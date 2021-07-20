@@ -3,9 +3,8 @@ package main
 import (
 	_ "embed"
 	"flag"
-	"fmt"
 	"io/ioutil"
-	"os"
+	"log"
 
 	"github.com/snowflakedb/unshelled/server"
 
@@ -22,27 +21,40 @@ var (
 	policyFile    = flag.String("policyFile", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
 )
 
-func main() {
-	flag.Parse()
-
+// choosePolicy selects an OPA policy based on the flags, or calls log.Fatal if
+// an invalid combination is provided.
+func choosePolicy() string {
 	if *policyFlag != defaultPolicy && *policyFile != "" {
-		fmt.Fprintf(os.Stderr, "Do not set both --policy and --policyFile.\n")
-		os.Exit(2)
+		log.Fatal("Do not set both --policy and --policyFile.")
 	}
 
-	policy := *policyFlag
+	var policy string
 	if *policyFile != "" {
 		pff, err := ioutil.ReadFile(*policyFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s\n", err)
-			os.Exit(2)
+			log.Fatal(err)
 		}
+		log.Println("Using policy from --policyFlag")
 		policy = string(pff)
+	} else {
+		if *policyFlag != defaultPolicy {
+			log.Println("Using policy from --policy")
+			policy = *policyFlag
+		} else {
+			log.Println("Using built-in policy")
+			policy = defaultPolicy
+		}
 	}
+	return policy
+}
+
+func main() {
+	flag.Parse()
+
+	policy := choosePolicy()
 
 	err := server.Serve(*hostport, policy)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(3)
+		log.Fatal(err)
 	}
 }

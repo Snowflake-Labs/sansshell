@@ -21,10 +21,7 @@ func Serve(hostport string, policy string) error {
 		return err
 	}
 
-	if err := s.Serve(lis); err != nil {
-		return fmt.Errorf("failed to serve: %v", err)
-	}
-	return nil
+	return s.Serve(lis)
 }
 
 // buildServer creates a gRPC server, attaches the OPA policy interceptor,

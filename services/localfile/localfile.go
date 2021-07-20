@@ -13,7 +13,7 @@ import (
 	grpc "google.golang.org/grpc"
 )
 
-// server is used to implement helloworld.GreeterServer.
+// server is used to implement the gRPC server
 type server struct {
 	UnimplementedLocalFileServer
 }

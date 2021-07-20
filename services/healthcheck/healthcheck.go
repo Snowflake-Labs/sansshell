@@ -12,12 +12,12 @@ import (
 	grpc "google.golang.org/grpc"
 )
 
-// server is used to implement helloworld.GreeterServer.
+// server is used to implement the gRPC server
 type server struct {
 	UnimplementedHealthCheckServer
 }
 
-// Read returns the contents of the named file
+// Ok always returns an Empty proto without error
 func (s *server) Ok(ctx context.Context, in *Empty) (*Empty, error) {
 	log.Printf("Received HealthCheck request")
 	return &Empty{}, nil

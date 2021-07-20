@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -41,8 +40,6 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewLocalFileClient(conn)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	for _, filename := range f.Args() {
 		resp, err := c.Read(ctx, &pb.ReadRequest{Filename: filename})
 		if err != nil {

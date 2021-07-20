@@ -5,12 +5,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/open-policy-agent/opa/rego"
@@ -22,7 +24,7 @@ type OPA struct {
 
 type input struct {
 	Metadata metadata.MD           `json:"metadata"`
-	Message  interface{}           `json:"message"`
+	Message  json.RawMessage       `json:"message"`
 	Type     protoreflect.FullName `json:"type"`
 }
 
@@ -39,18 +41,23 @@ func NewOPA(policy string) (*OPA, error) {
 }
 
 func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	m, ok := req.(protoreflect.ProtoMessage)
-	if !ok {
-		return nil, fmt.Errorf("cast to proto message failed")
-	}
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, fmt.Errorf("no incoming gRPC metadata found")
+		return nil, status.Error(codes.Internal, "no incoming gRPC metadata found")
 	}
+	m, ok := req.(protoreflect.ProtoMessage)
+	if !ok {
+		return nil, status.Error(codes.Internal, "cast to proto message failed")
+	}
+	msgJSON, err := protojson.Marshal(m)
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("marshaling request: %s", err))
+	}
+	msgRaw := json.RawMessage(msgJSON)
 
 	input := input{
 		Metadata: md,
-		Message:  req,
+		Message:  msgRaw,
 		Type:     m.ProtoReflect().Descriptor().FullName(),
 	}
 	fmt.Printf("Evaluating input: %+v\n", input)
