@@ -30,7 +30,7 @@ func Serve(hostport string, policy string) error {
 func buildServer(lis net.Listener, policy string) (*grpc.Server, error) {
 	o, err := NewOPA(policy)
 	if err != nil {
-		return &grpc.Server{}, fmt.Errorf("NewOpa: %s", err)
+		return &grpc.Server{}, fmt.Errorf("NewOpa: %w", err)
 	}
 	s := grpc.NewServer(grpc.UnaryInterceptor(o.Authorize))
 	for _, unshelledService := range services.ListServices() {

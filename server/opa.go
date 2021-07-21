@@ -35,7 +35,7 @@ func NewOPA(policy string) (*OPA, error) {
 	)
 	pe, err := r.PrepareForEval(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("compiling policy: %s", err)
+		return nil, fmt.Errorf("compiling policy: %w", err)
 	}
 	return &OPA{policy: pe}, nil
 }
