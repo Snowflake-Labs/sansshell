@@ -60,22 +60,21 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 		Message:  msgRaw,
 		Type:     m.ProtoReflect().Descriptor().FullName(),
 	}
-	fmt.Printf("Evaluating input: %+v\n", input)
 
 	results, err := o.policy.Eval(ctx, rego.EvalInput(input))
-
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("error evaluating OPA policy: %s", err))
-	} else if len(results) == 0 {
-		return nil, status.Error(codes.Internal, "OPA policy result was undefined")
-	} else if result, ok := results[0].Bindings["x"].(bool); !ok {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("OPA policy returned undefined result type: %+v", result))
-	} else {
-		if result {
-			return handler(ctx, req)
-		} else {
-			return nil, status.Error(codes.PermissionDenied, "OPA policy does not permit this request")
-		}
 	}
-	return nil, status.Error(codes.Internal, "logic error in rego error handling")
+	if len(results) == 0 {
+		return nil, status.Error(codes.Internal, "OPA policy result was undefined")
+	}
+
+	result, ok := results[0].Bindings["x"].(bool)
+	if !ok {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("OPA policy returned undefined result type: %+v", result))
+	}
+	if !result {
+		return nil, status.Error(codes.PermissionDenied, "OPA policy does not permit this request")
+	}
+	return handler(ctx, req)
 }
