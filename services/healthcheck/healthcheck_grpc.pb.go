@@ -40,22 +40,20 @@ func (c *healthCheckClient) Ok(ctx context.Context, in *Empty, opts ...grpc.Call
 }
 
 // HealthCheckServer is the server API for HealthCheck service.
-// All implementations must embed UnimplementedHealthCheckServer
+// All implementations should embed UnimplementedHealthCheckServer
 // for forward compatibility
 type HealthCheckServer interface {
 	// Ok merely signals if the endpoint is reachable.
 	Ok(context.Context, *Empty) (*Empty, error)
-	mustEmbedUnimplementedHealthCheckServer()
 }
 
-// UnimplementedHealthCheckServer must be embedded to have forward compatible implementations.
+// UnimplementedHealthCheckServer should be embedded to have forward compatible implementations.
 type UnimplementedHealthCheckServer struct {
 }
 
 func (UnimplementedHealthCheckServer) Ok(context.Context, *Empty) (*Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ok not implemented")
 }
-func (UnimplementedHealthCheckServer) mustEmbedUnimplementedHealthCheckServer() {}
 
 // UnsafeHealthCheckServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to HealthCheckServer will

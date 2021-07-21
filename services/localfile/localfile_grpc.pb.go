@@ -40,22 +40,20 @@ func (c *localFileClient) Read(ctx context.Context, in *ReadRequest, opts ...grp
 }
 
 // LocalFileServer is the server API for LocalFile service.
-// All implementations must embed UnimplementedLocalFileServer
+// All implementations should embed UnimplementedLocalFileServer
 // for forward compatibility
 type LocalFileServer interface {
 	// Read reads a file from the disk and returns it contents
 	Read(context.Context, *ReadRequest) (*ReadReply, error)
-	mustEmbedUnimplementedLocalFileServer()
 }
 
-// UnimplementedLocalFileServer must be embedded to have forward compatible implementations.
+// UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
 type UnimplementedLocalFileServer struct {
 }
 
 func (UnimplementedLocalFileServer) Read(context.Context, *ReadRequest) (*ReadReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
 }
-func (UnimplementedLocalFileServer) mustEmbedUnimplementedLocalFileServer() {}
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
 // Use of this interface is not recommended, as added methods to LocalFileServer will
