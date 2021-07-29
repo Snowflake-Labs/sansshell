@@ -49,7 +49,7 @@ func TestExec(t *testing.T) {
 
 	client := NewExecClient(conn)
 	command := []string{"ls", "-ltr"}
-	resp, err := client.Run(ctx, &ExecRequest{Command: command})
+	resp, err := client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
 	if err != nil {
 		t.Fatalf("Exec failed: %v", err)
 	}

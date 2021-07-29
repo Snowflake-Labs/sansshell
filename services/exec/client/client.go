@@ -39,7 +39,7 @@ func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewExecClient(conn)
 
-	resp, err := c.Run(ctx, &pb.ExecRequest{Command: f.Args()})
+	resp, err := c.Run(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not execute due to likely program failure: %v\n", err)
 		return subcommands.ExitFailure

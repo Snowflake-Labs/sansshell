@@ -32,7 +32,7 @@ func NewExecClient(cc grpc.ClientConnInterface) ExecClient {
 
 func (c *execClient) Run(ctx context.Context, in *ExecRequest, opts ...grpc.CallOption) (*ExecResponse, error) {
 	out := new(ExecResponse)
-	err := c.cc.Invoke(ctx, "/Exec/Run", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/Exec.Exec/Run", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func _Exec_Run_Handler(srv interface{}, ctx context.Context, dec func(interface{
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/Exec/Run",
+		FullMethod: "/Exec.Exec/Run",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ExecServer).Run(ctx, req.(*ExecRequest))
@@ -88,7 +88,7 @@ func _Exec_Run_Handler(srv interface{}, ctx context.Context, dec func(interface{
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Exec_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "Exec",
+	ServiceName: "Exec.Exec",
 	HandlerType: (*ExecServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

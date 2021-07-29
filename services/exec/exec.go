@@ -15,8 +15,8 @@ type server struct{}
 
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, err error) {
-	cmdName := req.Command[0]
-	cmdArgs := req.Command[1:]
+	cmdName := req.Command
+	cmdArgs := req.Args
 
 	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
 	stderr, err := cmd.StderrPipe()
@@ -48,9 +48,9 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 		wStatus := pStateSys.(syscall.WaitStatus)
 		exitStatus := wStatus.ExitStatus()
 		return &ExecResponse{
-			Stdout:        outBuf,
-			Stderr:        errBuf,
-			RetCode:       int32(exitStatus),
+			Stdout:  outBuf,
+			Stderr:  errBuf,
+			RetCode: int32(exitStatus),
 		}, nil
 
 	} else if err != nil {
@@ -68,13 +68,3 @@ func (s *server) Register(gs *grpc.Server) {
 func init() {
 	services.RegisterUnshelledService(&server{})
 }
-
-//func byteToString(input []byte) string {
-//	return string(input)
-//}
-//
-//func stringToByte(input string) []byte {
-//	return []byte(input)
-//}
-
-//https://stackoverflow.com/questions/11886531/terminating-a-process-started-with-os-exec-in-golang

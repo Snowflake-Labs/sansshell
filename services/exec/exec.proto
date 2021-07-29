@@ -2,6 +2,8 @@ syntax = "proto3";
 
 option go_package = "github.com/snowflakedb/unshelled/services/exec";
 
+package Exec;
+
 // The Exec service definition.
 service Exec {
   // Run takes input, executes it and returns result of input execution
@@ -10,7 +12,8 @@ service Exec {
 
 // ExecRequest describes what to execute
 message ExecRequest {
-  repeated string command = 1;
+  string command = 1;
+  repeated string args = 2;
 }
 
 // ExecResponse describes output of execution
