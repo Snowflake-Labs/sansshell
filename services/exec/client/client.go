@@ -17,14 +17,14 @@ func init() {
 
 type execCmd struct{}
 
-func (*execCmd) Name() string     { return "exec" }
-func (*execCmd) Synopsis() string { return "Execute provided command and return a response." }
+func (*execCmd) Name() string     { return "run" }
+func (*execCmd) Synopsis() string { return "Run provided command and return a response." }
 func (*execCmd) Usage() string {
-	return `exec <command> [<args>...]:
-  Execute a command remotely and return the response
+	return `run <command> [<args>...]:
+  Run a command remotely and return the response
 
   Note: This is not optimized for long running commands.  If it doesn't fit in memory in
-  a single proto field or if it doesnt complete within 30 secs, you'll have a bad time 
+  a single proto field or if it doesnt complete within a timeout, you'll have a bad time 
 `
 }
 
@@ -39,16 +39,16 @@ func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewExecClient(conn)
 
-	resp, err := c.Exec(ctx, &pb.ExecRequest{Command: f.Args()})
+	resp, err := c.Run(ctx, &pb.ExecRequest{Command: f.Args()})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not execute: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Could not execute due to likely program failure: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	if len(resp.Error) > 0 {
-		fmt.Fprintf(os.Stderr, "Command execution failure: %v\n", string(resp.Error))
-		return subcommands.ExitFailure
+	if len(resp.Stderr) > 0 {
+		fmt.Fprintf(os.Stderr, "Command execution failure: %v\n", string(resp.Stderr))
+		return subcommands.ExitStatus(resp.RetCode)
 	}
-	fmt.Println(string(resp.GetOutput()))
 
+	fmt.Fprintf(os.Stdout, "Command execution success: %v\n", string(resp.Stdout))
 	return subcommands.ExitSuccess
 }

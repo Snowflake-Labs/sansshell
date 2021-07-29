@@ -49,7 +49,7 @@ func TestExec(t *testing.T) {
 
 	client := NewExecClient(conn)
 	command := []string{"ls", "-ltr"}
-	resp, err := client.Exec(ctx, &ExecRequest{Command: command})
+	resp, err := client.Run(ctx, &ExecRequest{Command: command})
 	if err != nil {
 		t.Fatalf("Exec failed: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestExec(t *testing.T) {
 
 	testCmd := exec.CommandContext(ctx, "ls", "-ltr")
 	testResp, err := testCmd.CombinedOutput()
-	if !bytes.Equal(testResp, resp.GetOutput()) {
+	if !bytes.Equal(testResp, resp.GetStdout()) {
 		t.Fatalf("contents do not match")
 	}
 }

@@ -1,11 +1,11 @@
 syntax = "proto3";
 
-option go_package = "./exec";
+option go_package = "github.com/snowflakedb/unshelled/services/exec";
 
 // The Exec service definition.
 service Exec {
-  // Exec takes input, executes it and returns result of input execution
-  rpc Exec (ExecRequest) returns (ExecResponse) {}
+  // Run takes input, executes it and returns result of input execution
+  rpc Run (ExecRequest) returns (ExecResponse) {}
 }
 
 // ExecRequest describes what to execute
@@ -15,6 +15,9 @@ message ExecRequest {
 
 // ExecResponse describes output of execution
 message ExecResponse {
-  bytes output = 1;
-  bytes error  = 2;
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
 }
+
+// cd services/exec && protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative exec.proto

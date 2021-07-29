@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/ioutil"
 	"os/exec"
+	"syscall"
 
 	"github.com/snowflakedb/unshelled/services"
 	grpc "google.golang.org/grpc"
@@ -12,8 +13,8 @@ import (
 // server is used to implement the gRPC server
 type server struct{}
 
-// Exec executes command and returns result
-func (s *server) Exec(ctx context.Context, req *ExecRequest) (res *ExecResponse, err error) {
+// Run executes command and returns result
+func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, err error) {
 	cmdName := req.Command[0]
 	cmdArgs := req.Command[1:]
 
@@ -31,21 +32,32 @@ func (s *server) Exec(ctx context.Context, req *ExecRequest) (res *ExecResponse,
 		return nil, err
 	}
 
-	errbuf, err := ioutil.ReadAll(stderr)
+	errBuf, err := ioutil.ReadAll(stderr)
 	if err != nil {
 		return nil, err
 	}
-	outbuf, err := ioutil.ReadAll(stdout)
+	outBuf, err := ioutil.ReadAll(stdout)
 	if err != nil {
 		return nil, err
 	}
 
 	err = cmd.Wait()
-	if err != nil {
+	exitErr, ok := err.(*exec.ExitError)
+	if err != nil && ok {
+		pStateSys := exitErr.Sys()
+		wStatus := pStateSys.(syscall.WaitStatus)
+		exitStatus := wStatus.ExitStatus()
+		return &ExecResponse{
+			Stdout:        outBuf,
+			Stderr:        errBuf,
+			RetCode:       int32(exitStatus),
+		}, nil
+
+	} else if err != nil {
 		return nil, err
 	}
 
-	return &ExecResponse{Error: errbuf, Output: outbuf}, nil
+	return &ExecResponse{Stderr: errBuf, Stdout: outBuf, RetCode: 0}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
@@ -56,3 +68,13 @@ func (s *server) Register(gs *grpc.Server) {
 func init() {
 	services.RegisterUnshelledService(&server{})
 }
+
+//func byteToString(input []byte) string {
+//	return string(input)
+//}
+//
+//func stringToByte(input string) []byte {
+//	return []byte(input)
+//}
+
+//https://stackoverflow.com/questions/11886531/terminating-a-process-started-with-os-exec-in-golang
