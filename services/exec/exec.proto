@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option go_package = "./exec";
+
+// The Exec service definition.
+service Exec {
+  // Exec takes input, executes it and returns result of input execution
+  rpc Exec (ExecRequest) returns (ExecResponse) {}
+}
+
+// ExecRequest describes what to execute
+message ExecRequest {
+  repeated string command = 1;
+}
+
+// ExecResponse describes output of execution
+message ExecResponse {
+  bytes output = 1;
+  bytes error  = 2;
+}
