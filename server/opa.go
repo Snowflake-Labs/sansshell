@@ -60,12 +60,6 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 		Message:  msgRaw,
 		Type:     m.ProtoReflect().Descriptor().FullName(),
 	}
-	j, err := json.Marshal(&msgRaw)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(j))
-	fmt.Println(m.ProtoReflect().Descriptor().FullName())
 
 	results, err := o.policy.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
