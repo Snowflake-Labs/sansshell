@@ -22,5 +22,3 @@ message ExecResponse {
   bytes stderr = 2;
   int32 retCode = 3;
 }
-
-// cd services/exec && protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative exec.proto
