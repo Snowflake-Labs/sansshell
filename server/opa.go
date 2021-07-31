@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -74,6 +75,7 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 		return nil, status.Error(codes.Internal, fmt.Sprintf("OPA policy returned undefined result type: %+v", result))
 	}
 	if !result {
+		log.Printf("Permission Denied: %+v\n", input)
 		return nil, status.Error(codes.PermissionDenied, "OPA policy does not permit this request")
 	}
 	return handler(ctx, req)

@@ -10,46 +10,35 @@ import (
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
 
-	pb "github.com/snowflakedb/unshelled/services/localfile"
+	pb "github.com/snowflakedb/unshelled/services/healthcheck"
 )
 
 func init() {
-	subcommands.Register(&readCmd{}, "raw")
+	subcommands.Register(&healthcheckCmd{}, "raw")
 }
 
-type readCmd struct{}
+type healthcheckCmd struct{}
 
-func (*readCmd) Name() string     { return "read" }
-func (*readCmd) Synopsis() string { return "Print a file to stdout." }
-func (*readCmd) Usage() string {
-	return `read <path> [<path>...]:
-  Read from the remote file named by <path> and print it to stdout.
-
-  Note: This is not optimized for large files.  If it doesn't fit in memory in
-  a single proto field, you'll have a bad time.
+func (*healthcheckCmd) Name() string     { return "healthcheck" }
+func (*healthcheckCmd) Synopsis() string { return "Confirm connectivity to working server." }
+func (*healthcheckCmd) Usage() string {
+	return `healthcheck:
+  Sends an empty request and expects an empty response.  Only prints errors.
 `
 }
 
-func (p *readCmd) SetFlags(f *flag.FlagSet) {}
+func (p *healthcheckCmd) SetFlags(f *flag.FlagSet) {}
 
-func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	conn := args[0].(*grpc.ClientConn)
-	if f.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Please specify a filename to read.\n")
-		return subcommands.ExitUsageError
-	}
-
-	c := pb.NewLocalFileClient(conn)
+	c := pb.NewHealthCheckClient(conn)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	for _, filename := range f.Args() {
-		resp, err := c.Read(ctx, &pb.ReadRequest{Filename: filename})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
-			return subcommands.ExitFailure
-		}
-		fmt.Println(string(resp.GetContents()))
+	_, err := c.Ok(ctx, &pb.Empty{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not healthcheck server: %v\n", err)
+		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
 }
