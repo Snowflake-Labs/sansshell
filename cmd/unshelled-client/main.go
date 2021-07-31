@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc"
 
 	// Import the raw command clients you want, they automatically register
+	_ "github.com/snowflakedb/unshelled/services/exec/client"
 	_ "github.com/snowflakedb/unshelled/services/healthcheck/client"
 	_ "github.com/snowflakedb/unshelled/services/localfile/client"
 )

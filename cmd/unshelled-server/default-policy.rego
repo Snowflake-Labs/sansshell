@@ -9,3 +9,9 @@ allow {
 	input.type = "LocalFile.ReadRequest"
 	input.message.filename = "/etc/hosts"
 }
+
+allow {
+	input.type = "Exec.ExecRequest"
+	input.message.command = "echo"
+	input.message.args = ["hello", "world"]
+}

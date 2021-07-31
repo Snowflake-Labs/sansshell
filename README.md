@@ -14,7 +14,11 @@ convenint but perhaps-less-friendly subcommands to address the raw Unshelled
 API endpoints.
 
 # Getting Started
-TODO: demonstrate building
+How to build and run locally for testing:
+```
+$ cd cmd/unshelled-server && go build && ./unshelled-server
+$ cd cmd/unshelled-client && go build && ./unshelled-client read /etc/hosts
+```
 
 # A tour of the codebase
 Unshelled is composed of 3 primary concepts:
@@ -30,6 +34,11 @@ Services implement at least one gRPC API endpoint, and expose it by calling
 implementations of the Unshelled Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
+
+###List of available Services:
+1) HealthCheck
+2) Read File: Read contents of file
+3) Execute: Execute a command
 
 TODO: Document service/.../client expectations.
 

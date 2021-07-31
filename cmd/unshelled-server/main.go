@@ -9,6 +9,7 @@ import (
 	"github.com/snowflakedb/unshelled/server"
 
 	// Import the server modules you want to expose, they automatically register
+	_ "github.com/snowflakedb/unshelled/services/exec"
 	_ "github.com/snowflakedb/unshelled/services/healthcheck"
 	_ "github.com/snowflakedb/unshelled/services/localfile"
 )
