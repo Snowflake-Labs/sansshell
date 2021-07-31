@@ -49,7 +49,10 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 	exitErr, ok := err.(*exec.ExitError)
 	if err != nil && ok {
 		pStateSys := exitErr.Sys()
-		wStatus := pStateSys.(syscall.WaitStatus)
+		wStatus, ok := pStateSys.(syscall.WaitStatus)
+		if !ok {
+			return nil, err
+		}
 		exitStatus := wStatus.ExitStatus()
 		return &ExecResponse{
 			Stdout:  outBuf,
