@@ -46,8 +46,11 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 	}
 
 	err = cmd.Wait()
-	exitErr, ok := err.(*exec.ExitError)
-	if err != nil && ok {
+	if err != nil {
+		exitErr, ok := err.(*exec.ExitError)
+		if !ok {
+			return nil, err
+		}
 		pStateSys := exitErr.Sys()
 		wStatus, ok := pStateSys.(syscall.WaitStatus)
 		if !ok {
@@ -59,9 +62,6 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 			Stderr:  errBuf,
 			RetCode: int32(exitStatus),
 		}, nil
-
-	} else if err != nil {
-		return nil, err
 	}
 
 	return &ExecResponse{Stderr: errBuf, Stdout: outBuf, RetCode: 0}, nil
