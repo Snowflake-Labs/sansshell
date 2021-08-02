@@ -23,10 +23,9 @@ func (*execCmd) Usage() string {
 	return `run <command> [<args>...]:
   Run a command remotely and return the response
 
-  Note: This is not optimized for long running commands.  If it doesn't fit in memory in
-  a single proto field or if it doesnt complete within a timeout, you'll have a bad time.
-  Default timeout is 30 sec, you can change it on command line by providing value for
-  timeout cli parameter
+	Note: This is not optimized for large output or long running commands.  If
+	the output doesn't fit in memory in a single proto message or if it doesnt
+	complete within the timeout, you'll have a bad time.
 `
 }
 
