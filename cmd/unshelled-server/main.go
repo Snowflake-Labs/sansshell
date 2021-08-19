@@ -5,6 +5,8 @@ import (
 	"flag"
 	"io/ioutil"
 	"log"
+	"os"
+	"path"
 
 	"github.com/snowflakedb/unshelled/server"
 
@@ -12,6 +14,12 @@ import (
 	_ "github.com/snowflakedb/unshelled/services/exec"
 	_ "github.com/snowflakedb/unshelled/services/healthcheck"
 	_ "github.com/snowflakedb/unshelled/services/localfile"
+)
+
+const (
+	defaultServerCertPath = ".unshelled/leaf.pem"
+	defaultServerKeyPath  = ".unshelled/leaf.key"
+	defaultRootCAPath     = ".unshelled/root.pem"
 )
 
 var (
@@ -50,12 +58,23 @@ func choosePolicy() string {
 }
 
 func main() {
+	cd, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	rootCAFile := flag.String("root-ca", path.Join(cd, defaultRootCAPath), "Path to a trusted server CA or Cert, PEM format")
+	serverCertFile := flag.String("server-cert", path.Join(cd, defaultServerCertPath), "Path to an x509 server cert, PEM format")
+	serverKeyFile := flag.String("server-key", path.Join(cd, defaultServerKeyPath), "Path to the server's TLS key")
 	flag.Parse()
 
 	policy := choosePolicy()
 
-	err := server.Serve(*hostport, policy)
+	creds, err := server.LoadTLSKeys(*rootCAFile, *serverCertFile, *serverKeyFile)
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := server.Serve(*hostport, creds, policy); err != nil {
 		log.Fatal(err)
 	}
 }
