@@ -1,10 +1,7 @@
 package server
 
 import (
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 
 	"google.golang.org/grpc"
@@ -41,30 +38,4 @@ func BuildServer(lis net.Listener, c credentials.TransportCredentials, policy st
 		unshelledService.Register(s)
 	}
 	return s, nil
-}
-
-// LoadTLSKeys reads the certificates and keys from disk at the supplied paths,
-// and assembles them into a set of TransportCredentials for the gRPC server.
-func LoadTLSKeys(rootCAFile, clientCertFile, clientKeyFile string) (credentials.TransportCredentials, error) {
-	// Read in the root of trust for server identities
-	ca, err := ioutil.ReadFile(rootCAFile)
-	if err != nil {
-		return nil, fmt.Errorf("reading server CA from %q: %v", rootCAFile, err)
-	}
-	capool := x509.NewCertPool()
-	if !capool.AppendCertsFromPEM(ca) {
-		return nil, fmt.Errorf("adding CA cert: %v", err)
-	}
-
-	// Read in client credentials
-	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("reading client credentials: %v", err)
-	}
-
-	return credentials.NewTLS(&tls.Config{
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{cert},
-		ClientCAs:    capool,
-	}), nil
 }
