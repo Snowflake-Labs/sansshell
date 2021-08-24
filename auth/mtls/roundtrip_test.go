@@ -50,15 +50,15 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
 }
 
-func serverWithPolicy(policy string, CAPool *x509.CertPool) *grpc.Server {
+func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.Server {
 	lis = bufconn.Listen(bufSize)
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
 	if err != nil {
-		log.Fatalf("Failed to load client cert: %v", err)
+		t.Fatalf("Failed to load client cert: %v", err)
 	}
 	s, err := server.BuildServer(lis, creds, policy)
 	if err != nil {
-		log.Fatalf("Could not build server: %s", err)
+		t.Fatalf("Could not build server: %s", err)
 	}
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -73,45 +73,50 @@ func TestHealthCheck(t *testing.T) {
 	ctx := context.Background()
 	CAPool, err := LoadRootOfTrust("testdata/root.pem")
 	if err != nil {
-		log.Fatalf("Failed to load root CA: %v", err)
+		t.Fatalf("Failed to load root CA: %v", err)
 	}
 	creds, err := LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
 	if err != nil {
-		log.Fatalf("Failed to load client cert: %v", err)
+		t.Fatalf("Failed to load client cert: %v", err)
 	}
 	ts := []struct {
+		Name   string
 		Policy string
 		Err    string
 	}{
 		{
+			Name:   "allowed request",
 			Policy: allowPolicy,
 			Err:    "",
 		},
 		{
+			Name:   "denied request",
 			Policy: denyPolicy,
 			Err:    "OPA policy does not permit this request",
 		},
 	}
-	for _, want := range ts {
-		s := serverWithPolicy(want.Policy, CAPool)
-		conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(creds))
-		if err != nil {
-			log.Fatalf("Failed to dial bufnet: %v", err)
-		}
-		defer conn.Close()
-		client := hc.NewHealthCheckClient(conn)
-		resp, err := client.Ok(ctx, &hc.Empty{})
-		if err != nil {
-			if want.Err == "" {
-				t.Errorf("Read failed: %v", err)
-				continue
+	for _, tc := range ts {
+		t.Run(tc.Name, func(t *testing.T) {
+			s := serverWithPolicy(t, tc.Policy, CAPool)
+			conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(creds))
+			if err != nil {
+				t.Fatalf("Failed to dial bufnet: %v", err)
 			}
-			if !strings.Contains(err.Error(), want.Err) {
-				t.Errorf("unexpected error; want: %s, got: %s", want.Err, err)
+			defer conn.Close()
+			client := hc.NewHealthCheckClient(conn)
+			resp, err := client.Ok(ctx, &hc.Empty{})
+			if err != nil {
+				if tc.Err == "" {
+					t.Errorf("Read failed: %v", err)
+					return
+				}
+				if !strings.Contains(err.Error(), tc.Err) {
+					t.Errorf("unexpected error; tc: %s, got: %s", tc.Err, err)
+				}
+				return
 			}
-			continue
-		}
-		t.Logf("Response: %+v", resp)
-		s.GracefulStop()
+			t.Logf("Response: %+v", resp)
+			s.GracefulStop()
+		})
 	}
 }

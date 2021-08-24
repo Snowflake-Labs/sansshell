@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	serverCertFile, serverKeyFile *string
+	serverCertFile, serverKeyFile string
 )
 
 func init() {
@@ -26,17 +26,19 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	serverCertFile = flag.String("server-cert", path.Join(cd, defaultServerCertPath), "Path to an x509 server cert, PEM format")
-	serverKeyFile = flag.String("server-key", path.Join(cd, defaultServerKeyPath), "Path to the server's TLS key")
+	serverCertFile = path.Join(cd, defaultServerCertPath)
+	serverKeyFile = path.Join(cd, defaultServerKeyPath)
+	flag.StringVar(&serverCertFile, "server-cert", serverCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&serverKeyFile, "server-key", serverKeyFile, "Path to the server's TLS key")
 }
 
 // GetServerCredentials wraps LoadServerTLS with convenient flag values and parsing
 func GetServerCredentials() (credentials.TransportCredentials, error) {
-	CAPool, err := LoadRootOfTrust(*rootCAFile) // defined in common.go
+	CAPool, err := GetCACredentials() // defined in common.go
 	if err != nil {
 		return nil, err
 	}
-	serverOpt, err := LoadServerTLS(*serverCertFile, *serverKeyFile, CAPool)
+	serverOpt, err := LoadServerTLS(serverCertFile, serverKeyFile, CAPool)
 	if err != nil {
 		return nil, err
 	}
@@ -56,5 +58,6 @@ func LoadServerTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) 
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		Certificates: []tls.Certificate{cert},
 		ClientCAs:    CAPool,
+		MinVersion:   tls.VersionTLS13,
 	}), nil
 }

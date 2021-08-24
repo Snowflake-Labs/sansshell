@@ -55,7 +55,7 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 	peer, ok := peer.FromContext(ctx)
 	if ok && peer.AuthInfo != nil {
 		switch peer.AuthInfo.AuthType() {
-		case "tls":
+		case credentials.TLSInfo{}.AuthType():
 			tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
 			if !ok {
 				break
