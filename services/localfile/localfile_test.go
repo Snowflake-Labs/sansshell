@@ -43,7 +43,7 @@ func TestRead(t *testing.T) {
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Failed to dial bufnet: %v", err)
+		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
 	defer conn.Close()
 
