@@ -1,2 +1,4 @@
 cmd/unshelled-client/unshelled-client
 cmd/unshelled-server/unshelled-server
+certs/
+*.swp
