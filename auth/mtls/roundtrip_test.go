@@ -51,6 +51,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 }
 
 func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.Server {
+	t.Helper()
 	lis = bufconn.Listen(bufSize)
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
 	if err != nil {

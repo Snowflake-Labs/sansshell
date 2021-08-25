@@ -38,11 +38,7 @@ func GetClientCredentials() (credentials.TransportCredentials, error) {
 	if err != nil {
 		return nil, err
 	}
-	clientOpt, err := LoadClientTLS(clientCertFile, clientKeyFile, CAPool)
-	if err != nil {
-		return nil, err
-	}
-	return clientOpt, nil
+	return LoadClientTLS(clientCertFile, clientKeyFile, CAPool)
 }
 
 // LoadClientTLS reads the certificates and keys from disk at the supplied paths,
@@ -57,5 +53,6 @@ func LoadClientTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) 
 	return credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      CAPool,
+		MinVersion:   tls.VersionTLS13,
 	}), nil
 }

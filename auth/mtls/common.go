@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	rootCAFile *string
+	rootCAFile string
 )
 
 func init() {
@@ -24,16 +24,13 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	rootCAFile = flag.String("root-ca", path.Join(cd, defaultRootCAPath), "The root of trust for remote identities, PEM format")
+	rootCAFile = path.Join(cd, defaultRootCAPath)
+	flag.StringVar(&rootCAFile, "root-ca", rootCAFile, "The root of trust for remote identities, PEM format")
 }
 
 // GetCACredentials wraps LoadRootOfTrust with the default flag value
 func GetCACredentials() (*x509.CertPool, error) {
-	CAPool, err := LoadRootOfTrust(*rootCAFile) // defined in common.go
-	if err != nil {
-		return nil, err
-	}
-	return CAPool, nil
+	return LoadRootOfTrust(rootCAFile)
 }
 
 func LoadRootOfTrust(filename string) (*x509.CertPool, error) {

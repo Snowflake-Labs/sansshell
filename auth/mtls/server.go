@@ -38,11 +38,7 @@ func GetServerCredentials() (credentials.TransportCredentials, error) {
 	if err != nil {
 		return nil, err
 	}
-	serverOpt, err := LoadServerTLS(serverCertFile, serverKeyFile, CAPool)
-	if err != nil {
-		return nil, err
-	}
-	return serverOpt, nil
+	return LoadServerTLS(serverCertFile, serverKeyFile, CAPool)
 }
 
 // LoadServerTLS reads the certificates and keys from disk at the supplied paths,
