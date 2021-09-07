@@ -57,6 +57,9 @@ func TestExec(t *testing.T) {
 
 	testCmd := exec.CommandContext(ctx, "echo", "hello world")
 	testResp, err := testCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Exec failed: %v", err)
+	}
 	if !bytes.Equal(testResp, resp.GetStdout()) {
 		t.Fatalf("contents do not match")
 	}

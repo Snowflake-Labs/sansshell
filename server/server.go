@@ -17,7 +17,7 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string) e
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	s, err := BuildServer(lis, c, policy)
+	s, err := BuildServer(c, policy)
 	if err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string) e
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor,
 // registers all of the imported Unshelled modules. Separating this from Serve
 // primarily facilitates testing.
-func BuildServer(lis net.Listener, c credentials.TransportCredentials, policy string) (*grpc.Server, error) {
+func BuildServer(c credentials.TransportCredentials, policy string) (*grpc.Server, error) {
 	o, err := NewOPA(policy)
 	if err != nil {
 		return &grpc.Server{}, fmt.Errorf("NewOpa: %w", err)

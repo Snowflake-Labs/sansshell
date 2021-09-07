@@ -52,16 +52,17 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.Server {
 	t.Helper()
-	lis = bufconn.Listen(bufSize)
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
 	if err != nil {
 		t.Fatalf("Failed to load client cert: %v", err)
 	}
-	s, err := server.BuildServer(lis, creds, policy)
+	s, err := server.BuildServer(creds, policy)
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
 	}
 	go func() {
+		lis = bufconn.Listen(bufSize)
+		defer lis.Close()
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Server exited with error: %v", err)
 		}
