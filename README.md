@@ -19,9 +19,11 @@ the project root directory.
 
 You only need to do these steps once to configure example mTLS certs:
 ```
-$ mkdir -m 0700 certs
 $ go get -u github.com/meterup/generate-cert
+$ mkdir -m 0700 certs
+$ cd certs
 $ $(go env GOPATH)/bin/generate-cert --host=localhost,127.0.0.1,::1
+$ cd ../
 $ ln -s $(pwd)/certs ~/.unshelled
 ```
 
