@@ -50,7 +50,7 @@ func Register(name string, loader CredentialsLoader) {
 }
 
 // Loader returns the CredentialsLoader associated with `name` or an
-// error if no such implemenation is registered.
+// error if no such implementation is registered.
 func Loader(name string) (CredentialsLoader, error) {
 	loaderMu.RLock()
 	loader, ok := loaders[name]
@@ -62,7 +62,7 @@ func Loader(name string) (CredentialsLoader, error) {
 }
 
 // Loaders() returns the names of all currently registered CredentialLoader
-// implemenations as a sorted list of strings.
+// implementations as a sorted list of strings.
 func Loaders() []string {
 	loaderMu.RLock()
 	defer loaderMu.RUnlock()
