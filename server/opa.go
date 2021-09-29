@@ -11,7 +11,9 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -24,9 +26,13 @@ type OPA struct {
 }
 
 type input struct {
-	Metadata metadata.MD           `json:"metadata"`
-	Message  json.RawMessage       `json:"message"`
-	Type     protoreflect.FullName `json:"type"`
+	Peer       *peer.Peer            `json:"peer"`
+	Method     string                `json:"method"`
+	ServerName string                `json:"servername"`
+	SPIFFEID   string                `json:"spiffeid"`
+	Metadata   metadata.MD           `json:"metadata"`
+	Message    json.RawMessage       `json:"message"`
+	Type       protoreflect.FullName `json:"type"`
 }
 
 func NewOPA(policy string) (*OPA, error) {
@@ -46,6 +52,21 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 	if !ok {
 		return nil, status.Error(codes.Internal, "no incoming gRPC metadata found")
 	}
+	var ServerName, SPIFFEID string
+	peer, ok := peer.FromContext(ctx)
+	if ok && peer.AuthInfo != nil {
+		switch peer.AuthInfo.AuthType() {
+		case credentials.TLSInfo{}.AuthType():
+			tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
+			if !ok {
+				break
+			}
+			if tlsInfo.SPIFFEID != nil {
+				SPIFFEID = tlsInfo.SPIFFEID.String()
+			}
+			ServerName = tlsInfo.State.ServerName
+		}
+	}
 	m, ok := req.(protoreflect.ProtoMessage)
 	if !ok {
 		return nil, status.Error(codes.Internal, "cast to proto message failed")
@@ -57,9 +78,13 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 	msgRaw := json.RawMessage(msgJSON)
 
 	input := input{
-		Metadata: md,
-		Message:  msgRaw,
-		Type:     m.ProtoReflect().Descriptor().FullName(),
+		Metadata:   md,
+		Peer:       peer,
+		ServerName: ServerName,
+		SPIFFEID:   SPIFFEID,
+		Method:     info.FullMethod,
+		Message:    msgRaw,
+		Type:       m.ProtoReflect().Descriptor().FullName(),
 	}
 
 	results, err := o.policy.Eval(ctx, rego.EvalInput(input))

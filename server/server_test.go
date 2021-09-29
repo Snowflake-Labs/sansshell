@@ -46,7 +46,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(lis, policy)
+	s, err := BuildServer(nil, policy)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -65,7 +65,7 @@ func TestRead(t *testing.T) {
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Failed to dial bufnet: %v", err)
+		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
 	defer conn.Close()
 

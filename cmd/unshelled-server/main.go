@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 
+	"github.com/snowflakedb/unshelled/auth/mtls"
 	"github.com/snowflakedb/unshelled/server"
 
 	// Import the server modules you want to expose, they automatically register
@@ -54,8 +55,12 @@ func main() {
 
 	policy := choosePolicy()
 
-	err := server.Serve(*hostport, policy)
+	creds, err := mtls.GetServerCredentials()
 	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := server.Serve(*hostport, creds, policy); err != nil {
 		log.Fatal(err)
 	}
 }

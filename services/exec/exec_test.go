@@ -43,7 +43,7 @@ func TestExec(t *testing.T) {
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("Failed to dial bufnet: %v", err)
+		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
 	defer conn.Close()
 
@@ -57,6 +57,9 @@ func TestExec(t *testing.T) {
 
 	testCmd := exec.CommandContext(ctx, "echo", "hello world")
 	testResp, err := testCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Exec failed: %v", err)
+	}
 	if !bytes.Equal(testResp, resp.GetStdout()) {
 		t.Fatalf("contents do not match")
 	}
