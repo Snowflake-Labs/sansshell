@@ -66,7 +66,7 @@ func Loader(name string) (CredentialsLoader, error) {
 func Loaders() []string {
 	loaderMu.RLock()
 	defer loaderMu.RUnlock()
-	out := make([]string, 0, len(loaders))
+	var out []string
 	for l := range loaders {
 		out = append(out, l)
 	}
