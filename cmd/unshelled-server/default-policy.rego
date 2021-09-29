@@ -3,8 +3,9 @@ package unshelled.authz
 default allow = false
 
 allow {
-	input.type = "HealthCheck.Ok"
+	input.type = "HealthCheck.Empty"
 }
+
 allow {
 	input.type = "LocalFile.ReadRequest"
 	input.message.filename = "/etc/hosts"

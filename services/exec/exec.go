@@ -8,7 +8,6 @@ import (
 	"context"
 	"io/ioutil"
 	"os/exec"
-	"syscall"
 
 	"github.com/snowflakedb/unshelled/services"
 	grpc "google.golang.org/grpc"
@@ -47,20 +46,10 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 
 	err = cmd.Wait()
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
-			return nil, err
-		}
-		pStateSys := exitErr.Sys()
-		wStatus, ok := pStateSys.(syscall.WaitStatus)
-		if !ok {
-			return nil, err
-		}
-		exitStatus := wStatus.ExitStatus()
 		return &ExecResponse{
 			Stdout:  outBuf,
 			Stderr:  errBuf,
-			RetCode: int32(exitStatus),
+			RetCode: int32(cmd.ProcessState.ExitCode()),
 		}, nil
 	}
 
