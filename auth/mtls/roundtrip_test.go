@@ -60,13 +60,16 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
 	}
+	listening := make(chan struct{})
 	go func() {
 		lis = bufconn.Listen(bufSize)
 		defer lis.Close()
+		listening <- struct{}{}
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Server exited with error: %v", err)
 		}
 	}()
+	<-listening
 	return s
 }
 

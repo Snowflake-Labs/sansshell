@@ -3,6 +3,7 @@ module github.com/snowflakedb/unshelled
 go 1.17
 
 require (
+	github.com/google/go-cmp v0.5.5
 	github.com/google/subcommands v1.2.0
 	github.com/open-policy-agent/opa v0.32.0
 	google.golang.org/grpc v1.40.0
@@ -11,7 +12,6 @@ require (
 
 require (
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/bytecodealliance/wasmtime-go v0.29.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect

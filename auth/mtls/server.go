@@ -1,44 +1,41 @@
 package mtls
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"flag"
 	"fmt"
-	"log"
-	"os"
-	"path"
 
 	"google.golang.org/grpc/credentials"
 )
 
-const (
-	defaultServerCertPath = ".unshelled/leaf.pem"
-	defaultServerKeyPath  = ".unshelled/leaf.key"
-)
-
-var (
-	serverCertFile, serverKeyFile string
-)
-
-func init() {
-	cd, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatal(err)
-	}
-	serverCertFile = path.Join(cd, defaultServerCertPath)
-	serverKeyFile = path.Join(cd, defaultServerKeyPath)
-	flag.StringVar(&serverCertFile, "server-cert", serverCertFile, "Path to an x509 server cert, PEM format")
-	flag.StringVar(&serverKeyFile, "server-key", serverKeyFile, "Path to the server's TLS key")
-}
-
-// GetServerCredentials wraps LoadServerTLS with convenient flag values and parsing
-func GetServerCredentials() (credentials.TransportCredentials, error) {
-	CAPool, err := GetCACredentials() // defined in common.go
+// GetServerCredentials returns transport credentials for an unshelled server as retrieved from the
+// specified `loaderName`
+func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	loader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
 	}
-	return LoadServerTLS(serverCertFile, serverKeyFile, CAPool)
+
+	pool, err := loader.LoadClientCA(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cert, err := loader.LoadServerCertificate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return NewServerCredentials(cert, pool), nil
+}
+
+// NewServerCredentials creates transport credentials for an unshelled server.
+func NewServerCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentials.TransportCredentials {
+	return credentials.NewTLS(&tls.Config{
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		Certificates: []tls.Certificate{cert},
+		ClientCAs:    CAPool,
+		MinVersion:   tls.VersionTLS13,
+	})
 }
 
 // LoadServerTLS reads the certificates and keys from disk at the supplied paths,
@@ -47,13 +44,7 @@ func LoadServerTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) 
 	// Read in client credentials
 	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
 	if err != nil {
-		return nil, fmt.Errorf("reading client credentials: %v", err)
+		return nil, fmt.Errorf("reading client credentials: %w", err)
 	}
-
-	return credentials.NewTLS(&tls.Config{
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{cert},
-		ClientCAs:    CAPool,
-		MinVersion:   tls.VersionTLS13,
-	}), nil
+	return NewServerCredentials(cert, CAPool), nil
 }

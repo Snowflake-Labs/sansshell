@@ -1,44 +1,40 @@
 package mtls
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"flag"
 	"fmt"
-	"log"
-	"os"
-	"path"
 
 	"google.golang.org/grpc/credentials"
 )
 
-const (
-	defaultClientCertPath = ".unshelled/client.pem"
-	defaultClientKeyPath  = ".unshelled/client.key"
-)
-
-var (
-	clientCertFile, clientKeyFile string
-)
-
-func init() {
-	cd, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatal(err)
-	}
-	clientCertFile = path.Join(cd, defaultClientCertPath)
-	clientKeyFile = path.Join(cd, defaultClientKeyPath)
-	flag.StringVar(&clientCertFile, "client-cert", clientCertFile, "Path to this client's x509 cert, PEM format")
-	flag.StringVar(&clientKeyFile, "client-key", clientKeyFile, "Path to this client's key")
-}
-
-// GetClientCredentials wraps LoadTLSClientKeys with convenient flag values and parsing
-func GetClientCredentials() (credentials.TransportCredentials, error) {
-	CAPool, err := GetCACredentials() // defined in common.go
+// GetClientCredentials returns transport credentials for unshelled clients, based on the provided
+// `loaderName`
+func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	loader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
 	}
-	return LoadClientTLS(clientCertFile, clientKeyFile, CAPool)
+
+	pool, err := loader.LoadRootCA(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cert, err := loader.LoadClientCertificate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return NewClientCredentials(cert, pool), nil
+}
+
+// NewClientCredentials returns transport credentials for unshelled clients.
+func NewClientCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentials.TransportCredentials {
+	return credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      CAPool,
+		MinVersion:   tls.VersionTLS13,
+	})
 }
 
 // LoadClientTLS reads the certificates and keys from disk at the supplied paths,
@@ -49,10 +45,5 @@ func LoadClientTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) 
 	if err != nil {
 		return nil, fmt.Errorf("could not read client credentials: %w", err)
 	}
-
-	return credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      CAPool,
-		MinVersion:   tls.VersionTLS13,
-	}), nil
+	return NewClientCredentials(cert, CAPool), nil
 }
