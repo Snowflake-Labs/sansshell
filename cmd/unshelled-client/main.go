@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/subcommands"
@@ -13,6 +14,7 @@ import (
 
 	// Import the raw command clients you want, they automatically register
 	"github.com/snowflakedb/unshelled/auth/mtls"
+	mtlsFlags "github.com/snowflakedb/unshelled/auth/mtls/flags"
 	_ "github.com/snowflakedb/unshelled/services/exec/client"
 	_ "github.com/snowflakedb/unshelled/services/healthcheck/client"
 	_ "github.com/snowflakedb/unshelled/services/localfile/client"
@@ -26,15 +28,19 @@ var (
 func main() {
 	address := flag.String("address", defaultAddress, "Address to contact unshelled-server")
 	timeout := flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
+	credSource := flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 
 	subcommands.ImportantFlag("address")
+	subcommands.ImportantFlag("credential-source")
 	subcommands.Register(subcommands.HelpCommand(), "")
 	subcommands.Register(subcommands.FlagsCommand(), "")
 	subcommands.Register(subcommands.CommandsCommand(), "")
 
 	flag.Parse()
 
-	creds, err := mtls.GetClientCredentials()
+	ctx := context.Background()
+
+	creds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
 		os.Exit(1)
@@ -48,7 +54,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 
 	// Invoke the subcommand, passing the dialed connection object
