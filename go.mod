@@ -1,4 +1,4 @@
-module github.com/snowflakedb/unshelled
+module github.com/Snowflake-Labs/sansshell
 
 go 1.17
 

@@ -37,7 +37,7 @@ type input struct {
 
 func NewOPA(policy string) (*OPA, error) {
 	r := rego.New(
-		rego.Query("x = data.unshelled.authz.allow"),
+		rego.Query("x = data.sansshell.authz.allow"),
 		rego.Module("builtin-policy.rego", policy),
 	)
 	pe, err := r.PrepareForEval(context.Background())

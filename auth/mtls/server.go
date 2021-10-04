@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// GetServerCredentials returns transport credentials for an unshelled server as retrieved from the
-// specified `loaderName`
+// GetServerCredentials returns transport credentials for a SansShell server as
+// retrieved from the specified `loaderName`
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	loader, err := Loader(loaderName)
 	if err != nil {
@@ -28,7 +28,7 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 	return NewServerCredentials(cert, pool), nil
 }
 
-// NewServerCredentials creates transport credentials for an unshelled server.
+// NewServerCredentials creates transport credentials for a SansShell server.
 func NewServerCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentials.TransportCredentials {
 	return credentials.NewTLS(&tls.Config{
 		ClientAuth:   tls.RequireAndVerifyClientCert,

@@ -11,13 +11,13 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/snowflakedb/unshelled/server"
-	hc "github.com/snowflakedb/unshelled/services/healthcheck"
+	"github.com/Snowflake-Labs/sansshell/server"
+	hc "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 )
 
 const (
 	allowPolicy = `
-package unshelled.authz
+package sansshell.authz
 
 default allow = false
 
@@ -28,7 +28,7 @@ allow {
 }
 `
 	denyPolicy = `
-package unshelled.authz
+package sansshell.authz
 
 default allow = false
 

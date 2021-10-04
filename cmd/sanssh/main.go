@@ -1,4 +1,4 @@
-// Package main implements the unshelled cli client.
+// Package main implements the SansShell CLI client.
 package main
 
 import (
@@ -13,11 +13,11 @@ import (
 	"google.golang.org/grpc"
 
 	// Import the raw command clients you want, they automatically register
-	"github.com/snowflakedb/unshelled/auth/mtls"
-	mtlsFlags "github.com/snowflakedb/unshelled/auth/mtls/flags"
-	_ "github.com/snowflakedb/unshelled/services/exec/client"
-	_ "github.com/snowflakedb/unshelled/services/healthcheck/client"
-	_ "github.com/snowflakedb/unshelled/services/localfile/client"
+	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
 )
 
 var (
@@ -26,7 +26,7 @@ var (
 )
 
 func main() {
-	address := flag.String("address", defaultAddress, "Address to contact unshelled-server")
+	address := flag.String("address", defaultAddress, "Address to contact sansshell-server")
 	timeout := flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
 	credSource := flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 
@@ -46,7 +46,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Set up a connection to the unshelled-server.
+	// Set up a connection to the sansshell-server.
 	conn, err := grpc.Dial(*address, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)

@@ -8,23 +8,23 @@ import (
 
 var (
 	mu          sync.RWMutex
-	rpcServices []UnshelledRpcService
+	rpcServices []SansShellRpcService
 )
 
-type UnshelledRpcService interface {
+type SansShellRpcService interface {
 	Register(*grpc.Server)
 }
 
-// RegisterUnshelledService provides a mechanism for imported modules to
+// RegisterSansShellService provides a mechanism for imported modules to
 // register themselves with a gRPC server.
-func RegisterUnshelledService(s UnshelledRpcService) {
+func RegisterSansShellService(s SansShellRpcService) {
 	mu.Lock()
 	defer mu.Unlock()
 	rpcServices = append(rpcServices, s)
 }
 
 // ListServices returns the list of registered serfvices.
-func ListServices() []UnshelledRpcService {
+func ListServices() []SansShellRpcService {
 	mu.RLock()
 	defer mu.RUnlock()
 	return rpcServices
