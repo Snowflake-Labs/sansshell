@@ -10,7 +10,7 @@ import (
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
 
-	pb "github.com/snowflakedb/unshelled/services/healthcheck"
+	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 )
 
 func init() {

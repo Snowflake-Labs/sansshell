@@ -1,4 +1,4 @@
-package unshelled.authz
+package sansshell.authz
 
 default allow = false
 

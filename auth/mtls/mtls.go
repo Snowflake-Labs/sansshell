@@ -1,4 +1,4 @@
-// Package mtls facilitates Mutual TLS authentication for Unshelled.
+// Package mtls facilitates Mutual TLS authentication for SansShell.
 package mtls
 
 import (

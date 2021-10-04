@@ -87,7 +87,7 @@ func TestRead(t *testing.T) {
 		},
 		{
 			Name:     "bad-file",
-			Filename: "/no-such-filename-for-unshelled-unittest",
+			Filename: "/no-such-filename-for-sansshell-unittest",
 			Err:      "no such file or directory",
 		},
 	}

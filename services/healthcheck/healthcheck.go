@@ -8,7 +8,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/snowflakedb/unshelled/services"
+	"github.com/Snowflake-Labs/sansshell/services"
 	grpc "google.golang.org/grpc"
 )
 
@@ -27,5 +27,5 @@ func (s *server) Register(gs *grpc.Server) {
 }
 
 func init() {
-	services.RegisterUnshelledService(&server{})
+	services.RegisterSansShellService(&server{})
 }

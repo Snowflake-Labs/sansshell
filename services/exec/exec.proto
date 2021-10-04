@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/snowflakedb/unshelled/services/exec";
+option go_package = "github.com/Snowflake-Labs/sansshell/services/exec";
 
 package Exec;
 

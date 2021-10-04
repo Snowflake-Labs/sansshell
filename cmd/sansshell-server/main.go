@@ -1,3 +1,4 @@
+// Package main implements the SansShell server.
 package main
 
 import (
@@ -9,15 +10,14 @@ import (
 	"log"
 	"strings"
 
-	"github.com/snowflakedb/unshelled/auth/mtls"
-	mtlsFlags "github.com/snowflakedb/unshelled/auth/mtls/flags"
-	"github.com/snowflakedb/unshelled/server"
-
+	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
+	"github.com/Snowflake-Labs/sansshell/server"
 
 	// Import the server modules you want to expose, they automatically register
-	_ "github.com/snowflakedb/unshelled/services/exec"
-	_ "github.com/snowflakedb/unshelled/services/healthcheck"
-	_ "github.com/snowflakedb/unshelled/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
 var (

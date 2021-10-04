@@ -9,17 +9,17 @@ import (
 	"os"
 	"path"
 
-	"github.com/snowflakedb/unshelled/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 )
 
 const (
 	loaderName = "flags"
 
-	defaultClientCertPath = ".unshelled/client.pem"
-	defaultClientKeyPath  = ".unshelled/client.key"
-	defaultServerCertPath = ".unshelled/leaf.pem"
-	defaultServerKeyPath  = ".unshelled/leaf.key"
-	defaultRootCAPath     = ".unshelled/root.pem"
+	defaultClientCertPath = ".sansshell/client.pem"
+	defaultClientKeyPath  = ".sansshell/client.key"
+	defaultServerCertPath = ".sansshell/leaf.pem"
+	defaultServerKeyPath  = ".sansshell/leaf.key"
+	defaultRootCAPath     = ".sansshell/root.pem"
 )
 
 var (

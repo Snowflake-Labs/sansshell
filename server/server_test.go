@@ -14,13 +14,13 @@ import (
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
-	_ "github.com/snowflakedb/unshelled/services/healthcheck"
-	lf "github.com/snowflakedb/unshelled/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	lf "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
 const (
 	policy = `
-package unshelled.authz
+package sansshell.authz
 
 default allow = false
 
@@ -30,7 +30,7 @@ allow {
 }
 allow {
     input.type = "LocalFile.ReadRequest"
-		input.message.filename = "/no-such-filename-for-unshelled-unittest"
+		input.message.filename = "/no-such-filename-for-sansshell-unittest"
 }
 `
 )
@@ -79,11 +79,11 @@ func TestRead(t *testing.T) {
 			Err:      "",
 		},
 		{
-			Filename: "/no-such-filename-for-unshelled-unittest",
+			Filename: "/no-such-filename-for-sansshell-unittest",
 			Err:      "no such file or directory",
 		},
 		{
-			Filename: "/permission-denied-filename-for-unshelled-unittest",
+			Filename: "/permission-denied-filename-for-sansshell-unittest",
 			Err:      "PermissionDenied",
 		},
 	}

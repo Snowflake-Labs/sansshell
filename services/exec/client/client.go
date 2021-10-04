@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/google/subcommands"
-	pb "github.com/snowflakedb/unshelled/services/exec"
 	"google.golang.org/grpc"
 )
 
