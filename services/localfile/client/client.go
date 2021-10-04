@@ -17,7 +17,10 @@ func init() {
 	subcommands.Register(&readCmd{}, "raw")
 }
 
-type readCmd struct{}
+type readCmd struct {
+	offset int64
+	length int64
+}
 
 func (*readCmd) Name() string     { return "read" }
 func (*readCmd) Synopsis() string { return "Print a file to stdout." }
@@ -27,7 +30,10 @@ func (*readCmd) Usage() string {
 `
 }
 
-func (p *readCmd) SetFlags(f *flag.FlagSet) {}
+func (p *readCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.offset, "offset", 0, "If positive bytes to skip before reading. If negative apply from the end of the file")
+	f.Int64Var(&p.length, "length", 0, "If positive the maximum number of bytes to read")
+}
 
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	conn := args[0].(*grpc.ClientConn)
@@ -37,7 +43,7 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 
 	for _, filename := range f.Args() {
-		err := ReadFile(ctx, conn, filename, os.Stdout)
+		err := ReadFile(ctx, conn, filename, p.offset, p.length, os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
 			return subcommands.ExitFailure
@@ -47,9 +53,13 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	return subcommands.ExitSuccess
 }
 
-func ReadFile(ctx context.Context, conn *grpc.ClientConn, filename string, writer io.Writer) error {
+func ReadFile(ctx context.Context, conn *grpc.ClientConn, filename string, offset int64, length int64, writer io.Writer) error {
 	c := pb.NewLocalFileClient(conn)
-	stream, err := c.Read(ctx, &pb.ReadRequest{Filename: filename})
+	stream, err := c.Read(ctx, &pb.ReadRequest{
+		Filename: filename,
+		Offset:   offset,
+		Length:   length,
+	})
 	if err != nil {
 		return err
 	}
