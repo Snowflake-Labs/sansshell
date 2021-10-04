@@ -46,11 +46,10 @@ func NewOPA(policy string) (*OPA, error) {
 	}
 	return &OPA{policy: pe}, nil
 }
-
-func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func (o *OPA) evalAuth(ctx context.Context, req interface{}, method string) error {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return nil, status.Error(codes.Internal, "no incoming gRPC metadata found")
+		return status.Error(codes.Internal, "no incoming gRPC metadata found")
 	}
 	var ServerName, SPIFFEID string
 	peer, ok := peer.FromContext(ctx)
@@ -69,11 +68,11 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 	}
 	m, ok := req.(protoreflect.ProtoMessage)
 	if !ok {
-		return nil, status.Error(codes.Internal, "cast to proto message failed")
+		return status.Error(codes.Internal, "cast to proto message failed")
 	}
 	msgJSON, err := protojson.Marshal(m)
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("marshaling request: %s", err))
+		return status.Error(codes.Internal, fmt.Sprintf("marshaling request: %s", err))
 	}
 	msgRaw := json.RawMessage(msgJSON)
 
@@ -82,26 +81,60 @@ func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnarySe
 		Peer:       peer,
 		ServerName: ServerName,
 		SPIFFEID:   SPIFFEID,
-		Method:     info.FullMethod,
+		Method:     method,
 		Message:    msgRaw,
 		Type:       m.ProtoReflect().Descriptor().FullName(),
 	}
-
 	results, err := o.policy.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("error evaluating OPA policy: %s", err))
+		return status.Error(codes.Internal, fmt.Sprintf("error evaluating OPA policy: %s", err))
 	}
 	if len(results) == 0 {
-		return nil, status.Error(codes.Internal, "OPA policy result was undefined")
+		return status.Error(codes.Internal, "OPA policy result was undefined")
 	}
 
 	result, ok := results[0].Bindings["x"].(bool)
 	if !ok {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("OPA policy returned undefined result type: %+v", result))
+		return status.Error(codes.Internal, fmt.Sprintf("OPA policy returned undefined result type: %+v", result))
 	}
 	if !result {
 		log.Printf("Permission Denied: %+v\n", input)
-		return nil, status.Error(codes.PermissionDenied, "OPA policy does not permit this request")
+		return status.Error(codes.PermissionDenied, "OPA policy does not permit this request")
+	}
+	return nil
+}
+
+func (o *OPA) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if err := o.evalAuth(ctx, req, info.FullMethod); err != nil {
+		return nil, err
 	}
 	return handler(ctx, req)
+}
+
+type embeddedStream struct {
+	grpc.ServerStream
+	info *grpc.StreamServerInfo
+	o    *OPA
+}
+
+func (e *embeddedStream) RecvMsg(req interface{}) error {
+	ctx := e.Context()
+	// Get the actual message since at this point we just have an empty
+	// one to fill in:
+	if err := e.ServerStream.RecvMsg(req); err != nil {
+		return err
+	}
+	if err := e.o.evalAuth(ctx, req, e.info.FullMethod); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *OPA) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	wrapper := &embeddedStream{
+		ServerStream: ss,
+		info:         info,
+		o:            o,
+	}
+	return handler(srv, wrapper)
 }

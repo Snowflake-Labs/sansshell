@@ -33,7 +33,7 @@ func BuildServer(c credentials.TransportCredentials, policy string) (*grpc.Serve
 	if err != nil {
 		return &grpc.Server{}, fmt.Errorf("NewOpa: %w", err)
 	}
-	s := grpc.NewServer(grpc.Creds(c), grpc.UnaryInterceptor(o.Authorize))
+	s := grpc.NewServer(grpc.Creds(c), grpc.UnaryInterceptor(o.Authorize), grpc.StreamInterceptor(o.AuthorizeStream))
 	for _, unshelledService := range services.ListServices() {
 		unshelledService.Register(s)
 	}

@@ -7,12 +7,16 @@ package LocalFile;
 // The LocalFile service definition.
 service LocalFile {
   // Read reads a file from the disk and returns it contents
-  rpc Read (ReadRequest) returns (ReadReply) {}
+  rpc Read (ReadRequest) returns (stream ReadReply) {}
 }
 
 // ReadRequest describes the filename to be read
 message ReadRequest {
   string filename = 1;
+  // If positive and non-zero skip N bytes into the file before returning data.
+  int64 offset = 2; 
+  // If positive and non-zero return only this many total bytes.
+  int64 length = 3;
 }
 
 // ReadResponse contains the contents of the file

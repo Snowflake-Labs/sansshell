@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"io"
 	"io/ioutil"
 	"log"
 	"net"
@@ -87,24 +88,50 @@ func TestRead(t *testing.T) {
 		},
 	}
 	for _, want := range ts {
-		client := lf.NewLocalFileClient(conn)
-		resp, err := client.Read(ctx, &lf.ReadRequest{Filename: want.Filename})
-		if err != nil {
-			if want.Err == "" {
-				t.Errorf("Read failed: %v", err)
+		// Future proof for t.Parallel()
+		want := want
+		t.Run(want.Filename, func(t *testing.T) {
+			client := lf.NewLocalFileClient(conn)
+			stream, err := client.Read(ctx, &lf.ReadRequest{Filename: want.Filename})
+			if err != nil {
+				// At this point it only returns if we can't connect. Actual errors
+				// happen below on the first stream Recv() call.
+				if want.Err == "" {
+					t.Fatalf("Start of Read failed: %v", err)
+				}
 			}
-			if !strings.Contains(err.Error(), want.Err) {
-				t.Errorf("unexpected error; want: %s, got: %s", want.Err, err)
+			buf := &bytes.Buffer{}
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Logf("Got error: %v", err)
+					if want.Err == "" || !strings.Contains(err.Error(), want.Err) {
+						t.Errorf("unexpected error; want: %s, got: %s", want.Err, err)
+					}
+					// If this was an expected error we're done.
+					return
+				}
+
+				contents := resp.GetContents()
+				n, err := buf.Write(contents)
+				if got, want := n, len(contents); got != want {
+					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
+				}
+				if err != nil {
+					t.Fatalf("Can't write into buffer: %v", err)
+				}
 			}
-			continue
-		}
-		t.Logf("Response: %+v", resp)
-		contents, err := ioutil.ReadFile(want.Filename)
-		if err != nil {
-			t.Fatalf("reading test data: %s", err)
-		}
-		if !bytes.Equal(contents, resp.GetContents()) {
-			t.Fatalf("contents do not match")
-		}
+
+			contents, err := ioutil.ReadFile(want.Filename)
+			if err != nil {
+				t.Fatalf("reading test data: %s", err)
+			}
+			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
+				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
+			}
+		})
 	}
 }

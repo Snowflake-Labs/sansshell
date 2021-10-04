@@ -4,6 +4,7 @@ package localfile
 
 import (
 	context "context"
+
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -19,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type LocalFileClient interface {
 	// Read reads a file from the disk and returns it contents
-	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadReply, error)
+	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error)
 }
 
 type localFileClient struct {
@@ -30,13 +31,36 @@ func NewLocalFileClient(cc grpc.ClientConnInterface) LocalFileClient {
 	return &localFileClient{cc}
 }
 
-func (c *localFileClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadReply, error) {
-	out := new(ReadReply)
-	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Read", in, out, opts...)
+func (c *localFileClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[0], "/LocalFile.LocalFile/Read", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &localFileReadClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type LocalFile_ReadClient interface {
+	Recv() (*ReadReply, error)
+	grpc.ClientStream
+}
+
+type localFileReadClient struct {
+	grpc.ClientStream
+}
+
+func (x *localFileReadClient) Recv() (*ReadReply, error) {
+	m := new(ReadReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // LocalFileServer is the server API for LocalFile service.
@@ -44,15 +68,15 @@ func (c *localFileClient) Read(ctx context.Context, in *ReadRequest, opts ...grp
 // for forward compatibility
 type LocalFileServer interface {
 	// Read reads a file from the disk and returns it contents
-	Read(context.Context, *ReadRequest) (*ReadReply, error)
+	Read(*ReadRequest, LocalFile_ReadServer) error
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
 type UnimplementedLocalFileServer struct {
 }
 
-func (UnimplementedLocalFileServer) Read(context.Context, *ReadRequest) (*ReadReply, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
+func (UnimplementedLocalFileServer) Read(*ReadRequest, LocalFile_ReadServer) error {
+	return status.Errorf(codes.Unimplemented, "method Read not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -66,22 +90,25 @@ func RegisterLocalFileServer(s grpc.ServiceRegistrar, srv LocalFileServer) {
 	s.RegisterService(&LocalFile_ServiceDesc, srv)
 }
 
-func _LocalFile_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _LocalFile_Read_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ReadRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(LocalFileServer).Read(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/LocalFile.LocalFile/Read",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(LocalFileServer).Read(ctx, req.(*ReadRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(LocalFileServer).Read(m, &localFileReadServer{stream})
+}
+
+type LocalFile_ReadServer interface {
+	Send(*ReadReply) error
+	grpc.ServerStream
+}
+
+type localFileReadServer struct {
+	grpc.ServerStream
+}
+
+func (x *localFileReadServer) Send(m *ReadReply) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
@@ -90,12 +117,13 @@ func _LocalFile_Read_Handler(srv interface{}, ctx context.Context, dec func(inte
 var LocalFile_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "LocalFile.LocalFile",
 	HandlerType: (*LocalFileServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "Read",
-			Handler:    _LocalFile_Read_Handler,
+			StreamName:    "Read",
+			Handler:       _LocalFile_Read_Handler,
+			ServerStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "localfile.proto",
 }

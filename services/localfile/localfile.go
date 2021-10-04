@@ -5,25 +5,86 @@ package localfile
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative localfile.proto
 
 import (
-	"context"
-	"io/ioutil"
+	"io"
 	"log"
+	"math"
+	"os"
 
 	"github.com/snowflakedb/unshelled/services"
 	grpc "google.golang.org/grpc"
 )
 
 // server is used to implement the gRPC server
-type server struct{}
+type server struct {
+}
+
+// TODO(jchacon): Make this configurable
+// The chunk size we use when sending replies to Read on
+// the stream.
+var chunkSize = 128 * 1024
 
 // Read returns the contents of the named file
-func (s *server) Read(ctx context.Context, in *ReadRequest) (*ReadReply, error) {
-	log.Printf("Received request for: %v", in.GetFilename())
-	contents, err := ioutil.ReadFile(in.GetFilename())
+func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
+	file := in.GetFilename()
+	log.Printf("Received request for: %v", file)
+	f, err := os.Open(file)
 	if err != nil {
-		return nil, err
+		log.Printf("Can't open file %s: %v", file, err)
+		return err
 	}
-	return &ReadReply{Contents: contents}, nil
+
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Printf("Can't close file %s: %v", file, err)
+		}
+	}()
+
+	// Seek forward if requested
+	if s := in.GetOffset(); s != 0 {
+		whence := 0
+		// If negative we're tailing from the end so
+		// negate the sign and set whence.
+		if s < 0 {
+			whence = 2
+		}
+		if _, err := f.Seek(s, whence); err != nil {
+			return err
+		}
+	}
+
+	max := in.GetLength()
+	if max == 0 {
+		max = math.MaxInt64
+	}
+
+	buf := make([]byte, chunkSize)
+
+	reader := io.LimitReader(f, max)
+
+	for {
+		n, err := reader.Read(buf)
+
+		// If we got EOF we're done.
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// Only send over the number of bytes we actually read or
+		// else we'll send over garbage in the last packet potentially.
+		if err := stream.Send(&ReadReply{Contents: buf[:n]}); err != nil {
+			return err
+		}
+
+		// If we got back less than a full chunk we're done.
+		if n < chunkSize {
+			break
+		}
+	}
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/google/subcommands"
@@ -23,9 +24,6 @@ func (*readCmd) Synopsis() string { return "Print a file to stdout." }
 func (*readCmd) Usage() string {
 	return `read <path> [<path>...]:
   Read from the remote file named by <path> and print it to stdout.
-
-  Note: This is not optimized for large files.  If it doesn't fit in memory in
-  a single proto field, you'll have a bad time.
 `
 }
 
@@ -38,15 +36,40 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitUsageError
 	}
 
-	c := pb.NewLocalFileClient(conn)
-
 	for _, filename := range f.Args() {
-		resp, err := c.Read(ctx, &pb.ReadRequest{Filename: filename})
+		err := ReadFile(ctx, conn, filename, os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		fmt.Println(string(resp.GetContents()))
+
 	}
 	return subcommands.ExitSuccess
+}
+
+func ReadFile(ctx context.Context, conn *grpc.ClientConn, filename string, writer io.Writer) error {
+	c := pb.NewLocalFileClient(conn)
+	stream, err := c.Read(ctx, &pb.ReadRequest{Filename: filename})
+	if err != nil {
+		return err
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		contents := resp.GetContents()
+		n, err := writer.Write(contents)
+		if got, want := n, len(contents); got != want {
+			return fmt.Errorf("can't write into buffer at correct length. Got %d want %d", got, want)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

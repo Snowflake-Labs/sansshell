@@ -17,6 +17,19 @@ API endpoints.
 How to setup, build and run locally for testing.  All commands are relative to
 the project root directory.
 
+## Environment setup Mac
+You need the Go setup as well as the proto compiler.:
+
+```
+$ brew install go
+$ brew install protoc-gen-go
+$ brew install protoc-gen-go-grpc
+```
+
+## Environment setup Linux
+TODO:
+
+## Build and run
 You only need to do these steps once to configure example mTLS certs:
 ```
 $ go get -u github.com/meterup/generate-cert
@@ -90,3 +103,11 @@ That same extensibility makes it easy to add additional functionality by
 implementing your own module.
 
 TODO: Add example client and server, building in different unshelled modules.
+
+If you need to edit a proto file (to augment an existing service or 
+create a new one) you'll need to generate proto outputs.
+
+```
+$ cd services/SERVICE
+$ go generate
+```
