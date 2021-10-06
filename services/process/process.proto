@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/services/process";
+
+package Process;
+
+// The Process service definition.
+service Process {
+  rpc List(ListRequest) returns (ListReply) {}
+  rpc GetStacks(GetStacksRequest) returns (GetStacksReply) {}
+  rpc GetJavaStacks(GetJavaStacksRequest) returns (GetJavaStacksReply) {}
+  rpc GetCore(GetCoreRequest) returns (stream GetCoreReply) {}
+  rpc GetJavaHeapDump(GetJavaHeapDumpRequest)
+      returns (stream GetJavaHeapDumpReply) {}
+}
+
+message ListRequest {
+  // Flags to pass to ps. Must be prefixed with -
+  repeated string option = 1;
+}
+
+message ListReply {
+  string header = 1;
+  repeated string entries = 2;
+}
+
+message GetStacksRequest { int64 pid = 1; }
+
+message ThreadStack {
+  int64 thread_number = 1;
+  int64 thread_id = 2;
+  int64 lwp = 3;
+  repeated string stacks = 4;
+}
+
+message GetStacksReply { repeated ThreadStack stacks = 1; }
+
+message GetJavaStacksRequest { int64 pid = 1; }
+
+message JavaThreadStack {
+  string name = 1;
+  bool daemon = 2;
+  int32 priority = 3;
+  int32 os_priority = 4;
+  int64 cpu_ms = 5;
+  int64 elapsed_sec = 6;
+  int64 thread_id = 7;
+  int64 native_thread_id = 8;
+  string state = 9;
+  int64 pc = 10;
+  string thread_state = 11;
+  repeated string stacks = 12;
+}
+
+message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
+
+message GetCoreRequest { int64 pid = 1; }
+
+message GetCoreReply { bytes data = 1; }
+
+message GetJavaHeapDumpRequest { int64 pid = 1; }
+
+message GetJavaHeapDumpReply { bytes data = 1; }
