@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+option go_package = "github.com/snowflakedb/unshelled/services/ansible";
+
+package Ansible;
+
+// The Playbook service definition.
+service Playbook {
+  rpc Run(RunRequest) returns (RunReply) {}
+}
+
+message RunRequest {
+  string host_pattern = 1;
+  string module = 2;
+  string args = 3;
+
+  // Passed to -i
+  string inventory = 4;
+
+  // Passed to -f
+  int32 fork_limit = 5;
+
+  // If set --become is passed to ansible.
+  bool become = 6;
+
+  // Either a substring/tag or a regex to be used to limit hosts to run against.
+  string limit_hosts = 7;
+
+  // The user to use for remote exection.
+  string user = 8;
+
+  // If set --check is passed to ansible. Depending on playbook settings
+  // this may still execute tasks.
+  bool check = 9;
+
+  // If set --diff is passed to ansible
+  bool diff = 10;
+
+  // If set passes --list-hosts to ansible and doesn't execute anything.
+  bool list_hosts = 11;
+}
+
+message RunReply { string debug_output = 1; }
