@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+option go_package = "github.com/snowflakedb/unshelled/services/packages";
+
+package Packages;
+
+// The Packages service definition.
+service Packages {
+  rpc Install(InstallRequest) returns (InstallReply) {}
+  rpc Update(UpdateRequest) returns (UpdateReply) {}
+  rpc ListInstalled(ListInstalledRequest) returns (ListInstalledReply) {}
+  rpc RepoList(RepoListRequest) returns (RepoListReply) {}
+}
+
+// Allow different package systems as future proofing.
+enum PackageSystem {
+  // The remote side will attempt to pick the appropriate one.
+  UNKNOWN = 0;
+  YUM = 1;
+}
+
+message InstallRequest {
+  PackageSystem package_system = 1;
+  string name = 2;
+  string version = 3;
+  // If set enables this repo for resolving package/version.
+  optional string repo = 4;
+}
+
+message InstallReply { string debug_output = 1; }
+
+message UpdateRequest {
+  PackageSystem package_system = 1;
+  string name = 2;
+  // This version must be installed for update to execute.
+  string old_version = 3;
+  string new_version = 4;
+  // If set enables this repo as well for resolving package/version.
+  string repo = 5;
+}
+
+message UpdateReply { string debug_output = 1; }
+
+message ListInstalledRequest {
+  PackageSystem package_system = 1;
+  // Takes a glob pattern in the style of the package system list command.
+  string glob_pattern = 2;
+}
+
+message PackageInfo {
+  string name = 1;
+  string version = 2;
+  string repo = 3;
+}
+
+message ListInstalledReply { repeated PackageInfo packages = 1; }
+
+message RepoListRequest { PackageSystem package_system = 1; }
+
+enum RepoStatus {
+  UNSPECIFIED = 0;
+  ENABLED = 1;
+  DISABLED = 2;
+}
+
+message Repo {
+  string id = 1;
+  string name = 2;
+  RepoStatus status = 3;
+}
+
+message RepoListReply { repeated Repo repos = 1; }
