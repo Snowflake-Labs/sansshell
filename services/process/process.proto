@@ -6,10 +6,23 @@ package Process;
 
 // The Process service definition.
 service Process {
+  // List returns the output from the ps command (with the given options).
   rpc List(ListRequest) returns (ListReply) {}
+  // GetStacks will return the output from pstack which generally has nothing
+  // sensitive in it but depending on function names could have internal details
+  // so be careful.
   rpc GetStacks(GetStacksRequest) returns (GetStacksReply) {}
+  // GetJavaStacks will return the output from jstack which generally has
+  // nothing sensitive in it but depending on function names could have internal
+  // details so be careful.
   rpc GetJavaStacks(GetJavaStacksRequest) returns (GetJavaStacksReply) {}
+  // GetCore will return the output from gcore which 100% has
+  // sensitive data contained within it. Be very careful where this is
+  // stored/transferred/etc.
   rpc GetCore(GetCoreRequest) returns (stream GetCoreReply) {}
+  // GetJavaHeapDump will return the output from jmap which 100% has
+  // sensitive data contained within it. Be very careful where this is
+  // stored/transferred/etc.
   rpc GetJavaHeapDump(GetJavaHeapDumpRequest)
       returns (stream GetJavaHeapDumpReply) {}
 }
@@ -19,10 +32,14 @@ message ListRequest {
   repeated string option = 1;
 }
 
-message ListReply {
+message ProcessEntry { repeated ProcessDetail process_details = 1; }
+
+message ProcessDetail {
   string header = 1;
-  repeated string entries = 2;
+  string value = 2;
 }
+
+message ListReply { repeated ProcessEntry process_entries = 1; }
 
 message GetStacksRequest { int64 pid = 1; }
 
