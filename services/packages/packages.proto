@@ -15,8 +15,8 @@ service Packages {
 // Allow different package systems as future proofing.
 enum PackageSystem {
   // The remote side will attempt to pick the appropriate one.
-  UNKNOWN = 0;
-  YUM = 1;
+  PACKAGE_SYSTEM_UNKNOWN = 0;
+  PACKAGE_SYSTEM_YUM = 1;
 }
 
 message InstallRequest {
@@ -58,9 +58,9 @@ message ListInstalledReply { repeated PackageInfo packages = 1; }
 message RepoListRequest { PackageSystem package_system = 1; }
 
 enum RepoStatus {
-  UNSPECIFIED = 0;
-  ENABLED = 1;
-  DISABLED = 2;
+  REPO_STATUS_UNKNOWN = 0;
+  REPO_STATUS_ENABLED = 1;
+  REPO_STATUS_DISABLED = 2;
 }
 
 message Repo {
