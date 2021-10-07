@@ -71,10 +71,28 @@ message JavaThreadStack {
 
 message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
 
-message GetCoreRequest { int64 pid = 1; }
+enum BlobDestination {
+  BLOB_DESTINATION_UNKNOWN = 0;
+  // Just stream it back.
+  BLOB_DESTINATION_STREAM = 1;
+  // This state requires an additional field to designate location.
+  BLOB_DESTINATION_URL = 2;
+}
+
+message GetCoreRequest {
+  int64 pid = 1;
+  BlobDestination destination = 2;
+  // Only used for BLOB_DESTINATION_URL
+  string url = 3;
+}
 
 message GetCoreReply { bytes data = 1; }
 
-message GetJavaHeapDumpRequest { int64 pid = 1; }
+message GetJavaHeapDumpRequest {
+  int64 pid = 1;
+  BlobDestination destination = 2;
+  // Only used for BLOB_DESTINATION_URL
+  string url = 3;
+}
 
 message GetJavaHeapDumpReply { bytes data = 1; }

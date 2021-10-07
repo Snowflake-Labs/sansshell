@@ -18,10 +18,23 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProcessClient interface {
+	// List returns the output from the ps command (with the given options).
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListReply, error)
+	// GetStacks will return the output from pstack which generally has nothing
+	// sensitive in it but depending on function names could have internal details
+	// so be careful.
 	GetStacks(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (*GetStacksReply, error)
+	// GetJavaStacks will return the output from jstack which generally has
+	// nothing sensitive in it but depending on function names could have internal
+	// details so be careful.
 	GetJavaStacks(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (*GetJavaStacksReply, error)
+	// GetCore will return the output from gcore which 100% has
+	// sensitive data contained within it. Be very careful where this is
+	// stored/transferred/etc.
 	GetCore(ctx context.Context, in *GetCoreRequest, opts ...grpc.CallOption) (Process_GetCoreClient, error)
+	// GetJavaHeapDump will return the output from jmap which 100% has
+	// sensitive data contained within it. Be very careful where this is
+	// stored/transferred/etc.
 	GetJavaHeapDump(ctx context.Context, in *GetJavaHeapDumpRequest, opts ...grpc.CallOption) (Process_GetJavaHeapDumpClient, error)
 }
 
@@ -128,10 +141,23 @@ func (x *processGetJavaHeapDumpClient) Recv() (*GetJavaHeapDumpReply, error) {
 // All implementations should embed UnimplementedProcessServer
 // for forward compatibility
 type ProcessServer interface {
+	// List returns the output from the ps command (with the given options).
 	List(context.Context, *ListRequest) (*ListReply, error)
+	// GetStacks will return the output from pstack which generally has nothing
+	// sensitive in it but depending on function names could have internal details
+	// so be careful.
 	GetStacks(context.Context, *GetStacksRequest) (*GetStacksReply, error)
+	// GetJavaStacks will return the output from jstack which generally has
+	// nothing sensitive in it but depending on function names could have internal
+	// details so be careful.
 	GetJavaStacks(context.Context, *GetJavaStacksRequest) (*GetJavaStacksReply, error)
+	// GetCore will return the output from gcore which 100% has
+	// sensitive data contained within it. Be very careful where this is
+	// stored/transferred/etc.
 	GetCore(*GetCoreRequest, Process_GetCoreServer) error
+	// GetJavaHeapDump will return the output from jmap which 100% has
+	// sensitive data contained within it. Be very careful where this is
+	// stored/transferred/etc.
 	GetJavaHeapDump(*GetJavaHeapDumpRequest, Process_GetJavaHeapDumpServer) error
 }
 
