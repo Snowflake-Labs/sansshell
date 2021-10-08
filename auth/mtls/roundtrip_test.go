@@ -57,7 +57,7 @@ default allow = false
 allow {
     input.type = "HealthCheck.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.peer.cert.subject.SerialNumbert  = "12345"
+		input.peer.cert.subject.SerialNumber = "12345"
 }
 `
 )
