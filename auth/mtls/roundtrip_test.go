@@ -38,6 +38,28 @@ allow {
 		input.servername = "localhost"
 }
 `
+	allowPeerSerialPolicy = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+    input.type = "HealthCheck.Empty"
+    input.method = "/HealthCheck.HealthCheck/Ok"
+		input.peer.cert.subject.SerialNumber = "255288720161934708870254561641453151839"
+}
+`
+	denyPeerSerialPolicy = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+    input.type = "HealthCheck.Empty"
+    input.method = "/HealthCheck.HealthCheck/Ok"
+		input.peer.cert.subject.SerialNumber = "12345"
+}
+`
 )
 
 var (
@@ -97,6 +119,16 @@ func TestHealthCheck(t *testing.T) {
 		{
 			Name:   "denied request",
 			Policy: denyPolicy,
+			Err:    "OPA policy does not permit this request",
+		},
+		{
+			Name:   "allowed peer by subject serial",
+			Policy: allowPeerSerialPolicy,
+			Err:    "",
+		},
+		{
+			Name:   "denied peer by subject serial",
+			Policy: denyPeerSerialPolicy,
 			Err:    "OPA policy does not permit this request",
 		},
 	}
