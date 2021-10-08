@@ -102,8 +102,6 @@ func (o *OPA) evalAuth(ctx context.Context, req interface{}, method string) erro
 		return status.Error(codes.Internal, fmt.Sprintf("marshaling request: %s", err))
 	}
 	msgRaw := json.RawMessage(msgJSON)
-	log.Println("peer info = ", peerInfo)
-	log.Println("peer subject serial = ", peerInfo.CertInfo.Subject.SerialNumber)
 
 	input := input{
 		Peer:       peerInfo,
