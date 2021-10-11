@@ -6,7 +6,7 @@ package Process;
 
 // The Process service definition.
 service Process {
-  // List returns the output from the ps command (with the given options).
+  // List returns the output from the ps command.
   // NOTE: Since this contains the command line this can
   // contain sensitive data.
   rpc List(ListRequest) returns (ListReply) {}
