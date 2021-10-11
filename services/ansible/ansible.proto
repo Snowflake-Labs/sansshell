@@ -6,38 +6,28 @@ package Ansible;
 
 // The Playbook service definition.
 service Playbook {
+  // Will run ansible-playbook only on the local host using the args passed.
   rpc Run(RunRequest) returns (RunReply) {}
 }
 
+message Var {
+  string key = 1;
+  string value = 2;
+}
+
 message RunRequest {
-  string host_pattern = 1;
-  string module = 2;
-  string args = 3;
+  // Will become N -e options to ansible-playbook
+  repeated Var vars = 1;
 
-  // Passed to -i
-  string inventory = 4;
-
-  // Passed to -f
-  int32 fork_limit = 5;
-
-  // If set --become is passed to ansible.
-  bool become = 6;
-
-  // Either a substring/tag or a regex to be used to limit hosts to run against.
-  string limit_hosts = 7;
-
-  // The user to use for remote exection.
-  string user = 8;
+  // The user to use for exection.
+  string user = 2;
 
   // If set --check is passed to ansible. Depending on playbook settings
   // this may still execute tasks.
-  bool check = 9;
+  bool check = 3;
 
   // If set --diff is passed to ansible
-  bool diff = 10;
-
-  // If set passes --list-hosts to ansible and doesn't execute anything.
-  bool list_hosts = 11;
+  bool diff = 4;
 }
 
 message RunReply { string debug_output = 1; }

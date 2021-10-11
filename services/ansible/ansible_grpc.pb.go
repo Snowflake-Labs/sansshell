@@ -18,6 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PlaybookClient interface {
+	// Will run ansible-playbook only on the local host using the args passed.
 	Run(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
 }
 
@@ -42,6 +43,7 @@ func (c *playbookClient) Run(ctx context.Context, in *RunRequest, opts ...grpc.C
 // All implementations should embed UnimplementedPlaybookServer
 // for forward compatibility
 type PlaybookServer interface {
+	// Will run ansible-playbook only on the local host using the args passed.
 	Run(context.Context, *RunRequest) (*RunReply, error)
 }
 

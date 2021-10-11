@@ -20,16 +20,81 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Var struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Key   string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+}
+
+func (x *Var) Reset() {
+	*x = Var{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_ansible_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Var) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Var) ProtoMessage() {}
+
+func (x *Var) ProtoReflect() protoreflect.Message {
+	mi := &file_ansible_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Var.ProtoReflect.Descriptor instead.
+func (*Var) Descriptor() ([]byte, []int) {
+	return file_ansible_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Var) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *Var) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 type RunRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	// Will become N -e options to ansible-playbook
+	Vars []*Var `protobuf:"bytes,1,rep,name=vars,proto3" json:"vars,omitempty"`
+	// The user to use for exection.
+	User string `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
+	// If set --check is passed to ansible. Depending on playbook settings
+	// this may still execute tasks.
+	Check bool `protobuf:"varint,3,opt,name=check,proto3" json:"check,omitempty"`
+	// If set --diff is passed to ansible
+	Diff bool `protobuf:"varint,4,opt,name=diff,proto3" json:"diff,omitempty"`
 }
 
 func (x *RunRequest) Reset() {
 	*x = RunRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_ansible_proto_msgTypes[0]
+		mi := &file_ansible_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -42,7 +107,7 @@ func (x *RunRequest) String() string {
 func (*RunRequest) ProtoMessage() {}
 
 func (x *RunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ansible_proto_msgTypes[0]
+	mi := &file_ansible_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,19 +120,49 @@ func (x *RunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunRequest.ProtoReflect.Descriptor instead.
 func (*RunRequest) Descriptor() ([]byte, []int) {
-	return file_ansible_proto_rawDescGZIP(), []int{0}
+	return file_ansible_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RunRequest) GetVars() []*Var {
+	if x != nil {
+		return x.Vars
+	}
+	return nil
+}
+
+func (x *RunRequest) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *RunRequest) GetCheck() bool {
+	if x != nil {
+		return x.Check
+	}
+	return false
+}
+
+func (x *RunRequest) GetDiff() bool {
+	if x != nil {
+		return x.Diff
+	}
+	return false
 }
 
 type RunReply struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	DebugOutput string `protobuf:"bytes,1,opt,name=debug_output,json=debugOutput,proto3" json:"debug_output,omitempty"`
 }
 
 func (x *RunReply) Reset() {
 	*x = RunReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_ansible_proto_msgTypes[1]
+		mi := &file_ansible_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -80,7 +175,7 @@ func (x *RunReply) String() string {
 func (*RunReply) ProtoMessage() {}
 
 func (x *RunReply) ProtoReflect() protoreflect.Message {
-	mi := &file_ansible_proto_msgTypes[1]
+	mi := &file_ansible_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -93,23 +188,41 @@ func (x *RunReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunReply.ProtoReflect.Descriptor instead.
 func (*RunReply) Descriptor() ([]byte, []int) {
-	return file_ansible_proto_rawDescGZIP(), []int{1}
+	return file_ansible_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RunReply) GetDebugOutput() string {
+	if x != nil {
+		return x.DebugOutput
+	}
+	return ""
 }
 
 var File_ansible_proto protoreflect.FileDescriptor
 
 var file_ansible_proto_rawDesc = []byte{
 	0x0a, 0x0d, 0x61, 0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12,
-	0x07, 0x41, 0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x22, 0x0c, 0x0a, 0x0a, 0x52, 0x75, 0x6e, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x0a, 0x0a, 0x08, 0x52, 0x75, 0x6e, 0x52, 0x65, 0x70,
-	0x6c, 0x79, 0x32, 0x3b, 0x0a, 0x08, 0x50, 0x6c, 0x61, 0x79, 0x62, 0x6f, 0x6f, 0x6b, 0x12, 0x2f,
-	0x0a, 0x03, 0x52, 0x75, 0x6e, 0x12, 0x13, 0x2e, 0x41, 0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x2e,
-	0x52, 0x75, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x11, 0x2e, 0x41, 0x6e, 0x73,
-	0x69, 0x62, 0x6c, 0x65, 0x2e, 0x52, 0x75, 0x6e, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x42,
-	0x33, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x73, 0x6e,
-	0x6f, 0x77, 0x66, 0x6c, 0x61, 0x6b, 0x65, 0x64, 0x62, 0x2f, 0x75, 0x6e, 0x73, 0x68, 0x65, 0x6c,
-	0x6c, 0x65, 0x64, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x2f, 0x61, 0x6e, 0x73,
-	0x69, 0x62, 0x6c, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x07, 0x41, 0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x22, 0x2d, 0x0a, 0x03, 0x56, 0x61, 0x72, 0x12,
+	0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65,
+	0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x22, 0x6c, 0x0a, 0x0a, 0x52, 0x75, 0x6e, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x20, 0x0a, 0x04, 0x76, 0x61, 0x72, 0x73, 0x18, 0x01, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x41, 0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x2e, 0x56, 0x61,
+	0x72, 0x52, 0x04, 0x76, 0x61, 0x72, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x75, 0x73, 0x65, 0x72, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x75, 0x73, 0x65, 0x72, 0x12, 0x14, 0x0a, 0x05, 0x63,
+	0x68, 0x65, 0x63, 0x6b, 0x18, 0x03, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05, 0x63, 0x68, 0x65, 0x63,
+	0x6b, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x69, 0x66, 0x66, 0x18, 0x04, 0x20, 0x01, 0x28, 0x08, 0x52,
+	0x04, 0x64, 0x69, 0x66, 0x66, 0x22, 0x2d, 0x0a, 0x08, 0x52, 0x75, 0x6e, 0x52, 0x65, 0x70, 0x6c,
+	0x79, 0x12, 0x21, 0x0a, 0x0c, 0x64, 0x65, 0x62, 0x75, 0x67, 0x5f, 0x6f, 0x75, 0x74, 0x70, 0x75,
+	0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x64, 0x65, 0x62, 0x75, 0x67, 0x4f, 0x75,
+	0x74, 0x70, 0x75, 0x74, 0x32, 0x3b, 0x0a, 0x08, 0x50, 0x6c, 0x61, 0x79, 0x62, 0x6f, 0x6f, 0x6b,
+	0x12, 0x2f, 0x0a, 0x03, 0x52, 0x75, 0x6e, 0x12, 0x13, 0x2e, 0x41, 0x6e, 0x73, 0x69, 0x62, 0x6c,
+	0x65, 0x2e, 0x52, 0x75, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x11, 0x2e, 0x41,
+	0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x2e, 0x52, 0x75, 0x6e, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22,
+	0x00, 0x42, 0x33, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
+	0x73, 0x6e, 0x6f, 0x77, 0x66, 0x6c, 0x61, 0x6b, 0x65, 0x64, 0x62, 0x2f, 0x75, 0x6e, 0x73, 0x68,
+	0x65, 0x6c, 0x6c, 0x65, 0x64, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x2f, 0x61,
+	0x6e, 0x73, 0x69, 0x62, 0x6c, 0x65, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -124,19 +237,21 @@ func file_ansible_proto_rawDescGZIP() []byte {
 	return file_ansible_proto_rawDescData
 }
 
-var file_ansible_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_ansible_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_ansible_proto_goTypes = []interface{}{
-	(*RunRequest)(nil), // 0: Ansible.RunRequest
-	(*RunReply)(nil),   // 1: Ansible.RunReply
+	(*Var)(nil),        // 0: Ansible.Var
+	(*RunRequest)(nil), // 1: Ansible.RunRequest
+	(*RunReply)(nil),   // 2: Ansible.RunReply
 }
 var file_ansible_proto_depIdxs = []int32{
-	0, // 0: Ansible.Playbook.Run:input_type -> Ansible.RunRequest
-	1, // 1: Ansible.Playbook.Run:output_type -> Ansible.RunReply
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: Ansible.RunRequest.vars:type_name -> Ansible.Var
+	1, // 1: Ansible.Playbook.Run:input_type -> Ansible.RunRequest
+	2, // 2: Ansible.Playbook.Run:output_type -> Ansible.RunReply
+	2, // [2:3] is the sub-list for method output_type
+	1, // [1:2] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_ansible_proto_init() }
@@ -146,7 +261,7 @@ func file_ansible_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_ansible_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RunRequest); i {
+			switch v := v.(*Var); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -158,6 +273,18 @@ func file_ansible_proto_init() {
 			}
 		}
 		file_ansible_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RunRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_ansible_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*RunReply); i {
 			case 0:
 				return &v.state
@@ -176,7 +303,7 @@ func file_ansible_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_ansible_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
