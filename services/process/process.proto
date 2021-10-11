@@ -57,6 +57,18 @@ enum ProcessState {
   PROCESS_STATE_ZOMBIE = 6;
 }
 
+// ProcessStateCode interprets the additional characters
+// appened to ps -o stat output.
+enum ProcessStateCode {
+  PROCESS_STATE_CODE_UNKNOWN = 0;
+  PROCESS_STATE_CODE_HIGH_PRIORITY = 1;
+  PROCESS_STATE_CODE_LOW_PRIORITY = 2;
+  PROCESS_STATE_CODE_LOCKED_PAGES = 3;
+  PROCESS_STATE_CODE_SESSION_LEADER = 4;
+  PROCESS_STATE_CODE_MULTI_THREADED = 5;
+  PROCESS_STATE_CODE_FOREGROUND_PGRP = 6;
+}
+
 message ProcessEntry {
   int64 pid = 1;
   int64 ppid = 2;
@@ -78,9 +90,9 @@ message ProcessEntry {
   int32 nice = 18;
   int32 priority = 19;
   string scheduling_class = 20;
-  string stat = 21;
-  ProcessFlags flags = 22;
-  ProcessState state = 23;
+  ProcessFlags flags = 21;
+  ProcessState state = 22;
+  repeated ProcessStateCode state_code = 23;
   int64 eip = 24;
   int64 esp = 25;
   int64 blocked_signals = 26;
