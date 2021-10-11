@@ -16,18 +16,20 @@ message Var {
 }
 
 message RunRequest {
+  // The playbook to execute
+  string playbook = 1;
   // Will become N -e options to ansible-playbook
-  repeated Var vars = 1;
+  repeated Var vars = 2;
 
   // The user to use for exection.
-  string user = 2;
+  string user = 3;
 
   // If set --check is passed to ansible. Depending on playbook settings
   // this may still execute tasks.
-  bool check = 3;
+  bool check = 4;
 
   // If set --diff is passed to ansible
-  bool diff = 4;
+  bool diff = 5;
 }
 
 message RunReply { string debug_output = 1; }
