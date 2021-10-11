@@ -2,16 +2,19 @@
 
 package sanshell
 
-// tools used by unshelled build process
+// Various tooling uses by the sansshell build process.
 // These import lines make tools (such as code generators)
 // visible to Go's module tracking, ensuring consistent
-// versioning.
+// versioning in multiple environments.
 import (
 	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
 	_ "google.golang.org/protobuf/cmd/protoc-gen-go"
 )
 
-// As a convenience, the various
+// For convenience, listing of service generation
+// targets makes it possible to regenerate all services
+// by executing `go generate` against this file.
+
 //go:generate go generate ./services/exec
 //go:generate go generate ./services/healthcheck
 //go:generate go generate ./services/localfile
