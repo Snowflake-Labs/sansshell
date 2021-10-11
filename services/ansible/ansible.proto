@@ -30,6 +30,9 @@ message RunRequest {
 
   // If set --diff is passed to ansible
   bool diff = 5;
+
+  // If true, execute ansible with verbose output enabled (equivilant to -v)
+  bool verbose = 6;
 }
 
 message RunReply { string debug_output = 1; }
