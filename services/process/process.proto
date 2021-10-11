@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/services/process";
+
+package Process;
+
+// The Process service definition.
+service Process {
+  // List returns the output from the ps command.
+  // NOTE: Since this contains the command line this can
+  // contain sensitive data.
+  rpc List(ListRequest) returns (ListReply) {}
+  // GetStacks will return the output from pstack which generally has nothing
+  // sensitive in it but depending on function names could have internal details
+  // so be careful.
+  rpc GetStacks(GetStacksRequest) returns (GetStacksReply) {}
+  // GetJavaStacks will return the output from jstack which generally has
+  // nothing sensitive in it but depending on function names could have internal
+  // details so be careful.
+  rpc GetJavaStacks(GetJavaStacksRequest) returns (GetJavaStacksReply) {}
+  // GetCore will return the output from gcore which 100% has
+  // sensitive data contained within it. Be very careful where this is
+  // stored/transferred/etc.
+  rpc GetCore(GetCoreRequest) returns (stream GetCoreReply) {}
+  // GetJavaHeapDump will return the output from jmap which 100% has
+  // sensitive data contained within it. Be very careful where this is
+  // stored/transferred/etc.
+  rpc GetJavaHeapDump(GetJavaHeapDumpRequest)
+      returns (stream GetJavaHeapDumpReply) {}
+}
+
+message ListRequest {
+  // If non-empty will only return data on the listed pids.
+  // Otherwise all processes are returned.
+  repeated int64 pids = 1;
+}
+
+message ProcessFlags {
+  bool forked_no_exec = 1;
+  bool used_root_privs = 2;
+}
+
+// ProcessState refers to the single letter state "ps -o s" returns.
+enum ProcessState {
+  PROCESS_STATE_UNKNOWN = 0;
+  // D
+  PROCESS_STATE_UNINTERRUPTIBLE_SLEEP = 1;
+  // R
+  PROCESS_STATE_RUNNING = 2;
+  // S
+  PROCESS_STATE_INTERRUPTIBLE_SLEEP = 3;
+  // T
+  PROCESS_STATE_STOPPED_JOB_CONTROL = 4;
+  // t
+  PROCESS_STATE_STOPPED_DEBUGGER = 5;
+  // Z
+  PROCESS_STATE_ZOMBIE = 6;
+}
+
+message ProcessEntry {
+  int64 pid = 1;
+  int64 ppid = 2;
+  string command = 3;
+  int64 lwp = 4;
+  string wchan = 5;
+  float cpu_percent = 6;
+  float mem_percent = 7;
+  string started_time = 8;
+  string elapsed_time = 9;
+  int64 rss = 10;
+  int64 vsize = 11;
+  int64 egid = 12;
+  int64 euid = 13;
+  int64 rgid = 14;
+  int64 ruid = 15;
+  int64 sgid = 16;
+  int64 suid = 17;
+  int32 nice = 18;
+  int32 priority = 19;
+  string scheduling_class = 20;
+  string stat = 21;
+  ProcessFlags flags = 22;
+  ProcessState state = 23;
+  int64 eip = 24;
+  int64 esp = 25;
+  int64 blocked_signals = 26;
+  int64 caught_signals = 27;
+  int64 ignored_signals = 28;
+  int64 pending_signals = 29;
+  int64 number_of_lwps = 30;
+}
+
+message ListReply {
+  // A list of process details which may be limited to only the pids requested.
+  repeated ProcessEntry process_entries = 1;
+}
+
+message GetStacksRequest { int64 pid = 1; }
+
+message ThreadStack {
+  int64 thread_number = 1;
+  int64 thread_id = 2;
+  int64 lwp = 3;
+  repeated string stacks = 4;
+}
+
+message GetStacksReply { repeated ThreadStack stacks = 1; }
+
+message GetJavaStacksRequest { int64 pid = 1; }
+
+message JavaThreadStack {
+  string name = 1;
+  bool daemon = 2;
+  int32 priority = 3;
+  int32 os_priority = 4;
+  int64 cpu_ms = 5;
+  int64 elapsed_sec = 6;
+  int64 thread_id = 7;
+  int64 native_thread_id = 8;
+  string state = 9;
+  int64 pc = 10;
+  string thread_state = 11;
+  repeated string stacks = 12;
+}
+
+message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
+
+enum BlobDestination {
+  BLOB_DESTINATION_UNKNOWN = 0;
+  // Just stream it back.
+  BLOB_DESTINATION_STREAM = 1;
+  // This state requires an additional field to designate location.
+  BLOB_DESTINATION_URL = 2;
+}
+
+message GetCoreRequest {
+  int64 pid = 1;
+  BlobDestination destination = 2;
+  // Only used for BLOB_DESTINATION_URL
+  string url = 3;
+  // Any additional data BLOB_DESTINATION_URL may need in order
+  // to succeed (such as an auth token for S3).
+  bytes blob_data = 4;
+}
+
+message GetCoreReply { bytes data = 1; }
+
+message GetJavaHeapDumpRequest {
+  int64 pid = 1;
+  BlobDestination destination = 2;
+  // Only used for BLOB_DESTINATION_URL
+  string url = 3;
+  // Any additional data BLOB_DESTINATION_URL may need in order
+  // to succeed (such as an auth token for S3).
+  bytes blob_data = 4;
+}
+
+message GetJavaHeapDumpReply { bytes data = 1; }
