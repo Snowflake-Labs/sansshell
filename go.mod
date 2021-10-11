@@ -7,6 +7,7 @@ require (
 	github.com/google/subcommands v1.2.0
 	github.com/open-policy-agent/opa v0.32.0
 	google.golang.org/grpc v1.40.0
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
 	google.golang.org/protobuf v1.27.1
 )
 

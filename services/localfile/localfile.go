@@ -5,6 +5,7 @@ package localfile
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative localfile.proto
 
 import (
+	"context"
 	"io"
 	"log"
 	"math"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // server is used to implement the gRPC server
@@ -85,6 +88,14 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 		}
 	}
 	return nil
+}
+
+func (s *server) Stat(ctx context.Context, in *StatRequest) (*StatReply, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+
+func (s *server) Sum(ctx context.Context, in *SumRequest) (*SumReply, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 
 // Register is called to expose this handler to the gRPC server
