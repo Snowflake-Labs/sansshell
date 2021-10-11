@@ -18,6 +18,7 @@ message Var {
 message RunRequest {
   // The playbook to execute
   string playbook = 1;
+
   // Will become N -e options to ansible-playbook
   repeated Var vars = 2;
 
