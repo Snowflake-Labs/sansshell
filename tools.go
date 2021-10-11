@@ -11,6 +11,9 @@ import (
 	_ "google.golang.org/protobuf/cmd/protoc-gen-go"
 )
 
+//go:generate go install google.golang.org/protobuf/cmd/protoc-gen-go
+//go:generate go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
 // For convenience, listing of service generation
 // targets makes it possible to regenerate all services
 // by executing `go generate` against this file.

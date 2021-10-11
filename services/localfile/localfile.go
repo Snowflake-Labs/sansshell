@@ -5,7 +5,6 @@ package localfile
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative localfile.proto
 
 import (
-	"context"
 	"io"
 	"log"
 	"math"
@@ -90,12 +89,12 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 	return nil
 }
 
-func (s *server) Stat(ctx context.Context, in *StatRequest) (*StatReply, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+func (s *server) Stat(LocalFile_StatServer) error {
+	return status.Error(codes.Unimplemented, "")
 }
 
-func (s *server) Sum(ctx context.Context, in *SumRequest) (*SumReply, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+func (s *server) Sum(LocalFile_SumServer) error {
+	return status.Error(codes.Unimplemented, "")
 }
 
 // Register is called to expose this handler to the gRPC server
