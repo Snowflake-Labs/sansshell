@@ -1,5 +1,5 @@
 .DS_Store
-cmd/unshelled-client/unshelled-client
-cmd/unshelled-server/unshelled-server
+cmd/sanssh/sanssh
+cmd/sansshell-server/sansshell-server
 certs/
 *.swp
