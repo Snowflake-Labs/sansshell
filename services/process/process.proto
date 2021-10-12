@@ -90,7 +90,7 @@ message ProcessEntry {
   int64 pid = 1;
   int64 ppid = 2;
   string command = 3;
-  int64 lwp = 4;
+  int64 thread_id = 4;
   string wchan = 5;
   float cpu_percent = 6;
   float mem_percent = 7;
@@ -116,7 +116,7 @@ message ProcessEntry {
   int64 caught_signals = 27;
   int64 ignored_signals = 28;
   int64 pending_signals = 29;
-  int64 number_of_lwps = 30;
+  int64 number_of_threads = 30;
 }
 
 message ListReply {
