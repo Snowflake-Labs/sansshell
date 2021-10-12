@@ -69,6 +69,23 @@ enum ProcessStateCode {
   PROCESS_STATE_CODE_FOREGROUND_PGRP = 6;
 }
 
+enum SchedulingClass {
+  SCHEDULING_CLASS_UNKNOWN = 0;
+  SCHEDULING_CLASS_NOT_REPORTED = 1;
+  SCHEDULING_CLASS_OTHER = 2;
+  SCHEDULING_CLASS_FIFO = 3;
+  SCHEDULING_CLASS_RR = 4;
+  SCHEDULING_CLASS_BATCH = 5;
+  SCHEDULING_CLASS_ISO = 6;
+  SCHEDULING_CLASS_IDLE = 7;
+  SCHEDULING_CLASS_DEADLINE = 8;
+}
+
+// ProcessEntry describes a process based on ps output.
+// It is modeled on the Linux ps command and on other
+// OS may return a subset of these values instead.
+// i.e. strings will be empty and integer values will be -1
+// in those cases.
 message ProcessEntry {
   int64 pid = 1;
   int64 ppid = 2;
@@ -89,7 +106,7 @@ message ProcessEntry {
   int64 suid = 17;
   int32 nice = 18;
   int32 priority = 19;
-  string scheduling_class = 20;
+  SchedulingClass scheduling_class = 20;
   ProcessFlags flags = 21;
   ProcessState state = 22;
   repeated ProcessStateCode state_code = 23;
