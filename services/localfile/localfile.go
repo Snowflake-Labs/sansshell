@@ -12,6 +12,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // server is used to implement the gRPC server
@@ -85,6 +87,14 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 		}
 	}
 	return nil
+}
+
+func (s *server) Stat(LocalFile_StatServer) error {
+	return status.Error(codes.Unimplemented, "")
+}
+
+func (s *server) Sum(LocalFile_SumServer) error {
+	return status.Error(codes.Unimplemented, "")
 }
 
 // Register is called to expose this handler to the gRPC server

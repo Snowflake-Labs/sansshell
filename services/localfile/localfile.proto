@@ -2,12 +2,20 @@ syntax = "proto3";
 
 option go_package = "github.com/Snowflake-Labs/sansshell/services/localfile";
 
+import "google/protobuf/timestamp.proto";
+
 package LocalFile;
 
 // The LocalFile service definition.
 service LocalFile {
   // Read reads a file from the disk and returns it contents
   rpc Read (ReadRequest) returns (stream ReadReply) {}
+
+  // Stat returns metadata about a single filesytem path
+  rpc Stat (stream StatRequest) returns (stream StatReply) {}
+
+  // Sum calculates a sum over the data in a single file.
+  rpc Sum (stream SumRequest) returns (stream SumReply) {}
 }
 
 // ReadRequest describes the filename to be read
@@ -22,4 +30,53 @@ message ReadRequest {
 // ReadResponse contains the contents of the file
 message ReadReply {
   bytes contents = 1;
+}
+
+// StatRequest specifies the filename for which to retrieve metadata.
+message StatRequest {
+  // absolute path to the target file
+  string filename = 1;
+}
+
+// StatReply contains stat information for a single file.
+message StatReply {
+  // The file path, as provided in StatRequest
+  string filename = 1;
+  // size of the file, in bytes
+  int64 size = 2;
+  // NB: the file mode here is represented using Go's fs.FileMode scheme
+  // which combines permissions with additional data such as the type
+  // (directory, symlink, etc)
+  uint32 mode = 3;
+  // File modification time
+  google.protobuf.Timestamp modtime = 4;
+}
+
+// SumType specifies a hashing function to use when calculating
+// file sums.
+enum SumType {
+  SUM_TYPE_UNKNOWN = 0;
+  SUM_TYPE_CRC32IEEE = 1;
+  SUM_TYPE_MD5 = 2;
+  SUM_TYPE_SHA256 = 3;
+  SUM_TYPE_SHA512_256 = 4;
+}
+
+// SumRequest specifies a type and filename for a sum operation.
+message SumRequest {
+  // Absoloute path to the target file.
+  string filename = 1;
+  // The requested sum type. If not set, or SUM_TYPE_UNKNOWN,
+  // an implementation-default value will be chosen automatically,
+  // and indicated in the reply.
+  SumType sum_type = 2;
+}
+
+message SumReply {
+  // Filename, as provided in SumRequest
+  string filename = 1;
+  // The type of sum used to calculate `sum`
+  SumType sum_type = 2;
+  // The sum value, as a hex-encoded string
+  string sum = 3;
 }

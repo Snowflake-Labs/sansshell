@@ -16,17 +16,42 @@ perhaps-less-friendly subcommands to address the raw SansShell API endpoints.
 How to setup, build and run locally for testing.  All commands are relative to
 the project root directory.
 
-## Environment setup Mac
-You need the Go setup as well as the proto compiler.:
+Building SansShell requires a recent version of Go (check the go.mod file for
+the current version).
+
+## Environment setup : protoc
+
+When making any change to the protocol buffers, you'll also need the protocol
+buffer compiler (`protoc`) (version 3 or above) as well as the protoc plugins
+for Go and Go-GRPC
+
+On MacOS, the protocol buffer can be installed via homebrew using
+```
+brew install protoc
+```
+
+On Linux, protoc can be installed using either the OS package manager, or by
+directly installing a release version from the [protocol buffers github][1]
+
+## Environment setup : protoc plugins.
+
+On any platform, Once protoc has been installed, you can install the required 
+code generation plugins using `go install`.
 
 ```
-$ brew install go
-$ brew install protoc-gen-go
-$ brew install protoc-gen-go-grpc
+$ go install google.golang.org/protobuf/cmd/protoc-gen-go
+$ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
 ```
 
-## Environment setup Linux
-TODO:
+Note that, you'll need to make certain that your `PATH` includes the gobinary
+directory (either the value of `$GOBIN`, or, if unset, `$HOME/go/bin`)
+
+The `tools.go` file contains helpful `go generate` directives which will
+do this for you, as well as re-generating the service proto files.
+
+```
+$ go generate tools.go
+```
 
 ## Build and run
 You only need to do these steps once to configure example mTLS certs:
@@ -110,3 +135,5 @@ create a new one) you'll need to generate proto outputs.
 $ cd services/SERVICE
 $ go generate
 ```
+
+[1]: https://github.com/protocolbuffers/protobuf/releases

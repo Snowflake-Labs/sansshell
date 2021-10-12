@@ -4,7 +4,6 @@ package localfile
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -21,6 +20,10 @@ const _ = grpc.SupportPackageIsVersion7
 type LocalFileClient interface {
 	// Read reads a file from the disk and returns it contents
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error)
+	// Stat returns metadata about a single filesytem path
+	Stat(ctx context.Context, opts ...grpc.CallOption) (LocalFile_StatClient, error)
+	// Sum calculates a sum over the data in a single file.
+	Sum(ctx context.Context, opts ...grpc.CallOption) (LocalFile_SumClient, error)
 }
 
 type localFileClient struct {
@@ -63,12 +66,78 @@ func (x *localFileReadClient) Recv() (*ReadReply, error) {
 	return m, nil
 }
 
+func (c *localFileClient) Stat(ctx context.Context, opts ...grpc.CallOption) (LocalFile_StatClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[1], "/LocalFile.LocalFile/Stat", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localFileStatClient{stream}
+	return x, nil
+}
+
+type LocalFile_StatClient interface {
+	Send(*StatRequest) error
+	Recv() (*StatReply, error)
+	grpc.ClientStream
+}
+
+type localFileStatClient struct {
+	grpc.ClientStream
+}
+
+func (x *localFileStatClient) Send(m *StatRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *localFileStatClient) Recv() (*StatReply, error) {
+	m := new(StatReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *localFileClient) Sum(ctx context.Context, opts ...grpc.CallOption) (LocalFile_SumClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[2], "/LocalFile.LocalFile/Sum", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localFileSumClient{stream}
+	return x, nil
+}
+
+type LocalFile_SumClient interface {
+	Send(*SumRequest) error
+	Recv() (*SumReply, error)
+	grpc.ClientStream
+}
+
+type localFileSumClient struct {
+	grpc.ClientStream
+}
+
+func (x *localFileSumClient) Send(m *SumRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *localFileSumClient) Recv() (*SumReply, error) {
+	m := new(SumReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // LocalFileServer is the server API for LocalFile service.
 // All implementations should embed UnimplementedLocalFileServer
 // for forward compatibility
 type LocalFileServer interface {
 	// Read reads a file from the disk and returns it contents
 	Read(*ReadRequest, LocalFile_ReadServer) error
+	// Stat returns metadata about a single filesytem path
+	Stat(LocalFile_StatServer) error
+	// Sum calculates a sum over the data in a single file.
+	Sum(LocalFile_SumServer) error
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
@@ -77,6 +146,12 @@ type UnimplementedLocalFileServer struct {
 
 func (UnimplementedLocalFileServer) Read(*ReadRequest, LocalFile_ReadServer) error {
 	return status.Errorf(codes.Unimplemented, "method Read not implemented")
+}
+func (UnimplementedLocalFileServer) Stat(LocalFile_StatServer) error {
+	return status.Errorf(codes.Unimplemented, "method Stat not implemented")
+}
+func (UnimplementedLocalFileServer) Sum(LocalFile_SumServer) error {
+	return status.Errorf(codes.Unimplemented, "method Sum not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -111,6 +186,58 @@ func (x *localFileReadServer) Send(m *ReadReply) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _LocalFile_Stat_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LocalFileServer).Stat(&localFileStatServer{stream})
+}
+
+type LocalFile_StatServer interface {
+	Send(*StatReply) error
+	Recv() (*StatRequest, error)
+	grpc.ServerStream
+}
+
+type localFileStatServer struct {
+	grpc.ServerStream
+}
+
+func (x *localFileStatServer) Send(m *StatReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *localFileStatServer) Recv() (*StatRequest, error) {
+	m := new(StatRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _LocalFile_Sum_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LocalFileServer).Sum(&localFileSumServer{stream})
+}
+
+type LocalFile_SumServer interface {
+	Send(*SumReply) error
+	Recv() (*SumRequest, error)
+	grpc.ServerStream
+}
+
+type localFileSumServer struct {
+	grpc.ServerStream
+}
+
+func (x *localFileSumServer) Send(m *SumReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *localFileSumServer) Recv() (*SumRequest, error) {
+	m := new(SumRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -123,6 +250,18 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Read",
 			Handler:       _LocalFile_Read_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "Stat",
+			Handler:       _LocalFile_Stat_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Sum",
+			Handler:       _LocalFile_Sum_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "localfile.proto",
