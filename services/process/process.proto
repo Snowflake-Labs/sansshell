@@ -35,11 +35,6 @@ message ListRequest {
   repeated int64 pids = 1;
 }
 
-message ProcessFlags {
-  bool forked_no_exec = 1;
-  bool used_root_privs = 2;
-}
-
 // ProcessState refers to the single letter state "ps -o s" returns.
 enum ProcessState {
   PROCESS_STATE_UNKNOWN = 0;
@@ -107,7 +102,8 @@ message ProcessEntry {
   int32 nice = 18;
   int32 priority = 19;
   SchedulingClass scheduling_class = 20;
-  ProcessFlags flags = 21;
+  // OS dependent on what this means (check man ps).
+  int64 flags = 21;
   ProcessState state = 22;
   repeated ProcessStateCode state_code = 23;
   int64 eip = 24;
