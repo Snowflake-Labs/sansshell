@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProcessClient interface {
-	// List returns the output from the ps command (with the given options).
+	// List returns the output from the ps command.
 	// NOTE: Since this contains the command line this can
 	// contain sensitive data.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListReply, error)
@@ -143,7 +143,7 @@ func (x *processGetJavaHeapDumpClient) Recv() (*GetJavaHeapDumpReply, error) {
 // All implementations should embed UnimplementedProcessServer
 // for forward compatibility
 type ProcessServer interface {
-	// List returns the output from the ps command (with the given options).
+	// List returns the output from the ps command.
 	// NOTE: Since this contains the command line this can
 	// contain sensitive data.
 	List(context.Context, *ListRequest) (*ListReply, error)

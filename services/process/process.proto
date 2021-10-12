@@ -35,11 +35,6 @@ message ListRequest {
   repeated int64 pids = 1;
 }
 
-message ProcessFlags {
-  bool forked_no_exec = 1;
-  bool used_root_privs = 2;
-}
-
 // ProcessState refers to the single letter state "ps -o s" returns.
 enum ProcessState {
   PROCESS_STATE_UNKNOWN = 0;
@@ -57,11 +52,40 @@ enum ProcessState {
   PROCESS_STATE_ZOMBIE = 6;
 }
 
+// ProcessStateCode interprets the additional characters
+// appened to ps -o stat output.
+enum ProcessStateCode {
+  PROCESS_STATE_CODE_UNKNOWN = 0;
+  PROCESS_STATE_CODE_HIGH_PRIORITY = 1;
+  PROCESS_STATE_CODE_LOW_PRIORITY = 2;
+  PROCESS_STATE_CODE_LOCKED_PAGES = 3;
+  PROCESS_STATE_CODE_SESSION_LEADER = 4;
+  PROCESS_STATE_CODE_MULTI_THREADED = 5;
+  PROCESS_STATE_CODE_FOREGROUND_PGRP = 6;
+}
+
+enum SchedulingClass {
+  SCHEDULING_CLASS_UNKNOWN = 0;
+  SCHEDULING_CLASS_NOT_REPORTED = 1;
+  SCHEDULING_CLASS_OTHER = 2;
+  SCHEDULING_CLASS_FIFO = 3;
+  SCHEDULING_CLASS_RR = 4;
+  SCHEDULING_CLASS_BATCH = 5;
+  SCHEDULING_CLASS_ISO = 6;
+  SCHEDULING_CLASS_IDLE = 7;
+  SCHEDULING_CLASS_DEADLINE = 8;
+}
+
+// ProcessEntry describes a process based on ps output.
+// It is modeled on the Linux ps command and on other
+// OS may return a subset of these values instead.
+// i.e. strings will be empty and integer values will be -1
+// in those cases.
 message ProcessEntry {
   int64 pid = 1;
   int64 ppid = 2;
   string command = 3;
-  int64 lwp = 4;
+  int64 thread_id = 4;
   string wchan = 5;
   float cpu_percent = 6;
   float mem_percent = 7;
@@ -77,17 +101,18 @@ message ProcessEntry {
   int64 suid = 17;
   int32 nice = 18;
   int32 priority = 19;
-  string scheduling_class = 20;
-  string stat = 21;
-  ProcessFlags flags = 22;
-  ProcessState state = 23;
+  SchedulingClass scheduling_class = 20;
+  // OS dependent on what this means (check man ps).
+  int64 flags = 21;
+  ProcessState state = 22;
+  repeated ProcessStateCode state_code = 23;
   int64 eip = 24;
   int64 esp = 25;
   int64 blocked_signals = 26;
   int64 caught_signals = 27;
   int64 ignored_signals = 28;
   int64 pending_signals = 29;
-  int64 number_of_lwps = 30;
+  int64 number_of_threads = 30;
 }
 
 message ListReply {
