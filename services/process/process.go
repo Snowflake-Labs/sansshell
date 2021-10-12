@@ -6,11 +6,13 @@ package process
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -21,44 +23,83 @@ import (
 
 var psBin = flag.String("ps_bin", "/usr/bin/ps", "Location of the ps command")
 
-// Flags passed to ps -e -o <flags> to get the output needed to implement List.
-var psOptions = []string{
-	"pid",
-	"ppid",
-	"lwp",
-	"wchan:32", // Make this wider than the default since kernel functions are often wordy.
-	"pcpu",
-	"pmem",
-	"stime",
-	"time",
-	"rss",
-	"vsz",
-	"egid",
-	"euid",
-	"rgid",
-	"ruid",
-	"sgid",
-	"suid",
-	"nice",
-	"priority",
-	"class",
-	"flag",
-	"stat",
-	"eip",
-	"esp",
-	"blocked",
-	"caught",
-	"ignored",
-	"pending",
-	"nlwp",
-	"cmd", // Last so it's easy to parse.
+var osSpecificPsFlags = map[string]func() []string{
+	"linux":  linuxPsFlags,
+	"darwin": darwinPsFlags,
 }
 
-var psFlags = []string{
-	"--noheader",
-	"-e",
-	"-o",
-	strings.Join(psOptions, ","),
+func linuxPsFlags() []string {
+	// Flags passed to ps -e -o <flags> to get the output needed to implement List.
+	psOptions := []string{
+		"pid",
+		"ppid",
+		"lwp",
+		"wchan:32", // Make this wider than the default since kernel functions are often wordy.
+		"pcpu",
+		"pmem",
+		"stime",
+		"time",
+		"rss",
+		"vsz",
+		"egid",
+		"euid",
+		"rgid",
+		"ruid",
+		"sgid",
+		"suid",
+		"nice",
+		"priority",
+		"class",
+		"flag",
+		"stat",
+		"eip",
+		"esp",
+		"blocked",
+		"caught",
+		"ignored",
+		"pending",
+		"nlwp",
+		"cmd", // Last so it's easy to parse.
+	}
+
+	return []string{
+		"--noheader",
+		"-e",
+		"-o",
+		strings.Join(psOptions, ","),
+	}
+}
+
+func darwinPsFlags() []string {
+	psOptions := []string{
+		"pid",
+		"ppid",
+		"wchan",
+		"pcpu",
+		"pmem",
+		"start",
+		"time",
+		"rss",
+		"vsz",
+		"gid",
+		"uid",
+		"rgid",
+		"ruid",
+		"nice",
+		"pri",
+		"flags",
+		"stat",
+		"blocked",
+		"pending",
+		"command",
+	}
+
+	return []string{
+		"-M",
+		"-ax",
+		"-o",
+		strings.Join(psOptions, ","),
+	}
 }
 
 // server is used to implement the gRPC server
@@ -67,35 +108,35 @@ type server struct {
 
 func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error) {
 	cmdName := *psBin
-	options := psFlags
+	options, ok := osSpecificPsFlags[runtime.GOOS]
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("no support for OS %q", runtime.GOOS))
+	}
 
+	psOptions := options()
+
+	log.Printf("Received request for List: %+v", req)
 	// We gather all the processes up and then filter by pid if needed at the end.
-	cmd := exec.CommandContext(ctx, cmdName, options...)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	}
+	cmd := exec.CommandContext(ctx, cmdName, psOptions...)
+	var stderrBuf, stdoutBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	cmd.Stdin = nil
 
 	if err := cmd.Start(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	// TODO(jchacon): We're assuming on any error we don't have unbounded output.
-	// Probably should just clip instead.
-	errBuf, err := ioutil.ReadAll(stderr)
-	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	if err := cmd.Wait(); err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("command exited with error: %v", err))
 	}
 
+	errBuf := stderrBuf.Bytes()
 	if len(errBuf) != 0 {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("unexpected error output:\n%s", string(errBuf)))
 	}
 
-	scanner := bufio.NewScanner(stdout)
+	scanner := bufio.NewScanner(&stdoutBuf)
 
 	// Parse entries into a map so we can filter by pid later if needed.
 	entries := make(map[int64]*ProcessEntry)
