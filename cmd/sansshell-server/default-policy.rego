@@ -16,3 +16,7 @@ allow {
 	input.message.command = "echo"
 	input.message.args = ["hello", "world"]
 }
+
+allow {
+	input.type = "Process.ListRequest"
+}
