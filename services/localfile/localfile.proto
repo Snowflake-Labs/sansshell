@@ -64,13 +64,12 @@ enum SumType {
 
 // SumRequest specifies a type and filename for a sum operation.
 message SumRequest {
+  // Absoloute path to the target file.
+  string filename = 1;
   // The requested sum type. If not set, or SUM_TYPE_UNKNOWN,
   // an implementation-default value will be chosen automatically,
   // and indicated in the reply.
-  SumType sum_type = 1;
-
-  // Absoloute path to the target file.
-  string filename = 2;
+  SumType sum_type = 2;
 }
 
 message SumReply {
