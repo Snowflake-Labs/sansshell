@@ -17,6 +17,7 @@ func init() {
 }
 
 type processCmd struct {
+	pid int64
 }
 
 func (*processCmd) Name() string     { return "ps" }
@@ -28,6 +29,7 @@ func (*processCmd) Usage() string {
 }
 
 func (p *processCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.pid, "pid", 0, "If positive restrict request to this pid only")
 }
 
 func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -35,7 +37,11 @@ func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	c := pb.NewProcessClient(conn)
 
-	resp, err := c.List(ctx, &pb.ListRequest{})
+	req := &pb.ListRequest{}
+	if p.pid > 0 {
+		req.Pids = append(req.Pids, p.pid)
+	}
+	resp, err := c.List(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "List returned error: %v\n", err)
 		return subcommands.ExitFailure
