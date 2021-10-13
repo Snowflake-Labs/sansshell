@@ -136,7 +136,20 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	numThreads := int64(0)
 	numEntries := 0
 
-	out := &ProcessEntry{}
+	blank := func() *ProcessEntry {
+		// Set the entries we know darwin doesn't fill in.
+		return &ProcessEntry{
+			Sgid:            -1,
+			Suid:            -1,
+			SchedulingClass: SchedulingClass_SCHEDULING_CLASS_UNKNOWN,
+			Eip:             -1,
+			Esp:             -1,
+			CaughtSignals:   -1,
+			IgnoredSignals:  -1,
+		}
+	}
+
+	out := blank()
 
 	for scanner.Scan() {
 		// We should get back exactly the same amount of fields as we asked but
@@ -161,8 +174,7 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			if numEntries > 0 { // Done counting for this entry so fill in number of threads and insert into the map.
 				out.NumberOfThreads = numThreads
 				entries[out.Pid] = out
-				log.Printf("Got entry: %+v", out)
-				out = &ProcessEntry{}
+				out = blank()
 				numThreads = 1
 			}
 			numEntries++
