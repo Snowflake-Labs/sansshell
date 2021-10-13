@@ -105,14 +105,21 @@ func darwinPsFlags() []string {
 		"stat",
 		"blocked",
 		"pending",
+		"tt",
+		"stime",
+		"utime",
+		"user",
 		"command",
 	}
 
 	return []string{
-		"-M",
+		// Order here is important. -M must come after -o or it'll clip command and add fields it insists
+		// must be there. It's why we include tt, stime, utime and user above even though we don't return
+		// them in a ProcessEntry.
 		"-e",
 		"-o",
 		strings.Join(psOptions, ","),
+		"-M",
 	}
 }
 
@@ -132,8 +139,6 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("missing first line? %v", err))
 	}
 
-	// Always start with one thread as the default.
-	numThreads := int64(0)
 	numEntries := 0
 
 	blank := func() *ProcessEntry {
@@ -154,10 +159,11 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	for scanner.Scan() {
 		// We should get back exactly the same amount of fields as we asked but
 		// cmd can have spaces so stop before it.
-		// Also on darwin the only way to get a thread count if with -M which adds
-		// 9 columns regardless of -o (they get added after it). One of those 9 is
-		// command which means it can have spaces...So parsing is painful.
+		// In this case we know it's >= 23 fields.
+		const FIELD_COUNT = 23
+
 		text := scanner.Text()
+		fields := strings.Fields(text)
 
 		// Assume we increment but reset if we found a new start (i.e. not space in first position).
 		// Lines look like
@@ -166,157 +172,150 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		//      PID TT %CPU ...
 		//
 		// for something with 2 threads. Each blank leading line indicates another thread.
-		numThreads++
-		if text[0] != ' ' {
+
+		// Only increment thread count if we've parsed the first one since otherwise it'll add one
+		// spurious thread to the first entry.
+		if numEntries > 0 {
+			out.NumberOfThreads++
+		}
+
+		if len(fields) >= FIELD_COUNT {
 			// The first line will match this and we haven't parsed yet so skip until it's done.
 			// Also have to handle this below when we get done with the scanner.
 
 			if numEntries > 0 { // Done counting for this entry so fill in number of threads and insert into the map.
-				out.NumberOfThreads = numThreads
 				entries[out.Pid] = out
 				out = blank()
-				numThreads = 1
 			}
 			numEntries++
 		}
 
 		// We only process the main line.
-		if numThreads == 1 {
-			// Take the line and split by spaces
-			lineScanner := bufio.NewScanner(strings.NewReader(text))
-			lineScanner.Split(bufio.ScanWords)
-
-			// Helper for moving the scanner forward and checking errors.
-			sc := func(reason string) error {
-				if !lineScanner.Scan() {
-					err := lineScanner.Err()
-					return status.Error(codes.Internal, fmt.Sprintf("parse error against %q: reason %s - %v", text, reason, err))
+		if len(fields) >= FIELD_COUNT {
+			for _, f := range []struct {
+				name  string
+				field string
+				fmt   string
+				out   interface{}
+			}{
+				{
+					name:  "pid",
+					field: fields[0],
+					fmt:   "%d",
+					out:   &out.Pid,
+				},
+				{
+					name:  "ppid",
+					field: fields[1],
+					fmt:   "%d",
+					out:   &out.Ppid,
+				},
+				{
+					name:  "wchan",
+					field: fields[2],
+					fmt:   "%s",
+					out:   &out.Wchan,
+				},
+				{
+					name:  "pcpu",
+					field: fields[3],
+					fmt:   "%f",
+					out:   &out.CpuPercent,
+				},
+				{
+					name:  "pmem",
+					field: fields[4],
+					fmt:   "%f",
+					out:   &out.MemPercent,
+				},
+				{
+					name:  "started time",
+					field: fields[5],
+					fmt:   "%s",
+					out:   &out.StartedTime,
+				},
+				{
+					name:  "elapsed time",
+					field: fields[6],
+					fmt:   "%s",
+					out:   &out.ElapsedTime,
+				},
+				{
+					name:  "rss",
+					field: fields[7],
+					fmt:   "%d",
+					out:   &out.Rss,
+				},
+				{
+					name:  "vsize",
+					field: fields[8],
+					fmt:   "%d",
+					out:   &out.Vsize,
+				},
+				{
+					name:  "egid",
+					field: fields[9],
+					fmt:   "%d",
+					out:   &out.Egid,
+				},
+				{
+					name:  "euid",
+					field: fields[10],
+					fmt:   "%d",
+					out:   &out.Euid,
+				},
+				{
+					name:  "rgid",
+					field: fields[11],
+					fmt:   "%d",
+					out:   &out.Rgid,
+				},
+				{
+					name:  "ruid",
+					field: fields[12],
+					fmt:   "%d",
+					out:   &out.Ruid,
+				},
+				{
+					name:  "nice",
+					field: fields[13],
+					fmt:   "%d",
+					out:   &out.Nice,
+				},
+				{
+					// On darwin this has a trailing letter which isn't documented
+					// so it's going to get ignored on the parse.
+					name:  "priority",
+					field: fields[14],
+					fmt:   "%d",
+					out:   &out.Priority,
+				},
+				{
+					name:  "flags",
+					field: fields[15],
+					fmt:   "%x",
+					out:   &out.Flags,
+				},
+				{
+					name:  "blocked",
+					field: fields[17],
+					fmt:   "%x",
+					out:   &out.BlockedSignals,
+				},
+				{
+					name:  "pending",
+					field: fields[18],
+					fmt:   "%x",
+					out:   &out.PendingSignals,
+				},
+			} {
+				if n, err := fmt.Sscanf(f.field, f.fmt, f.out); n != 1 || err != nil {
+					return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", f.name, f.field, text, err))
 				}
-				return nil
-			}
-
-			// First field is username, skip it.
-			if err := sc("username"); err != nil {
-				return nil, err
-			}
-
-			// 2nd is pid, remember it.
-			if err := sc("pid"); err != nil {
-				return nil, err
-			}
-			pid := lineScanner.Text()
-
-			// Now scan forward until we find pid again. Now we're in the fields we specified.
-			for {
-				// We either find the pid or run out of input.
-				if err := sc("find pid again"); err != nil {
-					return nil, err
-				}
-				if pid == lineScanner.Text() {
-					break
-				}
-			}
-
-			// Parse pid
-			if n, err := fmt.Sscanf(pid, "%d", &out.Pid); n != 1 || err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract pid: %q in line %q: %v", pid, text, err))
-			}
-
-			// Helper func to extract a token and convert into the right field.
-			parse := func(debug string, format string, dest interface{}) error {
-				if err := sc("find " + debug); err != nil {
-					return err
-				}
-				t := lineScanner.Text()
-				if n, err := fmt.Sscanf(t, format, dest); n != 1 || err != nil {
-					return status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", debug, t, text, err))
-				}
-				return nil
-			}
-
-			// Parse ppid
-			if err := parse("ppid", "%d", &out.Ppid); err != nil {
-				return nil, err
-			}
-
-			// Parse wchan
-			if err := parse("wchan", "%s", &out.Wchan); err != nil {
-				return nil, err
-			}
-
-			// Parse pcpu
-			if err := parse("pcpu", "%f", &out.CpuPercent); err != nil {
-				return nil, err
-			}
-
-			// Parse pmem
-			if err := parse("pmem", "%f", &out.MemPercent); err != nil {
-				return nil, err
-			}
-
-			// Parse started time
-			if err := parse("started time", "%s", &out.StartedTime); err != nil {
-				return nil, err
-			}
-
-			// Parse elapsed time
-			if err := parse("elapsed time", "%s", &out.ElapsedTime); err != nil {
-				return nil, err
-			}
-
-			// Parse rss
-			if err := parse("rss", "%d", &out.Rss); err != nil {
-				return nil, err
-			}
-
-			// Parse vsize
-			if err := parse("vsize", "%d", &out.Vsize); err != nil {
-				return nil, err
-			}
-
-			// Parse egid
-			if err := parse("egid", "%d", &out.Egid); err != nil {
-				return nil, err
-			}
-
-			// Parse euid
-			if err := parse("euid", "%d", &out.Euid); err != nil {
-				return nil, err
-			}
-
-			// Parse rgid
-			if err := parse("rgid", "%d", &out.Rgid); err != nil {
-				return nil, err
-			}
-
-			// Parse ruid
-			if err := parse("ruid", "%d", &out.Ruid); err != nil {
-				return nil, err
-			}
-
-			// Parse nice
-			if err := parse("nice", "%d", &out.Nice); err != nil {
-				return nil, err
-			}
-
-			// Parse priority. On darwin this has a trailing letter which isn't documented
-			// so it's going to get ignored on the parse.
-			if err := parse("priority", "%d", &out.Priority); err != nil {
-				return nil, err
-			}
-
-			// Parse flags
-			if err := parse("flags", "%x", &out.Flags); err != nil {
-				return nil, err
 			}
 
 			// State has to be computed by hand.
-			if err := sc("find state"); err != nil {
-				return nil, err
-			}
-			t := lineScanner.Text()
-
-			switch t[0] {
+			switch fields[16][0] {
 			case 'I', 'S':
 				out.State = ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
 			case 'R':
@@ -331,26 +330,9 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 				out.State = ProcessState_PROCESS_STATE_UNKNOWN
 			}
 
-			// Parse blocked
-			if err := parse("blocked", "%x", &out.BlockedSignals); err != nil {
-				return nil, err
-			}
-
-			// Parse pending
-			if err := parse("pending", "%x", &out.PendingSignals); err != nil {
-				return nil, err
-			}
-
 			// Everything left is the command so gather it up, rejoin with spaces
 			// and we're done with this line.
-			var command []string
-			for lineScanner.Scan() {
-				command = append(command, lineScanner.Text())
-			}
-			out.Command = strings.Join(command, " ")
-			if err := lineScanner.Err(); err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("parse error filling command %q: %v", text, err))
-			}
+			out.Command = strings.Join(fields[23:], " ")
 		}
 
 	}
@@ -360,7 +342,6 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	}
 
 	// Final entry
-	out.NumberOfThreads = numThreads
 	entries[out.Pid] = out
 
 	return entries, nil
