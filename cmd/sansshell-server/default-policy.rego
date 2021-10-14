@@ -12,6 +12,14 @@ allow {
 }
 
 allow {
+  input.type = "LocalFile.StatRequest"
+}
+
+allow {
+  input.type = "LocalFile.SumRequest"
+}
+
+allow {
 	input.type = "Exec.ExecRequest"
 	input.message.command = "echo"
 	input.message.args = ["hello", "world"]

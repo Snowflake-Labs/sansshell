@@ -5,20 +5,32 @@ package localfile
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative localfile.proto
 
 import (
+	"crypto/md5"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
+	"hash"
+	"hash/crc32"
 	"io"
 	"log"
 	"math"
 	"os"
+	"path/filepath"
+	"syscall"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+var (
+	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute")
 )
 
 // server is used to implement the gRPC server
-type server struct {
-}
+type server struct{}
 
 // TODO(jchacon): Make this configurable
 // The chunk size we use when sending replies to Read on
@@ -29,6 +41,9 @@ var chunkSize = 128 * 1024
 func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 	file := in.GetFilename()
 	log.Printf("Received request for: %v", file)
+	if !filepath.IsAbs(file) {
+		return AbsolutePathError
+	}
 	f, err := os.Open(file)
 	if err != nil {
 		log.Printf("Can't open file %s: %v", file, err)
@@ -89,12 +104,88 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 	return nil
 }
 
-func (s *server) Stat(LocalFile_StatServer) error {
-	return status.Error(codes.Unimplemented, "")
+func (s *server) Stat(stream LocalFile_StatServer) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !filepath.IsAbs(in.Filename) {
+			return AbsolutePathError
+		}
+		stat, err := os.Stat(in.Filename)
+		if err != nil {
+			return err
+		}
+		stat_t, ok := stat.Sys().(*syscall.Stat_t)
+		if !ok || stat_t == nil {
+			return status.Error(codes.Unimplemented, "stat not supported")
+		}
+		if err := stream.Send(&StatReply{
+			Filename: in.Filename,
+			Size:     stat.Size(),
+			Mode:     uint32(stat.Mode()),
+			Modtime:  timestamppb.New(stat.ModTime()),
+			Uid:      stat_t.Uid,
+			Gid:      stat_t.Gid,
+		}); err != nil {
+			return err
+		}
+	}
 }
 
-func (s *server) Sum(LocalFile_SumServer) error {
-	return status.Error(codes.Unimplemented, "")
+func (s *server) Sum(stream LocalFile_SumServer) error {
+	for {
+		in, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !filepath.IsAbs(in.Filename) {
+			return AbsolutePathError
+		}
+		out := &SumReply{
+			SumType:  in.SumType,
+			Filename: in.Filename,
+		}
+		var hasher hash.Hash
+		switch in.SumType {
+		// default to sha256 for unspecified
+		case SumType_SUM_TYPE_UNKNOWN, SumType_SUM_TYPE_SHA256:
+			hasher = sha256.New()
+			out.SumType = SumType_SUM_TYPE_SHA256
+		case SumType_SUM_TYPE_MD5:
+			hasher = md5.New()
+		case SumType_SUM_TYPE_SHA512_256:
+			hasher = sha512.New512_256()
+		case SumType_SUM_TYPE_CRC32IEEE:
+			hasher = crc32.NewIEEE()
+		default:
+			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", in.SumType)
+		}
+		if err := func() error {
+			f, err := os.Open(in.Filename)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			if _, err := io.Copy(hasher, f); err != nil {
+				return err
+			}
+			out.Sum = hex.EncodeToString(hasher.Sum(nil))
+			return nil
+		}(); err != nil {
+			return err
+		}
+		if err := stream.Send(out); err != nil {
+			return err
+		}
+	}
 }
 
 // Register is called to expose this handler to the gRPC server
