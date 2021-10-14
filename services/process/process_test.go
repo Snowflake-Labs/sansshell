@@ -11,9 +11,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -78,7 +79,7 @@ func TestList(t *testing.T) {
 	}
 
 	testdata := &ListReply{}
-	if err := proto.UnmarshalText(string(input), testdata); err != nil {
+	if err := prototext.Unmarshal(input, testdata); err != nil {
 		t.Fatalf("Can't unmarshall test data %v", err)
 	}
 
