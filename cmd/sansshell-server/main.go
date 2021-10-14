@@ -1,3 +1,6 @@
+//+build go1.16
+//go:build go1.16
+
 // Package main implements the SansShell server.
 package main
 
