@@ -1,101 +1,64 @@
 process_entries : <
-  pid : 61
-  ppid : 1
-  command : "/usr/libexec/UserEventAgent (System)"
-  wchan : "-"
-  started_time : "20Sep21"
-  elapsed_time : "5:35.35"
-  rss : 9944
-  vsize : 6670316
-  sgid : -1
-  suid : -1
-  priority : 31
-  flags : 16388
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
-  number_of_threads : 4
->
-process_entries : <
-  pid : 64
-  ppid : 1
-  command : "/System/Library/PrivateFrameworks/Uninstall.framework/Resources/"
-            "uninstalld"
-  wchan : "-"
-  started_time : "20Sep21"
-  elapsed_time : "0:55.40"
-  rss : 2516
-  vsize : 4440496
-  sgid : -1
-  suid : -1
-  priority : 20
-  flags : 16388
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
-  number_of_threads : 3
->
-process_entries : <
-  pid : 65
-  ppid : 1
-  command : "/System/Library/Frameworks/CoreServices.framework/Versions/A/"
-            "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd"
-  wchan : "-"
-  started_time : "20Sep21"
-  elapsed_time : "34:33.37"
-  rss : 6264
-  vsize : 6645232
-  sgid : -1
-  suid : -1
-  priority : 49
-  flags : 16793604
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
-  number_of_threads : 16
->
-process_entries : <
   pid : 1
-  command : "/sbin/launchd"
-  wchan : "-"
-  started_time : "20Sep21"
-  elapsed_time : "157:17.67"
-  rss : 16756
-  vsize : 4807404
-  sgid : -1
-  suid : -1
-  priority : 31
-  flags : 16388
+  wchan : "ep_poll"
+  cpu_percent: 0.1
+  started_time : "Oct01"
+  elapsed_time : "00:05:13"
+  rss : 4176
+  vsize : 191668
+  priority : 20
+  scheduling_class : SCHEDULING_CLASS_OTHER
+  flags : 4
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
+  state_code : PROCESS_STATE_CODE_SESSION_LEADER
+  eip : 1408114643
+  esp : 3172019824
+  blocked_signals : 8927191084203854339
+  caught_signals : 6442452204
+  ignored_signals : 4096
+  number_of_threads : 1
+  command : "/usr/lib/systemd/systemd --switched-root --system --deserialize 22"
+>
+process_entries : <
+  pid : 2
+  wchan : "kthreadd"
+  mem_percent: 0.2
+  started_time : "Oct01"
+  elapsed_time : "00:00:01"
+  priority : 20
+  scheduling_class : SCHEDULING_CLASS_OTHER
+  flags : 1
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
   ignored_signals : -1
   number_of_threads : 2
+  command : "[kthreadd]"
 >
 process_entries : <
-  pid : 60
-  ppid : 1
-  command : "/usr/sbin/syslogd"
-  wchan : "-"
-  started_time : "20Sep21"
-  elapsed_time : "3:17.56"
-  rss : 1168
-  vsize : 4801792
-  sgid : -1
-  suid : -1
-  priority : 4
-  flags : 16388
+  pid : 4
+  ppid : 2
+  wchan : "worker_thread"
+  started_time : "Oct01"
+  elapsed_time : "00:00:00"
+  nice : -20
+  scheduling_class : SCHEDULING_CLASS_OTHER
+  flags : 1
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
+  state_code : PROCESS_STATE_CODE_HIGH_PRIORITY
   ignored_signals : -1
-  number_of_threads : 3
+  number_of_threads : 4
+  command : "[kworker/0:0H]"
+>
+process_entries : <
+  pid : 6
+  ppid : 2
+  wchan : "smpboot_thread_fn"
+  started_time : "Oct01"
+  elapsed_time : "00:01:16"
+  priority : 20
+  scheduling_class : SCHEDULING_CLASS_OTHER
+  flags : 1
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  ignored_signals : -1
+  number_of_threads : 4
+  command : "[ksoftirqd/0]"
 >

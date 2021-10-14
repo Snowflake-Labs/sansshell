@@ -17,6 +17,8 @@ process_entries : <
   caught_signals : -1
   ignored_signals : -1
   number_of_threads : 4
+  cpu_percent: 0.0
+  mem_percent: 0.0
 >
 process_entries : <
   pid : 64
@@ -38,6 +40,8 @@ process_entries : <
   caught_signals : -1
   ignored_signals : -1
   number_of_threads : 3
+  cpu_percent: 0.0
+  mem_percent: 0.0
 >
 process_entries : <
   pid : 65
@@ -59,6 +63,8 @@ process_entries : <
   caught_signals : -1
   ignored_signals : -1
   number_of_threads : 16
+  cpu_percent: 0.0
+  mem_percent: 0.0
 >
 process_entries : <
   pid : 1
@@ -78,6 +84,8 @@ process_entries : <
   caught_signals : -1
   ignored_signals : -1
   number_of_threads : 2
+  cpu_percent: 0.0
+  mem_percent: 0.0
 >
 process_entries : <
   pid : 60
@@ -98,4 +106,6 @@ process_entries : <
   caught_signals : -1
   ignored_signals : -1
   number_of_threads : 3
+  cpu_percent: 0.0
+  mem_percent: 0.0
 >
