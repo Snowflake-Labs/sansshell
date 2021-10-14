@@ -103,15 +103,15 @@ message ProcessEntry {
   int32 priority = 19;
   SchedulingClass scheduling_class = 20;
   // OS dependent on what this means (check man ps).
-  int64 flags = 21;
+  uint64 flags = 21;
   ProcessState state = 22;
   repeated ProcessStateCode state_code = 23;
-  int64 eip = 24;
-  int64 esp = 25;
-  int64 blocked_signals = 26;
-  int64 caught_signals = 27;
-  int64 ignored_signals = 28;
-  int64 pending_signals = 29;
+  uint64 eip = 24;
+  uint64 esp = 25;
+  uint64 blocked_signals = 26;
+  uint64 caught_signals = 27;
+  uint64 ignored_signals = 28;
+  uint64 pending_signals = 29;
   int64 number_of_threads = 30;
 }
 
