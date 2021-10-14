@@ -1,0 +1,101 @@
+process_entries : <
+  pid : 61
+  ppid : 1
+  command : "/usr/libexec/UserEventAgent (System)"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "5:35.35"
+  rss : 9944
+  vsize : 6670316
+  sgid : -1
+  suid : -1
+  priority : 31
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  eip : -1
+  esp : -1
+  caught_signals : -1
+  ignored_signals : -1
+  number_of_threads : 4
+>
+process_entries : <
+  pid : 64
+  ppid : 1
+  command : "/System/Library/PrivateFrameworks/Uninstall.framework/Resources/"
+            "uninstalld"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "0:55.40"
+  rss : 2516
+  vsize : 4440496
+  sgid : -1
+  suid : -1
+  priority : 20
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  eip : -1
+  esp : -1
+  caught_signals : -1
+  ignored_signals : -1
+  number_of_threads : 3
+>
+process_entries : <
+  pid : 65
+  ppid : 1
+  command : "/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+            "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "34:33.37"
+  rss : 6264
+  vsize : 6645232
+  sgid : -1
+  suid : -1
+  priority : 49
+  flags : 16793604
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  eip : -1
+  esp : -1
+  caught_signals : -1
+  ignored_signals : -1
+  number_of_threads : 16
+>
+process_entries : <
+  pid : 1
+  command : "/sbin/launchd"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "157:17.67"
+  rss : 16756
+  vsize : 4807404
+  sgid : -1
+  suid : -1
+  priority : 31
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  eip : -1
+  esp : -1
+  caught_signals : -1
+  ignored_signals : -1
+  number_of_threads : 2
+>
+process_entries : <
+  pid : 60
+  ppid : 1
+  command : "/usr/sbin/syslogd"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "3:17.56"
+  rss : 1168
+  vsize : 4801792
+  sgid : -1
+  suid : -1
+  priority : 4
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  eip : -1
+  esp : -1
+  caught_signals : -1
+  ignored_signals : -1
+  number_of_threads : 3
+>
