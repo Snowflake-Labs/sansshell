@@ -111,13 +111,16 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 			return nil
 		}
 		if err != nil {
+			log.Printf("stat: recv error %v", err)
 			return err
 		}
+		log.Printf("stat: request for file: %v", in.Filename)
 		if !filepath.IsAbs(in.Filename) {
 			return AbsolutePathError
 		}
 		stat, err := os.Stat(in.Filename)
 		if err != nil {
+			log.Printf("stat: os.Stat error %v", err)
 			return err
 		}
 		stat_t, ok := stat.Sys().(*syscall.Stat_t)
@@ -132,6 +135,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 			Uid:      stat_t.Uid,
 			Gid:      stat_t.Gid,
 		}); err != nil {
+			log.Printf("stat: send error %v", err)
 			return err
 		}
 	}
@@ -144,8 +148,10 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 			return nil
 		}
 		if err != nil {
+			log.Printf("sum: recv error %v", err)
 			return err
 		}
+		log.Printf("sum: request for file: %v", in.Filename)
 		if !filepath.IsAbs(in.Filename) {
 			return AbsolutePathError
 		}
@@ -166,6 +172,7 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 		case SumType_SUM_TYPE_CRC32IEEE:
 			hasher = crc32.NewIEEE()
 		default:
+			log.Printf("sum: invalid sum type %v", in.SumType)
 			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", in.SumType)
 		}
 		if err := func() error {
@@ -175,6 +182,7 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 			}
 			defer f.Close()
 			if _, err := io.Copy(hasher, f); err != nil {
+				log.Printf("sum: copy error %v", err)
 				return err
 			}
 			out.Sum = hex.EncodeToString(hasher.Sum(nil))
@@ -183,6 +191,7 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 			return err
 		}
 		if err := stream.Send(out); err != nil {
+			log.Printf("sum: send error %v", err)
 			return err
 		}
 	}
