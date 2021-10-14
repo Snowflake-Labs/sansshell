@@ -207,6 +207,11 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintf(os.Stderr, "sum client error: %v\n", err)
 		return subcommands.ExitFailure
 	}
+	// NB: we could gain more performance by asynchronously processing
+	// requests and responses, at the expense of needing to manage a
+	// goroutine, and non-straightline error handling.
+	// Instead, for the sake of simplicity, we're treating the bidirectional
+	// stream as a simple request/reply channel
 	for _, filename := range f.Args() {
 		if err := stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
 			fmt.Fprintf(os.Stderr, "sum: send error: %v\n", err)
