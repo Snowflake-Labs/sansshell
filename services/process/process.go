@@ -47,7 +47,6 @@ func linuxPsFlags() []string {
 	psOptions := []string{
 		"pid",
 		"ppid",
-		"lwp",
 		"wchan:32", // Make this wider than the default since kernel functions are often wordy.
 		"pcpu",
 		"pmem",
@@ -125,6 +124,268 @@ func darwinPsFlags() []string {
 
 func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	entries := make(map[int64]*ProcessEntry)
+
+	scanner := bufio.NewScanner(r)
+	out := &ProcessEntry{}
+
+	for scanner.Scan() {
+		text := scanner.Text()
+		fields := strings.Fields(text)
+
+		// In case the last line is blank. In general a blank doesn't hurt.
+		if len(text) == 0 {
+			continue
+		}
+
+		// We know there are at least 27 fields but can be more
+		// since command could have spaces.
+		const FIELD_COUNT = 27
+
+		if len(fields) < FIELD_COUNT {
+			return nil, status.Error(codes.Internal, fmt.Sprintf("invalid field count for line. Must be %d minimum. Input: %q", FIELD_COUNT, text))
+		}
+
+		for _, f := range []struct {
+			name  string
+			field string
+			fmt   string
+			out   interface{}
+		}{
+			{
+				name:  "pid",
+				field: fields[0],
+				fmt:   "%d",
+				out:   &out.Pid,
+			},
+			{
+				name:  "ppid",
+				field: fields[1],
+				fmt:   "%d",
+				out:   &out.Ppid,
+			},
+			{
+				name:  "wchan",
+				field: fields[2],
+				fmt:   "%s",
+				out:   &out.Wchan,
+			},
+			{
+				name:  "pcpu",
+				field: fields[3],
+				fmt:   "%f",
+				out:   &out.CpuPercent,
+			},
+			{
+				name:  "pmem",
+				field: fields[4],
+				fmt:   "%f",
+				out:   &out.MemPercent,
+			},
+			{
+				name:  "started time",
+				field: fields[5],
+				fmt:   "%s",
+				out:   &out.StartedTime,
+			},
+			{
+				name:  "elapsed time",
+				field: fields[6],
+				fmt:   "%s",
+				out:   &out.ElapsedTime,
+			},
+			{
+				name:  "rss",
+				field: fields[7],
+				fmt:   "%d",
+				out:   &out.Rss,
+			},
+			{
+				name:  "vsize",
+				field: fields[8],
+				fmt:   "%d",
+				out:   &out.Vsize,
+			},
+			{
+				name:  "egid",
+				field: fields[9],
+				fmt:   "%d",
+				out:   &out.Egid,
+			},
+			{
+				name:  "euid",
+				field: fields[10],
+				fmt:   "%d",
+				out:   &out.Euid,
+			},
+			{
+				name:  "rgid",
+				field: fields[11],
+				fmt:   "%d",
+				out:   &out.Rgid,
+			},
+			{
+				name:  "ruid",
+				field: fields[12],
+				fmt:   "%d",
+				out:   &out.Ruid,
+			},
+			{
+				name:  "sgid",
+				field: fields[13],
+				fmt:   "%d",
+				out:   &out.Sgid,
+			},
+			{
+				name:  "suid",
+				field: fields[14],
+				fmt:   "%d",
+				out:   &out.Suid,
+			},
+			{
+				name:  "nice",
+				field: fields[15],
+				fmt:   "%d",
+				out:   &out.Nice,
+			},
+			{
+				name:  "priority",
+				field: fields[16],
+				fmt:   "%d",
+				out:   &out.Priority,
+			},
+			{
+				name:  "flags",
+				field: fields[18],
+				fmt:   "%x",
+				out:   &out.Flags,
+			},
+			{
+				name:  "eip",
+				field: fields[20],
+				fmt:   "%x",
+				out:   &out.Eip,
+			},
+			{
+				name:  "e2p",
+				field: fields[21],
+				fmt:   "%x",
+				out:   &out.Esp,
+			},
+			{
+				name:  "blocked",
+				field: fields[22],
+				fmt:   "%x",
+				out:   &out.BlockedSignals,
+			},
+			{
+				name:  "caught",
+				field: fields[23],
+				fmt:   "%x",
+				out:   &out.CaughtSignals,
+			},
+			{
+				name:  "ignored",
+				field: fields[24],
+				fmt:   "%x",
+				out:   &out.IgnoredSignals,
+			},
+			{
+				name:  "pending",
+				field: fields[25],
+				fmt:   "%x",
+				out:   &out.PendingSignals,
+			},
+			{
+				name:  "nlwp",
+				field: fields[26],
+				fmt:   "%d",
+				out:   &out.NumberOfThreads,
+			},
+		} {
+			if n, err := fmt.Sscanf(f.field, f.fmt, f.out); n != 1 || err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", f.name, f.field, text, err))
+			}
+		}
+
+		// Class and stat have to be direct parsed.
+
+		// Class
+		switch fields[17] {
+		case "-":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED
+		case "TS":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_OTHER
+		case "FF":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_FIFO
+		case "RR":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_RR
+		case "B":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_BATCH
+		case "ISO":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_ISO
+		case "IDL":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_ISO
+		case "DLN":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_DEADLINE
+		case "?":
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_UNKNOWN
+		default:
+			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_UNKNOWN
+		}
+
+		// State
+		switch fields[19][0] {
+		case 'D':
+			out.State = ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
+		case 'R':
+			out.State = ProcessState_PROCESS_STATE_RUNNING
+		case 'S':
+			out.State = ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
+		case 'T':
+			out.State = ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL
+		case 't':
+			out.State = ProcessState_PROCESS_STATE_STOPPED_DEBUGGER
+		case 'Z':
+			out.State = ProcessState_PROCESS_STATE_ZOMBIE
+		default:
+			out.State = ProcessState_PROCESS_STATE_UNKNOWN
+		}
+
+		// Now process any trailing symbols on State
+		for i := 1; i < len(fields[19]); i++ {
+			switch fields[19][i] {
+			case '<':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY)
+			case 'N':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_LOW_PRIORITY)
+			case 'L':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_LOCKED_PAGES)
+			case 's':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_SESSION_LEADER)
+			case 'l':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_MULTI_THREADED)
+			case '+':
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_FOREGROUND_PGRP)
+			default:
+				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_UNKNOWN)
+			}
+		}
+
+		// Everything left is the command so gather it up, rejoin with spaces
+		// and we're done with this line.
+		out.Command = strings.Join(fields[FIELD_COUNT:], " ")
+		entries[out.Pid] = out
+		out = &ProcessEntry{}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("parsing error:\n%v", err))
+	}
+
+	if len(entries) == 0 {
+		return nil, status.Error(codes.Internal, "no output from ps?")
+	}
+
 	return entries, nil
 }
 
@@ -133,7 +394,8 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 
 	scanner := bufio.NewScanner(r)
 
-	// Skip the first line of text since it's the header on OS/X
+	// Skip the first line of text since it's the header on OS/X which
+	// can't be eliminated via options.
 	if !scanner.Scan() {
 		err := scanner.Err()
 		return nil, status.Error(codes.Internal, fmt.Sprintf("missing first line? %v", err))
@@ -147,10 +409,6 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			Sgid:            -1,
 			Suid:            -1,
 			SchedulingClass: SchedulingClass_SCHEDULING_CLASS_UNKNOWN,
-			Eip:             -1,
-			Esp:             -1,
-			CaughtSignals:   -1,
-			IgnoredSignals:  -1,
 		}
 	}
 
@@ -164,6 +422,11 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 
 		text := scanner.Text()
 		fields := strings.Fields(text)
+
+		// In case the last line is blank. In general a blank doesn't hurt.
+		if len(text) == 0 {
+			continue
+		}
 
 		// Assume we increment but reset if we found a new start (i.e. not space in first position).
 		// Lines look like
@@ -332,7 +595,7 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 
 			// Everything left is the command so gather it up, rejoin with spaces
 			// and we're done with this line.
-			out.Command = strings.Join(fields[23:], " ")
+			out.Command = strings.Join(fields[FIELD_COUNT:], " ")
 		}
 
 	}
@@ -344,10 +607,16 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	// Final entry
 	entries[out.Pid] = out
 
+	if numEntries == 0 {
+		return nil, status.Error(codes.Internal, "no output from ps?")
+	}
+
 	return entries, nil
 }
 
 func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error) {
+	log.Printf("Received request for List: %+v", req)
+
 	cmdName := *psBin
 	options, ok := osSpecificPsFlags[runtime.GOOS]
 	if !ok {
@@ -356,7 +625,6 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 
 	psOptions := options()
 
-	log.Printf("Received request for List: %+v", req)
 	// We gather all the processes up and then filter by pid if needed at the end.
 	cmd := exec.CommandContext(ctx, cmdName, psOptions...)
 	var stderrBuf, stdoutBuf bytes.Buffer
