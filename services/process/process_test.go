@@ -11,10 +11,11 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 var (
@@ -104,8 +105,8 @@ func TestList(t *testing.T) {
 	toSort = resp.ProcessEntries
 	sort.Slice(resp.ProcessEntries, less)
 
-	if got, want := resp, testdata; !proto.Equal(got, want) {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v", got, want)
+	if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
+		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
 	}
 
 	// Test 2: Ask for just one process (use the first one in testdata)
@@ -127,8 +128,8 @@ func TestList(t *testing.T) {
 	}
 
 	// Make sure it's what we got back
-	if want := resp; !proto.Equal(got, want) {
-		t.Fatalf("unexpected entry count. Want %+v, got %+v\n", want, got)
+	if diff := cmp.Diff(got, resp, protocmp.Transform()); diff != "" {
+		t.Fatalf("unexpected entry count. Want %+v, got %+v\nDiff:\n%s", resp, got, diff)
 	}
 
 	// Test 3: Ask for a non-existant pid and we should get an error.
