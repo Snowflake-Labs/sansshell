@@ -1,7 +1,8 @@
 process_entries : <
   pid : 1
+  thread_id : 1
   wchan : "ep_poll"
-  cpu_percent: 0.1
+  cpu_percent : 0.1
   started_time : "Oct01"
   elapsed_time : "00:05:13"
   rss : 4176
@@ -21,21 +22,30 @@ process_entries : <
 >
 process_entries : <
   pid : 2
+  thread_id : 2
   wchan : "kthreadd"
-  mem_percent: 0.2
+  mem_percent : 0.2
   started_time : "Oct01"
   elapsed_time : "00:00:01"
+  egid : 1
+  euid : 2
+  rgid : 3
+  ruid : 4
+  sgid : 5
+  suid : 6
   priority : 20
   scheduling_class : SCHEDULING_CLASS_OTHER
   flags : 1
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  ignored_signals : -1
+  ignored_signals : 18446744073709551615
+  pending_signals : 1099511631872
   number_of_threads : 2
   command : "[kthreadd]"
 >
 process_entries : <
   pid : 4
   ppid : 2
+  thread_id : 3
   wchan : "worker_thread"
   started_time : "Oct01"
   elapsed_time : "00:00:00"
@@ -44,13 +54,14 @@ process_entries : <
   flags : 1
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
   state_code : PROCESS_STATE_CODE_HIGH_PRIORITY
-  ignored_signals : -1
+  ignored_signals : 18446744073709551615
   number_of_threads : 4
   command : "[kworker/0:0H]"
 >
 process_entries : <
   pid : 6
   ppid : 2
+  thread_id : 4
   wchan : "smpboot_thread_fn"
   started_time : "Oct01"
   elapsed_time : "00:01:16"
@@ -58,7 +69,7 @@ process_entries : <
   scheduling_class : SCHEDULING_CLASS_OTHER
   flags : 1
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  ignored_signals : -1
-  number_of_threads : 4
+  ignored_signals : 18446744073709551615
+  number_of_threads : 1
   command : "[ksoftirqd/0]"
 >
