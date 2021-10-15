@@ -69,6 +69,12 @@ process_entries : <
   scheduling_class : SCHEDULING_CLASS_OTHER
   flags : 1
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  state_code : PROCESS_STATE_CODE_HIGH_PRIORITY
+  state_code : PROCESS_STATE_CODE_SESSION_LEADER
+  state_code : PROCESS_STATE_CODE_LOW_PRIORITY
+  state_code : PROCESS_STATE_CODE_LOCKED_PAGES
+  state_code : PROCESS_STATE_CODE_MULTI_THREADED
+  state_code : PROCESS_STATE_CODE_FOREGROUND_PGRP
   ignored_signals : 18446744073709551615
   number_of_threads : 1
   command : "[ksoftirqd/0]"

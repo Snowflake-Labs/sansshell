@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"runtime"
-	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -84,15 +83,17 @@ func TestList(t *testing.T) {
 		t.Fatalf("Can't unmarshall test data %v", err)
 	}
 
-	// The slices aren't necessarily sorted and proto.Equal doesn't
-	// sort when comparing slices (just len and element by element).
-	// So fix them up. Just reassign toSort below as responses are
-	// tested.
-	toSort := testdata.ProcessEntries
-	less := func(i, j int) bool {
-		return toSort[i].Pid < toSort[j].Pid
-	}
-	sort.Slice(testdata.ProcessEntries, less)
+	// Some sorting functions for protocmp below.
+
+	// Be able to sort the overall entries in a response
+	sortEntries := protocmp.SortRepeated(func(i *ProcessEntry, j *ProcessEntry) bool {
+		return i.Pid < j.Pid
+	})
+
+	// A sorter for the repeated fields of ProcessStateCode.
+	sortCodes := protocmp.SortRepeated(func(i ProcessStateCode, j ProcessStateCode) bool {
+		return i < j
+	})
 
 	client := NewProcessClient(conn)
 
@@ -102,10 +103,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("Unexpected error for basic list: %v", err)
 	}
 
-	toSort = resp.ProcessEntries
-	sort.Slice(resp.ProcessEntries, less)
-
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
+	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries, sortCodes); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
 	}
 
@@ -128,7 +126,7 @@ func TestList(t *testing.T) {
 	}
 
 	// Make sure it's what we got back
-	if diff := cmp.Diff(got, resp, protocmp.Transform()); diff != "" {
+	if diff := cmp.Diff(got, resp, protocmp.Transform(), sortEntries, sortCodes); diff != "" {
 		t.Fatalf("unexpected entry count. Want %+v, got %+v\nDiff:\n%s", resp, got, diff)
 	}
 
