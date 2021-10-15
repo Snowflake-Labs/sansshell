@@ -47,6 +47,7 @@ func linuxPsFlags() []string {
 	psOptions := []string{
 		"pid",
 		"ppid",
+		"lwp",
 		"wchan:32", // Make this wider than the default since kernel functions are often wordy.
 		"pcpu",
 		"pmem",
@@ -137,9 +138,9 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			continue
 		}
 
-		// We know there are at least 27 fields but can be more
+		// We know there are at least 28 fields but can be more
 		// since command could have spaces.
-		const FIELD_COUNT = 27
+		const FIELD_COUNT = 28
 
 		if len(fields) < FIELD_COUNT {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("invalid field count for line. Must be %d minimum. Input: %q", FIELD_COUNT, text))
@@ -162,142 +163,147 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 				field: fields[1],
 				fmt:   "%d",
 				out:   &out.Ppid,
+			}, {
+				name:  "lwp",
+				field: fields[2],
+				fmt:   "%d",
+				out:   &out.ThreadId,
 			},
 			{
 				name:  "wchan",
-				field: fields[2],
+				field: fields[3],
 				fmt:   "%s",
 				out:   &out.Wchan,
 			},
 			{
 				name:  "pcpu",
-				field: fields[3],
+				field: fields[4],
 				fmt:   "%f",
 				out:   &out.CpuPercent,
 			},
 			{
 				name:  "pmem",
-				field: fields[4],
+				field: fields[5],
 				fmt:   "%f",
 				out:   &out.MemPercent,
 			},
 			{
 				name:  "started time",
-				field: fields[5],
+				field: fields[6],
 				fmt:   "%s",
 				out:   &out.StartedTime,
 			},
 			{
 				name:  "elapsed time",
-				field: fields[6],
+				field: fields[7],
 				fmt:   "%s",
 				out:   &out.ElapsedTime,
 			},
 			{
 				name:  "rss",
-				field: fields[7],
+				field: fields[8],
 				fmt:   "%d",
 				out:   &out.Rss,
 			},
 			{
 				name:  "vsize",
-				field: fields[8],
+				field: fields[9],
 				fmt:   "%d",
 				out:   &out.Vsize,
 			},
 			{
 				name:  "egid",
-				field: fields[9],
+				field: fields[10],
 				fmt:   "%d",
 				out:   &out.Egid,
 			},
 			{
 				name:  "euid",
-				field: fields[10],
+				field: fields[11],
 				fmt:   "%d",
 				out:   &out.Euid,
 			},
 			{
 				name:  "rgid",
-				field: fields[11],
+				field: fields[12],
 				fmt:   "%d",
 				out:   &out.Rgid,
 			},
 			{
 				name:  "ruid",
-				field: fields[12],
+				field: fields[13],
 				fmt:   "%d",
 				out:   &out.Ruid,
 			},
 			{
 				name:  "sgid",
-				field: fields[13],
+				field: fields[14],
 				fmt:   "%d",
 				out:   &out.Sgid,
 			},
 			{
 				name:  "suid",
-				field: fields[14],
+				field: fields[15],
 				fmt:   "%d",
 				out:   &out.Suid,
 			},
 			{
 				name:  "nice",
-				field: fields[15],
+				field: fields[16],
 				fmt:   "%d",
 				out:   &out.Nice,
 			},
 			{
 				name:  "priority",
-				field: fields[16],
+				field: fields[17],
 				fmt:   "%d",
 				out:   &out.Priority,
 			},
 			{
 				name:  "flags",
-				field: fields[18],
+				field: fields[19],
 				fmt:   "%x",
 				out:   &out.Flags,
 			},
 			{
 				name:  "eip",
-				field: fields[20],
+				field: fields[21],
 				fmt:   "%x",
 				out:   &out.Eip,
 			},
 			{
 				name:  "e2p",
-				field: fields[21],
+				field: fields[22],
 				fmt:   "%x",
 				out:   &out.Esp,
 			},
 			{
 				name:  "blocked",
-				field: fields[22],
+				field: fields[23],
 				fmt:   "%x",
 				out:   &out.BlockedSignals,
 			},
 			{
 				name:  "caught",
-				field: fields[23],
+				field: fields[24],
 				fmt:   "%x",
 				out:   &out.CaughtSignals,
 			},
 			{
 				name:  "ignored",
-				field: fields[24],
+				field: fields[25],
 				fmt:   "%x",
 				out:   &out.IgnoredSignals,
 			},
 			{
 				name:  "pending",
-				field: fields[25],
+				field: fields[26],
 				fmt:   "%x",
 				out:   &out.PendingSignals,
 			},
 			{
 				name:  "nlwp",
-				field: fields[26],
+				field: fields[27],
 				fmt:   "%d",
 				out:   &out.NumberOfThreads,
 			},
@@ -308,9 +314,11 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		}
 
 		// Class and stat have to be direct parsed.
+		const SCHEDULE_CLASS = 18
+		const STATE = 20
 
 		// Class
-		switch fields[17] {
+		switch fields[SCHEDULE_CLASS] {
 		case "-":
 			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED
 		case "TS":
@@ -334,7 +342,7 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		}
 
 		// State
-		switch fields[19][0] {
+		switch fields[STATE][0] {
 		case 'D':
 			out.State = ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
 		case 'R':
@@ -352,8 +360,8 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		}
 
 		// Now process any trailing symbols on State
-		for i := 1; i < len(fields[19]); i++ {
-			switch fields[19][i] {
+		for i := 1; i < len(fields[STATE]); i++ {
+			switch fields[STATE][i] {
 			case '<':
 				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY)
 			case 'N':
