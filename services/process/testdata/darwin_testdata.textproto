@@ -12,10 +12,6 @@ process_entries : <
   priority : 31
   flags : 16388
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
   number_of_threads : 4
   cpu_percent: 0.0
   mem_percent: 0.0
@@ -35,10 +31,6 @@ process_entries : <
   priority : 20
   flags : 16388
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
   number_of_threads : 3
   cpu_percent: 0.0
   mem_percent: 0.0
@@ -58,10 +50,6 @@ process_entries : <
   priority : 49
   flags : 16793604
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
   number_of_threads : 16
   cpu_percent: 0.0
   mem_percent: 0.0
@@ -79,10 +67,6 @@ process_entries : <
   priority : 31
   flags : 16388
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
   number_of_threads : 2
   cpu_percent: 0.0
   mem_percent: 0.0
@@ -101,10 +85,6 @@ process_entries : <
   priority : 4
   flags : 16388
   state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
-  eip : -1
-  esp : -1
-  caught_signals : -1
-  ignored_signals : -1
   number_of_threads : 3
   cpu_percent: 0.0
   mem_percent: 0.0
