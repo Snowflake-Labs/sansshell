@@ -42,6 +42,46 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestListNative(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	client := NewProcessClient(conn)
+
+	// Ask for all processes
+	resp, err := client.List(ctx, &ListRequest{})
+	if err != nil {
+		t.Fatalf("Unexpected error for basic list: %v", err)
+	}
+
+	if len(resp.ProcessEntries) == 0 {
+		t.Errorf("Returned ps list is empty?")
+	}
+
+	// Pid 1 should be stable on all unix.
+	pid := int64(1)
+	resp, err = client.List(ctx, &ListRequest{
+		Pids: []int64{pid},
+	})
+
+	if err != nil {
+		t.Fatalf("Unexpected error for basic list: %v", err)
+	}
+
+	if len(resp.ProcessEntries) != 1 {
+		t.Fatalf("Asked for a single entry and got back something else? %+v", resp)
+	}
+
+	if pid != resp.ProcessEntries[0].Pid {
+		t.Fatalf("Pids don't match. Expecting %d and got back entry: %+v", pid, resp)
+	}
+}
+
 func TestList(t *testing.T) {
 	var err error
 	ctx := context.Background()

@@ -247,12 +247,7 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 				fmt:   "%d",
 				out:   &out.Suid,
 			},
-			{
-				name:  "nice",
-				field: fields[16],
-				fmt:   "%d",
-				out:   &out.Nice,
-			},
+
 			{
 				name:  "priority",
 				field: fields[17],
@@ -310,6 +305,14 @@ func linuxPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		} {
 			if n, err := fmt.Sscanf(f.field, f.fmt, f.out); n != 1 || err != nil {
 				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", f.name, f.field, text, err))
+			}
+		}
+
+		// Need to parse nice directly since for some scheduling classes it can be a - and isn't a number.
+		// In that case we leave it 0 and it's up to clients to display as ps would with a -.
+		if fields[16] != "-" {
+			if n, err := fmt.Sscanf(fields[16], "%d", &out.Nice); n != 1 || err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract nice: %q in line %q: %v", fields[16], text, err))
 			}
 		}
 

@@ -87,7 +87,7 @@ func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	fmtHeader := "%8s %8s %32s %4s %4s %8s %16s %20s %20s %8s %8s %8s %8s %8s %8s %8s %8s %5s %8s %5s %16s %16s %16s %16s %16s %16s %8s %s\n"
-	fmtEntry := "%8d %8d %32s %4.1f %4.1f %8s %16s %20d %20d %8d %8d %8d %8d %8d %8d %8d %8d %5s %8x %5s %16x %16x %16x %16x %16x %16x %8d %s\n"
+	fmtEntry := "%8d %8d %32s %4.1f %4.1f %8s %16s %20d %20d %8d %8d %8d %8d %8d %8d %8s %8d %5s %8x %5s %16x %16x %16x %16x %16x %16x %8d %s\n"
 	fmt.Printf(fmtHeader, "PID", "PPID", "WCHAN", "%CPU", "%MEM", "START", "TIME", "RSS", "VSZ", "EGID", "EUID", "RGID", "RUID", "SGID", "SUID", "NICE", "PRIORITY", "CLS", "FLAG", "STAT", "EIP", "ESP", "BLOCKED", "CAUGHT", "IGNORED", "PENDING", "NLWP", "CMD")
 	for _, p := range resp.ProcessEntries {
 		var cls, stat string
@@ -146,7 +146,14 @@ func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 				stat += "l"
 			}
 		}
-		fmt.Printf(fmtEntry, p.Pid, p.Ppid, p.Wchan, p.CpuPercent, p.MemPercent, p.StartedTime, p.ElapsedTime, p.Rss, p.Vsize, p.Egid, p.Euid, p.Rgid, p.Ruid, p.Sgid, p.Suid, p.Nice, p.Priority, cls, p.Flags, stat, p.Eip, p.Esp, p.BlockedSignals, p.CaughtSignals, p.IgnoredSignals, p.PendingSignals, p.NumberOfThreads, p.Command)
+
+		nice := fmt.Sprintf("%d", p.Nice)
+
+		// These scheduling classes are linux real time and nice doesn't apply.
+		if cls == "RR" || cls == "FF" {
+			nice = "-"
+		}
+		fmt.Printf(fmtEntry, p.Pid, p.Ppid, p.Wchan, p.CpuPercent, p.MemPercent, p.StartedTime, p.ElapsedTime, p.Rss, p.Vsize, p.Egid, p.Euid, p.Rgid, p.Ruid, p.Sgid, p.Suid, nice, p.Priority, cls, p.Flags, stat, p.Eip, p.Esp, p.BlockedSignals, p.CaughtSignals, p.IgnoredSignals, p.PendingSignals, p.NumberOfThreads, p.Command)
 	}
 
 	return subcommands.ExitSuccess
