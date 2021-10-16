@@ -417,6 +417,7 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			Sgid:            -1,
 			Suid:            -1,
 			SchedulingClass: SchedulingClass_SCHEDULING_CLASS_UNKNOWN,
+			NumberOfThreads: 1,
 		}
 	}
 
@@ -444,12 +445,6 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		//
 		// for something with 2 threads. Each blank leading line indicates another thread.
 
-		// Only increment thread count if we've parsed the first one since otherwise it'll add one
-		// spurious thread to the first entry.
-		if numEntries > 0 {
-			out.NumberOfThreads++
-		}
-
 		if len(fields) >= FIELD_COUNT {
 			// The first line will match this and we haven't parsed yet so skip until it's done.
 			// Also have to handle this below when we get done with the scanner.
@@ -461,7 +456,7 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			numEntries++
 		}
 
-		// We only process the main line.
+		// We only fully process the main line.
 		if len(fields) >= FIELD_COUNT {
 			for _, f := range []struct {
 				name  string
@@ -597,13 +592,25 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 				out.State = ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
 			case 'Z':
 				out.State = ProcessState_PROCESS_STATE_ZOMBIE
-			default:
-				out.State = ProcessState_PROCESS_STATE_UNKNOWN
 			}
 
 			// Everything left is the command so gather it up, rejoin with spaces
 			// and we're done with this line.
 			out.Command = strings.Join(fields[FIELD_COUNT:], " ")
+		} else {
+			// Bump the thread count
+			out.NumberOfThreads++
+
+			// Other lines may contain additional cpu/mem percent values we need to add up.
+			var cpu, mem float32
+			if n, err := fmt.Sscanf(fields[3], "%f", &cpu); n != 1 || err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract cpu in line %q: %v", text, err))
+			}
+			if n, err := fmt.Sscanf(fields[4], "%f", &mem); n != 1 || err != nil {
+				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract mem in line %q: %v", text, err))
+			}
+			out.CpuPercent += cpu
+			out.MemPercent += mem
 		}
 
 	}
@@ -612,7 +619,7 @@ func darwinPsParser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("parsing error:\n%v", err))
 	}
 
-	// Final entry
+	// Final entry gets recorded.
 	entries[out.Pid] = out
 
 	if numEntries == 0 {
