@@ -42,12 +42,12 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("command exited with error: %v\n%s", err, string(stderrBuf.Bytes())))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("command exited with error: %v\n%s", err, stderrBuf.String()))
 	}
 
 	errBuf := stderrBuf.Bytes()
 	if len(errBuf) != 0 {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("unexpected error output:\n%s", string(errBuf)))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("unexpected error output:\n%s", stderrBuf.String()))
 	}
 
 	entries, err := parser(&stdoutBuf)
