@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+option go_package = "github.com/snowflakedb/unshelled/services/ansible";
+
+package Ansible;
+
+// The Playbook service definition.
+service Playbook {
+  // Will run ansible-playbook only on the local host using the args passed.
+  rpc Run(RunRequest) returns (RunReply) {}
+}
+
+message Var {
+  string key = 1;
+  string value = 2;
+}
+
+message RunRequest {
+  // The playbook to execute
+  string playbook = 1;
+
+  // Will become N -e options to ansible-playbook
+  repeated Var vars = 2;
+
+  // The user to use for exection.
+  string user = 3;
+
+  // If set --check is passed to ansible. Depending on playbook settings
+  // this may still execute tasks.
+  bool check = 4;
+
+  // If set --diff is passed to ansible
+  bool diff = 5;
+
+  // If true, execute ansible with verbose output enabled (equivilant to -v)
+  bool verbose = 6;
+
+  // The return code from the ansible command. Ansible returning non-zero will
+  // not be an RPC failure as exec'ing is all we guarentee and some playbooks
+  // are designed to return non-zero.
+  int32 return_code = 7;
+}
+
+message RunReply { string debug_output = 1; }
