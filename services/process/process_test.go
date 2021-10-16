@@ -2,12 +2,10 @@ package process
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -95,27 +93,26 @@ func TestList(t *testing.T) {
 	// to submit into the server.
 	savedPsBin := *psBin
 	*psBin = "cat"
-	savedFunc := osSpecificPsFlags[runtime.GOOS]
-	osSpecificPsFlags[runtime.GOOS] = func() []string {
+	savedFunc := psOptions
+	psOptions = func() ([]string, error) {
 		return []string{
-			fmt.Sprintf("./testdata/%s.ps", runtime.GOOS),
-		}
+			testdataPs,
+		}, nil
 	}
 	defer func() {
 		*psBin = savedPsBin
-		osSpecificPsFlags[runtime.GOOS] = savedFunc
+		psOptions = savedFunc
 	}()
 
-	fn := fmt.Sprintf("./testdata/%s_testdata.textproto", runtime.GOOS)
-	f, err := os.Open(fn)
+	f, err := os.Open(testdataFile)
 	if err != nil {
-		t.Fatalf("Can't open testdata %s: %v", fn, err)
+		t.Fatalf("Can't open testdata %s: %v", testdataFile, err)
 	}
 	defer f.Close()
 
 	input, err := ioutil.ReadAll(f)
 	if err != nil {
-		t.Fatalf("Can't read textproto data from %s: %v", fn, err)
+		t.Fatalf("Can't read textproto data from %s: %v", testdataFile, err)
 	}
 
 	testdata := &ListReply{}
@@ -187,15 +184,11 @@ func TestList(t *testing.T) {
 
 	// Test 4: Send some bad input in and make sure we fail (also gives some
 	// coverage in places we can fail).
-	badFiles := []string{
-		fmt.Sprintf("./testdata/%s_bad0.ps", runtime.GOOS),
-		fmt.Sprintf("./testdata/%s_bad1.ps", runtime.GOOS),
-	}
 	for _, bf := range badFiles {
-		osSpecificPsFlags[runtime.GOOS] = func() []string {
+		psOptions = func() ([]string, error) {
 			return []string{
 				bf,
-			}
+			}, nil
 		}
 		resp, err := client.List(ctx, &ListRequest{})
 		if err == nil {
