@@ -203,6 +203,25 @@ func TestList(t *testing.T) {
 	*psBin = "/usr/bin/false"
 	resp, err = client.List(ctx, &ListRequest{})
 	if err == nil {
-		t.Fatalf("Expected error for invalid pid. Insteaf got %+v", resp)
+		t.Fatalf("Expected error for command returning non-zero Insteaf got %+v", resp)
+	}
+
+	// Test 6: Run an invalid command all-together.
+	*psBin = "/a/non-existant/command"
+	resp, err = client.List(ctx, &ListRequest{})
+	if err == nil {
+		t.Fatalf("Expected error for invalid command. Insteaf got %+v", resp)
+	}
+
+	// Test 7: Command with stderr output.
+	*psBin = "sh"
+	psOptions = func() []string {
+		return []string{"-c",
+			"echo boo 1>&2",
+		}
+	}
+	resp, err = client.List(ctx, &ListRequest{})
+	if err == nil {
+		t.Fatalf("Expected error for stderr output. Insteaf got %+v", resp)
 	}
 }
