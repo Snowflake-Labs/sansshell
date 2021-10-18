@@ -1,0 +1,158 @@
+process_entries : <
+  pid : 61
+  ppid : 1
+  command : "/usr/libexec/UserEventAgent (System)"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "5:35.35"
+  rss : 9944
+  vsize : 6670316
+  sgid : -1
+  suid : -1
+  priority : 31
+  flags : 16388
+  state : PROCESS_STATE_RUNNING
+  number_of_threads : 4
+>
+process_entries : <
+  pid : 64
+  ppid : 1
+  command : "/System/Library/PrivateFrameworks/Uninstall.framework/Resources/"
+            "uninstalld"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "0:55.40"
+  rss : 2516
+  vsize : 4440496
+  sgid : -1
+  suid : -1
+  priority : 20
+  flags : 16388
+  state : PROCESS_STATE_STOPPED_JOB_CONTROL
+  number_of_threads : 3
+>
+process_entries : <
+  pid : 65
+  ppid : 1
+  command : "/System/Library/Frameworks/CoreServices.framework/Versions/A/"
+            "Frameworks/FSEvents.framework/Versions/A/Support/fseventsd"
+  wchan : "-"
+  mem_percent : 0.6
+  started_time : "20Sep21"
+  elapsed_time : "34:33.37"
+  rss : 6264
+  vsize : 6645232
+  sgid : -1
+  suid : -1
+  priority : 49
+  flags : 16793604
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  number_of_threads : 17
+>
+process_entries : <
+  pid : 1
+  command : "/sbin/launchd"
+  wchan : "-"
+  cpu_percent : 0.1
+  started_time : "20Sep21"
+  elapsed_time : "157:17.67"
+  rss : 16756
+  vsize : 4807404
+  sgid : -1
+  suid : -1
+  priority : 31
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  number_of_threads : 2
+>
+process_entries : <
+  pid : 60
+  ppid : 1
+  command : "/usr/sbin/syslogd"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "3:17.56"
+  rss : 1168
+  vsize : 4801792
+  sgid : -1
+  suid : -1
+  priority : 4
+  flags : 16388
+  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  number_of_threads : 3
+>
+process_entries : <
+  pid : 66
+  ppid : 2
+  command : "/some/make/up/process"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "01:02.03"
+  rss : 1234
+  vsize : 4444445
+  sgid : -1
+  suid : -1
+  egid : 1
+  euid : 2
+  rgid : 3
+  ruid : 4
+  nice : -20
+  priority : 1
+  flags : 16388
+  blocked_signals : 4294967295
+  pending_signals : 4294967295
+  state : PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
+  number_of_threads : 1
+  cpu_percent : 0.1
+  mem_percent : 0.2
+>
+process_entries : <
+  pid : 67
+  ppid : 2
+  command : "/some/make/up/process2"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "01:02.03"
+  rss : 1234
+  vsize : 4444445
+  sgid : -1
+  suid : -1
+  egid : 1
+  euid : 2
+  rgid : 3
+  ruid : 4
+  nice : -20
+  priority : 1
+  flags : 16388
+  blocked_signals : 4294967295
+  pending_signals : 4294967295
+  state : PROCESS_STATE_ZOMBIE
+  number_of_threads : 1
+  cpu_percent : 0.1
+  mem_percent : 0.2
+>
+process_entries : <
+  pid : 68
+  ppid : 2
+  command : "/some/make/up/process3"
+  wchan : "-"
+  started_time : "20Sep21"
+  elapsed_time : "01:02.03"
+  rss : 1234
+  vsize : 4444445
+  sgid : -1
+  suid : -1
+  egid : 1
+  euid : 2
+  rgid : 3
+  ruid : 4
+  nice : -20
+  priority : 1
+  flags : 16388
+  blocked_signals : 4294967295
+  pending_signals : 4294967295
+  state : PROCESS_STATE_ZOMBIE
+  number_of_threads : 1
+  cpu_percent : 0.1
+  mem_percent : 0.2
+>

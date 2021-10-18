@@ -18,6 +18,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
 )
 
 var (

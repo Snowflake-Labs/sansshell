@@ -1,3 +1,6 @@
+//+build go1.16
+//go:build go1.16
+
 // Package main implements the SansShell server.
 package main
 
@@ -18,6 +21,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/exec"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/process"
 )
 
 var (
