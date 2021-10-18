@@ -94,10 +94,10 @@ func TestList(t *testing.T) {
 	savedPsBin := *psBin
 	*psBin = "cat"
 	savedFunc := psOptions
-	psOptions = func() ([]string, error) {
+	psOptions = func() []string {
 		return []string{
 			testdataPs,
-		}, nil
+		}
 	}
 	defer func() {
 		*psBin = savedPsBin
@@ -185,10 +185,10 @@ func TestList(t *testing.T) {
 	// Test 4: Send some bad input in and make sure we fail (also gives some
 	// coverage in places we can fail).
 	for _, bf := range badFiles {
-		psOptions = func() ([]string, error) {
+		psOptions = func() []string {
 			return []string{
 				bf,
-			}, nil
+			}
 		}
 		resp, err := client.List(ctx, &ListRequest{})
 		if err == nil {

@@ -24,10 +24,7 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 	log.Printf("Received request for List: %+v", req)
 
 	cmdName := *psBin
-	options, err := psOptions()
-	if err != nil {
-		return nil, status.Errorf(codes.Unimplemented, "can't determine ps options: %v", err)
-	}
+	options := psOptions()
 
 	// We gather all the processes up and then filter by pid if needed at the end.
 	cmd := exec.CommandContext(ctx, cmdName, options...)

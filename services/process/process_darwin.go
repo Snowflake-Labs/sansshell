@@ -22,7 +22,7 @@ var (
 	psBin = flag.String("ps_bin", "/bin/ps", "Location of the ps command")
 
 	// This is a var so we can replace for testing.
-	psOptions = func() ([]string, error) {
+	psOptions = func() []string {
 		options := []string{
 			"pid",
 			"ppid",
@@ -58,7 +58,7 @@ var (
 			"-o",
 			strings.Join(options, ","),
 			"-M",
-		}, nil
+		}
 	}
 )
 
