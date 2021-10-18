@@ -48,6 +48,8 @@ func TestExec(t *testing.T) {
 	defer conn.Close()
 
 	client := NewExecClient(conn)
+
+	// Test 0: Basic functionality
 	command := []string{"echo", "hello world"}
 	resp, err := client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
 	if err != nil {
@@ -58,9 +60,29 @@ func TestExec(t *testing.T) {
 	testCmd := exec.CommandContext(ctx, "echo", "hello world")
 	testResp, err := testCmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("Exec failed: %v", err)
+		t.Fatalf("Exec for echo failed: %v", err)
 	}
 	if !bytes.Equal(testResp, resp.GetStdout()) {
 		t.Fatalf("contents do not match")
 	}
+
+	// Test 1: Execute false so the command fails but RPC should not.
+	command = []string{"false"}
+	resp, err = client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
+	if err != nil {
+		t.Fatalf("Exec for false failed: %v", err)
+	}
+	t.Logf("Response: %+v", resp)
+
+	if got, want := resp.RetCode, int32(1); got != want {
+		t.Fatalf("Wrong response codes for %q. Got %d want %d", command[0], got, want)
+	}
+
+	// Test 2: Non-existant program.
+	command = []string{"/something/non-existant"}
+	resp, err = client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
+	if err == nil {
+		t.Fatalf("Expected failure for %q. Got %v", command[0], resp)
+	}
+	t.Logf("Response: %+v", resp)
 }
