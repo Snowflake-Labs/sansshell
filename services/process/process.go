@@ -7,7 +7,6 @@ package process
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"log"
 	"os/exec"
 
@@ -27,7 +26,7 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 	cmdName := *psBin
 	options, err := psOptions()
 	if err != nil {
-		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("can't determine ps options: %v", err))
+		return nil, status.Errorf(codes.Unimplemented, "can't determine ps options: %v", err)
 	}
 
 	// We gather all the processes up and then filter by pid if needed at the end.
@@ -42,25 +41,25 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("command exited with error: %v\n%s", err, stderrBuf.String()))
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, stderrBuf.String())
 	}
 
 	errBuf := stderrBuf.Bytes()
 	if len(errBuf) != 0 {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("unexpected error output:\n%s", stderrBuf.String()))
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", stderrBuf.String())
 	}
 
 	entries, err := parser(&stdoutBuf)
 
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("unexpected parsing error: %v", err))
+		return nil, status.Errorf(codes.Internal, "unexpected parsing error: %v", err)
 	}
 
 	reply := &ListReply{}
 	if len(req.Pids) != 0 {
 		for _, pid := range req.Pids {
 			if _, ok := entries[pid]; !ok {
-				return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("pid %d does not exist", pid))
+				return nil, status.Errorf(codes.InvalidArgument, "pid %d does not exist", pid)
 			}
 
 			reply.ProcessEntries = append(reply.ProcessEntries, entries[pid])
@@ -76,19 +75,19 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 }
 
 func (s *server) GetStacks(ctx context.Context, req *GetStacksRequest) (*GetStacksReply, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *server) GetJavaStacks(ctx context.Context, req *GetJavaStacksRequest) (*GetJavaStacksReply, error) {
-	return nil, status.Error(codes.Unimplemented, "")
+	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *server) GetCore(req *GetCoreRequest, stream Process_GetCoreServer) error {
-	return status.Error(codes.Unimplemented, "")
+	return status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *server) GetJavaHeapDump(req *GetJavaHeapDumpRequest, stream Process_GetJavaHeapDumpServer) error {
-	return status.Error(codes.Unimplemented, "")
+	return status.Error(codes.Unimplemented, "not implemented")
 }
 
 // Register is called to expose this handler to the gRPC server

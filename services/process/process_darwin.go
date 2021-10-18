@@ -71,7 +71,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	// can't be eliminated via options.
 	if !scanner.Scan() {
 		err := scanner.Err()
-		return nil, status.Error(codes.Internal, fmt.Sprintf("missing first line? %v", err))
+		return nil, status.Errorf(codes.Internal, "missing first line? %v", err)
 	}
 
 	numEntries := 0
@@ -241,7 +241,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 				},
 			} {
 				if n, err := fmt.Sscanf(f.field, f.fmt, f.out); n != 1 || err != nil {
-					return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", f.name, f.field, text, err))
+					return nil, status.Errorf(codes.Internal, "can't extract %s: %q in line %q: %v", f.name, f.field, text, err)
 				}
 			}
 
@@ -269,10 +269,10 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			// Other lines may contain additional cpu/mem percent values we need to add up.
 			var cpu, mem float32
 			if n, err := fmt.Sscanf(fields[3], "%f", &cpu); n != 1 || err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract cpu in line %q: %v", text, err))
+				return nil, status.Errorf(codes.Internal, "can't extract cpu in line %q: %v", text, err)
 			}
 			if n, err := fmt.Sscanf(fields[4], "%f", &mem); n != 1 || err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract mem in line %q: %v", text, err))
+				return nil, status.Errorf(codes.Internal, "can't extract mem in line %q: %v", text, err)
 			}
 			out.CpuPercent += cpu
 			out.MemPercent += mem
@@ -281,7 +281,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("parsing error:\n%v", err))
+		return nil, status.Errorf(codes.Internal, "parsing error:\n%v", err)
 	}
 
 	// Final entry gets recorded.

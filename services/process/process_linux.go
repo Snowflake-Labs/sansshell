@@ -84,7 +84,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		const FIELD_COUNT = 28
 
 		if len(fields) < FIELD_COUNT {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("invalid field count for line. Must be %d minimum. Input: %q", FIELD_COUNT, text))
+			return nil, status.Errorf(codes.Internal, "invalid field count for line. Must be %d minimum. Input: %q", FIELD_COUNT, text)
 		}
 
 		for _, f := range []struct {
@@ -245,7 +245,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			},
 		} {
 			if n, err := fmt.Sscanf(f.field, f.fmt, f.out); n != 1 || err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract %s: %q in line %q: %v", f.name, f.field, text, err))
+				return nil, status.Errorf(codes.Internal, "can't extract %s: %q in line %q: %v", f.name, f.field, text, err)
 			}
 		}
 
@@ -253,7 +253,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		// In that case we leave it 0 and it's up to clients to display as ps would with a -.
 		if fields[16] != "-" {
 			if n, err := fmt.Sscanf(fields[16], "%d", &out.Nice); n != 1 || err != nil {
-				return nil, status.Error(codes.Internal, fmt.Sprintf("can't extract nice: %q in line %q: %v", fields[16], text, err))
+				return nil, status.Errorf(codes.Internal, "can't extract nice: %q in line %q: %v", fields[16], text, err)
 			}
 		}
 
@@ -331,7 +331,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("parsing error:\n%v", err))
+		return nil, status.Errorf(codes.Internal, "parsing error:\n%v", err)
 	}
 
 	if len(entries) == 0 {
