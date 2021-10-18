@@ -299,8 +299,6 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			out.State = ProcessState_PROCESS_STATE_STOPPED_DEBUGGER
 		case 'Z':
 			out.State = ProcessState_PROCESS_STATE_ZOMBIE
-		default:
-			out.State = ProcessState_PROCESS_STATE_UNKNOWN
 		}
 
 		// Now process any trailing symbols on State
