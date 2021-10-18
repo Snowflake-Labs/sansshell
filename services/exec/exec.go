@@ -5,12 +5,14 @@ package exec
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative exec.proto
 
 import (
+	"bytes"
 	"context"
-	"io/ioutil"
 	"os/exec"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // server is used to implement the gRPC server
@@ -22,38 +24,26 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 	cmdArgs := req.Args
 
 	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
+
+	var errBuf, outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	cmd.Stdin = nil
 
 	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-
-	errBuf, err := ioutil.ReadAll(stderr)
-	if err != nil {
-		return nil, err
-	}
-	outBuf, err := ioutil.ReadAll(stdout)
-	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "can't start program: %v", err)
 	}
 
 	err = cmd.Wait()
 	if err != nil {
 		return &ExecResponse{
-			Stdout:  outBuf,
-			Stderr:  errBuf,
+			Stdout:  outBuf.Bytes(),
+			Stderr:  errBuf.Bytes(),
 			RetCode: int32(cmd.ProcessState.ExitCode()),
 		}, nil
 	}
 
-	return &ExecResponse{Stderr: errBuf, Stdout: outBuf, RetCode: 0}, nil
+	return &ExecResponse{Stderr: errBuf.Bytes(), Stdout: outBuf.Bytes(), RetCode: 0}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
