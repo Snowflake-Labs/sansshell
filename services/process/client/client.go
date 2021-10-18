@@ -76,8 +76,8 @@ func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	c := pb.NewProcessClient(conn)
 
 	req := &pb.ListRequest{}
-	for _, p := range p.pids {
-		req.Pids = append(req.Pids, p)
+	for _, pid := range p.pids {
+		req.Pids = append(req.Pids, pid)
 	}
 
 	resp, err := c.List(ctx, req)
@@ -89,72 +89,85 @@ func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	fmtHeader := "%8s %8s %32s %4s %4s %8s %16s %20s %20s %8s %8s %8s %8s %8s %8s %8s %8s %5s %8s %5s %16s %16s %16s %16s %16s %16s %8s %s\n"
 	fmtEntry := "%8d %8d %32s %4.1f %4.1f %8s %16s %20d %20d %8d %8d %8d %8d %8d %8d %8s %8d %5s %8x %5s %16x %16x %16x %16x %16x %16x %8d %s\n"
 	fmt.Printf(fmtHeader, "PID", "PPID", "WCHAN", "%CPU", "%MEM", "START", "TIME", "RSS", "VSZ", "EGID", "EUID", "RGID", "RUID", "SGID", "SUID", "NICE", "PRIORITY", "CLS", "FLAG", "STAT", "EIP", "ESP", "BLOCKED", "CAUGHT", "IGNORED", "PENDING", "NLWP", "CMD")
-	for _, p := range resp.ProcessEntries {
-		var cls, stat string
 
-		switch p.SchedulingClass {
-		case pb.SchedulingClass_SCHEDULING_CLASS_BATCH:
-			cls = "B"
-		case pb.SchedulingClass_SCHEDULING_CLASS_DEADLINE:
-			cls = "DLN"
-		case pb.SchedulingClass_SCHEDULING_CLASS_FIFO:
-			cls = "FF"
-		case pb.SchedulingClass_SCHEDULING_CLASS_IDLE:
-			cls = "IDL"
-		case pb.SchedulingClass_SCHEDULING_CLASS_ISO:
-			cls = "ISO"
-		case pb.SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED:
-			cls = "-"
-		case pb.SchedulingClass_SCHEDULING_CLASS_OTHER:
-			cls = "TS"
-		case pb.SchedulingClass_SCHEDULING_CLASS_RR:
-			cls = "RR"
-		default:
-			cls = "?"
-		}
+	for _, entry := range resp.ProcessEntries {
+		cls := parseClass(entry.SchedulingClass)
+		stat := parseState(entry.State, entry.StateCode)
 
-		switch p.State {
-		case pb.ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP:
-			stat = "S"
-		case pb.ProcessState_PROCESS_STATE_RUNNING:
-			stat = "R"
-		case pb.ProcessState_PROCESS_STATE_STOPPED_DEBUGGER:
-			stat = "t"
-		case pb.ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL:
-			stat = "T"
-		case pb.ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP:
-			stat = "D"
-		case pb.ProcessState_PROCESS_STATE_ZOMBIE:
-			stat = "Z"
-		default:
-			stat = "?"
-		}
-
-		for _, s := range p.StateCode {
-			switch s {
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_FOREGROUND_PGRP:
-				stat += "+"
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY:
-				stat += "<"
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_LOCKED_PAGES:
-				stat += "L"
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_LOW_PRIORITY:
-				stat += "N"
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_SESSION_LEADER:
-				stat += "s"
-			case pb.ProcessStateCode_PROCESS_STATE_CODE_MULTI_THREADED:
-				stat += "l"
-			}
-		}
-
-		nice := fmt.Sprintf("%d", p.Nice)
-
+		nice := fmt.Sprintf("%d", entry.Nice)
 		// These scheduling classes are linux real time and nice doesn't apply.
 		if cls == "RR" || cls == "FF" {
 			nice = "-"
 		}
-		fmt.Printf(fmtEntry, p.Pid, p.Ppid, p.Wchan, p.CpuPercent, p.MemPercent, p.StartedTime, p.ElapsedTime, p.Rss, p.Vsize, p.Egid, p.Euid, p.Rgid, p.Ruid, p.Sgid, p.Suid, nice, p.Priority, cls, p.Flags, stat, p.Eip, p.Esp, p.BlockedSignals, p.CaughtSignals, p.IgnoredSignals, p.PendingSignals, p.NumberOfThreads, p.Command)
+
+		// Print everything from this entry.
+		fmt.Printf(fmtEntry, entry.Pid, entry.Ppid, entry.Wchan, entry.CpuPercent, entry.MemPercent, entry.StartedTime, entry.ElapsedTime, entry.Rss, entry.Vsize, entry.Egid, entry.Euid, entry.Rgid, entry.Ruid, entry.Sgid, entry.Suid, nice, entry.Priority, cls, entry.Flags, stat, entry.Eip, entry.Esp, entry.BlockedSignals, entry.CaughtSignals, entry.IgnoredSignals, entry.PendingSignals, entry.NumberOfThreads, entry.Command)
 	}
 
 	return subcommands.ExitSuccess
+}
+
+func parseClass(schedulingClass pb.SchedulingClass) string {
+	var cls string
+
+	switch schedulingClass {
+	case pb.SchedulingClass_SCHEDULING_CLASS_BATCH:
+		cls = "B"
+	case pb.SchedulingClass_SCHEDULING_CLASS_DEADLINE:
+		cls = "DLN"
+	case pb.SchedulingClass_SCHEDULING_CLASS_FIFO:
+		cls = "FF"
+	case pb.SchedulingClass_SCHEDULING_CLASS_IDLE:
+		cls = "IDL"
+	case pb.SchedulingClass_SCHEDULING_CLASS_ISO:
+		cls = "ISO"
+	case pb.SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED:
+		cls = "-"
+	case pb.SchedulingClass_SCHEDULING_CLASS_OTHER:
+		cls = "TS"
+	case pb.SchedulingClass_SCHEDULING_CLASS_RR:
+		cls = "RR"
+	default:
+		cls = "?"
+	}
+	return cls
+}
+
+func parseState(processState pb.ProcessState, codes []pb.ProcessStateCode) string {
+	var state string
+
+	switch processState {
+	case pb.ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP:
+		state = "S"
+	case pb.ProcessState_PROCESS_STATE_RUNNING:
+		state = "R"
+	case pb.ProcessState_PROCESS_STATE_STOPPED_DEBUGGER:
+		state = "t"
+	case pb.ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL:
+		state = "T"
+	case pb.ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP:
+		state = "D"
+	case pb.ProcessState_PROCESS_STATE_ZOMBIE:
+		state = "Z"
+	default:
+		state = "?"
+	}
+
+	for _, s := range codes {
+		switch s {
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_FOREGROUND_PGRP:
+			state += "+"
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY:
+			state += "<"
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_LOCKED_PAGES:
+			state += "L"
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_LOW_PRIORITY:
+			state += "N"
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_SESSION_LEADER:
+			state += "s"
+		case pb.ProcessStateCode_PROCESS_STATE_CODE_MULTI_THREADED:
+			state += "l"
+		}
+	}
+	return state
 }
