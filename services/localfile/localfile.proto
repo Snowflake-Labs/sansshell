@@ -50,6 +50,10 @@ message StatReply {
   uint32 mode = 3;
   // File modification time
   google.protobuf.Timestamp modtime = 4;
+  // UID of owner
+  uint32 uid = 5;
+  // GID of owner
+  uint32 gid = 6;
 }
 
 // SumType specifies a hashing function to use when calculating

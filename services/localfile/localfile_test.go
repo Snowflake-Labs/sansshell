@@ -3,6 +3,7 @@ package localfile
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -11,8 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -161,6 +165,240 @@ func TestRead(t *testing.T) {
 			}
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func fatalOnErr(op string, e error, t *testing.T) {
+	t.Helper()
+	if e != nil {
+		t.Fatalf("%s: err was %v, want nil", op, e)
+	}
+}
+
+func TestStat(t *testing.T) {
+	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	fatalOnErr("os.CreateTemp", err, t)
+	f1Stat, err := f1.Stat()
+	fatalOnErr("f1.Stat", err, t)
+
+	dirStat, err := os.Stat(temp)
+	fatalOnErr("os.Stat(tempdir)", err, t)
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	for _, tc := range []struct {
+		name        string
+		req         *StatRequest
+		reply       *StatReply
+		sendErrFunc func(string, error, *testing.T)
+		recvErrFunc func(string, error, *testing.T)
+	}{
+		{
+			name:        "nonexistent file",
+			req:         &StatRequest{Filename: "/no/such/file"},
+			reply:       nil,
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if err == nil {
+					t.Fatalf("%s: err was nil, expecting not found", op)
+				}
+			},
+		},
+		{
+			name:        "non-absolute path",
+			req:         &StatRequest{Filename: "../../relative-path/not-valid"},
+			reply:       nil,
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if !errors.Is(err, AbsolutePathError) {
+					t.Fatalf("%s: err was %v, want AbsolutePathError", op, err)
+				}
+			},
+		},
+		{
+			name: "directory",
+			req:  &StatRequest{Filename: temp},
+			reply: &StatReply{
+				Filename: temp,
+				Size:     dirStat.Size(),
+				Mode:     uint32(dirStat.Mode()),
+				Modtime:  timestamppb.New(dirStat.ModTime()),
+				Uid:      uid,
+				Gid:      gid,
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+		{
+			name: "known test file",
+			req:  &StatRequest{Filename: f1.Name()},
+			reply: &StatReply{
+				Filename: f1.Name(),
+				Size:     f1Stat.Size(),
+				Mode:     uint32(f1Stat.Mode()),
+				Modtime:  timestamppb.New(f1Stat.ModTime()),
+				Uid:      uid,
+				Gid:      gid,
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewLocalFileClient(conn)
+			stream, err := client.Stat(ctx)
+			fatalOnErr("client.Stat", err, t)
+			err = stream.Send(tc.req)
+			if tc.sendErrFunc != nil {
+				tc.sendErrFunc("stream.Send", err, t)
+			}
+			reply, err := stream.Recv()
+			if tc.recvErrFunc != nil {
+				tc.recvErrFunc("stream.Recv", err, t)
+			}
+			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
+				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
+			}
+		})
+	}
+}
+
+func TestSum(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	tempfile, err := os.CreateTemp(temp, "testfile.*")
+	t.Cleanup(func() { tempfile.Close() })
+	fatalOnErr("os.CreateTemp", err, t)
+
+	in, err := os.Open("./testdata/sum.data")
+	fatalOnErr("os.Open", err, t)
+	t.Cleanup(func() { in.Close() })
+
+	_, err = io.Copy(tempfile, in)
+	fatalOnErr("io.Copy", err, t)
+
+	for _, tc := range []struct {
+		name        string
+		req         *SumRequest
+		reply       *SumReply
+		sendErrFunc func(string, error, *testing.T)
+		recvErrFunc func(string, error, *testing.T)
+	}{
+		{
+			name:        "nonexistent file",
+			req:         &SumRequest{Filename: "/no/such/file"},
+			reply:       nil,
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if err == nil {
+					t.Fatalf("%s: err was nil, expecting not found", op)
+				}
+			},
+		},
+		{
+			name:        "non-absolute path",
+			req:         &SumRequest{Filename: "../../relative-path/not-valid"},
+			reply:       nil,
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if !errors.Is(err, AbsolutePathError) {
+					t.Fatalf("%s: err was %v, want AbsolutePathError", op, err)
+				}
+			},
+		},
+		{
+			name:        "directory",
+			req:         &SumRequest{Filename: temp, SumType: SumType_SUM_TYPE_SHA256},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if err == nil || !strings.Contains(err.Error(), "directory") {
+					t.Fatalf("%s : err was %v, want err containing 'directory'", op, err)
+				}
+			},
+		},
+		{
+			name: "default type if unset",
+			req:  &SumRequest{Filename: tempfile.Name()},
+			reply: &SumReply{
+				Filename: tempfile.Name(),
+				SumType:  SumType_SUM_TYPE_SHA256,
+				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+		{
+			name: "sha256",
+			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_SHA256},
+			reply: &SumReply{
+				Filename: tempfile.Name(),
+				SumType:  SumType_SUM_TYPE_SHA256,
+				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+		{
+			name: "sha512_256",
+			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_SHA512_256},
+			reply: &SumReply{
+				Filename: tempfile.Name(),
+				SumType:  SumType_SUM_TYPE_SHA512_256,
+				Sum:      "f28247cd3fb739c77014b33f3aff1e48e7dc3674c46c10498dc8d25f4b3405a1",
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+		{
+			name: "md5",
+			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_MD5},
+			reply: &SumReply{
+				Filename: tempfile.Name(),
+				SumType:  SumType_SUM_TYPE_MD5,
+				Sum:      "485032cb71937bed2d371731498d20d3",
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+		{
+			name: "crc32_ieee",
+			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_CRC32IEEE},
+			reply: &SumReply{
+				Filename: tempfile.Name(),
+				SumType:  SumType_SUM_TYPE_CRC32IEEE,
+				Sum:      "01df4a25",
+			},
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: fatalOnErr,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewLocalFileClient(conn)
+			stream, err := client.Sum(ctx)
+			fatalOnErr("client.Sum", err, t)
+			err = stream.Send(tc.req)
+			if tc.sendErrFunc != nil {
+				tc.sendErrFunc("stream.Send", err, t)
+			}
+			reply, err := stream.Recv()
+			if tc.recvErrFunc != nil {
+				tc.recvErrFunc("stream.Recv", err, t)
+			}
+			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
+				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
 		})
 	}
