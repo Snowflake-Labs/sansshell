@@ -46,8 +46,7 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 	}
 	f, err := os.Open(file)
 	if err != nil {
-		log.Printf("Can't open file %s: %v", file, err)
-		return err
+		return status.Errorf(codes.Internal, "can't open file %s: %v", file, err)
 	}
 
 	defer func() {
@@ -65,7 +64,7 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 			whence = 2
 		}
 		if _, err := f.Seek(s, whence); err != nil {
-			return err
+			return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
 		}
 	}
 
@@ -87,13 +86,13 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 		}
 
 		if err != nil {
-			return err
+			return status.Errorf(codes.Internal, "can't read for file %s: %v", file, err)
 		}
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
 		if err := stream.Send(&ReadReply{Contents: buf[:n]}); err != nil {
-			return err
+			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 		}
 
 		// If we got back less than a full chunk we're done.
@@ -112,7 +111,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 		}
 		if err != nil {
 			log.Printf("stat: recv error %v", err)
-			return err
+			return status.Errorf(codes.Internal, "stat: recv error %v", err)
 		}
 		log.Printf("stat: request for file: %v", in.Filename)
 		if !filepath.IsAbs(in.Filename) {
@@ -120,8 +119,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 		}
 		stat, err := os.Stat(in.Filename)
 		if err != nil {
-			log.Printf("stat: os.Stat error %v", err)
-			return err
+			return status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
 		}
 		stat_t, ok := stat.Sys().(*syscall.Stat_t)
 		if !ok || stat_t == nil {
@@ -136,7 +134,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 			Gid:      stat_t.Gid,
 		}); err != nil {
 			log.Printf("stat: send error %v", err)
-			return err
+			return status.Errorf(codes.Internal, "stat: send error %v", err)
 		}
 	}
 }
@@ -149,7 +147,7 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 		}
 		if err != nil {
 			log.Printf("sum: recv error %v", err)
-			return err
+			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
 		log.Printf("sum: request for file: %v", in.Filename)
 		if !filepath.IsAbs(in.Filename) {
@@ -188,11 +186,11 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 			out.Sum = hex.EncodeToString(hasher.Sum(nil))
 			return nil
 		}(); err != nil {
-			return err
+			return status.Errorf(codes.Internal, "can't create sum: %v", err)
 		}
 		if err := stream.Send(out); err != nil {
 			log.Printf("sum: send error %v", err)
-			return err
+			return status.Errorf(codes.Internal, "sum: send error %v", err)
 		}
 	}
 }
