@@ -20,3 +20,7 @@ allow {
 allow {
 	input.type = "Process.ListRequest"
 }
+
+allow {
+	input.type = "Ansible.RunRequest"
+}
