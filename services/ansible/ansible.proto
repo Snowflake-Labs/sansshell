@@ -34,11 +34,6 @@ message RunRequest {
 
   // If true, execute ansible with verbose output enabled (equivilant to -vvv)
   bool verbose = 6;
-
-  // The return code from the ansible command. Ansible returning non-zero will
-  // not be an RPC failure as exec'ing is all we guarentee and some playbooks
-  // are designed to return non-zero.
-  int32 return_code = 7;
 }
 
 message RunReply {
