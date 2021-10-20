@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -35,7 +36,14 @@ var re = regexp.MustCompile("[^a-zA-Z0-9]+")
 func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 	// Basic sanity checking up front.
 	if !filepath.IsAbs(req.Playbook) {
-		return nil, status.Error(codes.Internal, "playbook path must be a full qualified path")
+		return nil, status.Error(codes.InvalidArgument, "playbook path must be a full qualified path")
+	}
+
+	// Make sure it's a valid file and nothing something which might be malicious like
+	// /some/path && rm -rf /
+	stat, err := os.Stat(req.Playbook)
+	if err != nil || stat.IsDir() {
+		return nil, status.Errorf(codes.InvalidArgument, "%s is not a valid file", req.Playbook)
 	}
 
 	cmdArgs := []string{

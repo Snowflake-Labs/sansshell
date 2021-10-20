@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -69,9 +70,16 @@ func TestRun(t *testing.T) {
 
 	client := NewPlaybookClient(conn)
 
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Can't get current working directory: %s", err)
+	}
+
+	path := filepath.Join(wd, "testdata", "test.yml")
+
 	// Test 0: A bad command that doesn't exec.
 	*ansiblePlaybookBin = "/non-existant-command"
-	resp, err := client.Run(ctx, &RunRequest{Playbook: "/PLAYBOOK"})
+	resp, err := client.Run(ctx, &RunRequest{Playbook: path})
 	if err == nil {
 		t.Fatalf("Expected error for bad command. Instead got: +%v", resp)
 	}
@@ -79,11 +87,11 @@ func TestRun(t *testing.T) {
 
 	// Test 1: A command that exits non-zero
 	*ansiblePlaybookBin = "false"
-	resp, err = client.Run(ctx, &RunRequest{Playbook: "/PLAYBOOK"})
+	resp, err = client.Run(ctx, &RunRequest{Playbook: path})
 	if err != nil {
 		t.Fatalf("Unexpected error for non-zero exiting command. %v", err)
 	}
-	t.Log(err)
+	t.Log(resp)
 
 	if resp.ReturnCode == 0 {
 		t.Fatalf("Got a 0 return code from false. Reply: %+v", resp)
@@ -97,7 +105,7 @@ func TestRun(t *testing.T) {
 			"echo foo >&2 && echo bar",
 		}
 	}
-	resp, err = client.Run(ctx, &RunRequest{Playbook: "/PLAYBOOK"})
+	resp, err = client.Run(ctx, &RunRequest{Playbook: path})
 	if err != nil {
 		t.Fatalf("Unexpected error for stdout/stderr test. %v", err)
 	}
@@ -125,15 +133,25 @@ func TestRun(t *testing.T) {
 	}
 	t.Log(err)
 
-	baseArgs := []string{
-		"-i",
-		"localhost,",
-		"--connection=local",
+	// Test 4: Run with an absolute path but points to a directory.
+	resp, err = client.Run(ctx, &RunRequest{Playbook: "/"})
+	if err == nil {
+		t.Fatalf("Expected error for playbook being a directory. Instead got: +%v", resp)
 	}
+	t.Log(err)
 
-	// Test 4: A key/value with potentially bad things to pass to a shell
+	// Test 5: Run with an absolute path but appends some additional items that would be bad
+	//         to pass to the shell.
+
+	resp, err = client.Run(ctx, &RunRequest{Playbook: path + " && rm -rf /"})
+	if err == nil {
+		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
+	}
+	t.Log(err)
+
+	// Test 6: A key/value with potentially bad things to pass to a shell
 	resp, err = client.Run(ctx, &RunRequest{
-		Playbook: "/PLAYBOOK",
+		Playbook: path,
 		Vars: []*Var{
 			{
 				Key:   "key",
@@ -146,9 +164,15 @@ func TestRun(t *testing.T) {
 	}
 	t.Log(err)
 
-	// Test 5: Table driven test of various arg combos.
+	// Test 7: Table driven test of various arg combos.
 	//         Playbook arg is the same for all and added below
 	//         at the top of test logic each time.
+	baseArgs := []string{
+		"-i",
+		"localhost,",
+		"--connection=local",
+	}
+
 	for _, test := range []struct {
 		name     string
 		wantArgs []string
@@ -207,8 +231,8 @@ func TestRun(t *testing.T) {
 		},
 	} {
 		// Things every request does the same.
-		test.req.Playbook = "/PLAYBOOK"
-		test.wantArgs = append(test.wantArgs, "/PLAYBOOK")
+		test.req.Playbook = path
+		test.wantArgs = append(test.wantArgs, path)
 
 		var savedArgs []string
 		diff := ""
