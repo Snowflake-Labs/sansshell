@@ -41,11 +41,7 @@ message UpdateRequest {
 
 message UpdateReply { string debug_output = 1; }
 
-message ListInstalledRequest {
-  PackageSystem package_system = 1;
-  // Takes a glob pattern in the style of the package system list command.
-  string glob_pattern = 2;
-}
+message ListInstalledRequest { PackageSystem package_system = 1; }
 
 message PackageInfo {
   string name = 1;

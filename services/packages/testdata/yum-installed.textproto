@@ -1,0 +1,15 @@
+packages : <
+  name : "adoptopenjdk-11-hotspot.x86_64"
+  version : "11.0.11+9-3"
+  repo : "@adoptopenjdk"
+>
+packages : <
+  name : "copy-jdk-configs.noarch"
+  version : "3.3-10.el7_5"
+  repo : "@anaconda"
+>
+packages : <
+  name : "java-1.8.0-openjdk.x86_64"
+  version : "1:1.8.0.292.b10-1.el7_9"
+  repo : "@updates"
+>
