@@ -90,7 +90,7 @@ func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 	cmd.Stderr = &stderrBuf
 	cmd.Stdin = nil
 
-	log.Printf("Executing: %s %v", cmd.Path, cmd.Args)
+	log.Printf("Executing: %s", cmd.String())
 	if err := cmd.Start(); err != nil {
 		return nil, status.Errorf(codes.Internal, "can't start ansible-playbook: %v", err)
 	}
