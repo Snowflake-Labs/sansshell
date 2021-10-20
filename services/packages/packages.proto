@@ -36,6 +36,7 @@ message UpdateRequest {
   PackageSystem package_system = 1;
   string name = 2;
   // This version must be installed for update to execute.
+  // As with install above for YUM this must be a full neva version.
   string old_version = 3;
   string new_version = 4;
   // If set enables this repo as well for resolving package/version.
