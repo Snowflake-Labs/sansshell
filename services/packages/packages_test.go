@@ -71,7 +71,7 @@ func TestListInstalled(t *testing.T) {
 		return []string{"cat", testdataInput}, nil
 	}
 	defer func() {
-		generateRepoList = savedGenerateListInstalled
+		generateListInstalled = savedGenerateListInstalled
 	}()
 
 	f, err := os.Open(testdataGolden)
