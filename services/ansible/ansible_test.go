@@ -142,8 +142,17 @@ func TestRun(t *testing.T) {
 
 	// Test 5: Run with an absolute path but appends some additional items that would be bad
 	//         to pass to the shell.
-
 	resp, err = client.Run(ctx, &RunRequest{Playbook: path + " && rm -rf /"})
+	if err == nil {
+		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
+	}
+	t.Log(err)
+
+	// Test 5: Run with a badly named user.
+	resp, err = client.Run(ctx, &RunRequest{
+		Playbook: path,
+		User:     "user && rm -rf /",
+	})
 	if err == nil {
 		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
 	}

@@ -54,13 +54,16 @@ func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 
 	for _, v := range req.Vars {
 		if v.Key != re.ReplaceAllString(v.Key, "") || v.Value != re.ReplaceAllString(v.Value, "") {
-			return nil, status.Errorf(codes.InvalidArgument, "vars must contain key/value that is only contains [a-zA-Z0-9] - %s=%s invalid", v.Key, v.Value)
+			return nil, status.Errorf(codes.InvalidArgument, "vars must contain key/value that is only contains [a-zA-Z0-9_] - '%s=%s' is invalid", v.Key, v.Value)
 		}
 		cmdArgs = append(cmdArgs, "-e")
 		cmdArgs = append(cmdArgs, fmt.Sprintf("%s=%s", v.Key, v.Value))
 	}
 
 	if req.User != "" {
+		if req.User != re.ReplaceAllString(req.User, "") {
+			return nil, status.Errorf(codes.InvalidArgument, "user must only contain [a-zA-Z0-9_] - %q is invalid", req.User)
+		}
 		cmdArgs = append(cmdArgs, "--become")
 		cmdArgs = append(cmdArgs, req.User)
 	}
