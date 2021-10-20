@@ -41,6 +41,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestListNative(t *testing.T) {
+	// We're on a platform which doesn't support this so we can't test.
+	if testdataFile == "" {
+		t.Skip()
+	}
+
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
@@ -81,6 +86,11 @@ func TestListNative(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
+	// We're on a platform which doesn't support this so we can't test.
+	if testdataFile == "" {
+		t.Skip()
+	}
+
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
