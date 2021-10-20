@@ -41,3 +41,7 @@ Repo-expire  : 21,600 second(s) (last: Mon Oct 18 20:36:02 2021)
   Filter     : read-only:present
 Repo-filename: /etc/yum.repos.d/adoptopenjdk.repo
 
+Repo-id      : somerepo
+Repo-name    : somerepo name
+Repo-status  : xyzzy
+
