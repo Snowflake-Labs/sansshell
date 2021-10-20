@@ -67,6 +67,8 @@ message Repo {
   string id = 1;
   string name = 2;
   RepoStatus status = 3;
+  string filename = 4;
+  string url = 5;
 }
 
 message RepoListReply { repeated Repo repos = 1; }
