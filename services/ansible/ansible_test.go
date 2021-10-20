@@ -189,12 +189,12 @@ func TestRun(t *testing.T) {
 				"-e",
 				"foo=bar",
 				"-e",
-				"baz=baz",
+				"baz=BAZ0_",
 			}...),
 			req: &RunRequest{
 				Vars: []*Var{
 					{Key: "foo", Value: "bar"},
-					{Key: "baz", Value: "baz"},
+					{Key: "baz", Value: "BAZ0_"},
 				},
 			},
 		},

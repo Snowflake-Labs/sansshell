@@ -31,7 +31,7 @@ var cmdArgsTransform = func(input []string) []string {
 // server is used to implement the gRPC server
 type server struct{}
 
-var re = regexp.MustCompile("[^a-zA-Z0-9]+")
+var re = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
 func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 	// Basic sanity checking up front.
