@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	grpc "google.golang.org/grpc"
@@ -28,9 +30,11 @@ var cmdArgsTransform = func(input []string) []string {
 // server is used to implement the gRPC server
 type server struct{}
 
+var re = regexp.MustCompile("[^a-zA-Z0-9]+")
+
 func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 	// Basic sanity checking up front.
-	if len(req.Playbook) == 0 || req.Playbook[0] != '/' {
+	if !filepath.IsAbs(req.Playbook) {
 		return nil, status.Error(codes.Internal, "playbook path must be a full qualified path")
 	}
 
@@ -41,6 +45,9 @@ func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 	}
 
 	for _, v := range req.Vars {
+		if v.Key != re.ReplaceAllString(v.Key, "") || v.Value != re.ReplaceAllString(v.Value, "") {
+			return nil, status.Errorf(codes.InvalidArgument, "vars must contain key/value that is only contains [a-zA-Z0-9] - %s=%s invalid", v.Key, v.Value)
+		}
 		cmdArgs = append(cmdArgs, "-e")
 		cmdArgs = append(cmdArgs, fmt.Sprintf("%s=%s", v.Key, v.Value))
 	}

@@ -131,7 +131,22 @@ func TestRun(t *testing.T) {
 		"--connection=local",
 	}
 
-	// Test 4: Table driven test of various arg combos.
+	// Test 4: A key/value with potentially bad things to pass to a shell
+	resp, err = client.Run(ctx, &RunRequest{
+		Playbook: "/PLAYBOOK",
+		Vars: []*Var{
+			{
+				Key:   "key",
+				Value: "val && rm -rf /",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("Expected error for bad key/value. Instead got: +%v", resp)
+	}
+	t.Log(err)
+
+	// Test 5: Table driven test of various arg combos.
 	//         Playbook arg is the same for all and added below
 	//         at the top of test logic each time.
 	for _, test := range []struct {
