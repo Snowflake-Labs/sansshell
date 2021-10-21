@@ -51,7 +51,7 @@ func (i *intList) Set(val string) error {
 }
 
 func init() {
-	subcommands.Register(&processCmd{}, "raw")
+	subcommands.Register(&processCmd{}, "process")
 }
 
 type processCmd struct {

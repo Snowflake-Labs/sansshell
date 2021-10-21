@@ -14,7 +14,7 @@ import (
 )
 
 func init() {
-	subcommands.Register(&healthcheckCmd{}, "raw")
+	subcommands.Register(&healthcheckCmd{}, "healthcheck")
 }
 
 type healthcheckCmd struct{}
