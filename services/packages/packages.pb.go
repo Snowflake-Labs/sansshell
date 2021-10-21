@@ -124,7 +124,7 @@ type InstallRequest struct {
 
 	PackageSystem PackageSystem `protobuf:"varint,1,opt,name=package_system,json=packageSystem,proto3,enum=Packages.PackageSystem" json:"package_system,omitempty"`
 	Name          string        `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// Version must be the full neva version if this is YUM:
+	// Version must be the full nevra version if this is YUM:
 	//
 	// i.e. epoch:version.arch
 	Version string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
@@ -247,7 +247,7 @@ type UpdateRequest struct {
 	PackageSystem PackageSystem `protobuf:"varint,1,opt,name=package_system,json=packageSystem,proto3,enum=Packages.PackageSystem" json:"package_system,omitempty"`
 	Name          string        `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// This version must be installed for update to execute.
-	// As with install above for YUM this must be a full neva version.
+	// As with install above for YUM this must be a full nevra version.
 	OldVersion string `protobuf:"bytes,3,opt,name=old_version,json=oldVersion,proto3" json:"old_version,omitempty"`
 	NewVersion string `protobuf:"bytes,4,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
 	// If set enables this repo as well for resolving package/version.

@@ -22,7 +22,7 @@ enum PackageSystem {
 message InstallRequest {
   PackageSystem package_system = 1;
   string name = 2;
-  // Version must be the full neva version if this is YUM:
+  // Version must be the full nevra version if this is YUM:
   //
   // i.e. epoch:version.arch
   string version = 3;
@@ -36,7 +36,7 @@ message UpdateRequest {
   PackageSystem package_system = 1;
   string name = 2;
   // This version must be installed for update to execute.
-  // As with install above for YUM this must be a full neva version.
+  // As with install above for YUM this must be a full nevra version.
   string old_version = 3;
   string new_version = 4;
   // If set enables this repo as well for resolving package/version.
