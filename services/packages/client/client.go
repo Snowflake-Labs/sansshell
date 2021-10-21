@@ -162,6 +162,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 type repoListCmd struct {
 	packageSystem string
+	verbose       bool
 }
 
 func (*repoListCmd) Name() string     { return "repolist" }
@@ -174,6 +175,7 @@ func (*repoListCmd) Usage() string {
 
 func (r *repoListCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&r.packageSystem, "package_system", "YUM", "Either blank or YUM (which means the same thing currently)")
+	f.BoolVar(&r.verbose, "verbose", false, "If true print out fully verbose outage")
 }
 
 func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -193,17 +195,33 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	}
 
 	// Print the repo id, name and status with some reasonable spacing.
-	format := "%40s %40s %16s\n"
-	fmt.Fprint(os.Stdout, format, "repo id", "repo name", "status")
-	for _, repo := range resp.Repos {
-		status := "unknown"
-		switch repo.Status {
-		case pb.RepoStatus_REPO_STATUS_DISABLED:
-			status = "disabled"
-		case pb.RepoStatus_REPO_STATUS_ENABLED:
-			status = "enabled"
+	if r.verbose {
+		// Print like "yum repolist all -v would.
+		for _, repo := range resp.Repos {
+			fmt.Fprintf(os.Stdout, "Repo-id      : %s\n", repo.Id)
+			fmt.Fprintf(os.Stdout, "Repo-name    : %s\n", repo.Name)
+			fmt.Fprintf(os.Stdout, "Repo-status  : %s\n", getStatus(repo.Status))
+			fmt.Fprintf(os.Stdout, "Repo-baseurl : %s\n", repo.Url)
+			fmt.Fprintf(os.Stdout, "Repo-filename: %s\n", repo.Filename)
+			fmt.Fprintln(os.Stdout)
 		}
-		fmt.Fprintf(os.Stdout, format, repo.Id, repo.Name, status)
+	} else {
+		format := "%40s %40s %16s\n"
+		fmt.Fprint(os.Stdout, format, "repo id", "repo name", "status")
+		for _, repo := range resp.Repos {
+			fmt.Fprintf(os.Stdout, format, repo.Id, repo.Name, getStatus(repo.Status))
+		}
 	}
 	return subcommands.ExitSuccess
+}
+
+func getStatus(s pb.RepoStatus) string {
+	status := "unknown"
+	switch s {
+	case pb.RepoStatus_REPO_STATUS_DISABLED:
+		status = "disabled"
+	case pb.RepoStatus_REPO_STATUS_ENABLED:
+		status = "enabled"
+	}
+	return status
 }
