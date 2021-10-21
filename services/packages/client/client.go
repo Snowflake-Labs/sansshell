@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -13,10 +15,28 @@ import (
 )
 
 func init() {
-	subcommands.Register(&installCmd{}, "raw")
-	subcommands.Register(&updateCmd{}, "raw")
-	subcommands.Register(&listCmd{}, "raw")
-	subcommands.Register(&repoListCmd{}, "raw")
+	subcommands.Register(&installCmd{}, "packages")
+	subcommands.Register(&updateCmd{}, "packages")
+	subcommands.Register(&listCmd{}, "packages")
+	subcommands.Register(&repoListCmd{}, "packages")
+}
+
+func flagToType(val string) (pb.PackageSystem, error) {
+	v := fmt.Sprintf("PACKAGE_SYSTEM_%s", strings.ToUpper(val))
+	i, ok := pb.PackageSystem_value[v]
+	if !ok {
+		return pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN, fmt.Errorf("no such sumtype value: %s", v)
+	}
+	return pb.PackageSystem(i), nil
+}
+
+func shortPackageSystemNames() []string {
+	var shortNames []string
+	for k := range pb.PackageSystem_value {
+		shortNames = append(shortNames, strings.TrimPrefix(k, "PACKAGE_SYSTEM_"))
+	}
+	sort.Strings(shortNames)
+	return shortNames
 }
 
 type installCmd struct {
@@ -35,15 +55,16 @@ func (*installCmd) Usage() string {
 }
 
 func (i *installCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&i.packageSystem, "package_system", "YUM", "Either blank or YUM (which means the same thing currently)")
+	f.StringVar(&i.packageSystem, "package_system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&i.name, "name", "", "Name of package to install")
 	f.StringVar(&i.version, "version", "", "Version of package to install. For YUM this must be a full nevra version")
 	f.StringVar(&i.repo, "repo", "", "If set also enable this repo when resolving packages.")
 }
 
 func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if i.packageSystem != "YUM" && i.packageSystem != "" {
-		fmt.Fprint(os.Stderr, "--package_system must be blank or YUM")
+	ps, err := flagToType(i.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", i.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -52,7 +73,7 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	c := pb.NewPackagesClient(conn)
 
 	req := &pb.InstallRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
+		PackageSystem: ps,
 		Name:          i.name,
 		Version:       i.version,
 		Repo:          i.repo,
@@ -85,7 +106,7 @@ func (*updateCmd) Usage() string {
 }
 
 func (u *updateCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&u.packageSystem, "package_system", "YUM", "Either blank or YUM (which means the same thing currently)")
+	f.StringVar(&u.packageSystem, "package_system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&u.name, "name", "", "Name of package to install")
 	f.StringVar(&u.old_version, "old_version", "", "Old version of package which must be on the system. For YUM this must be a full nevra version")
 	f.StringVar(&u.new_version, "new_version", "", "New version of package to update. For YUM this must be a full nevra version")
@@ -93,8 +114,9 @@ func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if u.packageSystem != "YUM" && u.packageSystem != "" {
-		fmt.Fprint(os.Stderr, "--package_system must be blank or YUM")
+	ps, err := flagToType(u.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", u.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -103,7 +125,7 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	c := pb.NewPackagesClient(conn)
 
 	req := &pb.UpdateRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
+		PackageSystem: ps,
 		Name:          u.name,
 		OldVersion:    u.old_version,
 		NewVersion:    u.new_version,
@@ -133,12 +155,13 @@ func (*listCmd) Usage() string {
 }
 
 func (l *listCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&l.packageSystem, "package_system", "YUM", "Either blank or YUM (which means the same thing currently)")
+	f.StringVar(&l.packageSystem, "package_system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 }
 
 func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if l.packageSystem != "YUM" && l.packageSystem != "" {
-		fmt.Fprint(os.Stderr, "--package_system must be blank or YUM")
+	ps, err := flagToType(l.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", l.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -146,7 +169,9 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewPackagesClient(conn)
 
-	resp, err := c.ListInstalled(ctx, &pb.ListInstalledRequest{})
+	resp, err := c.ListInstalled(ctx, &pb.ListInstalledRequest{
+		PackageSystem: ps,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "List returned error: %v\n", err)
 		return subcommands.ExitFailure
@@ -174,13 +199,14 @@ func (*repoListCmd) Usage() string {
 }
 
 func (r *repoListCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&r.packageSystem, "package_system", "YUM", "Either blank or YUM (which means the same thing currently)")
+	f.StringVar(&r.packageSystem, "package_system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.BoolVar(&r.verbose, "verbose", false, "If true print out fully verbose outage")
 }
 
 func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if r.packageSystem != "YUM" && r.packageSystem != "" {
-		fmt.Fprint(os.Stderr, "--package_system must be blank or YUM")
+	ps, err := flagToType(r.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", r.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -188,7 +214,9 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 	c := pb.NewPackagesClient(conn)
 
-	resp, err := c.RepoList(ctx, &pb.RepoListRequest{})
+	resp, err := c.RepoList(ctx, &pb.RepoListRequest{
+		PackageSystem: ps,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Repo list returned error: %v\n", err)
 		return subcommands.ExitFailure
