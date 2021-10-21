@@ -15,6 +15,7 @@ import (
 	// Import the raw command clients you want, they automatically register
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
+	_ "github.com/Snowflake-Labs/sansshell/services/ansible/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"

@@ -16,7 +16,7 @@ message Var {
 }
 
 message RunRequest {
-  // The playbook to execute
+  // The playbook to execute. Needs to be a fully qualified path.
   string playbook = 1;
 
   // Will become N -e options to ansible-playbook
@@ -32,13 +32,19 @@ message RunRequest {
   // If set --diff is passed to ansible
   bool diff = 5;
 
-  // If true, execute ansible with verbose output enabled (equivilant to -v)
+  // If true, execute ansible with verbose output enabled (equivilant to -vvv)
   bool verbose = 6;
+}
+
+message RunReply {
+  // All output sent to stdout.
+  string stdout = 1;
+
+  // All output sent to stderr.
+  string stderr = 2;
 
   // The return code from the ansible command. Ansible returning non-zero will
   // not be an RPC failure as exec'ing is all we guarentee and some playbooks
   // are designed to return non-zero.
-  int32 return_code = 7;
+  int32 return_code = 3;
 }
-
-message RunReply { string debug_output = 1; }

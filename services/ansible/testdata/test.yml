@@ -1,0 +1,11 @@
+---
+
+- hosts: localhost
+  tasks:
+    - name: Test
+      ansible.builtin.shell:
+        cmd: echo foo >&2 ; ls {{ path }} {{ path2 }}
+      register: shell_output
+
+    - debug:
+        var: shell_output
