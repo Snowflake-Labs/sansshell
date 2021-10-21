@@ -1,4 +1,4 @@
-package localfile
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:

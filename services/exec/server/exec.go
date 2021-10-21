@@ -1,4 +1,4 @@
-package exec
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // This comment encodes the necessary magic:

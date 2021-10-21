@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package process
+package server
 
 // OS specific locations for finding test data.
 var (
