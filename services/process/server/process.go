@@ -11,6 +11,7 @@ import (
 	"os/exec"
 
 	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,7 +21,7 @@ import (
 type server struct {
 }
 
-func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error) {
+func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	log.Printf("Received request for List: %+v", req)
 
 	cmdName := *psBin
@@ -52,7 +53,7 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 		return nil, status.Errorf(codes.Internal, "unexpected parsing error: %v", err)
 	}
 
-	reply := &ListReply{}
+	reply := &pb.ListReply{}
 	if len(req.Pids) != 0 {
 		for _, pid := range req.Pids {
 			if _, ok := entries[pid]; !ok {
@@ -71,25 +72,25 @@ func (s *server) List(ctx context.Context, req *ListRequest) (*ListReply, error)
 	return reply, nil
 }
 
-func (s *server) GetStacks(ctx context.Context, req *GetStacksRequest) (*GetStacksReply, error) {
+func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.GetStacksReply, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *server) GetJavaStacks(ctx context.Context, req *GetJavaStacksRequest) (*GetJavaStacksReply, error) {
+func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest) (*pb.GetJavaStacksReply, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *server) GetCore(req *GetCoreRequest, stream Process_GetCoreServer) error {
+func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer) error {
 	return status.Error(codes.Unimplemented, "not implemented")
 }
 
-func (s *server) GetJavaHeapDump(req *GetJavaHeapDumpRequest, stream Process_GetJavaHeapDumpServer) error {
+func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Process_GetJavaHeapDumpServer) error {
 	return status.Error(codes.Unimplemented, "not implemented")
 }
 
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
-	RegisterProcessServer(gs, s)
+	pb.RegisterProcessServer(gs, s)
 }
 
 func init() {

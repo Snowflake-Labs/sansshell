@@ -11,11 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
-	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
-	lf "github.com/Snowflake-Labs/sansshell/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
+	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 )
 
 const (
@@ -91,8 +92,8 @@ func TestRead(t *testing.T) {
 		// Future proof for t.Parallel()
 		want := want
 		t.Run(want.Filename, func(t *testing.T) {
-			client := lf.NewLocalFileClient(conn)
-			stream, err := client.Read(ctx, &lf.ReadRequest{Filename: want.Filename})
+			client := lfpb.NewLocalFileClient(conn)
+			stream, err := client.Read(ctx, &lfpb.ReadRequest{Filename: want.Filename})
 			if err != nil {
 				// At this point it only returns if we can't connect. Actual errors
 				// happen below on the first stream Recv() call.

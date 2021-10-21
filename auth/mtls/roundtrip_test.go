@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/Snowflake-Labs/sansshell/server"

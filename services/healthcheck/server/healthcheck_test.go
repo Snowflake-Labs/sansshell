@@ -7,7 +7,8 @@ import (
 	"os"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -45,8 +46,8 @@ func TestRead(t *testing.T) {
 	}
 	defer conn.Close()
 
-	client := NewHealthCheckClient(conn)
-	if _, err := client.Ok(ctx, &Empty{}); err != nil {
+	client := pb.NewHealthCheckClient(conn)
+	if _, err := client.Ok(ctx, &pb.Empty{}); err != nil {
 		t.Fatalf("HealthCheck failed: %v", err)
 	}
 }

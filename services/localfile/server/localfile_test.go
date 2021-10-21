@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -107,9 +108,9 @@ func TestRead(t *testing.T) {
 
 			chunkSize = tc.Chunksize
 
-			client := NewLocalFileClient(conn)
+			client := pb.NewLocalFileClient(conn)
 
-			stream, err := client.Read(ctx, &ReadRequest{
+			stream, err := client.Read(ctx, &pb.ReadRequest{
 				Filename: tc.Filename,
 				Offset:   tc.Offset,
 				Length:   tc.Length,
@@ -195,14 +196,14 @@ func TestStat(t *testing.T) {
 
 	for _, tc := range []struct {
 		name        string
-		req         *StatRequest
-		reply       *StatReply
+		req         *pb.StatRequest
+		reply       *pb.StatReply
 		sendErrFunc func(string, error, *testing.T)
 		recvErrFunc func(string, error, *testing.T)
 	}{
 		{
 			name:        "nonexistent file",
-			req:         &StatRequest{Filename: "/no/such/file"},
+			req:         &pb.StatRequest{Filename: "/no/such/file"},
 			reply:       nil,
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
@@ -213,7 +214,7 @@ func TestStat(t *testing.T) {
 		},
 		{
 			name:        "non-absolute path",
-			req:         &StatRequest{Filename: "../../relative-path/not-valid"},
+			req:         &pb.StatRequest{Filename: "../../relative-path/not-valid"},
 			reply:       nil,
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
@@ -224,8 +225,8 @@ func TestStat(t *testing.T) {
 		},
 		{
 			name: "directory",
-			req:  &StatRequest{Filename: temp},
-			reply: &StatReply{
+			req:  &pb.StatRequest{Filename: temp},
+			reply: &pb.StatReply{
 				Filename: temp,
 				Size:     dirStat.Size(),
 				Mode:     uint32(dirStat.Mode()),
@@ -238,8 +239,8 @@ func TestStat(t *testing.T) {
 		},
 		{
 			name: "known test file",
-			req:  &StatRequest{Filename: f1.Name()},
-			reply: &StatReply{
+			req:  &pb.StatRequest{Filename: f1.Name()},
+			reply: &pb.StatReply{
 				Filename: f1.Name(),
 				Size:     f1Stat.Size(),
 				Mode:     uint32(f1Stat.Mode()),
@@ -253,7 +254,7 @@ func TestStat(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			client := NewLocalFileClient(conn)
+			client := pb.NewLocalFileClient(conn)
 			stream, err := client.Stat(ctx)
 			fatalOnErr("client.Stat", err, t)
 			err = stream.Send(tc.req)
@@ -291,14 +292,14 @@ func TestSum(t *testing.T) {
 
 	for _, tc := range []struct {
 		name        string
-		req         *SumRequest
-		reply       *SumReply
+		req         *pb.SumRequest
+		reply       *pb.SumReply
 		sendErrFunc func(string, error, *testing.T)
 		recvErrFunc func(string, error, *testing.T)
 	}{
 		{
 			name:        "nonexistent file",
-			req:         &SumRequest{Filename: "/no/such/file"},
+			req:         &pb.SumRequest{Filename: "/no/such/file"},
 			reply:       nil,
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
@@ -309,7 +310,7 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name:        "non-absolute path",
-			req:         &SumRequest{Filename: "../../relative-path/not-valid"},
+			req:         &pb.SumRequest{Filename: "../../relative-path/not-valid"},
 			reply:       nil,
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
@@ -320,7 +321,7 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name:        "directory",
-			req:         &SumRequest{Filename: temp, SumType: SumType_SUM_TYPE_SHA256},
+			req:         &pb.SumRequest{Filename: temp, SumType: pb.SumType_SUM_TYPE_SHA256},
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), "directory") {
@@ -330,10 +331,10 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name: "default type if unset",
-			req:  &SumRequest{Filename: tempfile.Name()},
-			reply: &SumReply{
+			req:  &pb.SumRequest{Filename: tempfile.Name()},
+			reply: &pb.SumReply{
 				Filename: tempfile.Name(),
-				SumType:  SumType_SUM_TYPE_SHA256,
+				SumType:  pb.SumType_SUM_TYPE_SHA256,
 				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
 			},
 			sendErrFunc: fatalOnErr,
@@ -341,10 +342,10 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name: "sha256",
-			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_SHA256},
-			reply: &SumReply{
+			req:  &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_SHA256},
+			reply: &pb.SumReply{
 				Filename: tempfile.Name(),
-				SumType:  SumType_SUM_TYPE_SHA256,
+				SumType:  pb.SumType_SUM_TYPE_SHA256,
 				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
 			},
 			sendErrFunc: fatalOnErr,
@@ -352,10 +353,10 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name: "sha512_256",
-			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_SHA512_256},
-			reply: &SumReply{
+			req:  &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_SHA512_256},
+			reply: &pb.SumReply{
 				Filename: tempfile.Name(),
-				SumType:  SumType_SUM_TYPE_SHA512_256,
+				SumType:  pb.SumType_SUM_TYPE_SHA512_256,
 				Sum:      "f28247cd3fb739c77014b33f3aff1e48e7dc3674c46c10498dc8d25f4b3405a1",
 			},
 			sendErrFunc: fatalOnErr,
@@ -363,10 +364,10 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name: "md5",
-			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_MD5},
-			reply: &SumReply{
+			req:  &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_MD5},
+			reply: &pb.SumReply{
 				Filename: tempfile.Name(),
-				SumType:  SumType_SUM_TYPE_MD5,
+				SumType:  pb.SumType_SUM_TYPE_MD5,
 				Sum:      "485032cb71937bed2d371731498d20d3",
 			},
 			sendErrFunc: fatalOnErr,
@@ -374,10 +375,10 @@ func TestSum(t *testing.T) {
 		},
 		{
 			name: "crc32_ieee",
-			req:  &SumRequest{Filename: tempfile.Name(), SumType: SumType_SUM_TYPE_CRC32IEEE},
-			reply: &SumReply{
+			req:  &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_CRC32IEEE},
+			reply: &pb.SumReply{
 				Filename: tempfile.Name(),
-				SumType:  SumType_SUM_TYPE_CRC32IEEE,
+				SumType:  pb.SumType_SUM_TYPE_CRC32IEEE,
 				Sum:      "01df4a25",
 			},
 			sendErrFunc: fatalOnErr,
@@ -386,7 +387,7 @@ func TestSum(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			client := NewLocalFileClient(conn)
+			client := pb.NewLocalFileClient(conn)
 			stream, err := client.Sum(ctx)
 			fatalOnErr("client.Sum", err, t)
 			err = stream.Send(tc.req)

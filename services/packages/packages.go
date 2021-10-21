@@ -9,7 +9,7 @@ import (
 	"errors"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 )
 
 // server is used to implement the gRPC server
