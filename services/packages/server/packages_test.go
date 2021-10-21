@@ -54,6 +54,22 @@ func TestInstall(t *testing.T) {
 
 	client := pb.NewPackagesClient(conn)
 
+	testdataInput := "This is output we expect to see\n\nMore output\n"
+	savedGenerateInstall := generateInstall
+	var cmdLine string
+	generateInstall = func(i *pb.InstallRequest) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		out, err := savedGenerateInstall(i)
+		if err != nil {
+			return nil, err
+		}
+		cmdLine = strings.Join(out, " ")
+		return []string{"echo", "-n", testdataInput}, nil
+	}
+	defer func() {
+		generateInstall = savedGenerateInstall
+	}()
+
 	// Test 0: Bunch of permutations for invalid input.
 	for _, test := range []struct {
 		name string
@@ -114,19 +130,6 @@ func TestInstall(t *testing.T) {
 		}
 		t.Logf("%s: %v", test.name, err)
 	}
-
-	testdataInput := "This is output we expect to see\n\nMore output\n"
-	savedGenerateInstall := generateInstall
-	var cmdLine string
-	generateInstall = func(i *pb.InstallRequest) ([]string, error) {
-		// Capture what was generated so we can validate it.
-		out, _ := savedGenerateInstall(i)
-		cmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
-	}
-	defer func() {
-		generateInstall = savedGenerateInstall
-	}()
 
 	req := &pb.InstallRequest{
 		Name:    "package",
@@ -195,6 +198,33 @@ func TestUpdate(t *testing.T) {
 	defer conn.Close()
 
 	client := pb.NewPackagesClient(conn)
+
+	testdataInput := "This is output we expect to see\n\nMore output\n"
+	savedGenerateValidate := generateValidate
+	savedGenerateUpdate := generateUpdate
+	var cmdLine, validateCmdLine string
+	generateValidate = func(u *pb.UpdateRequest) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		out, err := savedGenerateValidate(u)
+		if err != nil {
+			return nil, err
+		}
+		validateCmdLine = strings.Join(out, " ")
+		return []string{"echo", "-n", testdataInput}, nil
+	}
+	generateUpdate = func(u *pb.UpdateRequest) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		out, err := savedGenerateUpdate(u)
+		if err != nil {
+			return nil, err
+		}
+		cmdLine = strings.Join(out, " ")
+		return []string{"echo", "-n", testdataInput}, nil
+	}
+	defer func() {
+		generateValidate = savedGenerateValidate
+		generateUpdate = savedGenerateUpdate
+	}()
 
 	// Test 0: Bunch of permutations for invalid input.
 	for _, test := range []struct {
@@ -287,27 +317,6 @@ func TestUpdate(t *testing.T) {
 		t.Logf("%s: %v", test.name, err)
 	}
 
-	testdataInput := "This is output we expect to see\n\nMore output\n"
-	savedGenerateValidate := generateValidate
-	savedGenerateUpdate := generateUpdate
-	var cmdLine, validateCmdLine string
-	generateValidate = func(u *pb.UpdateRequest) ([]string, error) {
-		// Capture what was generated so we can validate it.
-		out, _ := savedGenerateValidate(u)
-		validateCmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
-	}
-	generateUpdate = func(u *pb.UpdateRequest) ([]string, error) {
-		// Capture what was generated so we can validate it.
-		out, _ := savedGenerateUpdate(u)
-		cmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
-	}
-	defer func() {
-		generateValidate = savedGenerateValidate
-		generateUpdate = savedGenerateUpdate
-	}()
-
 	req := &pb.UpdateRequest{
 		Name:       "package",
 		OldVersion: "1.2.3",
@@ -379,16 +388,6 @@ func TestListInstalled(t *testing.T) {
 
 	client := pb.NewPackagesClient(conn)
 
-	// Test 0: Specify a bad package system and get an error.
-	//         Should work with all default setup.
-	resp, err := client.ListInstalled(ctx, &pb.ListInstalledRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
-	})
-	if err == nil {
-		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
-	}
-	t.Log(err)
-
 	// Setup for feeding in test data for further tests.
 	testdataInput := "./testdata/yum-installed.out"
 	testdataInputBad := "./testdata/yum-installed-bad.out"
@@ -398,7 +397,10 @@ func TestListInstalled(t *testing.T) {
 	var cmdLine string
 	generateListInstalled = func(p pb.PackageSystem) ([]string, error) {
 		// Capture what was generated so we can validate it.
-		out, _ := savedGenerateListInstalled(p)
+		out, err := savedGenerateListInstalled(p)
+		if err != nil {
+			return nil, err
+		}
 		cmdLine = strings.Join(out, " ")
 		return []string{"cat", testdataInput}, nil
 	}
@@ -426,6 +428,15 @@ func TestListInstalled(t *testing.T) {
 	sortEntries := protocmp.SortRepeated(func(i *pb.PackageInfo, j *pb.PackageInfo) bool {
 		return i.Name < j.Name && i.Version < j.Version
 	})
+
+	// Test 0: Specify a bad package system and get an error.
+	resp, err := client.ListInstalled(ctx, &pb.ListInstalledRequest{
+		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+	})
+	if err == nil {
+		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
+	}
+	t.Log(err)
 
 	// Test 1: No options. Should pick yum w/o error and give back our list.
 
@@ -513,16 +524,6 @@ func TestRepoList(t *testing.T) {
 
 	client := pb.NewPackagesClient(conn)
 
-	// Test 0: Specify a bad package system and get an error.
-	//         Should work with all default setup.
-	resp, err := client.RepoList(ctx, &pb.RepoListRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
-	})
-	if err == nil {
-		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
-	}
-	t.Log(err)
-
 	// Setup for feeding in test data for further tests.
 	testdataInput := "./testdata/yum-repolist.out"
 	testdataGolden := "./testdata/yum-repolist.textproto"
@@ -531,7 +532,10 @@ func TestRepoList(t *testing.T) {
 	var cmdLine string
 	generateRepoList = func(p pb.PackageSystem) ([]string, error) {
 		// Capture what was generated so we can validate it.
-		out, _ := savedGenerateRepoList(p)
+		out, err := savedGenerateRepoList(p)
+		if err != nil {
+			return nil, err
+		}
 		cmdLine = strings.Join(out, " ")
 		return []string{"cat", testdataInput}, nil
 	}
@@ -559,6 +563,15 @@ func TestRepoList(t *testing.T) {
 	sortEntries := protocmp.SortRepeated(func(i *pb.Repo, j *pb.Repo) bool {
 		return i.Id < j.Id && i.Name < j.Name
 	})
+
+	// Test 0: Specify a bad package system and get an error.
+	resp, err := client.RepoList(ctx, &pb.RepoListRequest{
+		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+	})
+	if err == nil {
+		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
+	}
+	t.Log(err)
 
 	// Test 1: No options. Should pick yum w/o error and give back our list.
 

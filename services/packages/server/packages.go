@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -25,7 +26,7 @@ import (
 func genCmd(p pb.PackageSystem, m map[pb.PackageSystem][]string) ([]string, error) {
 	var out []string
 	switch p {
-	case pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN, pb.PackageSystem_PACKAGE_SYSTEM_YUM:
+	case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
 		out = append(out, *yumBin)
 		out = append(out, m[p]...)
 	default:
@@ -36,7 +37,7 @@ func genCmd(p pb.PackageSystem, m map[pb.PackageSystem][]string) ([]string, erro
 
 // Optionally add the repo arg and then append the full package name to the list.
 func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version string, repo string) []string {
-	if repo != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN || p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
+	if repo != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
 		out = append(out, fmt.Sprintf("--enablerepo=%s", repo))
 	}
 	// Tack the fully qualfied package name on. This assumes any vetting of args has already been done.
@@ -52,10 +53,6 @@ var (
 	// These are vars for testing to be able to replace them.
 	generateInstall = func(p *pb.InstallRequest) ([]string, error) {
 		installOpts := map[pb.PackageSystem][]string{
-			pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN: {
-				"install-nevra",
-				"-y",
-			},
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"install-nevra",
 				"-y",
@@ -70,10 +67,6 @@ var (
 
 	generateValidate = func(p *pb.UpdateRequest) ([]string, error) {
 		validateOpts := map[pb.PackageSystem][]string{
-			pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN: {
-				"list",
-				"installed",
-			},
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"list",
 				"installed",
@@ -88,10 +81,6 @@ var (
 
 	generateUpdate = func(p *pb.UpdateRequest) ([]string, error) {
 		updateOpts := map[pb.PackageSystem][]string{
-			pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN: {
-				"update-to",
-				"-y",
-			},
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"update-to",
 				"-y",
@@ -106,10 +95,6 @@ var (
 
 	generateListInstalled = func(p pb.PackageSystem) ([]string, error) {
 		listOpts := map[pb.PackageSystem][]string{
-			pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN: {
-				"list",
-				"installed",
-			},
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"list",
 				"installed",
@@ -120,10 +105,6 @@ var (
 
 	generateRepoList = func(p pb.PackageSystem) ([]string, error) {
 		repoOpts := map[pb.PackageSystem][]string{
-			pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN: {
-				"repoinfo",
-				"all",
-			},
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"repoinfo",
 				"all",
@@ -157,6 +138,10 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, err
 	}
 
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
 	command, err := generateInstall(req)
 	if err != nil {
 		return nil, err
@@ -191,11 +176,16 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if err := validateField("name", req.Name); err != nil {
 		return nil, err
 	}
-	if err := validateField("version", req.OldVersion); err != nil {
+	if err := validateField("old_version", req.OldVersion); err != nil {
 		return nil, err
 	}
-	if err := validateField("version", req.NewVersion); err != nil {
+	if err := validateField("new_version", req.NewVersion); err != nil {
 		return nil, err
+	}
+
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
 	}
 
 	// First need to validate the old version is what we expect.
@@ -247,34 +237,19 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	}, nil
 }
 
-func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest) (*pb.ListInstalledReply, error) {
-	command, err := generateListInstalled(req.PackageSystem)
-	if err != nil {
-		return nil, err
+func parseListInstallOutput(p pb.PackageSystem, r io.Reader) (*pb.ListInstalledReply, error) {
+	parsers := map[pb.PackageSystem]func(r io.Reader) (*pb.ListInstalledReply, error){
+		pb.PackageSystem_PACKAGE_SYSTEM_YUM: parseYumListInstallOutput,
 	}
-
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-
-	// These probably should be streaming through a go-routine to rate limit what we
-	// can buffer. In practice output tends to be in the low K range size wise.
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	parser, ok := parsers[p]
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "can't find parser for list install output for package system %d", p)
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
-	}
+	return parser(r)
+}
 
-	// This should never return stderr output. If they do something is off.
-	if len(errBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
-	}
-
-	scanner := bufio.NewScanner(&outBuf)
+func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
+	scanner := bufio.NewScanner(r)
 
 	reply := &pb.ListInstalledReply{}
 	started := false
@@ -314,8 +289,13 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	return reply, nil
 }
 
-func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.RepoListReply, error) {
-	command, err := generateRepoList(req.PackageSystem)
+func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest) (*pb.ListInstalledReply, error) {
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	command, err := generateListInstalled(req.PackageSystem)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +321,22 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
 	}
 
-	scanner := bufio.NewScanner(&outBuf)
+	return parseListInstallOutput(req.PackageSystem, &outBuf)
+}
+
+func parseRepoListOutput(p pb.PackageSystem, r io.Reader) (*pb.RepoListReply, error) {
+	parsers := map[pb.PackageSystem]func(r io.Reader) (*pb.RepoListReply, error){
+		pb.PackageSystem_PACKAGE_SYSTEM_YUM: parseYumRepoListOutput,
+	}
+	parser, ok := parsers[p]
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "can't find parser for repo list output for package system %d", p)
+	}
+	return parser(r)
+}
+
+func parseYumRepoListOutput(r io.Reader) (*pb.RepoListReply, error) {
+	scanner := bufio.NewScanner(r)
 
 	reply := &pb.RepoListReply{}
 	out := &pb.Repo{}
@@ -409,6 +404,42 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 	}
 
 	return reply, nil
+}
+
+func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.RepoListReply, error) {
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	command, err := generateRepoList(req.PackageSystem)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+
+	// These probably should be streaming through a go-routine to rate limit what we
+	// can buffer. In practice output tends to be in the low K range size wise.
+	var errBuf, outBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
+	}
+
+	// This should never return stderr output. If they do something is off.
+	if len(errBuf.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
+	}
+
+	return parseRepoListOutput(req.PackageSystem, &outBuf)
+
 }
 
 // Install is called to expose this handler to the gRPC server
