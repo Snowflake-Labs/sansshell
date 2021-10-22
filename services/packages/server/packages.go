@@ -111,6 +111,10 @@ var (
 	}
 )
 
+// The maximum we should allow stdout or stderr to be when sending back in an error string.
+// grpc has limits on how large a returned error can be (generally 4-8k depending on language).
+const MAX_BUF = 1024
+
 // server is used to implement the gRPC server
 type server struct{}
 
@@ -162,6 +166,12 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
+		if outBuf.Len() > MAX_BUF {
+			outBuf.Truncate(MAX_BUF)
+		}
+		if errBuf.Len() > MAX_BUF {
+			errBuf.Truncate(MAX_BUF)
+		}
 		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nStdout: %s\nStderr: %s", command[0], outBuf.String(), errBuf.String())
 	}
 	return &pb.InstallReply{
@@ -203,6 +213,9 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, status.Errorf(codes.Internal, "can't start validate %s: %v", cmd.String(), err)
 	}
 	if err := cmd.Wait(); err != nil {
+		if errBuf.Len() > MAX_BUF {
+			errBuf.Truncate(MAX_BUF)
+		}
 		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, errBuf.String())
 	}
 
@@ -227,6 +240,12 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
+		if outBuf.Len() > MAX_BUF {
+			outBuf.Truncate(MAX_BUF)
+		}
+		if errBuf.Len() > MAX_BUF {
+			errBuf.Truncate(MAX_BUF)
+		}
 		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nStdout: %s\nStderr: %s", command[0], outBuf.String(), errBuf.String())
 	}
 	return &pb.UpdateReply{
@@ -315,6 +334,12 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
+		if outBuf.Len() > MAX_BUF {
+			outBuf.Truncate(MAX_BUF)
+		}
+		if errBuf.Len() > MAX_BUF {
+			errBuf.Truncate(MAX_BUF)
+		}
 		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
 	}
 
@@ -432,6 +457,12 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
+		if outBuf.Len() > MAX_BUF {
+			outBuf.Truncate(MAX_BUF)
+		}
+		if errBuf.Len() > MAX_BUF {
+			errBuf.Truncate(MAX_BUF)
+		}
 		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
 	}
 
