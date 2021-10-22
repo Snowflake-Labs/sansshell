@@ -8,7 +8,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os/exec"
@@ -46,8 +45,6 @@ func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version st
 }
 
 var (
-	yumBin = flag.String("yum_bin", "/usr/bin/yum", "Path to yum binary")
-
 	inputValidateRe = regexp.MustCompile("[^a-zA-Z0-9_.-]+")
 
 	// These are vars for testing to be able to replace them.
