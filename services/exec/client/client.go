@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	subcommands.Register(&execCmd{}, "raw")
+	subcommands.Register(&execCmd{}, "exec")
 }
 
 type execCmd struct{}

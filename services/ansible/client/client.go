@@ -55,7 +55,7 @@ func (i *stringList) Set(val string) error {
 }
 
 func init() {
-	subcommands.Register(&ansibleCmd{}, "raw")
+	subcommands.Register(&ansibleCmd{}, "ansible")
 }
 
 type ansibleCmd struct {

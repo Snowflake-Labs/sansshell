@@ -17,9 +17,9 @@ import (
 )
 
 func init() {
-	subcommands.Register(&readCmd{}, "raw")
-	subcommands.Register(&statCmd{}, "raw")
-	subcommands.Register(&sumCmd{}, "raw")
+	subcommands.Register(&readCmd{}, "file")
+	subcommands.Register(&statCmd{}, "file")
+	subcommands.Register(&sumCmd{}, "file")
 }
 
 type readCmd struct {
