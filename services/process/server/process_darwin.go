@@ -1,7 +1,7 @@
 //go:build darwin
 // +build darwin
 
-package process
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
@@ -14,6 +14,7 @@ import (
 	"io"
 	"strings"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -62,8 +63,8 @@ var (
 	}
 )
 
-func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
-	entries := make(map[int64]*ProcessEntry)
+func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
+	entries := make(map[int64]*pb.ProcessEntry)
 
 	scanner := bufio.NewScanner(r)
 
@@ -76,12 +77,12 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 
 	numEntries := 0
 
-	blank := func() *ProcessEntry {
+	blank := func() *pb.ProcessEntry {
 		// Set the entries we know darwin doesn't fill in.
-		return &ProcessEntry{
+		return &pb.ProcessEntry{
 			Sgid:            -1,
 			Suid:            -1,
-			SchedulingClass: SchedulingClass_SCHEDULING_CLASS_UNKNOWN,
+			SchedulingClass: pb.SchedulingClass_SCHEDULING_CLASS_UNKNOWN,
 			NumberOfThreads: 1,
 		}
 	}
@@ -248,15 +249,15 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 			// State has to be computed by hand.
 			switch fields[16][0] {
 			case 'I', 'S':
-				out.State = ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
+				out.State = pb.ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
 			case 'R':
-				out.State = ProcessState_PROCESS_STATE_RUNNING
+				out.State = pb.ProcessState_PROCESS_STATE_RUNNING
 			case 'T':
-				out.State = ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL
+				out.State = pb.ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL
 			case 'U':
-				out.State = ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
+				out.State = pb.ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
 			case 'Z':
-				out.State = ProcessState_PROCESS_STATE_ZOMBIE
+				out.State = pb.ProcessState_PROCESS_STATE_ZOMBIE
 			}
 
 			// Everything left is the command so gather it up, rejoin with spaces

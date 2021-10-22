@@ -1,4 +1,4 @@
-package exec
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // This comment encodes the necessary magic:
@@ -10,7 +10,8 @@ import (
 	"os/exec"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	grpc "google.golang.org/grpc"
+	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -19,7 +20,7 @@ import (
 type server struct{}
 
 // Run executes command and returns result
-func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, err error) {
+func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
 	cmdName := req.Command
 	cmdArgs := req.Args
 
@@ -36,19 +37,19 @@ func (s *server) Run(ctx context.Context, req *ExecRequest) (res *ExecResponse, 
 
 	err = cmd.Wait()
 	if err != nil {
-		return &ExecResponse{
+		return &pb.ExecResponse{
 			Stdout:  outBuf.Bytes(),
 			Stderr:  errBuf.Bytes(),
 			RetCode: int32(cmd.ProcessState.ExitCode()),
 		}, nil
 	}
 
-	return &ExecResponse{Stderr: errBuf.Bytes(), Stdout: outBuf.Bytes(), RetCode: 0}, nil
+	return &pb.ExecResponse{Stderr: errBuf.Bytes(), Stdout: outBuf.Bytes(), RetCode: 0}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
-	RegisterExecServer(gs, s)
+	pb.RegisterExecServer(gs, s)
 }
 
 func init() {

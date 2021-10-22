@@ -1,4 +1,4 @@
-package exec
+package server
 
 import (
 	"bytes"
@@ -9,7 +9,8 @@ import (
 	"os/exec"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -47,11 +48,11 @@ func TestExec(t *testing.T) {
 	}
 	defer conn.Close()
 
-	client := NewExecClient(conn)
+	client := pb.NewExecClient(conn)
 
 	// Test 0: Basic functionality
 	command := []string{"echo", "hello world"}
-	resp, err := client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
+	resp, err := client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
 	if err != nil {
 		t.Fatalf("Exec failed: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestExec(t *testing.T) {
 
 	// Test 1: Execute false so the command fails but RPC should not.
 	command = []string{"false"}
-	resp, err = client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
+	resp, err = client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
 	if err != nil {
 		t.Fatalf("Exec for false failed: %v", err)
 	}
@@ -80,7 +81,7 @@ func TestExec(t *testing.T) {
 
 	// Test 2: Non-existant program.
 	command = []string{"/something/non-existant"}
-	resp, err = client.Run(ctx, &ExecRequest{Command: command[0], Args: command[1:]})
+	resp, err = client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
 	if err == nil {
 		t.Fatalf("Expected failure for %q. Got %v", command[0], resp)
 	}

@@ -1,7 +1,7 @@
 //go:build darwin
 // +build darwin
 
-package process
+package server
 
 // OS specific locations for finding test data.
 var (

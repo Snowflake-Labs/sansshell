@@ -1,4 +1,4 @@
-package process
+package server
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"os"
 	"testing"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -54,10 +55,10 @@ func TestListNative(t *testing.T) {
 	}
 	defer conn.Close()
 
-	client := NewProcessClient(conn)
+	client := pb.NewProcessClient(conn)
 
 	// Ask for all processes
-	resp, err := client.List(ctx, &ListRequest{})
+	resp, err := client.List(ctx, &pb.ListRequest{})
 	if err != nil {
 		t.Fatalf("Unexpected error for basic list: %v", err)
 	}
@@ -68,7 +69,7 @@ func TestListNative(t *testing.T) {
 
 	// Pid 1 should be stable on all unix.
 	pid := int64(1)
-	resp, err = client.List(ctx, &ListRequest{
+	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{pid},
 	})
 
@@ -125,7 +126,7 @@ func TestList(t *testing.T) {
 		t.Fatalf("Can't read textproto data from %s: %v", testdataFile, err)
 	}
 
-	testdata := &ListReply{}
+	testdata := &pb.ListReply{}
 	if err := prototext.Unmarshal(input, testdata); err != nil {
 		t.Fatalf("Can't unmarshall test data %v", err)
 	}
@@ -133,19 +134,19 @@ func TestList(t *testing.T) {
 	// Some sorting functions for protocmp below.
 
 	// Be able to sort the overall entries in a response
-	sortEntries := protocmp.SortRepeated(func(i *ProcessEntry, j *ProcessEntry) bool {
+	sortEntries := protocmp.SortRepeated(func(i *pb.ProcessEntry, j *pb.ProcessEntry) bool {
 		return i.Pid < j.Pid
 	})
 
 	// A sorter for the repeated fields of ProcessStateCode.
-	sortCodes := protocmp.SortRepeated(func(i ProcessStateCode, j ProcessStateCode) bool {
+	sortCodes := protocmp.SortRepeated(func(i pb.ProcessStateCode, j pb.ProcessStateCode) bool {
 		return i < j
 	})
 
-	client := NewProcessClient(conn)
+	client := pb.NewProcessClient(conn)
 
 	// Test 1: Ask for all processes
-	resp, err := client.List(ctx, &ListRequest{})
+	resp, err := client.List(ctx, &pb.ListRequest{})
 	if err != nil {
 		t.Fatalf("Unexpected error for basic list: %v", err)
 	}
@@ -156,7 +157,7 @@ func TestList(t *testing.T) {
 
 	// Test 2: Ask for just one process (use the first one in testdata)
 	testPid := testdata.ProcessEntries[0].Pid
-	resp, err = client.List(ctx, &ListRequest{
+	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{testPid},
 	})
 	if err != nil {
@@ -164,7 +165,7 @@ func TestList(t *testing.T) {
 	}
 
 	// Asked for 1, that should be all we get back.
-	got := &ListReply{}
+	got := &pb.ListReply{}
 	for _, t := range testdata.ProcessEntries {
 		if t.Pid == testPid {
 			got.ProcessEntries = append(got.ProcessEntries, t)
@@ -185,7 +186,7 @@ func TestList(t *testing.T) {
 	for _, p := range testdata.ProcessEntries {
 		testPid += p.Pid
 	}
-	resp, err = client.List(ctx, &ListRequest{
+	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{testPid},
 	})
 	if err == nil {
@@ -200,7 +201,7 @@ func TestList(t *testing.T) {
 				bf,
 			}
 		}
-		resp, err := client.List(ctx, &ListRequest{})
+		resp, err := client.List(ctx, &pb.ListRequest{})
 		if err == nil {
 			t.Fatalf("Expected error for test file %s but got none. Instead got %+v", bf, resp)
 		}
@@ -211,14 +212,14 @@ func TestList(t *testing.T) {
 
 	// Either this is where false is or nothing is there. Either way will error.
 	*psBin = "/usr/bin/false"
-	resp, err = client.List(ctx, &ListRequest{})
+	resp, err = client.List(ctx, &pb.ListRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for command returning non-zero Insteaf got %+v", resp)
 	}
 
 	// Test 6: Run an invalid command all-together.
 	*psBin = "/a/non-existant/command"
-	resp, err = client.List(ctx, &ListRequest{})
+	resp, err = client.List(ctx, &pb.ListRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for invalid command. Insteaf got %+v", resp)
 	}
@@ -230,7 +231,7 @@ func TestList(t *testing.T) {
 			"echo boo 1>&2",
 		}
 	}
-	resp, err = client.List(ctx, &ListRequest{})
+	resp, err = client.List(ctx, &pb.ListRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for stderr output. Insteaf got %+v", resp)
 	}

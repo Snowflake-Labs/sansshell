@@ -1,4 +1,4 @@
-package ansible
+package server
 
 // NOTE: This doesn't run a real ansible-playbook binary as that would require build hosts to have
 //       ansible installed which is a bit much. Instead everything is faked to validate the right
@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -68,7 +69,7 @@ func TestRun(t *testing.T) {
 		cmdArgsTransform = savedCmdArgsTransform
 	}()
 
-	client := NewPlaybookClient(conn)
+	client := pb.NewPlaybookClient(conn)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -79,7 +80,7 @@ func TestRun(t *testing.T) {
 
 	// Test 0: A bad command that doesn't exec.
 	*ansiblePlaybookBin = "/non-existant-command"
-	resp, err := client.Run(ctx, &RunRequest{Playbook: path})
+	resp, err := client.Run(ctx, &pb.RunRequest{Playbook: path})
 	if err == nil {
 		t.Fatalf("Expected error for bad command. Instead got: +%v", resp)
 	}
@@ -87,7 +88,7 @@ func TestRun(t *testing.T) {
 
 	// Test 1: A command that exits non-zero
 	*ansiblePlaybookBin = "false"
-	resp, err = client.Run(ctx, &RunRequest{Playbook: path})
+	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path})
 	if err != nil {
 		t.Fatalf("Unexpected error for non-zero exiting command. %v", err)
 	}
@@ -105,7 +106,7 @@ func TestRun(t *testing.T) {
 			"echo foo >&2 && echo bar",
 		}
 	}
-	resp, err = client.Run(ctx, &RunRequest{Playbook: path})
+	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path})
 	if err != nil {
 		t.Fatalf("Unexpected error for stdout/stderr test. %v", err)
 	}
@@ -120,21 +121,21 @@ func TestRun(t *testing.T) {
 	*ansiblePlaybookBin = "cat"
 
 	// Test 2: Run without a path set.
-	resp, err = client.Run(ctx, &RunRequest{})
+	resp, err = client.Run(ctx, &pb.RunRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for no path. Instead got: +%v", resp)
 	}
 	t.Log(err)
 
 	// Test 3: Run without an absolute path
-	resp, err = client.Run(ctx, &RunRequest{Playbook: "some_path"})
+	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: "some_path"})
 	if err == nil {
 		t.Fatalf("Expected error for not being an absolute path path. Instead got: +%v", resp)
 	}
 	t.Log(err)
 
 	// Test 4: Run with an absolute path but points to a directory.
-	resp, err = client.Run(ctx, &RunRequest{Playbook: "/"})
+	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: "/"})
 	if err == nil {
 		t.Fatalf("Expected error for playbook being a directory. Instead got: +%v", resp)
 	}
@@ -142,14 +143,14 @@ func TestRun(t *testing.T) {
 
 	// Test 5: Run with an absolute path but appends some additional items that would be bad
 	//         to pass to the shell.
-	resp, err = client.Run(ctx, &RunRequest{Playbook: path + " && rm -rf /"})
+	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path + " && rm -rf /"})
 	if err == nil {
 		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
 	}
 	t.Log(err)
 
 	// Test 5: Run with a badly named user.
-	resp, err = client.Run(ctx, &RunRequest{
+	resp, err = client.Run(ctx, &pb.RunRequest{
 		Playbook: path,
 		User:     "user && rm -rf /",
 	})
@@ -159,9 +160,9 @@ func TestRun(t *testing.T) {
 	t.Log(err)
 
 	// Test 6: A key/value with potentially bad things to pass to a shell
-	resp, err = client.Run(ctx, &RunRequest{
+	resp, err = client.Run(ctx, &pb.RunRequest{
 		Playbook: path,
-		Vars: []*Var{
+		Vars: []*pb.Var{
 			{
 				Key:   "key",
 				Value: "val && rm -rf /",
@@ -185,12 +186,12 @@ func TestRun(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		wantArgs []string
-		req      *RunRequest
+		req      *pb.RunRequest
 	}{
 		{
 			name:     "single playbook",
 			wantArgs: baseArgs,
-			req:      &RunRequest{},
+			req:      &pb.RunRequest{},
 		},
 		{
 			name: "extra vars",
@@ -200,8 +201,8 @@ func TestRun(t *testing.T) {
 				"-e",
 				"baz=BAZ0_",
 			}...),
-			req: &RunRequest{
-				Vars: []*Var{
+			req: &pb.RunRequest{
+				Vars: []*pb.Var{
 					{Key: "foo", Value: "bar"},
 					{Key: "baz", Value: "BAZ0_"},
 				},
@@ -213,28 +214,28 @@ func TestRun(t *testing.T) {
 				"--become",
 				"USER",
 			}...),
-			req: &RunRequest{
+			req: &pb.RunRequest{
 				User: "USER",
 			},
 		},
 		{
 			name:     "check",
 			wantArgs: append(baseArgs, "--check"),
-			req: &RunRequest{
+			req: &pb.RunRequest{
 				Check: true,
 			},
 		},
 		{
 			name:     "diff",
 			wantArgs: append(baseArgs, "--diff"),
-			req: &RunRequest{
+			req: &pb.RunRequest{
 				Diff: true,
 			},
 		},
 		{
 			name:     "verbose",
 			wantArgs: append(baseArgs, "-vvv"),
-			req: &RunRequest{
+			req: &pb.RunRequest{
 				Verbose: true,
 			},
 		},

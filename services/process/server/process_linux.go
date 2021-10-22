@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-package process
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
@@ -14,6 +14,7 @@ import (
 	"io"
 	"strings"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -64,11 +65,11 @@ var (
 	}
 )
 
-func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
-	entries := make(map[int64]*ProcessEntry)
+func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
+	entries := make(map[int64]*pb.ProcessEntry)
 
 	scanner := bufio.NewScanner(r)
-	out := &ProcessEntry{}
+	out := &pb.ProcessEntry{}
 
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -264,60 +265,60 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		// Class
 		switch fields[SCHEDULE_CLASS] {
 		case "-":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED
 		case "TS":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_OTHER
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_OTHER
 		case "FF":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_FIFO
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_FIFO
 		case "RR":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_RR
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_RR
 		case "B":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_BATCH
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_BATCH
 		case "ISO":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_ISO
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_ISO
 		case "IDL":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_ISO
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_ISO
 		case "DLN":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_DEADLINE
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_DEADLINE
 		case "?":
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_UNKNOWN
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_UNKNOWN
 		default:
-			out.SchedulingClass = SchedulingClass_SCHEDULING_CLASS_UNKNOWN
+			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_UNKNOWN
 		}
 
 		// State
 		switch fields[STATE][0] {
 		case 'D':
-			out.State = ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
+			out.State = pb.ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
 		case 'R':
-			out.State = ProcessState_PROCESS_STATE_RUNNING
+			out.State = pb.ProcessState_PROCESS_STATE_RUNNING
 		case 'S':
-			out.State = ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
+			out.State = pb.ProcessState_PROCESS_STATE_INTERRUPTIBLE_SLEEP
 		case 'T':
-			out.State = ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL
+			out.State = pb.ProcessState_PROCESS_STATE_STOPPED_JOB_CONTROL
 		case 't':
-			out.State = ProcessState_PROCESS_STATE_STOPPED_DEBUGGER
+			out.State = pb.ProcessState_PROCESS_STATE_STOPPED_DEBUGGER
 		case 'Z':
-			out.State = ProcessState_PROCESS_STATE_ZOMBIE
+			out.State = pb.ProcessState_PROCESS_STATE_ZOMBIE
 		}
 
 		// Now process any trailing symbols on State
 		for i := 1; i < len(fields[STATE]); i++ {
 			switch fields[STATE][i] {
 			case '<':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY)
 			case 'N':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_LOW_PRIORITY)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_LOW_PRIORITY)
 			case 'L':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_LOCKED_PAGES)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_LOCKED_PAGES)
 			case 's':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_SESSION_LEADER)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_SESSION_LEADER)
 			case 'l':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_MULTI_THREADED)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_MULTI_THREADED)
 			case '+':
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_FOREGROUND_PGRP)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_FOREGROUND_PGRP)
 			default:
-				out.StateCode = append(out.StateCode, ProcessStateCode_PROCESS_STATE_CODE_UNKNOWN)
+				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_UNKNOWN)
 			}
 		}
 
@@ -325,7 +326,7 @@ func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
 		// and we're done with this line.
 		out.Command = strings.Join(fields[FIELD_COUNT:], " ")
 		entries[out.Pid] = out
-		out = &ProcessEntry{}
+		out = &pb.ProcessEntry{}
 	}
 
 	if err := scanner.Err(); err != nil {

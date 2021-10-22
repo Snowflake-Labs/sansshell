@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/Snowflake-Labs/sansshell/server"
-	hc "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 )
 
 const (
@@ -140,8 +141,8 @@ func TestHealthCheck(t *testing.T) {
 				t.Fatalf("Failed to dial bufnet: %v", err)
 			}
 			defer conn.Close()
-			client := hc.NewHealthCheckClient(conn)
-			resp, err := client.Ok(ctx, &hc.Empty{})
+			client := hcpb.NewHealthCheckClient(conn)
+			resp, err := client.Ok(ctx, &hcpb.Empty{})
 			if err != nil {
 				if tc.Err == "" {
 					t.Errorf("Read failed: %v", err)

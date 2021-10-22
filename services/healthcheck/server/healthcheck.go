@@ -1,4 +1,4 @@
-package healthcheck
+package server
 
 // To regenerate the proto headers if the proto changes, just run go generate
 // and this encodes the necessary magic:
@@ -9,21 +9,22 @@ import (
 	"log"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	grpc "google.golang.org/grpc"
+	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	"google.golang.org/grpc"
 )
 
 // server is used to implement the gRPC server
 type server struct{}
 
 // Ok always returns an Empty proto without error
-func (s *server) Ok(ctx context.Context, in *Empty) (*Empty, error) {
+func (s *server) Ok(ctx context.Context, in *pb.Empty) (*pb.Empty, error) {
 	log.Printf("Received HealthCheck request")
-	return &Empty{}, nil
+	return &pb.Empty{}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
-	RegisterHealthCheckServer(gs, s)
+	pb.RegisterHealthCheckServer(gs, s)
 }
 
 func init() {

@@ -1,4 +1,4 @@
-package ansible
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
@@ -16,7 +16,8 @@ import (
 	"regexp"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	grpc "google.golang.org/grpc"
+	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -33,7 +34,7 @@ type server struct{}
 
 var re = regexp.MustCompile("[^a-zA-Z0-9_]+")
 
-func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
+func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
 	// Basic sanity checking up front.
 	if !filepath.IsAbs(req.Playbook) {
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be a full qualified path")
@@ -97,7 +98,7 @@ func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 
 	cmd.Wait()
 
-	return &RunReply{
+	return &pb.RunReply{
 		Stdout:     stdoutBuf.String(),
 		Stderr:     stderrBuf.String(),
 		ReturnCode: int32(cmd.ProcessState.ExitCode()),
@@ -106,7 +107,7 @@ func (s *server) Run(ctx context.Context, req *RunRequest) (*RunReply, error) {
 
 // Install is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
-	RegisterPlaybookServer(gs, s)
+	pb.RegisterPlaybookServer(gs, s)
 }
 
 func init() {

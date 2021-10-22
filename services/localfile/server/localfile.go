@@ -1,4 +1,4 @@
-package localfile
+package server
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
@@ -19,6 +19,7 @@ import (
 	"syscall"
 
 	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,7 +39,7 @@ type server struct{}
 var chunkSize = 128 * 1024
 
 // Read returns the contents of the named file
-func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
+func (s *server) Read(in *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
 	file := in.GetFilename()
 	log.Printf("Received request for: %v", file)
 	if !filepath.IsAbs(file) {
@@ -91,7 +92,7 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
-		if err := stream.Send(&ReadReply{Contents: buf[:n]}); err != nil {
+		if err := stream.Send(&pb.ReadReply{Contents: buf[:n]}); err != nil {
 			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 		}
 
@@ -103,7 +104,7 @@ func (s *server) Read(in *ReadRequest, stream LocalFile_ReadServer) error {
 	return nil
 }
 
-func (s *server) Stat(stream LocalFile_StatServer) error {
+func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 	for {
 		in, err := stream.Recv()
 		if err == io.EOF {
@@ -125,7 +126,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 		if !ok || stat_t == nil {
 			return status.Error(codes.Unimplemented, "stat not supported")
 		}
-		if err := stream.Send(&StatReply{
+		if err := stream.Send(&pb.StatReply{
 			Filename: in.Filename,
 			Size:     stat.Size(),
 			Mode:     uint32(stat.Mode()),
@@ -139,7 +140,7 @@ func (s *server) Stat(stream LocalFile_StatServer) error {
 	}
 }
 
-func (s *server) Sum(stream LocalFile_SumServer) error {
+func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 	for {
 		in, err := stream.Recv()
 		if err == io.EOF {
@@ -153,21 +154,21 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 		if !filepath.IsAbs(in.Filename) {
 			return AbsolutePathError
 		}
-		out := &SumReply{
+		out := &pb.SumReply{
 			SumType:  in.SumType,
 			Filename: in.Filename,
 		}
 		var hasher hash.Hash
 		switch in.SumType {
 		// default to sha256 for unspecified
-		case SumType_SUM_TYPE_UNKNOWN, SumType_SUM_TYPE_SHA256:
+		case pb.SumType_SUM_TYPE_UNKNOWN, pb.SumType_SUM_TYPE_SHA256:
 			hasher = sha256.New()
-			out.SumType = SumType_SUM_TYPE_SHA256
-		case SumType_SUM_TYPE_MD5:
+			out.SumType = pb.SumType_SUM_TYPE_SHA256
+		case pb.SumType_SUM_TYPE_MD5:
 			hasher = md5.New()
-		case SumType_SUM_TYPE_SHA512_256:
+		case pb.SumType_SUM_TYPE_SHA512_256:
 			hasher = sha512.New512_256()
-		case SumType_SUM_TYPE_CRC32IEEE:
+		case pb.SumType_SUM_TYPE_CRC32IEEE:
 			hasher = crc32.NewIEEE()
 		default:
 			log.Printf("sum: invalid sum type %v", in.SumType)
@@ -197,7 +198,7 @@ func (s *server) Sum(stream LocalFile_SumServer) error {
 
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
-	RegisterLocalFileServer(gs, s)
+	pb.RegisterLocalFileServer(gs, s)
 }
 
 func init() {

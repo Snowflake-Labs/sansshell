@@ -18,11 +18,11 @@ import (
 	"github.com/Snowflake-Labs/sansshell/server"
 
 	// Import the server modules you want to expose, they automatically register
-	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
-	_ "github.com/Snowflake-Labs/sansshell/services/exec"
-	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
-	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
-	_ "github.com/Snowflake-Labs/sansshell/services/process"
+	_ "github.com/Snowflake-Labs/sansshell/services/ansible/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
 )
 
 var (
