@@ -6,7 +6,10 @@ package process
 // OS specific locations for finding test data.
 // In this case all blank so tests skip.
 var (
-	testdataFile = ""
-	testdataPs   = ""
-	badFiles     = nil
+	testdataPsFile = ""
+	testdataPs     = ""
+	badFilesPS     = nil
+
+	testdataPstackNoThreadsFile = ""
+	testdataPstackThreadsFile   = ""
 )

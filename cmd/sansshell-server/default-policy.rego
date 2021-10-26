@@ -22,6 +22,10 @@ allow {
 }
 
 allow {
+	input.type = "Process.GetStacksRequest"
+}
+
+allow {
 	input.type = "Ansible.RunRequest"
 }
 

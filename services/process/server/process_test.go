@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
@@ -43,8 +44,8 @@ func TestMain(m *testing.M) {
 
 func TestListNative(t *testing.T) {
 	// We're on a platform which doesn't support this so we can't test.
-	if testdataFile == "" {
-		t.Skip()
+	if *psBin == "" {
+		t.Skip("OS not supported")
 	}
 
 	var err error
@@ -88,8 +89,8 @@ func TestListNative(t *testing.T) {
 
 func TestList(t *testing.T) {
 	// We're on a platform which doesn't support this so we can't test.
-	if testdataFile == "" {
-		t.Skip()
+	if testdataPsTextProto == "" {
+		t.Skip("OS not supported")
 	}
 
 	var err error
@@ -115,15 +116,15 @@ func TestList(t *testing.T) {
 		psOptions = savedFunc
 	}()
 
-	f, err := os.Open(testdataFile)
+	f, err := os.Open(testdataPsTextProto)
 	if err != nil {
-		t.Fatalf("Can't open testdata %s: %v", testdataFile, err)
+		t.Fatalf("Can't open testdata %s: %v", testdataPsTextProto, err)
 	}
 	defer f.Close()
 
 	input, err := ioutil.ReadAll(f)
 	if err != nil {
-		t.Fatalf("Can't read textproto data from %s: %v", testdataFile, err)
+		t.Fatalf("Can't read textproto data from %s: %v", testdataPsTextProto, err)
 	}
 
 	testdata := &pb.ListReply{}
@@ -195,7 +196,7 @@ func TestList(t *testing.T) {
 
 	// Test 4: Send some bad input in and make sure we fail (also gives some
 	// coverage in places we can fail).
-	for _, bf := range badFiles {
+	for _, bf := range badFilesPs {
 		psOptions = func() []string {
 			return []string{
 				bf,
@@ -234,5 +235,206 @@ func TestList(t *testing.T) {
 	resp, err = client.List(ctx, &pb.ListRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for stderr output. Insteaf got %+v", resp)
+	}
+}
+
+func TestPstackNative(t *testing.T) {
+	if *psStackBin == "" {
+		t.Skip("OS not supported")
+	}
+
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewProcessClient(conn)
+
+	// Our actual pid may not have symbols but our runner will.
+	resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{
+		Pid: int64(os.Getppid()),
+	})
+	if err != nil {
+		t.Fatalf("Can't get native pstack: %v", err)
+	}
+
+	// We're a go program. We have multiple threads.
+	if len(resp.Stacks) <= 1 {
+		t.Fatalf("Not enough threads in native response. Response: %+v", prototext.Format(resp))
+	}
+
+	found := false
+	for _, stack := range resp.Stacks {
+		for _, t := range stack.Stacks {
+			if strings.Contains(t, "runtime.") {
+				found = true
+				break
+			}
+		}
+		if found == true {
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("Never found a runtime stack in output? Response: %+v", prototext.Format(resp))
+	}
+}
+
+func TestPstack(t *testing.T) {
+	if testdataPstackNoThreads == "" || testdataPstackThreads == "" {
+		t.Skip("OS not supported")
+	}
+
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	// Setup for tests where we use cat and pre-canned data
+	// to submit into the server.
+	savedPstackBin := *psStackBin
+	*psStackBin = "cat"
+	savedPstackOptions := pstackOptions
+	var testInput string
+	pstackOptions = func(*pb.GetStacksRequest) []string {
+		return []string{testInput}
+	}
+	defer func() {
+		*psStackBin = savedPstackBin
+		pstackOptions = savedPstackOptions
+	}()
+
+	client := pb.NewProcessClient(conn)
+
+	goodPstackOptions := pstackOptions
+
+	for _, test := range []struct {
+		name     string
+		command  string
+		options  []string
+		input    string
+		validate string
+		pid      int64
+		wantErr  bool
+	}{
+		{
+			name:     "A program with only one thread",
+			input:    testdataPstackNoThreads,
+			validate: testdataPstackNoThreadsTextProto,
+			pid:      1,
+		},
+		{
+			name:     "A program with many threads",
+			input:    testdataPstackThreads,
+			validate: testdataPstackThreadsTextProto,
+			pid:      1,
+		},
+		{
+			name:    "bad pid - zero",
+			input:   testdataPstackThreads,
+			wantErr: true,
+		},
+		{
+			name:    "bad command",
+			command: "/non-existant-binary",
+			input:   testdataPstackThreads,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "bad command - returns error",
+			command: "false",
+			input:   testdataPstackThreads,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "bad command - returns stderr",
+			command: "sh",
+			options: []string{"-c", "echo foo >&2"},
+			input:   testdataPstackThreads,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad thread data - thread",
+			input:   testdataPstackThreadsBadThread,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad thread data - number",
+			input:   testdataPstackThreadsBadThreadNumber,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad thread data - id",
+			input:   testdataPstackThreadsBadThreadId,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad thread data - lwp",
+			input:   testdataPstackThreadsBadLwp,
+			pid:     1,
+			wantErr: true,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			command := "cat"
+			if test.command != "" {
+				command = test.command
+			}
+			*psStackBin = command
+			pstackOptions = goodPstackOptions
+			if len(test.options) > 0 {
+				pstackOptions = func(req *pb.GetStacksRequest) []string {
+					return test.options
+				}
+			}
+
+			testdata := &pb.GetStacksReply{}
+			// In general we don't need this if we expect errors.
+			if test.validate != "" {
+				f, err := os.Open(test.validate)
+				if err != nil {
+					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
+				}
+				defer f.Close()
+
+				input, err := ioutil.ReadAll(f)
+				if err != nil {
+					t.Fatalf("%s: Can't read textproto data from %s: %v", test.name, test.validate, err)
+				}
+
+				if err := prototext.Unmarshal(input, testdata); err != nil {
+					t.Fatalf("Can't unmarshall test data %v", err)
+				}
+			}
+
+			testInput = test.input
+			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: test.pid})
+			if err != nil && !test.wantErr {
+				t.Fatalf("%s: unexpected error: %v", test.name, err)
+			}
+			if err == nil && test.wantErr {
+				t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+			}
+
+			if !test.wantErr {
+				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", test.name, resp, testdata, diff)
+				}
+			}
+		})
 	}
 }
