@@ -1,0 +1,30 @@
+repos : <
+  id : "C7.0.1406-base/x86_64"
+  name : "CentOS-7.0.1406 - Base"
+  status : REPO_STATUS_DISABLED
+  filename : "/etc/yum.repos.d/CentOS-Vault.repo"
+  url : "http://vault.centos.org/7.0.1406/os/x86_64/"
+>
+repos : <
+  id : "C7.8.2003-fasttrack/x86_64"
+  name : "CentOS-7.8.2003 - Fasttrack"
+  status : REPO_STATUS_DISABLED
+  filename : "/etc/yum.repos.d/CentOS-Vault.repo"
+  url : "http://vault.centos.org/7.8.2003/fasttrack/x86_64/"
+>
+repos : <
+  id : "C7.8.2003-updates/x86_64"
+  name : "CentOS-7.8.2003 - Updates"
+  status : REPO_STATUS_DISABLED
+  filename : "/etc/yum.repos.d/CentOS-Vault.repo"
+  url : "http://vault.centos.org/7.8.2003/updates/x86_64/"
+>
+repos : <
+  id : "adoptopenjdk"
+  name : "CentOS-7 - AdoptOpenJDK"
+  status : REPO_STATUS_ENABLED
+  filename : "/etc/yum.repos.d/adoptopenjdk.repo"
+  url : "https://nexus.int.snowflakecomputing.com/repository/"
+        "adoptopenjdk-centos7-x86_64/"
+>
+repos : <id : "somerepo" name : "somerepo name" status : REPO_STATUS_UNKNOWN>

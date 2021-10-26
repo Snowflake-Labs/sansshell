@@ -22,9 +22,12 @@ enum PackageSystem {
 message InstallRequest {
   PackageSystem package_system = 1;
   string name = 2;
+  // Version must be the full nevra version if this is YUM:
+  //
+  // i.e. epoch:version.arch
   string version = 3;
   // If set enables this repo for resolving package/version.
-  optional string repo = 4;
+  string repo = 4;
 }
 
 message InstallReply { string debug_output = 1; }
@@ -33,6 +36,7 @@ message UpdateRequest {
   PackageSystem package_system = 1;
   string name = 2;
   // This version must be installed for update to execute.
+  // As with install above for YUM this must be a full nevra version.
   string old_version = 3;
   string new_version = 4;
   // If set enables this repo as well for resolving package/version.
@@ -41,11 +45,7 @@ message UpdateRequest {
 
 message UpdateReply { string debug_output = 1; }
 
-message ListInstalledRequest {
-  PackageSystem package_system = 1;
-  // Takes a glob pattern in the style of the package system list command.
-  string glob_pattern = 2;
-}
+message ListInstalledRequest { PackageSystem package_system = 1; }
 
 message PackageInfo {
   string name = 1;
@@ -67,6 +67,8 @@ message Repo {
   string id = 1;
   string name = 2;
   RepoStatus status = 3;
+  string filename = 4;
+  string url = 5;
 }
 
 message RepoListReply { repeated Repo repos = 1; }
