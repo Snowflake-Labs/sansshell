@@ -239,11 +239,11 @@ func TestList(t *testing.T) {
 }
 
 func TestPstackNative(t *testing.T) {
-	if *psStackBin == "" {
+	_, err := os.Stat(*psBin)
+	if *psStackBin == "" || err != nil {
 		t.Skip("OS not supported")
 	}
 
-	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
