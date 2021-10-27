@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -45,7 +46,7 @@ func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version st
 }
 
 var (
-	inputValidateRe = regexp.MustCompile("[^a-zA-Z0-9_.-]+")
+	inputValidateRe = regexp.MustCompile("[^a-zA-Z0-9_.:-]+")
 
 	// These are vars for testing to be able to replace them.
 	generateInstall = func(p *pb.InstallRequest) ([]string, error) {
@@ -115,6 +116,13 @@ var (
 // grpc has limits on how large a returned error can be (generally 4-8k depending on language).
 const MAX_BUF = 1024
 
+func trimString(s string) string {
+	if len(s) > MAX_BUF {
+		s = s[:MAX_BUF]
+	}
+	return s
+}
+
 // server is used to implement the gRPC server
 type server struct{}
 
@@ -126,12 +134,14 @@ func validateField(param string, name string) error {
 		return status.Errorf(codes.InvalidArgument, "package %s %q invalid. Cannot start with a dash", param, name)
 	}
 	if name != inputValidateRe.ReplaceAllString(name, "") {
-		return status.Errorf(codes.InvalidArgument, "package %s %q invalid. Must contain only [a-zA-Z0-9_-.]", param, name)
+		return status.Errorf(codes.InvalidArgument, "package %s %q invalid. Must contain only [a-zA-Z0-9_.:-]", param, name)
 	}
 	return nil
 }
 
 func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.InstallReply, error) {
+	log.Printf("Received request for Packages.Install: %+v", req)
+
 	if err := validateField("name", req.Name); err != nil {
 		return nil, err
 	}
@@ -161,25 +171,21 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
 	}
 	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
+		return nil, status.Errorf(codes.Internal, "error from running %s - %v\nstdout:\n%s\nstderr:\n%s\n%v", cmd.String(), err, trimString(outBuf.String()), trimString(errBuf.String()), err)
 	}
 
-	// This should never return stderr output. If they do something is off.
-	if len(errBuf.String()) != 0 {
-		if outBuf.Len() > MAX_BUF {
-			outBuf.Truncate(MAX_BUF)
-		}
-		if errBuf.Len() > MAX_BUF {
-			errBuf.Truncate(MAX_BUF)
-		}
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nStdout: %s\nStderr: %s", command[0], outBuf.String(), errBuf.String())
-	}
+	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.InstallReply{
 		DebugOutput: outBuf.String(),
 	}, nil
 }
 
+// Nevra is of the form n-e:v-r.a (where n is optional since e can be 0 for no epoch).
+var nevraRe = regexp.MustCompile(`^([^-]+-)?[^:]+:[^-]+-[^\.]+\..+$`)
+
 func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateReply, error) {
+	log.Printf("Received request for Packages.Update: %+v", req)
+
 	if err := validateField("name", req.Name); err != nil {
 		return nil, err
 	}
@@ -193,6 +199,14 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	// Update doesn't require nevra but we do so validate each version is nevra.
+	if !nevraRe.MatchString(req.OldVersion) {
+		return nil, status.Errorf(codes.Internal, "old_version %q not in nevra format (n-e:v-r.a)", req.OldVersion)
+	}
+	if !nevraRe.MatchString(req.NewVersion) {
+		return nil, status.Errorf(codes.Internal, "new_version %q not in nevra format (n-e:v-r.a)", req.NewVersion)
 	}
 
 	// First need to validate the old version is what we expect.
@@ -213,10 +227,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, status.Errorf(codes.Internal, "can't start validate %s: %v", cmd.String(), err)
 	}
 	if err := cmd.Wait(); err != nil {
-		if errBuf.Len() > MAX_BUF {
-			errBuf.Truncate(MAX_BUF)
-		}
-		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, errBuf.String())
+		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, trimString(errBuf.String()))
 	}
 
 	// A 0 return means we're ok to proceed.
@@ -238,16 +249,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
 	}
 
-	// This should never return stderr output. If they do something is off.
-	if len(errBuf.String()) != 0 {
-		if outBuf.Len() > MAX_BUF {
-			outBuf.Truncate(MAX_BUF)
-		}
-		if errBuf.Len() > MAX_BUF {
-			errBuf.Truncate(MAX_BUF)
-		}
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nStdout: %s\nStderr: %s", command[0], outBuf.String(), errBuf.String())
-	}
+	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.UpdateReply{
 		DebugOutput: outBuf.String(),
 	}, nil
@@ -287,8 +289,26 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 		//
 		// With no spaces (i.e. 3 fields)
 		fields := strings.Fields(text)
-		if len(fields) != 3 {
-			return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q", text)
+
+		switch len(fields) {
+		case 3:
+			// Nothing to do as this is expected.
+		case 2, 1:
+			// 2: Sometime the version name is so long it continues onto the next line.
+			// 1: Sometime the package name is so long it continues onto the next line.
+			if !scanner.Scan() {
+				return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and no continuation line", text)
+			}
+			text2 := scanner.Text()
+			remaining := strings.Fields(text2)
+			if len(remaining) != 3-len(fields) {
+				return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and then %q on next line", text, text2)
+			}
+			// Now setup fields so below has everything where we expect.
+			fields = append(fields, remaining...)
+		default:
+			// Anything else? No idea.
+			return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q which is invalid", text)
 		}
 
 		reply.Packages = append(reply.Packages, &pb.PackageInfo{
@@ -306,6 +326,8 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 }
 
 func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest) (*pb.ListInstalledReply, error) {
+	log.Printf("Received request for Packages.ListInstalled: %+v", req)
+
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -334,13 +356,7 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
-		if outBuf.Len() > MAX_BUF {
-			outBuf.Truncate(MAX_BUF)
-		}
-		if errBuf.Len() > MAX_BUF {
-			errBuf.Truncate(MAX_BUF)
-		}
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
+		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nstdout:\n%s\nstderr:\n%s", cmd.String(), trimString(outBuf.String()), trimString(errBuf.String()))
 	}
 
 	return parseListInstallOutput(req.PackageSystem, &outBuf)
@@ -429,6 +445,8 @@ func parseYumRepoListOutput(r io.Reader) (*pb.RepoListReply, error) {
 }
 
 func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.RepoListReply, error) {
+	log.Printf("Received request for Packages.RepoList: %+v", req)
+
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -457,13 +475,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 
 	// This should never return stderr output. If they do something is off.
 	if len(errBuf.String()) != 0 {
-		if outBuf.Len() > MAX_BUF {
-			outBuf.Truncate(MAX_BUF)
-		}
-		if errBuf.Len() > MAX_BUF {
-			errBuf.Truncate(MAX_BUF)
-		}
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s: %s", cmd.String(), errBuf.String())
+		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nstdout:\n%s\nstderr:\n%s", cmd.String(), trimString(outBuf.String()), trimString(errBuf.String()))
 	}
 
 	return parseRepoListOutput(req.PackageSystem, &outBuf)
