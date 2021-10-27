@@ -239,7 +239,7 @@ func TestList(t *testing.T) {
 }
 
 func TestPstackNative(t *testing.T) {
-	_, err := os.Stat(*psBin)
+	_, err := os.Stat(*psStackBin)
 	if *psStackBin == "" || err != nil {
 		t.Skip("OS not supported")
 	}
