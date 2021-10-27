@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	psBin      = flag.String("ps_bin", "/bin/ps", "Location of the ps command")
-	psStackBin = flag.String("pstack_bin", "", "Location of the pstack command")
+	psBin      = flag.String("ps-bin", "/bin/ps", "Location of the ps command")
+	psStackBin = flag.String("pstack-bin", "", "Location of the pstack command")
 
 	// This is a var so we can replace for testing.
 	psOptions = func() []string {

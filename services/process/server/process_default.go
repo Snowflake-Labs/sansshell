@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	psBin      = flag.String("ps_bin", "", "Location of the ps command")
-	psStackBin = flag.String("pstack_bin", "", "Location of the pstack command")
+	psBin      = flag.String("ps-bin", "", "Location of the ps command")
+	psStackBin = flag.String("pstack-bin", "", "Location of the pstack command")
 
 	psOptions = func() ([]string, error) {
 		return nil, fmt.Errorf("No support for OS %s", runtime.GOOS)
