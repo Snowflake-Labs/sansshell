@@ -7,6 +7,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"log"
 	"os/exec"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -21,6 +22,8 @@ type server struct{}
 
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
+	log.Printf("Received request for Exec.Run: %+v", req)
+
 	cmdName := req.Command
 	cmdArgs := req.Args
 

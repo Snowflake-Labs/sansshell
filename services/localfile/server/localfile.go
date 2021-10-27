@@ -39,8 +39,10 @@ type server struct{}
 var chunkSize = 128 * 1024
 
 // Read returns the contents of the named file
-func (s *server) Read(in *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
-	file := in.GetFilename()
+func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
+	log.Printf("Received request for LocalFile.Read: %+v", req)
+
+	file := req.Filename
 	log.Printf("Received request for: %v", file)
 	if !filepath.IsAbs(file) {
 		return AbsolutePathError
@@ -57,7 +59,7 @@ func (s *server) Read(in *pb.ReadRequest, stream pb.LocalFile_ReadServer) error 
 	}()
 
 	// Seek forward if requested
-	if s := in.GetOffset(); s != 0 {
+	if s := req.GetOffset(); s != 0 {
 		whence := 0
 		// If negative we're tailing from the end so
 		// negate the sign and set whence.
@@ -69,7 +71,7 @@ func (s *server) Read(in *pb.ReadRequest, stream pb.LocalFile_ReadServer) error 
 		}
 	}
 
-	max := in.GetLength()
+	max := req.GetLength()
 	if max == 0 {
 		max = math.MaxInt64
 	}
@@ -106,7 +108,7 @@ func (s *server) Read(in *pb.ReadRequest, stream pb.LocalFile_ReadServer) error 
 
 func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 	for {
-		in, err := stream.Recv()
+		req, err := stream.Recv()
 		if err == io.EOF {
 			return nil
 		}
@@ -114,11 +116,13 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 			log.Printf("stat: recv error %v", err)
 			return status.Errorf(codes.Internal, "stat: recv error %v", err)
 		}
-		log.Printf("stat: request for file: %v", in.Filename)
-		if !filepath.IsAbs(in.Filename) {
+		log.Printf("Received request for LocalFile.Stat: %+v", req)
+
+		log.Printf("stat: request for file: %v", req.Filename)
+		if !filepath.IsAbs(req.Filename) {
 			return AbsolutePathError
 		}
-		stat, err := os.Stat(in.Filename)
+		stat, err := os.Stat(req.Filename)
 		if err != nil {
 			return status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
 		}
@@ -127,7 +131,7 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 			return status.Error(codes.Unimplemented, "stat not supported")
 		}
 		if err := stream.Send(&pb.StatReply{
-			Filename: in.Filename,
+			Filename: req.Filename,
 			Size:     stat.Size(),
 			Mode:     uint32(stat.Mode()),
 			Modtime:  timestamppb.New(stat.ModTime()),
@@ -142,7 +146,7 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 
 func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 	for {
-		in, err := stream.Recv()
+		req, err := stream.Recv()
 		if err == io.EOF {
 			return nil
 		}
@@ -150,16 +154,16 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			log.Printf("sum: recv error %v", err)
 			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
-		log.Printf("sum: request for file: %v", in.Filename)
-		if !filepath.IsAbs(in.Filename) {
+		log.Printf("Received request for Localfile.Sum: %+v", req)
+		if !filepath.IsAbs(req.Filename) {
 			return AbsolutePathError
 		}
 		out := &pb.SumReply{
-			SumType:  in.SumType,
-			Filename: in.Filename,
+			SumType:  req.SumType,
+			Filename: req.Filename,
 		}
 		var hasher hash.Hash
-		switch in.SumType {
+		switch req.SumType {
 		// default to sha256 for unspecified
 		case pb.SumType_SUM_TYPE_UNKNOWN, pb.SumType_SUM_TYPE_SHA256:
 			hasher = sha256.New()
@@ -171,11 +175,11 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 		case pb.SumType_SUM_TYPE_CRC32IEEE:
 			hasher = crc32.NewIEEE()
 		default:
-			log.Printf("sum: invalid sum type %v", in.SumType)
-			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", in.SumType)
+			log.Printf("sum: invalid sum type %v", req.SumType)
+			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", req.SumType)
 		}
 		if err := func() error {
-			f, err := os.Open(in.Filename)
+			f, err := os.Open(req.Filename)
 			if err != nil {
 				return err
 			}
