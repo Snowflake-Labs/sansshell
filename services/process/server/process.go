@@ -24,6 +24,13 @@ type server struct {
 // grpc has limits on how large a returned error can be (generally 4-8k depending on language).
 const MAX_BUF = 1024
 
+func trimString(s string) string {
+	if len(s) > MAX_BUF {
+		s = s[:MAX_BUF]
+	}
+	return s
+}
+
 // A var so we can replace for testing.
 var pstackOptions = func(req *pb.GetStacksRequest) []string {
 	return []string{
@@ -47,16 +54,13 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	if err := cmd.Start(); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if stderrBuf.Len() > MAX_BUF {
-		stderrBuf.Truncate(MAX_BUF)
-	}
 
 	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, stderrBuf.String())
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
 	}
 
 	if len(stderrBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", stderrBuf.String())
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", trimString(stderrBuf.String()))
 	}
 
 	entries, err := parser(&stdoutBuf)
@@ -110,15 +114,12 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if stderrBuf.Len() > MAX_BUF {
-		stderrBuf.Truncate(MAX_BUF)
-	}
 	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, stderrBuf.String())
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
 	}
 
 	if len(stderrBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", stderrBuf.String())
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", trimString(stderrBuf.String()))
 	}
 
 	scanner := bufio.NewScanner(&stdoutBuf)
