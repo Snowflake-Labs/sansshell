@@ -150,7 +150,6 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 			if n, err := fmt.Sscanf(fields[1], "%d", &stack.ThreadNumber); n != 1 || err != nil {
 				return nil, status.Errorf(codes.Internal, "can't parse thread number: %s : %v", text, err)
 			}
-			log.Printf("field 3: %s\n", fields[3])
 			if n, err := fmt.Sscanf(fields[3], "0x%x", &stack.ThreadId); n != 1 || err != nil {
 				return nil, status.Errorf(codes.Internal, "can't parse thread id: %s : %v", text, err)
 			}
