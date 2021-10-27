@@ -171,12 +171,6 @@ func TestInstall(t *testing.T) {
 				return []string{"false"}, nil
 			},
 		},
-		{
-			name: "stderr output",
-			generate: func(*pb.InstallRequest) ([]string, error) {
-				return []string{"sh", "-c", "echo foo >&2"}, nil
-			},
-		},
 	} {
 		generateInstall = test.generate
 		resp, err := client.Install(ctx, req)
@@ -319,16 +313,16 @@ func TestUpdate(t *testing.T) {
 
 	req := &pb.UpdateRequest{
 		Name:       "package",
-		OldVersion: "1.2.3",
-		NewVersion: "4.5.6",
+		OldVersion: "0:1-1.2.3",
+		NewVersion: "0:1-4.5.6",
 		Repo:       "somerepo",
 	}
 
 	// Test 1: A clean install. Validate we got expected output back.
 
 	// This is assuming yum based installs for testing command builder.
-	wantValidateCmdLine := fmt.Sprintf("%s list installed package-1.2.3", *yumBin)
-	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo package-4.5.6", *yumBin)
+	wantValidateCmdLine := fmt.Sprintf("%s list installed package-0:1-1.2.3", *yumBin)
+	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo package-0:1-4.5.6", *yumBin)
 
 	resp, err := client.Update(ctx, req)
 	if err != nil {
@@ -360,12 +354,6 @@ func TestUpdate(t *testing.T) {
 			name: "bad exit code",
 			generate: func(*pb.UpdateRequest) ([]string, error) {
 				return []string{"false"}, nil
-			},
-		},
-		{
-			name: "stderr output",
-			generate: func(*pb.UpdateRequest) ([]string, error) {
-				return []string{"sh", "-c", "echo foo >&2"}, nil
 			},
 		},
 	} {

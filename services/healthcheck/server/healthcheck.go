@@ -18,7 +18,7 @@ type server struct{}
 
 // Ok always returns an Empty proto without error
 func (s *server) Ok(ctx context.Context, in *pb.Empty) (*pb.Empty, error) {
-	log.Printf("Received HealthCheck request")
+	log.Print("Received request for HealthCheck.Ok")
 	return &pb.Empty{}, nil
 }
 
