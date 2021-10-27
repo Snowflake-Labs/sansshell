@@ -114,6 +114,11 @@ func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if u.name == "" || u.old_version == "" || u.new_version == "" {
+		fmt.Fprintln(os.Stderr, "--name, --old_version and --new_version must be supplied")
+		return subcommands.ExitFailure
+	}
+
 	ps, err := flagToType(u.packageSystem)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", u.packageSystem)
@@ -234,8 +239,8 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 			fmt.Fprintln(os.Stdout)
 		}
 	} else {
-		format := "%40s %40s %16s\n"
-		fmt.Fprint(os.Stdout, format, "repo id", "repo name", "status")
+		format := "%35s %65s %10s\n"
+		fmt.Fprintf(os.Stdout, format, "repo id", "repo name", "status")
 		for _, repo := range resp.Repos {
 			fmt.Fprintf(os.Stdout, format, repo.Id, repo.Name, getStatus(repo.Status))
 		}
