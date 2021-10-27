@@ -85,7 +85,12 @@ func (a *ansibleCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	if a.playbook == "" {
+		fmt.Fprintln(os.Stderr, "--playbook is required")
+		return subcommands.ExitFailure
+	}
+
+	conn := args[0].(grpc.ClientConnInterface)
 
 	c := pb.NewPlaybookClient(conn)
 
