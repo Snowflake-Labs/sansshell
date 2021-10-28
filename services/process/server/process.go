@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os/exec"
@@ -20,6 +21,12 @@ import (
 type server struct {
 }
 
+var (
+	// These are effectively platform agnostic so they can here vs the architecture specific files.
+	jstackBin = flag.String("jstack-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jstack", "Path to the jstack binary")
+	jmapBin   = flag.String("jmap-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jmap", "Path to the jmap binary")
+)
+
 // The maximum we should allow stdout or stderr to be when sending back in an error string.
 // grpc has limits on how large a returned error can be (generally 4-8k depending on language).
 const MAX_BUF = 1024
@@ -31,12 +38,20 @@ func trimString(s string) string {
 	return s
 }
 
-// A var so we can replace for testing.
-var pstackOptions = func(req *pb.GetStacksRequest) []string {
-	return []string{
-		fmt.Sprintf("%d", req.Pid),
+// Vars so we can replace for testing.
+var (
+	pstackOptions = func(req *pb.GetStacksRequest) []string {
+		return []string{
+			fmt.Sprintf("%d", req.Pid),
+		}
 	}
-}
+
+	jstackOptions = func(req *pb.GetJavaStacksRequest) []string {
+		return []string{
+			fmt.Sprintf("%d", req.Pid),
+		}
+	}
+)
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	log.Printf("Received request for List: %+v", req)
@@ -92,7 +107,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	log.Printf("Received request for GetStacks: %+v", req)
 
 	// This is tied to pstack so either an OS provides it or it doesn't.
-	if *psStackBin == "" {
+	if *pstackBin == "" {
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
@@ -100,10 +115,9 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	cmdName := *psStackBin
+	cmdName := *pstackBin
 	options := pstackOptions(req)
 
-	// We gather all the processes up and then filter by pid if needed at the end.
 	cmd := exec.CommandContext(ctx, cmdName, options...)
 	var stderrBuf, stdoutBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -171,7 +185,186 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 }
 
 func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest) (*pb.GetJavaStacksReply, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	log.Printf("Received request for GetJavaStacks: %+v", req)
+
+	// This is tied to pstack so either an OS provides it or it doesn't.
+	if *jstackBin == "" {
+		return nil, status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	if req.Pid <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+
+	cmdName := *jstackBin
+	options := jstackOptions(req)
+
+	cmd := exec.CommandContext(ctx, cmdName, options...)
+	var stderrBuf, stdoutBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	cmd.Stdin = nil
+
+	if err := cmd.Start(); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
+	if err := cmd.Wait(); err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
+	}
+
+	scanner := bufio.NewScanner(&stdoutBuf)
+	out := &pb.GetJavaStacksReply{}
+
+	numEntries := 0
+	stack := &pb.JavaThreadStack{}
+
+	for scanner.Scan() {
+		text := scanner.Text()
+
+		// Just skip blank lines
+		if len(text) == 0 {
+			continue
+		}
+
+		if text[0] != '"' { // Anything else is a stack entry so just append it.
+			stack.Stacks = append(stack.Stacks, text)
+			continue
+		}
+		// Start of a new entry. Push the old one into the reply.
+		if numEntries > 0 {
+			out.Stacks = append(out.Stacks, stack)
+			stack = &pb.JavaThreadStack{}
+		}
+		numEntries++
+
+		// Find the trailing " character to extact the name.
+		end := strings.Index(text[1:], `"`)
+		if end == -1 {
+			return nil, status.Errorf(codes.Internal, "can't find thread name in line %q", text)
+		}
+
+		// Remember end is offset by one due to skipping the first " char above.
+		end++
+		stack.Name = text[1:end]
+
+		// Split the remaining fields up
+		end++
+		fields := strings.Fields(text[end:])
+
+		// If it's a daemon that's in the 2nd field (or not)
+		if fields[1] == "daemon" {
+			stack.Daemon = true
+			// Remove that field and shift over so parsing below is simpler.
+			copy(fields[1:], fields[2:])
+			fields = fields[0 : len(fields)-1]
+		}
+
+		type parser struct {
+			format string
+			in     string
+			out    interface{}
+		}
+		var parse []parser
+		startState := 0
+
+		// A Java thread has a thread number and more details. Other ones represent native/C++ threads
+		// which expose no stacks and have less fields.
+		//
+		// Java thread:
+		//
+		// "Attach Listener" #19 daemon prio=9 os_prio=0 cpu=1.19ms elapsed=4723.25s tid=0x00007f7818001000 nid=0x5606 waiting on condition  [0x0000000000000000]
+		//
+		// Native/C++ thread:
+		//
+		// "G1 Refine#0" os_prio=0 cpu=1.63ms elapsed=3042612.92s tid=0x00007f787826b000 nid=0x7eed runnable
+		if fields[0][0] == '#' {
+			startState = 7
+			parse = []parser{
+				{
+					format: "#%d",
+					in:     fields[0],
+					out:    &stack.ThreadNumber,
+				},
+				{
+					format: "prio=%d",
+					in:     fields[1],
+					out:    &stack.Priority,
+				},
+				{
+					format: "os_prio=%d",
+					in:     fields[2],
+					out:    &stack.OsPriority,
+				},
+				{
+					format: "cpu=%fms",
+					in:     fields[3],
+					out:    &stack.CpuMs,
+				},
+				{
+					format: "elapsed=%fs",
+					in:     fields[4],
+					out:    &stack.ElapsedSec,
+				},
+				{
+					format: "tid=0x%x",
+					in:     fields[5],
+					out:    &stack.ThreadId,
+				},
+				{
+					format: "nid=0x%x",
+					in:     fields[6],
+					out:    &stack.NativeThreadId,
+				},
+				{
+					format: "[0x%x]",
+					in:     fields[len(fields)-1],
+					out:    &stack.Pc,
+				},
+			}
+		} else {
+			startState = 5
+			parse = []parser{
+				{
+					format: "os_prio=%d",
+					in:     fields[0],
+					out:    &stack.OsPriority,
+				},
+				{
+					format: "cpu=%fms",
+					in:     fields[1],
+					out:    &stack.CpuMs,
+				},
+				{
+					format: "elapsed=%fs",
+					in:     fields[2],
+					out:    &stack.ElapsedSec,
+				},
+				{
+					format: "tid=0x%x",
+					in:     fields[3],
+					out:    &stack.ThreadId,
+				},
+				{
+					format: "nid=0x%x",
+					in:     fields[4],
+					out:    &stack.NativeThreadId,
+				},
+			}
+		}
+		for _, p := range parse {
+			if n, err := fmt.Sscanf(p.in, p.format, p.out); n != 1 || err != nil {
+				return nil, status.Errorf(codes.Internal, "can't parse %q out of text: %q - %v", p.format, text, err)
+			}
+		}
+		// Everything from field START_STATE to right before the last field is the state.
+		stack.State = strings.Join(fields[startState:len(fields)-1], " ")
+	}
+
+	// Append last entry
+	out.Stacks = append(out.Stacks, stack)
+	return out, nil
 }
 
 func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer) error {

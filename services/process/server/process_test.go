@@ -21,6 +21,10 @@ var (
 	bufSize = 1024 * 1024
 	lis     *bufconn.Listener
 	conn    *grpc.ClientConn
+
+	testdataJstack     = "./testdata/jstack.txt"
+	testdataJstackBad  = "./testdata/jstack-bad.txt"
+	testdataJstackBad1 = "./testdata/jstack-bad1.txt"
 )
 
 func bufDialer(context.Context, string) (net.Conn, error) {
@@ -239,8 +243,8 @@ func TestList(t *testing.T) {
 }
 
 func TestPstackNative(t *testing.T) {
-	_, err := os.Stat(*psStackBin)
-	if *psStackBin == "" || err != nil {
+	_, err := os.Stat(*pstackBin)
+	if *pstackBin == "" || err != nil {
 		t.Skip("OS not supported")
 	}
 
@@ -299,15 +303,15 @@ func TestPstack(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedPstackBin := *psStackBin
-	*psStackBin = "cat"
+	savedPstackBin := *pstackBin
+	*pstackBin = "cat"
 	savedPstackOptions := pstackOptions
 	var testInput string
 	pstackOptions = func(*pb.GetStacksRequest) []string {
 		return []string{testInput}
 	}
 	defer func() {
-		*psStackBin = savedPstackBin
+		*pstackBin = savedPstackBin
 		pstackOptions = savedPstackOptions
 	}()
 
@@ -394,8 +398,11 @@ func TestPstack(t *testing.T) {
 			if test.command != "" {
 				command = test.command
 			}
-			*psStackBin = command
+			*pstackBin = command
+
 			pstackOptions = goodPstackOptions
+			testInput = test.input
+
 			if len(test.options) > 0 {
 				pstackOptions = func(req *pb.GetStacksRequest) []string {
 					return test.options
@@ -417,12 +424,130 @@ func TestPstack(t *testing.T) {
 				}
 
 				if err := prototext.Unmarshal(input, testdata); err != nil {
-					t.Fatalf("Can't unmarshall test data %v", err)
+					t.Fatalf("%s: Can't unmarshall test data %v", test.name, err)
 				}
 			}
 
-			testInput = test.input
 			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: test.pid})
+			if err != nil && !test.wantErr {
+				t.Fatalf("%s: unexpected error: %v", test.name, err)
+			}
+			if err == nil && test.wantErr {
+				t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+			}
+
+			if !test.wantErr {
+				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", test.name, resp, testdata, diff)
+				}
+			}
+		})
+	}
+}
+
+func TestJstack(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewProcessClient(conn)
+
+	// Setup for tests where we use cat and pre-canned data
+	// to submit into the server.
+	savedJstackBin := *jstackBin
+	savedFunc := jstackOptions
+	var testInput string
+	jstackOptions = func(*pb.GetJavaStacksRequest) []string {
+		return []string{
+			testInput,
+		}
+	}
+	defer func() {
+		*jstackBin = savedJstackBin
+		jstackOptions = savedFunc
+	}()
+
+	goodJstackOptions := jstackOptions
+
+	for _, test := range []struct {
+		name     string
+		command  string
+		input    string
+		validate string
+		pid      int64
+		wantErr  bool
+	}{
+		{
+			name:     "Basic jstack output",
+			input:    testdataJstack,
+			validate: "./testdata/jstack.textproto",
+			pid:      1,
+		},
+		{
+			name:    "Bad pid",
+			input:   testdataJstack,
+			wantErr: true,
+		},
+		{
+			name:    "No end quote",
+			input:   testdataJstackBad,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad field",
+			input:   testdataJstackBad1,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "Bad command",
+			input:   testdataJstack,
+			pid:     1,
+			command: "/non-existant-command",
+			wantErr: true,
+		},
+		{
+			name:    "Command returns error",
+			input:   testdataJstack,
+			pid:     1,
+			command: "false",
+			wantErr: true,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := "cat"
+			if test.command != "" {
+				command = test.command
+			}
+			*jstackBin = command
+
+			jstackOptions = goodJstackOptions
+			testInput = test.input
+
+			testdata := &pb.GetJavaStacksReply{}
+			if test.validate != "" {
+				f, err := os.Open(test.validate)
+				if err != nil {
+					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
+				}
+				defer f.Close()
+
+				input, err := ioutil.ReadAll(f)
+				if err != nil {
+					t.Fatalf("%s: Can't read textproto data from %s: %v", test.name, test.validate, err)
+				}
+				if err := prototext.Unmarshal(input, testdata); err != nil {
+					t.Fatalf("%s: Can't unmarshall test data %v", test.name, err)
+				}
+
+			}
+
+			resp, err := client.GetJavaStacks(ctx, &pb.GetJavaStacksRequest{Pid: test.pid})
 			if err != nil && !test.wantErr {
 				t.Fatalf("%s: unexpected error: %v", test.name, err)
 			}

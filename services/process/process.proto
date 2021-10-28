@@ -135,17 +135,18 @@ message GetJavaStacksRequest { int64 pid = 1; }
 
 message JavaThreadStack {
   string name = 1;
-  bool daemon = 2;
-  int32 priority = 3;
-  int32 os_priority = 4;
-  int64 cpu_ms = 5;
-  int64 elapsed_sec = 6;
-  int64 thread_id = 7;
-  int64 native_thread_id = 8;
-  string state = 9;
-  int64 pc = 10;
-  string thread_state = 11;
-  repeated string stacks = 12;
+  int64 thread_number = 2;
+  bool daemon = 3;
+  int32 priority = 4;
+  int32 os_priority = 5;
+  float cpu_ms = 6;
+  float elapsed_sec = 7;
+  int64 thread_id = 8;
+  int64 native_thread_id = 9;
+  string state = 10;
+  int64 pc = 11;
+  string thread_state = 12;
+  repeated string stacks = 13;
 }
 
 message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
