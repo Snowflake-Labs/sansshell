@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/proxy";
+
+import "google/protobuf/any.proto";
+
+package Proxy;
+
+service Proxy {
+  // Proxy represents a bidirectional stream of requests from a sanshell
+  // client to one or more target sanshell instances reachable from the
+  // proxy server.
+  rpc Proxy(stream ProxyRequest) returns (stream ProxyReply) {}
+}
+
+message ProxyRequest {
+  oneof request {
+    // A request to open a new stream to a target.
+    StartStream start_stream = 1;
+
+    // Additional client data for one or more established streams.
+    StreamData stream_data = 2;
+
+    // A ClientClose indicates that no more data will be sent
+    // for one or more established streams.
+    ClientClose client_close = 3;
+
+    // A ClientCancel indicates that the client wants to cancel
+    // one or more established streams.
+    ClientCancel client_cancel = 4;
+  }
+}
+
+message ProxyReply {
+  oneof reply {
+    // A reply to a request to initiate a stream.
+    StartStreamReply start_stream_reply = 1;
+
+    // Additional server data for one or more established streams.
+    StreamData  stream_data = 2;
+
+    // An end of stream message for one or more established streams.
+    ServerClose server_close = 3;
+  }
+}
+
+// A request to start a stream to a target host.
+// The supplied `nonce` is an arbitrary client-chosen value
+// that will be echoed in the returned reply to allow clients
+// to correlate this request with the associated stream id.
+message StartStream {
+  // The stream target, as accepted by grpc.Dial.
+  string target = 1;
+
+  // The fully-qualified method name (e.g. "/Package.Service/Method")
+  string method_name = 2;
+
+  // A nonce value which will be echoed in the reply
+  // to allow the client to correlate this stream
+  // request with the server-assigned stream ID.
+  uint32 nonce = 3;
+
+  // True if the client will send a stream of requests.
+  // if both client_stream and server_stream are false,
+  // the opened stream will be automatically closed after
+  // the first message is processed.
+  bool client_streams = 4;
+  
+  // True if the server will send a stream of replies.
+  bool server_streams = 5;
+
+  // TODO: jallie: server_streams / client_streams can be
+  // derived from the server-side proto definition?
+}
+
+message StartStreamReply {
+  // The target string originally supplied to StartStream
+  string target = 1;
+
+  // The nonce value supplied by the client in StartStream.
+  uint64 nonce = 2;
+
+  oneof reply {
+    // The server-assigned stream identifier, which should be included
+    // in all future messages for this stream.
+    // stream_ids are only guaranteed to be unique within the
+    // context of a single proxy stream.
+    uint64 stream_id = 3;
+    
+    // Status carries an error if the stream could not be
+    // established.
+    Status error_status = 4;
+  }
+}
+
+// ClientClose is sent by the proxy client to indicate
+// that no more messages will be sent to the given stream(s)
+// Note that clients do not need to send a ClientClose for
+// streams where client_streams is false.
+message ClientClose {
+  // The server-asssigned stream id(s) to close.
+  repeated uint64 stream_ids = 1;
+}
+
+// ClientCancel is sent by the proxy client to request
+// cancellation of the given stream(s).
+message ClientCancel {
+  // The server-assigned stream id(s) to cancel.
+  repeated uint64 stream_ids = 1;
+}
+
+// StreamData is used by both clients and servers to transmit
+// data for an established stream.
+message StreamData {
+  // The stream identifier, as returned in StartStreamReply
+  // This can be repeated, to indicate that the same data is relevant
+  // to multiple established streams.
+  repeated uint64 stream_ids = 1;
+
+  // The message payload
+  google.protobuf.Any payload = 2;
+}
+
+// A server end-of-stream response, containing the final status
+// of the stream.
+message ServerClose {
+  // The stream identifier, as returned in StartStreamReply
+  // This can be repeated, to indicate that the same status is
+  // applicable to multiple streams.
+  repeated uint64 stream_ids = 1;
+
+  // The final status of the stream.
+  Status status = 2;
+}
+
+// A wire-compatible version of google.rpc.Status
+message Status {
+  // The status code (one of google.rpc.Code)
+  int32 code = 1;
+
+  // A developer-targeted error message.
+  string message = 2;
+
+  // List of messages carrying error details.
+  repeated google.protobuf.Any details = 3;
+}
