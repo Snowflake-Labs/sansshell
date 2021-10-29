@@ -59,18 +59,6 @@ message StartStream {
   // to allow the client to correlate this stream
   // request with the server-assigned stream ID.
   uint32 nonce = 3;
-
-  // True if the client will send a stream of requests.
-  // if both client_stream and server_stream are false,
-  // the opened stream will be automatically closed after
-  // the first message is processed.
-  bool client_streams = 4;
-  
-  // True if the server will send a stream of replies.
-  bool server_streams = 5;
-
-  // TODO: jallie: server_streams / client_streams can be
-  // derived from the server-side proto definition?
 }
 
 message StartStreamReply {
