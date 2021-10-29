@@ -261,14 +261,6 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 			fields = fields[0 : len(fields)-1]
 		}
 
-		type parser struct {
-			format string
-			in     string
-			out    interface{}
-		}
-		var parse []parser
-		startState := 0
-
 		// A Java thread has a thread number and more details. Other ones represent native/C++ threads
 		// which expose no stacks and have less fields.
 		//
@@ -279,87 +271,44 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		// Native/C++ thread:
 		//
 		// "G1 Refine#0" os_prio=0 cpu=1.63ms elapsed=3042612.92s tid=0x00007f787826b000 nid=0x7eed runnable
-		if fields[0][0] == '#' {
-			startState = 7
-			parse = []parser{
-				{
-					format: "#%d",
-					in:     fields[0],
-					out:    &stack.ThreadNumber,
-				},
-				{
-					format: "prio=%d",
-					in:     fields[1],
-					out:    &stack.Priority,
-				},
-				{
-					format: "os_prio=%d",
-					in:     fields[2],
-					out:    &stack.OsPriority,
-				},
-				{
-					format: "cpu=%fms",
-					in:     fields[3],
-					out:    &stack.CpuMs,
-				},
-				{
-					format: "elapsed=%fs",
-					in:     fields[4],
-					out:    &stack.ElapsedSec,
-				},
-				{
-					format: "tid=0x%x",
-					in:     fields[5],
-					out:    &stack.ThreadId,
-				},
-				{
-					format: "nid=0x%x",
-					in:     fields[6],
-					out:    &stack.NativeThreadId,
-				},
-				{
-					format: "[0x%x]",
-					in:     fields[len(fields)-1],
-					out:    &stack.Pc,
-				},
+		var state []string
+		for _, f := range fields {
+			var format string
+			var out interface{}
+			switch {
+			case strings.HasPrefix(f, "#"):
+				format = "#%d"
+				out = &stack.ThreadNumber
+			case strings.HasPrefix(f, "prio="):
+				format = "prio=%d"
+				out = &stack.Priority
+			case strings.HasPrefix(f, "os_prio="):
+				format = "os_prio=%d"
+				out = &stack.OsPriority
+			case strings.HasPrefix(f, "cpu="):
+				format = "cpu=%fms"
+				out = &stack.CpuMs
+			case strings.HasPrefix(f, "elapsed="):
+				format = "elapsed=%fs"
+				out = &stack.ElapsedSec
+			case strings.HasPrefix(f, "tid="):
+				format = "tid=0x%x"
+				out = &stack.ThreadId
+			case strings.HasPrefix(f, "nid="):
+				format = "nid=0x%x"
+				out = &stack.NativeThreadId
+			case strings.HasPrefix(f, "[0x"):
+				format = "[0x%x]"
+				out = &stack.Pc
+			default:
+				state = append(state, f)
+				continue
 			}
-		} else {
-			startState = 5
-			parse = []parser{
-				{
-					format: "os_prio=%d",
-					in:     fields[0],
-					out:    &stack.OsPriority,
-				},
-				{
-					format: "cpu=%fms",
-					in:     fields[1],
-					out:    &stack.CpuMs,
-				},
-				{
-					format: "elapsed=%fs",
-					in:     fields[2],
-					out:    &stack.ElapsedSec,
-				},
-				{
-					format: "tid=0x%x",
-					in:     fields[3],
-					out:    &stack.ThreadId,
-				},
-				{
-					format: "nid=0x%x",
-					in:     fields[4],
-					out:    &stack.NativeThreadId,
-				},
+			if n, err := fmt.Sscanf(f, format, out); n != 1 || err != nil {
+				return nil, status.Errorf(codes.Internal, "can't parse %q out of text: %q - %v", format, text, err)
 			}
 		}
-		for _, p := range parse {
-			if n, err := fmt.Sscanf(p.in, p.format, p.out); n != 1 || err != nil {
-				return nil, status.Errorf(codes.Internal, "can't parse %q out of text: %q - %v", p.format, text, err)
-			}
-		}
-		// Everything from field START_STATE to right before the last field is the state.
-		stack.State = strings.Join(fields[startState:len(fields)-1], " ")
+		stack.State = strings.Join(state, " ")
 	}
 
 	// Append last entry

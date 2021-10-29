@@ -123,6 +123,7 @@ stacks : <
   elapsed_sec : 3.042613e+06
   thread_id : 140155389448192
   native_thread_id : 32495
+  state : "runnable"
 >
 stacks : <
   name : "GC Thread#0"
@@ -130,4 +131,5 @@ stacks : <
   elapsed_sec : 3.042613e+06
   thread_id : 140155386331136
   native_thread_id : 32490
+  state : "runnable"
 >
