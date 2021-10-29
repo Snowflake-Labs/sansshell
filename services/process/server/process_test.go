@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -120,15 +119,9 @@ func TestList(t *testing.T) {
 		psOptions = savedFunc
 	}()
 
-	f, err := os.Open(testdataPsTextProto)
+	input, err := os.ReadFile(testdataPsTextProto)
 	if err != nil {
 		t.Fatalf("Can't open testdata %s: %v", testdataPsTextProto, err)
-	}
-	defer f.Close()
-
-	input, err := ioutil.ReadAll(f)
-	if err != nil {
-		t.Fatalf("Can't read textproto data from %s: %v", testdataPsTextProto, err)
 	}
 
 	testdata := &pb.ListReply{}
@@ -284,7 +277,7 @@ func TestPstackNative(t *testing.T) {
 	}
 
 	if !found {
-		t.Fatalf("Never found a runtime stack in output? Response: %+v", prototext.Format(resp))
+		t.Fatalf("pstack() : want response with stack containing 'runtime', got %v", prototext.Format(resp))
 	}
 }
 
@@ -412,15 +405,9 @@ func TestPstack(t *testing.T) {
 			testdata := &pb.GetStacksReply{}
 			// In general we don't need this if we expect errors.
 			if test.validate != "" {
-				f, err := os.Open(test.validate)
+				input, err := os.ReadFile(test.validate)
 				if err != nil {
 					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
-				}
-				defer f.Close()
-
-				input, err := ioutil.ReadAll(f)
-				if err != nil {
-					t.Fatalf("%s: Can't read textproto data from %s: %v", test.name, test.validate, err)
 				}
 
 				if err := prototext.Unmarshal(input, testdata); err != nil {
@@ -531,16 +518,11 @@ func TestJstack(t *testing.T) {
 
 			testdata := &pb.GetJavaStacksReply{}
 			if test.validate != "" {
-				f, err := os.Open(test.validate)
+				input, err := os.ReadFile(test.validate)
 				if err != nil {
 					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
 				}
-				defer f.Close()
 
-				input, err := ioutil.ReadAll(f)
-				if err != nil {
-					t.Fatalf("%s: Can't read textproto data from %s: %v", test.name, test.validate, err)
-				}
 				if err := prototext.Unmarshal(input, testdata); err != nil {
 					t.Fatalf("%s: Can't unmarshall test data %v", test.name, err)
 				}
