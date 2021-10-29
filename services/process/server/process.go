@@ -115,6 +115,8 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
+	// TODO(jchacon): Push all of this into a util library which validates things and forces
+	//                commands to have an abs path (testing will have to resolve path first).
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
