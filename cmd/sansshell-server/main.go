@@ -9,8 +9,8 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -44,7 +44,7 @@ func choosePolicy() string {
 
 	var policy string
 	if *policyFile != "" {
-		pff, err := ioutil.ReadFile(*policyFile)
+		pff, err := os.ReadFile(*policyFile)
 		if err != nil {
 			log.Fatal(err)
 		}

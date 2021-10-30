@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -126,7 +125,7 @@ func TestRead(t *testing.T) {
 				}
 			}
 
-			contents, err := ioutil.ReadFile(want.Filename)
+			contents, err := os.ReadFile(want.Filename)
 			if err != nil {
 				t.Fatalf("reading test data: %s", err)
 			}
