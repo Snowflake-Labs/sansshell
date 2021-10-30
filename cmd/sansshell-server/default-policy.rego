@@ -36,3 +36,7 @@ allow {
 allow {
 	input.type = "Packages.RepoListRequest"
 }
+
+allow {
+	input.type = "Process.GetJavaStacksRequest"
+}
