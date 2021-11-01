@@ -34,9 +34,9 @@ process_entries : <
   sgid : 5
   suid : 6
   priority : 20
-  scheduling_class : SCHEDULING_CLASS_OTHER
+  scheduling_class : SCHEDULING_CLASS_RR
   flags : 1
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  state : PROCESS_STATE_RUNNING
   ignored_signals : 18446744073709551615
   pending_signals : 1099511631872
   number_of_threads : 2
@@ -50,9 +50,9 @@ process_entries : <
   started_time : "Oct01"
   elapsed_time : "00:00:00"
   nice : -20
-  scheduling_class : SCHEDULING_CLASS_OTHER
+  scheduling_class : SCHEDULING_CLASS_BATCH
   flags : 1
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  state : PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
   state_code : PROCESS_STATE_CODE_HIGH_PRIORITY
   ignored_signals : 18446744073709551615
   number_of_threads : 4
@@ -66,9 +66,9 @@ process_entries : <
   started_time : "Oct01"
   elapsed_time : "00:01:16"
   priority : 20
-  scheduling_class : SCHEDULING_CLASS_OTHER
+  scheduling_class : SCHEDULING_CLASS_ISO
   flags : 1
-  state : PROCESS_STATE_INTERRUPTIBLE_SLEEP
+  state : PROCESS_STATE_STOPPED_JOB_CONTROL
   state_code : PROCESS_STATE_CODE_HIGH_PRIORITY
   state_code : PROCESS_STATE_CODE_SESSION_LEADER
   state_code : PROCESS_STATE_CODE_LOW_PRIORITY

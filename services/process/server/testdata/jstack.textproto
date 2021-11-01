@@ -1,0 +1,135 @@
+stacks : <
+  name : "main"
+  thread_number : 1
+  priority : 5
+  cpu_ms : 6444.38
+  elapsed_sec : 3.042613e+06
+  thread_id : 140155386232832
+  native_thread_id : 32489
+  state : "runnable"
+  pc : 140155508731904
+  stacks : "   java.lang.Thread.State: RUNNABLE"
+  stacks : "\tat java.io.FileOutputStream.writeBytes(java.base@11.0.11/Native "
+           "Method)"
+  stacks : "\tat "
+           "java.io.FileOutputStream.write(java.base@11.0.11/"
+           "FileOutputStream.java:354)"
+  stacks : "\tat "
+           "java.io.BufferedOutputStream.flushBuffer(java.base@11.0.11/"
+           "BufferedOutputStream.java:81)"
+  stacks : "\tat "
+           "java.io.BufferedOutputStream.flush(java.base@11.0.11/"
+           "BufferedOutputStream.java:142)"
+  stacks : "\t- locked <0x000000058deebc98> (a java.io.BufferedOutputStream)"
+  stacks : "\tat "
+           "java.io.PrintStream.write(java.base@11.0.11/PrintStream.java:561)"
+  stacks : "\t- locked <0x000000058deebc70> (a java.io.PrintStream)"
+  stacks : "\tat "
+           "sun.nio.cs.StreamEncoder.writeBytes(java.base@11.0.11/"
+           "StreamEncoder.java:233)"
+  stacks : "\tat "
+           "sun.nio.cs.StreamEncoder.implFlushBuffer(java.base@11.0.11/"
+           "StreamEncoder.java:312)"
+  stacks : "\tat "
+           "sun.nio.cs.StreamEncoder.flushBuffer(java.base@11.0.11/"
+           "StreamEncoder.java:104)"
+  stacks : "\t- locked <0x000000058deebdf0> (a java.io.OutputStreamWriter)"
+  stacks : "\tat "
+           "java.io.OutputStreamWriter.flushBuffer(java.base@11.0.11/"
+           "OutputStreamWriter.java:181)"
+  stacks : "\tat "
+           "java.io.PrintStream.write(java.base@11.0.11/PrintStream.java:606)"
+  stacks : "\t- locked <0x000000058deebc70> (a java.io.PrintStream)"
+  stacks : "\tat "
+           "java.io.PrintStream.print(java.base@11.0.11/PrintStream.java:662)"
+  stacks : "\tat "
+           "org.fusesource.jansi.FilterPrintStream.write(FilterPrintStream."
+           "java:99)"
+  stacks : "\tat "
+           "org.fusesource.jansi.FilterPrintStream.write(FilterPrintStream."
+           "java:107)"
+  stacks : "\tat "
+           "org.fusesource.jansi.FilterPrintStream.print(FilterPrintStream."
+           "java:156)"
+  stacks : "\tat "
+           "com.gradle.maven.scan.extension.internal.capture.j.a.a(SourceFile:"
+           "137)"
+  stacks : "\t- locked <0x00000005ae5fb7e8> (a java.lang.Object)"
+>
+stacks : <
+  name : "Reference Handler"
+  thread_number : 2
+  daemon : true
+  priority : 10
+  cpu_ms : 1.5
+  elapsed_sec : 3.042613e+06
+  thread_id : 140155389480960
+  native_thread_id : 32496
+  state : "waiting on condition"
+  pc : 140154399318016
+  stacks : "   java.lang.Thread.State: RUNNABLE"
+  stacks : "\tat "
+           "java.lang.ref.Reference.waitForReferencePendingList(java.base@11.0."
+           "11/Native Method)"
+  stacks : "\tat "
+           "java.lang.ref.Reference.processPendingReferences(java.base@11.0.11/"
+           "Reference.java:241)"
+  stacks : "\tat "
+           "java.lang.ref.Reference$ReferenceHandler.run(java.base@11.0.11/"
+           "Reference.java:213)"
+>
+stacks : <
+  name : "Finalizer"
+  thread_number : 3
+  daemon : true
+  priority : 8
+  cpu_ms : 0.89
+  elapsed_sec : 3.042613e+06
+  thread_id : 140155389497344
+  native_thread_id : 32497
+  state : "in Object.wait()"
+  pc : 140154398265344
+  stacks : "   java.lang.Thread.State: WAITING (on object monitor)"
+  stacks : "\tat java.lang.Object.wait(java.base@11.0.11/Native Method)"
+  stacks : "\t- waiting on <0x000000058de03fc0> (a "
+           "java.lang.ref.ReferenceQueue$Lock)"
+  stacks : "\tat "
+           "java.lang.ref.ReferenceQueue.remove(java.base@11.0.11/"
+           "ReferenceQueue.java:155)"
+  stacks : "\t- waiting to re-lock in wait() <0x000000058de03fc0> (a "
+           "java.lang.ref.ReferenceQueue$Lock)"
+  stacks : "\tat "
+           "java.lang.ref.ReferenceQueue.remove(java.base@11.0.11/"
+           "ReferenceQueue.java:176)"
+  stacks : "\tat "
+           "java.lang.ref.Finalizer$FinalizerThread.run(java.base@11.0.11/"
+           "Finalizer.java:170)"
+>
+stacks : <
+  name : "Attach Listener"
+  thread_number : 19
+  daemon : true
+  priority : 9
+  cpu_ms : 1.19
+  elapsed_sec : 4723.25
+  thread_id : 140153775460352
+  native_thread_id : 22022
+  state : "waiting on condition"
+  stacks : "   java.lang.Thread.State: RUNNABLE"
+>
+stacks : <
+  name : "VM Thread"
+  cpu_ms : 163082.8
+  elapsed_sec : 3.042613e+06
+  thread_id : 140155389448192
+  native_thread_id : 32495
+  state : "runnable"
+>
+stacks : <
+  name : "GC Thread#0"
+  cpu_ms : 60.02
+  elapsed_sec : 3.042613e+06
+  thread_id : 140155386331136
+  native_thread_id : 32490
+  state : "runnable"
+>

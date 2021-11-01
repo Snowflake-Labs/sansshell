@@ -1,0 +1,9 @@
+stacks : <
+  stacks : "#0  0x00007f9ea41ff4fc in waitpid () from /lib64/libc.so.6"
+  stacks : "#1  0x0000000000440c34 in waitchld.isra.10 ()"
+  stacks : "#2  0x0000000000441eec in wait_for ()"
+  stacks : "#3  0x0000000000433b1e in execute_command_internal ()"
+  stacks : "#4  0x0000000000433d3e in execute_command ()"
+  stacks : "#5  0x000000000041e375 in reader_loop ()"
+  stacks : "#6  0x000000000041c9de in main ()"
+>

@@ -22,6 +22,10 @@ allow {
 }
 
 allow {
+	input.type = "Process.GetStacksRequest"
+}
+
+allow {
 	input.type = "Ansible.RunRequest"
 }
 
@@ -31,4 +35,8 @@ allow {
 
 allow {
 	input.type = "Packages.RepoListRequest"
+}
+
+allow {
+	input.type = "Process.GetJavaStacksRequest"
 }

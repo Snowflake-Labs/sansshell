@@ -20,7 +20,9 @@ import (
 )
 
 var (
-	psBin = flag.String("ps_bin", "/bin/ps", "Location of the ps command")
+	psBin     = flag.String("ps-bin", "/bin/ps", "Path to the ps binary")
+	pstackBin = flag.String("pstack-bin", "", "Path to the pstack binary")
+	gcoreBin  = flag.String("gcore-bin", "", "Path to the gcore binary")
 
 	// This is a var so we can replace for testing.
 	psOptions = func() []string {

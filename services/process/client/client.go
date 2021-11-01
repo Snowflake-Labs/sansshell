@@ -51,27 +51,29 @@ func (i *intList) Set(val string) error {
 }
 
 func init() {
-	subcommands.Register(&processCmd{}, "process")
+	subcommands.Register(&psCmd{}, "process")
+	subcommands.Register(&pstackCmd{}, "process")
+	subcommands.Register(&jstackCmd{}, "process")
 }
 
-type processCmd struct {
+type psCmd struct {
 	pids intList
 }
 
-func (*processCmd) Name() string     { return "ps" }
-func (*processCmd) Synopsis() string { return "Retrieve process list." }
-func (*processCmd) Usage() string {
+func (*psCmd) Name() string     { return "ps" }
+func (*psCmd) Synopsis() string { return "Retrieve process list." }
+func (*psCmd) Usage() string {
 	return `ps:
   Read the process list from the remote machine.
 `
 }
 
-func (p *processCmd) SetFlags(f *flag.FlagSet) {
+func (p *psCmd) SetFlags(f *flag.FlagSet) {
 	f.Var(&p.pids, "pids", "Restrict to only pids listed (separated by comma)")
 }
 
-func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	conn := args[0].(grpc.ClientConnInterface)
 
 	c := pb.NewProcessClient(conn)
 
@@ -170,4 +172,112 @@ func parseState(processState pb.ProcessState, codes []pb.ProcessStateCode) strin
 		}
 	}
 	return state
+}
+
+type pstackCmd struct {
+	pid int64
+}
+
+func (*pstackCmd) Name() string     { return "pstack" }
+func (*pstackCmd) Synopsis() string { return "Retrieve stacks." }
+func (*pstackCmd) Usage() string {
+	return `pstack:
+  Read the stacks for a given process id.
+`
+}
+
+func (p *pstackCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.pid, "pid", 0, "Process to execute pstack against.")
+}
+
+func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if p.pid <= 0 {
+		fmt.Fprintln(os.Stderr, "--pid must be specified")
+		return subcommands.ExitFailure
+	}
+
+	conn := args[0].(grpc.ClientConnInterface)
+
+	c := pb.NewProcessClient(conn)
+
+	req := &pb.GetStacksRequest{
+		Pid: p.pid,
+	}
+
+	resp, err := c.GetStacks(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "GetStacks returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	for _, s := range resp.Stacks {
+		if s.ThreadNumber != 0 {
+			fmt.Fprintf(os.Stdout, "Thread %d (Thread 0x%x (LWP %d)):\n", s.ThreadNumber, s.ThreadId, s.Lwp)
+		}
+		for _, t := range s.Stacks {
+			fmt.Fprintln(os.Stdout, t)
+		}
+	}
+	return subcommands.ExitSuccess
+}
+
+type jstackCmd struct {
+	pid int64
+}
+
+func (*jstackCmd) Name() string     { return "jstack" }
+func (*jstackCmd) Synopsis() string { return "Retrieve java stacks." }
+func (*jstackCmd) Usage() string {
+	return `jstack:
+  Read the java stacks for a given process id.
+`
+}
+
+func (p *jstackCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.pid, "pid", 0, "Process to execute pstack against.")
+}
+
+func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if p.pid <= 0 {
+		fmt.Fprintln(os.Stderr, "--pid must be specified")
+		return subcommands.ExitFailure
+	}
+
+	conn := args[0].(grpc.ClientConnInterface)
+
+	c := pb.NewProcessClient(conn)
+
+	req := &pb.GetJavaStacksRequest{
+		Pid: p.pid,
+	}
+
+	resp, err := c.GetJavaStacks(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "GetJavaStacks returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	for _, s := range resp.Stacks {
+		fmt.Fprintf(os.Stdout, "%q ", s.Name)
+		if s.ThreadNumber != 0 {
+			fmt.Fprintf(os.Stdout, "#%d ", s.ThreadNumber)
+		}
+		daemon := ""
+		if s.Daemon {
+			daemon = "daemon "
+		}
+		fmt.Fprintf(os.Stdout, "%s", daemon)
+		if s.ThreadNumber != 0 {
+			fmt.Fprintf(os.Stdout, "prio=%d ", s.Priority)
+		}
+		fmt.Fprintf(os.Stdout, "os_prio=%d cpu=%fms elapsed=%fs tid=0x%016x nid=0x%x %s ", s.OsPriority, s.CpuMs, s.ElapsedSec, s.ThreadId, s.NativeThreadId, s.State)
+		if s.ThreadNumber != 0 {
+			fmt.Fprintf(os.Stdout, "[0x%016x]\n", s.Pc)
+		}
+		for _, t := range s.Stacks {
+			fmt.Fprintln(os.Stdout, t)
+		}
+		fmt.Fprintln(os.Stdout)
+	}
+	return subcommands.ExitSuccess
 }
