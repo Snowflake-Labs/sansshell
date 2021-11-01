@@ -1,15 +1,14 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"log"
 	"net"
 	"os"
-	"os/exec"
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -50,40 +49,53 @@ func TestExec(t *testing.T) {
 
 	client := pb.NewExecClient(conn)
 
-	// Test 0: Basic functionality
-	command := []string{"echo", "hello world"}
-	resp, err := client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
-	if err != nil {
-		t.Fatalf("Exec failed: %v", err)
+	for _, test := range []struct {
+		name              string
+		bin               string
+		args              []string
+		wantErr           bool
+		returnCodeNonZero bool
+		stdout            string
+	}{
+		{
+			name:   "Basic functionality",
+			bin:    testutil.ResolvePath(t, "echo"),
+			args:   []string{"hello world"},
+			stdout: "hello world\n",
+		},
+		{
+			name:              "Command fails",
+			bin:               testutil.ResolvePath(t, "false"),
+			returnCodeNonZero: true,
+		},
+		{
+			name:    "Non-existant program",
+			bin:     "/something/non-existant",
+			wantErr: true,
+		},
+		{
+			name:    "non-absolute path",
+			bin:     "foo",
+			wantErr: true,
+		},
+	} {
+		resp, err := client.Run(ctx, &pb.ExecRequest{
+			Command: test.bin,
+			Args:    test.args,
+		})
+		t.Logf("%s: resp: %+v", test.name, resp)
+		t.Logf("%s: err: %v", test.name, err)
+		if test.wantErr {
+			if got, want := err != nil, test.wantErr; got != want {
+				t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", test.name, resp)
+			}
+			continue
+		}
+		if got, want := resp.Stdout, test.stdout; string(got) != want {
+			t.Fatalf("%s: stdout doesn't match. Want %q Got %q", test.name, want, got)
+		}
+		if got, want := resp.RetCode != 0, test.returnCodeNonZero; got != want {
+			t.Fatalf("%s: Invalid return codes. Non-zero state doesn't match. Want %t Got %t ReturnCode %d", test.name, want, got, resp.RetCode)
+		}
 	}
-	t.Logf("Response: %+v", resp)
-
-	testCmd := exec.CommandContext(ctx, "echo", "hello world")
-	testResp, err := testCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("Exec for echo failed: %v", err)
-	}
-	if !bytes.Equal(testResp, resp.GetStdout()) {
-		t.Fatalf("contents do not match")
-	}
-
-	// Test 1: Execute false so the command fails but RPC should not.
-	command = []string{"false"}
-	resp, err = client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
-	if err != nil {
-		t.Fatalf("Exec for false failed: %v", err)
-	}
-	t.Logf("Response: %+v", resp)
-
-	if got, want := resp.RetCode, int32(1); got != want {
-		t.Fatalf("Wrong response codes for %q. Got %d want %d", command[0], got, want)
-	}
-
-	// Test 2: Non-existant program.
-	command = []string{"/something/non-existant"}
-	resp, err = client.Run(ctx, &pb.ExecRequest{Command: command[0], Args: command[1:]})
-	if err == nil {
-		t.Fatalf("Expected failure for %q. Got %v", command[0], resp)
-	}
-	t.Logf("Response: %+v", resp)
 }

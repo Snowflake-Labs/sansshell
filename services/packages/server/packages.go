@@ -2,17 +2,16 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"log"
-	"os/exec"
 	"regexp"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -108,17 +107,6 @@ var (
 	}
 )
 
-// The maximum we should allow stdout or stderr to be when sending back in an error string.
-// grpc has limits on how large a returned error can be (generally 4-8k depending on language).
-const MAX_BUF = 1024
-
-func trimString(s string) string {
-	if len(s) > MAX_BUF {
-		s = s[:MAX_BUF]
-	}
-	return s
-}
-
 // server is used to implement the gRPC server
 type server struct{}
 
@@ -154,25 +142,18 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-
-	// These probably should be streaming through a go-routine to rate limit what we
-	// can buffer. In practice output tends to be in the low K range size wise.
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s - %v\nstdout:\n%s\nstderr:\n%s\n%v", cmd.String(), err, trimString(outBuf.String()), trimString(errBuf.String()), err)
+
+	if err := run.WaitError; err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.InstallReply{
-		DebugOutput: outBuf.String(),
+		DebugOutput: run.Stdout.String(),
 	}, nil
 }
 
@@ -211,19 +192,12 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-
-	// These probably should be streaming through a go-routine to rate limit what we
-	// can buffer. In practice output tends to be in the low K range size wise.
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start validate %s: %v", cmd.String(), err)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, trimString(errBuf.String()))
+	if err := run.WaitError; err != nil {
+		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stderr.String()))
 	}
 
 	// A 0 return means we're ok to proceed.
@@ -231,23 +205,18 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if err != nil {
 		return nil, err
 	}
-	errBuf.Reset()
-	outBuf.Reset()
 
-	cmd = exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	run, err = util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
+	if err := run.WaitError; err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
 	}
 
 	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.UpdateReply{
-		DebugOutput: outBuf.String(),
+		DebugOutput: run.Stdout.String(),
 	}, nil
 }
 
@@ -334,28 +303,20 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-
-	// These probably should be streaming through a go-routine to rate limit what we
-	// can buffer. In practice output tends to be in the low K range size wise.
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
+	if err := run.WaitError; err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
 	}
 
 	// This should never return stderr output. If they do something is off.
-	if len(errBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nstdout:\n%s\nstderr:\n%s", cmd.String(), trimString(outBuf.String()), trimString(errBuf.String()))
+	if len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %q\nstdout:\n%s\nstderr:\n%s", command, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
-	return parseListInstallOutput(req.PackageSystem, &outBuf)
+	return parseListInstallOutput(req.PackageSystem, run.Stdout)
 }
 
 func parseRepoListOutput(p pb.PackageSystem, r io.Reader) (*pb.RepoListReply, error) {
@@ -453,29 +414,20 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-
-	// These probably should be streaming through a go-routine to rate limit what we
-	// can buffer. In practice output tends to be in the low K range size wise.
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start %s: %v", cmd.String(), err)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
 	}
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %s: %v", cmd.String(), err)
+	if err := run.WaitError; err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
 	}
 
 	// This should never return stderr output. If they do something is off.
-	if len(errBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %s\nstdout:\n%s\nstderr:\n%s", cmd.String(), trimString(outBuf.String()), trimString(errBuf.String()))
+	if len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %q\nstdout:\n%s\nstderr:\n%s", command, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
-	return parseRepoListOutput(req.PackageSystem, &outBuf)
-
+	return parseRepoListOutput(req.PackageSystem, run.Stdout)
 }
 
 // Install is called to expose this handler to the gRPC server

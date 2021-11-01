@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -63,7 +64,7 @@ func TestInstall(t *testing.T) {
 			return nil, err
 		}
 		cmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
+		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
 	defer func() {
 		generateInstall = savedGenerateInstall
@@ -167,7 +168,7 @@ func TestInstall(t *testing.T) {
 		{
 			name: "bad exit code",
 			generate: func(*pb.InstallRequest) ([]string, error) {
-				return []string{"false"}, nil
+				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
 	} {
@@ -203,7 +204,7 @@ func TestUpdate(t *testing.T) {
 			return nil, err
 		}
 		validateCmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
+		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
 	generateUpdate = func(u *pb.UpdateRequest) ([]string, error) {
 		// Capture what was generated so we can validate it.
@@ -212,7 +213,7 @@ func TestUpdate(t *testing.T) {
 			return nil, err
 		}
 		cmdLine = strings.Join(out, " ")
-		return []string{"echo", "-n", testdataInput}, nil
+		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
 	defer func() {
 		generateValidate = savedGenerateValidate
@@ -352,7 +353,7 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "bad exit code",
 			generate: func(*pb.UpdateRequest) ([]string, error) {
-				return []string{"false"}, nil
+				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
 	} {
@@ -389,7 +390,7 @@ func TestListInstalled(t *testing.T) {
 			return nil, err
 		}
 		cmdLine = strings.Join(out, " ")
-		return []string{"cat", testdataInput}, nil
+		return []string{testutil.ResolvePath(t, "cat"), testdataInput}, nil
 	}
 	defer func() {
 		generateListInstalled = savedGenerateListInstalled
@@ -451,7 +452,7 @@ func TestListInstalled(t *testing.T) {
 
 	// Test 3: Now try with bad input. Should error out.
 	generateListInstalled = func(pb.PackageSystem) ([]string, error) {
-		return []string{"cat", testdataInputBad}, nil
+		return []string{testutil.ResolvePath(t, "cat"), testdataInputBad}, nil
 	}
 	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{
 		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
@@ -475,13 +476,13 @@ func TestListInstalled(t *testing.T) {
 		{
 			name: "non-zero exit",
 			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{"false"}, nil
+				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
 		{
 			name: "stderr output",
 			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{"sh", "-c", "echo foo >&2"}, nil
+				return []string{testutil.ResolvePath(t, "sh"), "-c", "echo foo >&2"}, nil
 			},
 		},
 	} {
@@ -518,7 +519,7 @@ func TestRepoList(t *testing.T) {
 			return nil, err
 		}
 		cmdLine = strings.Join(out, " ")
-		return []string{"cat", testdataInput}, nil
+		return []string{testutil.ResolvePath(t, "cat"), testdataInput}, nil
 	}
 	defer func() {
 		generateRepoList = savedGenerateRepoList
@@ -591,13 +592,13 @@ func TestRepoList(t *testing.T) {
 		{
 			name: "non-zero exit",
 			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{"false"}, nil
+				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
 		{
 			name: "stderr output",
 			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{"sh", "-c", "echo foo >&2"}, nil
+				return []string{testutil.ResolvePath(t, "sh"), "-c", "echo foo >&2"}, nil
 			},
 		},
 	} {

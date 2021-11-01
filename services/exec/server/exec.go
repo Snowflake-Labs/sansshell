@@ -1,16 +1,13 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"log"
-	"os/exec"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // server is used to implement the gRPC server
@@ -20,30 +17,20 @@ type server struct{}
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
 	log.Printf("Received request for Exec.Run: %+v", req)
 
-	cmdName := req.Command
-	cmdArgs := req.Args
-
-	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
-
-	var errBuf, outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start program: %v", err)
+	run, err := util.RunCommand(ctx, req.Command, req.Args)
+	if err != nil {
+		return nil, err
 	}
 
-	err = cmd.Wait()
-	if err != nil {
+	if err := run.WaitError; err != nil {
 		return &pb.ExecResponse{
-			Stdout:  outBuf.Bytes(),
-			Stderr:  errBuf.Bytes(),
-			RetCode: int32(cmd.ProcessState.ExitCode()),
+			Stdout:  run.Stdout.Bytes(),
+			Stderr:  run.Stderr.Bytes(),
+			RetCode: int32(run.ExitCode),
 		}, nil
 	}
 
-	return &pb.ExecResponse{Stderr: errBuf.Bytes(), Stdout: outBuf.Bytes(), RetCode: 0}, nil
+	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: 0}, nil
 }
 
 // Register is called to expose this handler to the gRPC server

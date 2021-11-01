@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -78,105 +79,129 @@ func TestRun(t *testing.T) {
 
 	path := filepath.Join(wd, "testdata", "test.yml")
 
-	// Test 0: A bad command that doesn't exec.
-	*ansiblePlaybookBin = "/non-existant-command"
-	resp, err := client.Run(ctx, &pb.RunRequest{Playbook: path})
-	if err == nil {
-		t.Fatalf("Expected error for bad command. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 1: A command that exits non-zero
-	*ansiblePlaybookBin = "false"
-	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path})
-	if err != nil {
-		t.Fatalf("Unexpected error for non-zero exiting command. %v", err)
-	}
-	t.Log(resp)
-
-	if resp.ReturnCode == 0 {
-		t.Fatalf("Got a 0 return code from false. Reply: %+v", resp)
-	}
-
-	// Test 1: Validate stdout/stderr have expected data.
-	*ansiblePlaybookBin = "sh"
-	cmdArgsTransform = func(input []string) []string {
-		return []string{
-			"-c",
-			"echo foo >&2 && echo bar",
+	for _, test := range []struct {
+		name              string
+		bin               string
+		path              string
+		args              []string
+		user              string
+		vars              []*pb.Var
+		wantErr           bool
+		returnCodeNonZero bool
+		stdout            string
+		stderr            string
+	}{
+		{
+			name:    "A non-absolute bin path",
+			bin:     "something",
+			path:    path,
+			wantErr: true,
+		},
+		{
+			name:    "A bad command that doesn't exec",
+			bin:     "/non-existant-command",
+			path:    path,
+			wantErr: true,
+		},
+		{
+			name:              "A command that exits non-zero",
+			bin:               testutil.ResolvePath(t, "false"),
+			path:              path,
+			returnCodeNonZero: true,
+		},
+		{
+			name:   "Validate stdout/stderr have expected data",
+			bin:    testutil.ResolvePath(t, "sh"),
+			path:   path,
+			args:   []string{"-c", "echo foo >&2 && echo bar"},
+			stdout: "bar\n",
+			stderr: "foo\n",
+		},
+		{
+			name:    "Run without a path set",
+			bin:     testutil.ResolvePath(t, "cat"),
+			wantErr: true,
+		},
+		{
+			name:    "Run without an absolute path",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    "some_path",
+			wantErr: true,
+		},
+		{
+			name:    "Run with an absolute path but points to a directory",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    "/",
+			wantErr: true,
+		},
+		{
+			name:    "absolute path but appends some additional items that would be bad",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    path + " && rm -rf /",
+			wantErr: true,
+		},
+		{
+			name:    "Badly named user",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    path,
+			user:    "user && rm -rf /",
+			wantErr: true,
+		},
+		{
+			name: "Bad Key",
+			bin:  testutil.ResolvePath(t, "cat"),
+			path: path,
+			vars: []*pb.Var{
+				{
+					Key:   "key && rm -rf /",
+					Value: "val",
+				},
+			},
+			wantErr: true,
+		}, {
+			name: "Bad Value",
+			bin:  testutil.ResolvePath(t, "cat"),
+			path: path,
+			vars: []*pb.Var{
+				{
+					Key:   "key",
+					Value: "val && rm -rf /",
+				},
+			},
+			wantErr: true,
+		},
+	} {
+		*ansiblePlaybookBin = test.bin
+		cmdArgsTransform = func(input []string) []string {
+			return test.args
+		}
+		resp, err := client.Run(ctx, &pb.RunRequest{
+			Playbook: test.path,
+			User:     test.user,
+			Vars:     test.vars,
+		})
+		t.Logf("%s: resp: %+v", test.name, resp)
+		t.Logf("%s: err: %v", test.name, err)
+		if test.wantErr {
+			if got, want := err != nil, test.wantErr; got != want {
+				t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", test.name, resp)
+			}
+			continue
+		}
+		if test.returnCodeNonZero && resp.ReturnCode == 0 {
+			t.Fatalf("%s: Invalid return codes. Wanted non-zero and got zero", test.name)
+		}
+		if got, want := resp.Stdout, test.stdout; got != want {
+			t.Fatalf("%s: Stdout doesn't match. Want %q Got %q", test.name, want, got)
+		}
+		if got, want := resp.Stderr, test.stderr; got != want {
+			t.Fatalf("%s: Stderr doesn't match. Want %q Got %q", test.name, want, got)
 		}
 	}
-	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path})
-	if err != nil {
-		t.Fatalf("Unexpected error for stdout/stderr test. %v", err)
-	}
-	if got, want := resp.Stdout, "bar\n"; got != want {
-		t.Errorf("Wrong stdout output. Got %q Want %q", got, want)
-	}
-	if got, want := resp.Stderr, "foo\n"; got != want {
-		t.Errorf("Wrong stderr output. Got %q Want %q", got, want)
-	}
 
-	// Reset for remaining tests
-	*ansiblePlaybookBin = "cat"
-
-	// Test 2: Run without a path set.
-	resp, err = client.Run(ctx, &pb.RunRequest{})
-	if err == nil {
-		t.Fatalf("Expected error for no path. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 3: Run without an absolute path
-	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: "some_path"})
-	if err == nil {
-		t.Fatalf("Expected error for not being an absolute path path. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 4: Run with an absolute path but points to a directory.
-	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: "/"})
-	if err == nil {
-		t.Fatalf("Expected error for playbook being a directory. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 5: Run with an absolute path but appends some additional items that would be bad
-	//         to pass to the shell.
-	resp, err = client.Run(ctx, &pb.RunRequest{Playbook: path + " && rm -rf /"})
-	if err == nil {
-		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 5: Run with a badly named user.
-	resp, err = client.Run(ctx, &pb.RunRequest{
-		Playbook: path,
-		User:     "user && rm -rf /",
-	})
-	if err == nil {
-		t.Fatalf("Expected error for playbook not being a valid file. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 6: A key/value with potentially bad things to pass to a shell
-	resp, err = client.Run(ctx, &pb.RunRequest{
-		Playbook: path,
-		Vars: []*pb.Var{
-			{
-				Key:   "key",
-				Value: "val && rm -rf /",
-			},
-		},
-	})
-	if err == nil {
-		t.Fatalf("Expected error for bad key/value. Instead got: +%v", resp)
-	}
-	t.Log(err)
-
-	// Test 7: Table driven test of various arg combos.
-	//         Playbook arg is the same for all and added below
-	//         at the top of test logic each time.
+	// Table driven test of various arg combos.
+	// Playbook arg is the same for all and added below
+	// at the top of test logic each time.
 	baseArgs := []string{
 		"-i",
 		"localhost,",
@@ -251,7 +276,7 @@ func TestRun(t *testing.T) {
 			diff = cmp.Diff(input, test.wantArgs)
 			return []string{"/dev/null"}
 		}
-		resp, err = client.Run(ctx, test.req)
+		resp, err := client.Run(ctx, test.req)
 		if err != nil {
 			t.Fatalf("Unexpected error checking %s: %v", test.name, err)
 		}
