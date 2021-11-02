@@ -419,12 +419,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 		return nil, err
 	}
 	if err := run.WaitError; err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
-	}
-
-	// This should never return stderr output. If they do something is off.
-	if len(run.Stderr.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %q\nstdout:\n%s\nstderr:\n%s", command, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return parseRepoListOutput(req.PackageSystem, run.Stdout)

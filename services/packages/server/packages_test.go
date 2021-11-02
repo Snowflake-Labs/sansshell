@@ -595,12 +595,6 @@ func TestRepoList(t *testing.T) {
 				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
-		{
-			name: "stderr output",
-			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{testutil.ResolvePath(t, "sh"), "-c", "echo foo >&2"}, nil
-			},
-		},
 	} {
 		generateRepoList = test.generate
 		resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
