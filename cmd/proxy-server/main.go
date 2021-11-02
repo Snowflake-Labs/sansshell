@@ -32,22 +32,24 @@ func main() {
 
 	serverCreds, err := mtls.LoadServerCredentials(ctx, *credSource)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("mtls.LoadServerCredentials(%s) %v", *credSource, err)
 	}
 	g := grpc.NewServer(grpc.Creds(serverCreds))
 	clientCreds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("mtls.LoadClientCredentials(%s) %v", *credSource, err)
 	}
 	targetDialer := server.NewDialer(grpc.WithTransportCredentials(clientCreds))
 	server := server.New(targetDialer)
 	server.Register(g)
+	log.Println("initialized Proxy service using credentials from", *credSource)
 
 	lis, err := net.Listen("tcp", *hostport)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("net.Listen(%s): %v", *hostport, err)
 	}
+	log.Println("listening on", *hostport)
 	if err := g.Serve(lis); err != nil {
-		log.Fatal(err)
+		log.Fatalf("gRPCServer.Serve() %v", err)
 	}
 }

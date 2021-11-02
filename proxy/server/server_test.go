@@ -271,21 +271,42 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 		t.Fatalf("Send(%v) err was %v, want nil", req, err)
 	}
 
-	// We send once request, but we'll get two replies
-	for i := 0; i < 2; i++ {
+	// We send once request, but we'll get 4 replies:
+	// one each of streamdata and server close for each
+	// stream.
+	for i := 0; i < 4; i++ {
 		reply := testutil.Exchange(t, proxyStream, nil)
-		ids, data := testutil.UnpackStreamData(t, reply)
-		want := &td.TestResponse{}
-		switch ids[0] {
-		case fooId:
-			want.Output = "foo:123 Foo"
-		case barId:
-			want.Output = "bar:456 Foo"
+		switch reply.Reply.(type) {
+		case *pb.ProxyReply_ServerClose:
+			sc := reply.GetServerClose()
+			ids := sc.StreamIds
+			switch ids[0] {
+			case fooId:
+				// expected
+			case barId:
+				// expected
+			default:
+				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
+			}
+			if sc.GetStatus() != nil {
+				t.Fatalf("got ServerClose with error %v, want nil", sc.GetStatus())
+			}
+		case *pb.ProxyReply_StreamData:
+			ids, data := testutil.UnpackStreamData(t, reply)
+			want := &td.TestResponse{}
+			switch ids[0] {
+			case fooId:
+				want.Output = "foo:123 Foo"
+			case barId:
+				want.Output = "bar:456 Foo"
+			default:
+				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
+			}
+			if !proto.Equal(want, data) {
+				t.Errorf("proto.Equal(%v, %v) for id %d was false, want true", ids[0], want, data)
+			}
 		default:
-			t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
-		}
-		if !proto.Equal(want, data) {
-			t.Errorf("proto.Equal(%v, %v) for id %d was false, want true", ids[0], want, data)
+			t.Fatalf("unexpected reply type: %T", reply.Reply)
 		}
 	}
 }

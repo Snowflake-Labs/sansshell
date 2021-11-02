@@ -41,7 +41,7 @@ func TestEmptyStreamSet(t *testing.T) {
 		select {
 		case <-finishedWait:
 			return
-		case <-time.After(time.Second * 1):
+		case <-time.After(time.Second * 5):
 			t.Fatal("TargetStreamSet.Wait() blocked on empty set, want no block")
 		}
 	}()
