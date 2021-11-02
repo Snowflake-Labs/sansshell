@@ -34,6 +34,7 @@ type ProxyRet struct {
 	Error  error
 }
 
+// InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
 func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (chan *ProxyRet, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
@@ -44,10 +45,12 @@ type ProxyMany struct {
 	Args   interface{}
 }
 
+// InvokeManyMany is used in proto generated code to implemened unary ManyMany methods doing N:N calls to the proxy.
 func (p *ProxyConn) InvokeManyMany(ctx context.Context, calls []ProxyMany, opts ...grpc.CallOption) (chan *ProxyRet, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
+// Close tears down the ProxyConn and closes all connections to it.
 func (p *ProxyConn) Close() error {
 	return p.cc.Close()
 }
