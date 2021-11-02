@@ -1,3 +1,5 @@
+// package server provides the server-side implementation of the
+// sansshell proxy server.
 package server
 
 import (

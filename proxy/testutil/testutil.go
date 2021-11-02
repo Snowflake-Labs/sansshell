@@ -1,3 +1,5 @@
+// package testutil contains helpers and utilities for
+// writing unittests against the sansshell proxy.
 package testutil
 
 import (

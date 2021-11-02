@@ -257,6 +257,39 @@ func TestProxyServerUnaryCall(t *testing.T) {
 	}
 }
 
+func TestProxyServerUnaryFanout(t *testing.T) {
+	ctx := context.Background()
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+	proxyStream := startTestProxy(ctx, t, testServerMap)
+
+	fooId := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+	barId := testutil.MustStartStream(t, proxyStream, "bar:456", "/Testdata.TestService/TestUnary")
+
+	req := testutil.PackStreamData(t, &td.TestRequest{Input: "Foo"}, fooId, barId)
+
+	if err := proxyStream.Send(req); err != nil {
+		t.Fatalf("Send(%v) err was %v, want nil", req, err)
+	}
+
+	// We send once request, but we'll get two replies
+	for i := 0; i < 2; i++ {
+		reply := testutil.Exchange(t, proxyStream, nil)
+		ids, data := testutil.UnpackStreamData(t, reply)
+		want := &td.TestResponse{}
+		switch ids[0] {
+		case fooId:
+			want.Output = "foo:123 Foo"
+		case barId:
+			want.Output = "bar:456 Foo"
+		default:
+			t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
+		}
+		if !proto.Equal(want, data) {
+			t.Errorf("proto.Equal(%v, %v) for id %d was false, want true", ids[0], want, data)
+		}
+	}
+}
+
 func TestProxyServerServerStream(t *testing.T) {
 	ctx := context.Background()
 	testServerMap := startTestDataServers(t, "foo:456")
@@ -279,6 +312,51 @@ func TestProxyServerServerStream(t *testing.T) {
 		if !proto.Equal(want, data) {
 			t.Errorf("Server response %d, proto.Equal(%v, %v) was false, want true", i, want, data)
 		}
+	}
+}
+
+func TestProxyServerClientStream(t *testing.T) {
+	ctx := context.Background()
+
+	testServerMap := startTestDataServers(t, "foo:456")
+	proxyStream := startTestProxy(ctx, t, testServerMap)
+
+	streamId := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestClientStream")
+
+	req := testutil.PackStreamData(t, &td.TestRequest{Input: "Foo"}, streamId)
+
+	for i := 0; i < 3; i++ {
+		if err := proxyStream.Send(req); err != nil {
+			t.Fatalf("%d : proxyStream.Send(%v), err was %v, want nil", i, req, err)
+		}
+	}
+
+	// Send a half-close, and exchange it for the reply
+	hc := &pb.ProxyRequest{
+		Request: &pb.ProxyRequest_ClientClose{
+			ClientClose: &pb.ClientClose{
+				StreamIds: []uint64{streamId},
+			},
+		},
+	}
+
+	want := &td.TestResponse{
+		Output: "foo:456 Foo,Foo,Foo",
+	}
+	reply := testutil.Exchange(t, proxyStream, hc)
+	_, data := testutil.UnpackStreamData(t, reply)
+	if !proto.Equal(want, data) {
+		t.Errorf("client stream reply: proto.Equal(%v, %v) was false, want true", want, data)
+	}
+
+	// Final status
+	reply = testutil.Exchange(t, proxyStream, nil)
+	sc := reply.GetServerClose()
+	if sc == nil {
+		t.Fatalf("expected reply of type ServerClose, got %v", reply)
+	}
+	if sc.GetStatus() != nil {
+		t.Errorf("ServerClose.Status, want nil, got %+v", sc.GetStatus())
 	}
 }
 
