@@ -1,0 +1,8 @@
+#0  0x00007f9ea41ff4fc in waitpid () from /lib64/libc.so.6
+#1  0x0000000000440c34 in waitchld.isra.10 ()
+#2  0x0000000000441eec in wait_for ()
+#3  0x0000000000433b1e in execute_command_internal ()
+#4  0x0000000000433d3e in execute_command ()
+#5  0x000000000041e375 in reader_loop ()
+
+#6  0x000000000041c9de in main ()

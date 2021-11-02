@@ -1,0 +1,31 @@
+Thread 73 (Thread zzzzzzc6aa9700 (LWP 30372)):
+#0  0x00007f42c8a2fa35 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+#1  0x00007f42c7972af3 in os::PlatformEvent::park() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#2  0x00007f42c791b9f8 in Monitor::IWait(Thread*, long) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#3  0x00007f42c791c9ee in Monitor::wait(bool, long, bool) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#4  0x00007f42c7ba9ee1 in Threads::destroy_vm() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#5  0x00007f42c7682280 in jni_DestroyJavaVM () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#6  0x00007f42c8817ecc in JavaMain () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/bin/../lib/jli/libjli.so
+#7  0x00007f42c8a2bea5 in start_thread () from /lib64/libpthread.so.0
+#8  0x00007f42c83409fd in clone () from /lib64/libc.so.6
+Thread 72 (Thread 0x7f42c5c2c700 (LWP 30376)):
+#0  0x00007f42c8a31b3b in do_futex_wait.constprop.1 () from /lib64/libpthread.so.0
+#1  0x00007f42c8a31bcf in __new_sem_wait_slow.constprop.0 () from /lib64/libpthread.so.0
+#2  0x00007f42c8a31c6b in sem_wait@@GLIBC_2.2.5 () from /lib64/libpthread.so.0
+#3  0x00007f42c7a27ef2 in PosixSemaphore::wait() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#4  0x00007f42c7c36105 in SemaphoreGangTaskDispatcher::worker_wait_for_task() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#5  0x00007f42c7c35151 in GangWorker::loop() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#6  0x00007f42c7ba5aa9 in Thread::call_run() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#7  0x00007f42c7968f0e in thread_native_entry(Thread*) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#8  0x00007f42c8a2bea5 in start_thread () from /lib64/libpthread.so.0
+#9  0x00007f42c83409fd in clone () from /lib64/libc.so.6
+Thread 71 (Thread 0x7f42c47a8700 (LWP 30377)):
+#0  0x00007f42c8a2fa35 in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+#1  0x00007f42c7972af3 in os::PlatformEvent::park() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#2  0x00007f42c791b9f8 in Monitor::IWait(Thread*, long) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#3  0x00007f42c791cae9 in Monitor::wait(bool, long, bool) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#4  0x00007f42c7c39961 in YieldingFlexibleGangWorker::loop() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#5  0x00007f42c7ba5aa9 in Thread::call_run() () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#6  0x00007f42c7968f0e in thread_native_entry(Thread*) () from /var/lib/snapd/snap/intellij-idea-community/310/jbr/lib/server/libjvm.so
+#7  0x00007f42c8a2bea5 in start_thread () from /lib64/libpthread.so.0
+#8  0x00007f42c83409fd in clone () from /lib64/libc.so.6

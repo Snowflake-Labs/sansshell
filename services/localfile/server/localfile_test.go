@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -146,7 +145,7 @@ func TestRead(t *testing.T) {
 					t.Fatalf("Can't write into buffer: %v", err)
 				}
 			}
-			contents, err := ioutil.ReadFile(tc.Filename)
+			contents, err := os.ReadFile(tc.Filename)
 			if err != nil {
 				t.Fatalf("reading test data: %s", err)
 			}

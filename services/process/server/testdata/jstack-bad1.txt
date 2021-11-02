@@ -1,0 +1,46 @@
+"main" #1 prio=5 os_prio=A cpu=6444.38ms elapsed=3042612.93s tid=0x00007f7878028000 nid=0x7ee9 runnable  [0x00007f787f4fb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.io.FileOutputStream.writeBytes(java.base@11.0.11/Native Method)
+	at java.io.FileOutputStream.write(java.base@11.0.11/FileOutputStream.java:354)
+	at java.io.BufferedOutputStream.flushBuffer(java.base@11.0.11/BufferedOutputStream.java:81)
+	at java.io.BufferedOutputStream.flush(java.base@11.0.11/BufferedOutputStream.java:142)
+	- locked <0x000000058deebc98> (a java.io.BufferedOutputStream)
+	at java.io.PrintStream.write(java.base@11.0.11/PrintStream.java:561)
+	- locked <0x000000058deebc70> (a java.io.PrintStream)
+	at sun.nio.cs.StreamEncoder.writeBytes(java.base@11.0.11/StreamEncoder.java:233)
+	at sun.nio.cs.StreamEncoder.implFlushBuffer(java.base@11.0.11/StreamEncoder.java:312)
+	at sun.nio.cs.StreamEncoder.flushBuffer(java.base@11.0.11/StreamEncoder.java:104)
+	- locked <0x000000058deebdf0> (a java.io.OutputStreamWriter)
+	at java.io.OutputStreamWriter.flushBuffer(java.base@11.0.11/OutputStreamWriter.java:181)
+	at java.io.PrintStream.write(java.base@11.0.11/PrintStream.java:606)
+	- locked <0x000000058deebc70> (a java.io.PrintStream)
+	at java.io.PrintStream.print(java.base@11.0.11/PrintStream.java:662)
+	at org.fusesource.jansi.FilterPrintStream.write(FilterPrintStream.java:99)
+	at org.fusesource.jansi.FilterPrintStream.write(FilterPrintStream.java:107)
+	at org.fusesource.jansi.FilterPrintStream.print(FilterPrintStream.java:156)
+	at com.gradle.maven.scan.extension.internal.capture.j.a.a(SourceFile:137)
+	- locked <0x00000005ae5fb7e8> (a java.lang.Object)
+
+"Reference Handler" #2 daemon prio=10 os_prio=0 cpu=1.50ms elapsed=3042612.90s tid=0x00007f7878341000 nid=0x7ef0 waiting on condition  [0x00007f783d2f6000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.ref.Reference.waitForReferencePendingList(java.base@11.0.11/Native Method)
+	at java.lang.ref.Reference.processPendingReferences(java.base@11.0.11/Reference.java:241)
+	at java.lang.ref.Reference$ReferenceHandler.run(java.base@11.0.11/Reference.java:213)
+
+"Finalizer" #3 daemon prio=8 os_prio=0 cpu=0.89ms elapsed=3042612.90s tid=0x00007f7878345000 nid=0x7ef1 in Object.wait()  [0x00007f783d1f5000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait(java.base@11.0.11/Native Method)
+	- waiting on <0x000000058de03fc0> (a java.lang.ref.ReferenceQueue$Lock)
+	at java.lang.ref.ReferenceQueue.remove(java.base@11.0.11/ReferenceQueue.java:155)
+	- waiting to re-lock in wait() <0x000000058de03fc0> (a java.lang.ref.ReferenceQueue$Lock)
+	at java.lang.ref.ReferenceQueue.remove(java.base@11.0.11/ReferenceQueue.java:176)
+	at java.lang.ref.Finalizer$FinalizerThread.run(java.base@11.0.11/Finalizer.java:170)
+
+"Attach Listener" #19 daemon prio=9 os_prio=0 cpu=1.19ms elapsed=4723.25s tid=0x00007f7818001000 nid=0x5606 waiting on condition  [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+
+"VM Thread" os_prio=0 cpu=163082.79ms elapsed=3042612.91s tid=0x00007f7878339000 nid=0x7eef runnable  
+
+"GC Thread#0" os_prio=0 cpu=60.02ms elapsed=3042612.93s tid=0x00007f7878040000 nid=0x7eea runnable  
+
+

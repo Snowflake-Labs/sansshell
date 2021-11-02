@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -396,15 +395,9 @@ func TestListInstalled(t *testing.T) {
 		generateListInstalled = savedGenerateListInstalled
 	}()
 
-	f, err := os.Open(testdataGolden)
+	input, err := os.ReadFile(testdataGolden)
 	if err != nil {
-		t.Fatalf("Can't open testdata golden %s: %v", testdataGolden, err)
-	}
-	defer f.Close()
-
-	input, err := ioutil.ReadAll(f)
-	if err != nil {
-		t.Fatalf("Can't read textproto data from %s: %v", testdataGolden, err)
+		t.Fatalf("Can't read testdata golden  from %s: %v", testdataGolden, err)
 	}
 
 	testdata := &pb.ListInstalledReply{}
@@ -531,15 +524,9 @@ func TestRepoList(t *testing.T) {
 		generateRepoList = savedGenerateRepoList
 	}()
 
-	f, err := os.Open(testdataGolden)
+	input, err := os.ReadFile(testdataGolden)
 	if err != nil {
-		t.Fatalf("Can't open testdata golden %s: %v", testdataGolden, err)
-	}
-	defer f.Close()
-
-	input, err := ioutil.ReadAll(f)
-	if err != nil {
-		t.Fatalf("Can't read textproto data from %s: %v", testdataGolden, err)
+		t.Fatalf("Can't read testdata golde from %s: %v", testdataGolden, err)
 	}
 
 	testdata := &pb.RepoListReply{}
