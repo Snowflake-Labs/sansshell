@@ -14,7 +14,8 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
-// A TargetDialer makes grpc connections to target servers.
+// A TargetDialer is used by the proxy server to make connections
+// to requested targets.
 type TargetDialer interface {
 	DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error)
 }
@@ -44,14 +45,15 @@ type Server struct {
 	dialer TargetDialer
 }
 
+// Register registers this server with the given ServiceRegistar
+// (typically a grpc.Server)
 func (s *Server) Register(sr grpc.ServiceRegistrar) {
 	pb.RegisterProxyServer(sr, s)
 }
 
-// Creates a new Server using the supplied TargetDialer for creating
-// connections to target servers, and a service map loaded from
-// the set of protocol buffer files currently available in the global
-// scope.
+// Creates a new Server which will use the supplied TargetDialer
+// for opening new target connections, and the global protobuf
+// registry to resolve service methods.
 func New(dialer TargetDialer) *Server {
 	return NewWithServiceMap(dialer, LoadGlobalServiceMap())
 }
@@ -68,7 +70,7 @@ func NewWithServiceMap(dialer TargetDialer, serviceMap map[string]*ServiceMethod
 // stream which manages requests to a set of one or more backend
 // target servers.
 func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
-	log.Println("Recieved proxy request")
+	log.Println("Received new proxy stream request")
 
 	requestChan := make(chan *pb.ProxyRequest)
 	replyChan := make(chan *pb.ProxyReply)
@@ -168,11 +170,13 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 	// be removed from the stream set.
 	doneChan := make(chan uint64)
 
+loop:
 	for {
 		select {
 		case <-ctx.Done():
-			// Our context has ended.
-			return ctx.Err()
+			// Our context has ended. This should propogate automtically
+			// to all target streams.
+			break loop
 		case closedStream := <-doneChan:
 			// A stream has closed, and sent its final ServerClose status.
 			// Remove it from the active streams list. Further messages
@@ -190,8 +194,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 				// In either case, we should let the target streams
 				// know that no further requests will be arriving.
 				streamSet.ClientCloseAll()
-				streamSet.Wait()
-				return ctx.Err()
+				break loop
 			}
 			// We have a new request.
 			switch req.Request.(type) {
@@ -214,16 +217,6 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 			}
 		}
 	}
-}
-
-func convertStatus(s *status.Status) *pb.Status {
-	if s == nil {
-		return nil
-	}
-	p := s.Proto()
-	return &pb.Status{
-		Code:    p.Code,
-		Message: p.Message,
-		Details: p.Details,
-	}
+	streamSet.Wait()
+	return ctx.Err()
 }

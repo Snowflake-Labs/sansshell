@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package Testdata;
 
-option go_package = "github.com/Snowflake-Labs/sansshell/proxy/server/testdata";
+option go_package = "github.com/Snowflake-Labs/sansshell/proxy/testdata";
 
 message TestRequest {
   string input = 1;

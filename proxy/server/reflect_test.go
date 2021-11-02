@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/proto"
-	// make the testdata definitions available.
-	testpb "github.com/Snowflake-Labs/sansshell/proxy/server/testdata"
+
+	testpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 )
 
 func TestLoadServiceMap(t *testing.T) {

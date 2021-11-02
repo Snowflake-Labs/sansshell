@@ -10,8 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
-
-	_ "github.com/Snowflake-Labs/sansshell/proxy/server/testdata"
+	_ "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 )
 
 // A TargetDialer than returns an error for all Dials
