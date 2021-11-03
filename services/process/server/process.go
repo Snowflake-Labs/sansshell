@@ -2,16 +2,15 @@ package server
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
-	"os/exec"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,17 +25,6 @@ var (
 	jstackBin = flag.String("jstack-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jstack", "Path to the jstack binary")
 	jmapBin   = flag.String("jmap-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jmap", "Path to the jmap binary")
 )
-
-// The maximum we should allow stdout or stderr to be when sending back in an error string.
-// grpc has limits on how large a returned error can be (generally 4-8k depending on language).
-const MAX_BUF = 1024
-
-func trimString(s string) string {
-	if len(s) > MAX_BUF {
-		s = s[:MAX_BUF]
-	}
-	return s
-}
 
 // Vars so we can replace for testing.
 var (
@@ -60,25 +48,20 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	options := psOptions()
 
 	// We gather all the processes up and then filter by pid if needed at the end.
-	cmd := exec.CommandContext(ctx, cmdName, options...)
-	var stderrBuf, stdoutBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	run, err := util.RunCommand(ctx, cmdName, options)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
+	if err := run.Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
-	if len(stderrBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", trimString(stderrBuf.String()))
+	if len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
 	}
 
-	entries, err := parser(&stdoutBuf)
+	entries, err := parser(run.Stdout)
 
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unexpected parsing error: %v", err)
@@ -120,25 +103,20 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
-	cmd := exec.CommandContext(ctx, cmdName, options...)
-	var stderrBuf, stdoutBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	run, err := util.RunCommand(ctx, cmdName, options)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
+	if err := run.Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
-	if len(stderrBuf.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", trimString(stderrBuf.String()))
+	if len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
 	}
 
-	scanner := bufio.NewScanner(&stdoutBuf)
+	scanner := bufio.NewScanner(run.Stdout)
 	out := &pb.GetStacksReply{}
 
 	numEntries := 0
@@ -201,22 +179,17 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	cmdName := *jstackBin
 	options := jstackOptions(req)
 
-	cmd := exec.CommandContext(ctx, cmdName, options...)
-	var stderrBuf, stdoutBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	cmd.Stdin = nil
-
-	if err := cmd.Start(); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+	run, err := util.RunCommand(ctx, cmdName, options)
+	if err != nil {
+		return nil, err
 	}
 
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
-	if err := cmd.Wait(); err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, trimString(stderrBuf.String()))
+	if err := run.Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
-	scanner := bufio.NewScanner(&stdoutBuf)
+	scanner := bufio.NewScanner(run.Stdout)
 	out := &pb.GetJavaStacksReply{}
 
 	numEntries := 0
