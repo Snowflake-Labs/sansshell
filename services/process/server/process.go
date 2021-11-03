@@ -5,7 +5,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -40,10 +43,39 @@ var (
 		}
 	}
 
-	gcoreOptions = func(req *pb.GetCoreRequest) []string {
-		return []string{
-			fmt.Sprintf("%d", req.Pid),
+	// This will return options passed to the gcore command and the path to the resulting core file.
+	// The file will be placed in a temporary directory and that entire directory should be cleaned
+	// by the caller.
+	// TODO(jchacon): This is annoying as it requires a file in order to work. We should be able to
+	//                stream the data using Googles opensource library: https://code.google.com/archive/p/google-coredumper/
+	gcoreOptionsAndLocation = func(req *pb.GetCoreRequest) ([]string, string, error) {
+		dir, err := os.MkdirTemp(os.TempDir(), "cores")
+		if err != nil {
+			return nil, "", err
 		}
+		file := filepath.Join(dir, fmt.Sprintf("core.%d", req.Pid))
+		return []string{
+			"-o",
+			file,
+			fmt.Sprintf("%d", req.Pid),
+		}, file, nil
+	}
+
+	// This will return options passed to the gcore command and the path to the resulting core file.
+	// The file will be placed in a temporary directory and that entire directory should be cleaned
+	// by the caller.
+	// TODO(jchacon): This is annoying as it requires a file in order to work. We should be able to
+	//                stream the data somehow though that may require a private fork of jmap.
+	jmapOptionsAndLocation = func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
+		dir, err := os.MkdirTemp(os.TempDir(), "heaps")
+		if err != nil {
+			return nil, "", err
+		}
+		file := filepath.Join(dir, "heap.bin")
+		return []string{
+			fmt.Sprintf("-dump:format=b,file=%s", file),
+			fmt.Sprintf("%d", req.Pid),
+		}, file, nil
 	}
 )
 
@@ -104,8 +136,6 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	// TODO(jchacon): Push all of this into a util library which validates things and forces
-	//                commands to have an abs path (testing will have to resolve path first).
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
@@ -309,8 +339,20 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
+	if req.Destination == pb.BlobDestination_BLOB_DESTINATION_UNKNOWN {
+		req.Destination = pb.BlobDestination_BLOB_DESTINATION_STREAM
+	}
+
+	if req.Destination != pb.BlobDestination_BLOB_DESTINATION_STREAM {
+		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+	}
+
 	cmdName := *gcoreBin
-	options := gcoreOptions(req)
+	options, file, err := gcoreOptionsAndLocation(req)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't generate options/core file location: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(file)) // clean up
 
 	run, err := util.RunCommand(stream.Context(), cmdName, options)
 	if err != nil {
@@ -325,11 +367,95 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 		return status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
 	}
 
-	return status.Error(codes.Unimplemented, "not implemented")
+	f, err := os.Open(file)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
+	}
+	defer f.Close()
+
+	b := make([]byte, util.StreamingChunkSize)
+	for {
+		n, err := f.Read(b)
+		// We're done on EOF.
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+		}
+
+		// Only send over the number of bytes we actually read or
+		// else we'll send over garbage in the last packet potentially.
+		if err := stream.Send(&pb.GetCoreReply{Data: b[:n]}); err != nil {
+			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		}
+	}
+	return nil
 }
 
 func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Process_GetJavaHeapDumpServer) error {
-	return status.Error(codes.Unimplemented, "not implemented")
+	log.Printf("Received request for GetJavaHeapDump: %+v", req)
+
+	// This is tied to gcore so either an OS provides it or it doesn't.
+	if *jmapBin == "" {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	if req.Pid <= 0 {
+		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+
+	if req.Destination == pb.BlobDestination_BLOB_DESTINATION_UNKNOWN {
+		req.Destination = pb.BlobDestination_BLOB_DESTINATION_STREAM
+	}
+
+	if req.Destination != pb.BlobDestination_BLOB_DESTINATION_STREAM {
+		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+	}
+
+	cmdName := *jmapBin
+	options, file, err := jmapOptionsAndLocation(req)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't generate options/heap dump location: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+	run, err := util.RunCommand(stream.Context(), cmdName, options)
+	if err != nil {
+		return err
+	}
+
+	// Don't care about stderr output since jmap produces some debug that way.
+	if err := run.WaitError; err != nil {
+		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	}
+
+	f, err := os.Open(file)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
+	}
+	defer f.Close()
+
+	b := make([]byte, util.StreamingChunkSize)
+	for {
+		n, err := f.Read(b)
+		// We're done on EOF.
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+		}
+
+		// Only send over the number of bytes we actually read or
+		// else we'll send over garbage in the last packet potentially.
+		if err := stream.Send(&pb.GetJavaHeapDumpReply{Data: b[:n]}); err != nil {
+			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		}
+	}
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server
