@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -57,11 +58,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
 		os.Exit(1)
 	}
-	if *proxyAddr == "" {
-		defer conn.(*grpc.ClientConn).Close()
-	} else {
-		defer conn.(*proxy.ProxyConn).Close()
-	}
+	defer func() {
+		if closer, ok := conn.(io.Closer); ok {
+			closer.Close()
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
