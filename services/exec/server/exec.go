@@ -22,7 +22,7 @@ func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResp
 		return nil, err
 	}
 
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return &pb.ExecResponse{
 			Stdout:  run.Stdout.Bytes(),
 			Stderr:  run.Stderr.Bytes(),

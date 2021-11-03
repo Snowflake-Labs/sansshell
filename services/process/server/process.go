@@ -53,7 +53,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 		return nil, err
 	}
 
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
@@ -108,7 +108,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, err
 	}
 
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
@@ -185,7 +185,7 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	}
 
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 

@@ -147,7 +147,7 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, err
 	}
 
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -196,7 +196,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if err != nil {
 		return nil, err
 	}
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stderr.String()))
 	}
 
@@ -210,7 +210,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if err != nil {
 		return nil, err
 	}
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
 	}
 
@@ -307,7 +307,7 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	if err != nil {
 		return nil, err
 	}
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
 	}
 
@@ -418,7 +418,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 	if err != nil {
 		return nil, err
 	}
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 

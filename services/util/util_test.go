@@ -29,9 +29,9 @@ func TestRunCommand(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "non-existant binary",
-			bin:     "/non-existant-path",
-			wantErr: true,
+			name:              "non-existant binary",
+			bin:               "/non-existant-path",
+			returnCodeNonZero: true,
 		},
 		{
 			name:   "Command with stdout and stderr",
@@ -39,6 +39,11 @@ func TestRunCommand(t *testing.T) {
 			args:   []string{"-c", "echo foo >&2 && echo bar"},
 			stdout: "bar\n",
 			stderr: "foo\n",
+		},
+		{
+			name:   "Verify clean environment",
+			bin:    testutil.ResolvePath(t, "env"),
+			stdout: "",
 		},
 		{
 			name:              "error codes",
