@@ -39,6 +39,12 @@ var (
 			fmt.Sprintf("%d", req.Pid),
 		}
 	}
+
+	gcoreOptions = func(req *pb.GetCoreRequest) []string {
+		return []string{
+			fmt.Sprintf("%d", req.Pid),
+		}
+	}
 )
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
@@ -292,6 +298,33 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 }
 
 func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer) error {
+	log.Printf("Received request for GetCore: %+v", req)
+
+	// This is tied to gcore so either an OS provides it or it doesn't.
+	if *gcoreBin == "" {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	if req.Pid <= 0 {
+		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+
+	cmdName := *gcoreBin
+	options := gcoreOptions(req)
+
+	run, err := util.RunCommand(stream.Context(), cmdName, options)
+	if err != nil {
+		return err
+	}
+
+	if err := run.WaitError; err != nil {
+		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	}
+
+	if len(run.Stderr.String()) != 0 {
+		return status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
+	}
+
 	return status.Error(codes.Unimplemented, "not implemented")
 }
 
