@@ -18,6 +18,9 @@ import (
 
 // A TargetDialer is used by the proxy server to make connections
 // to requested targets.
+// It encapsulates the various low-level details of making target
+// connections (such as client credentials, deadlines, etc) which
+// the proxy can use without needing to understand.
 type TargetDialer interface {
 	DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error)
 }
