@@ -1,4 +1,4 @@
-# SanShell
+# SansShell
 A non-interactive daemon for host management
 
 SansShell is primarily gRPC server with a variety of options for localhost
