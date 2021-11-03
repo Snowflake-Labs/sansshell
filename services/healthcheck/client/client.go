@@ -30,7 +30,7 @@ func (*healthcheckCmd) Usage() string {
 func (p *healthcheckCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	conn := args[0].(grpc.ClientConnInterface)
 	c := pb.NewHealthCheckClient(conn)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
