@@ -35,7 +35,7 @@ type ProxyRet struct {
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
-func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (chan *ProxyRet, error) {
+func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
@@ -46,7 +46,7 @@ type ProxyMany struct {
 }
 
 // InvokeManyMany is used in proto generated code to implemened unary ManyMany methods doing N:N calls to the proxy.
-func (p *ProxyConn) InvokeManyMany(ctx context.Context, calls []ProxyMany, opts ...grpc.CallOption) (chan *ProxyRet, error) {
+func (p *ProxyConn) InvokeManyMany(ctx context.Context, calls []ProxyMany, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
@@ -59,22 +59,7 @@ func (p *ProxyConn) Close() error {
 // If proxy is blank and there is only one target this will return a normal grpc connection object (*grpc.ClientConn).
 // Otherwise this will return a *ProxyConn setup to act with the proxy.
 func Dial(proxy string, targets []string, opts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
-	if proxy == "" {
-		if len(targets) != 1 {
-			return nil, status.Error(codes.InvalidArgument, "no proxy specified but more than one target set")
-		}
-		return grpc.Dial(targets[0], opts...)
-	}
-	conn, err := grpc.Dial(proxy, opts...)
-	if err != nil {
-		return nil, err
-	}
-	ret := &ProxyConn{
-		cc: conn,
-	}
-	// Make our own copy of these.
-	ret.targets = append(ret.targets, targets...)
-	return ret, nil
+	return DialContext(context.Background(), proxy, targets, opts...)
 }
 
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
