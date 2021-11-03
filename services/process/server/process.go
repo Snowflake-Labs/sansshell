@@ -359,7 +359,7 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 		return err
 	}
 
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
@@ -427,7 +427,7 @@ func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Proce
 	}
 
 	// Don't care about stderr output since jmap produces some debug that way.
-	if err := run.WaitError; err != nil {
+	if err := run.Error; err != nil {
 		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
 
