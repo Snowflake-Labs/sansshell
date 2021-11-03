@@ -41,7 +41,7 @@ func (p *readCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	conn := args[0].(grpc.ClientConnInterface)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a filename to read.\n")
 		return subcommands.ExitUsageError
@@ -58,7 +58,7 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	return subcommands.ExitSuccess
 }
 
-func ReadFile(ctx context.Context, conn *grpc.ClientConn, filename string, offset int64, length int64, writer io.Writer) error {
+func ReadFile(ctx context.Context, conn grpc.ClientConnInterface, filename string, offset int64, length int64, writer io.Writer) error {
 	c := pb.NewLocalFileClient(conn)
 	stream, err := c.Read(ctx, &pb.ReadRequest{
 		Filename: filename,
@@ -102,7 +102,7 @@ func (s *statCmd) Usage() string {
 func (s *statCmd) SetFlags(f *flag.FlagSet) {}
 
 func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	conn := args[0].(grpc.ClientConnInterface)
 
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "please specify at least one path to stat\n")
@@ -191,7 +191,7 @@ func (s *sumCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	conn := args[0].(grpc.ClientConnInterface)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "please specify a filename to sum\n")
 		return subcommands.ExitUsageError

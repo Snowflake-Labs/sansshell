@@ -32,7 +32,7 @@ func (*execCmd) Usage() string {
 func (p *execCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(*grpc.ClientConn)
+	conn := args[0].(grpc.ClientConnInterface)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a command to execute.\n")
 		return subcommands.ExitUsageError
