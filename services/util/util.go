@@ -11,6 +11,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// TODO(jchacon): Make this configurable
+// The chunk size we use when sending replies on a stream.
+var StreamingChunkSize = 128 * 1024
+
 type CommandRun struct {
 <<<<<<< HEAD
 	Stdout   *bytes.Buffer

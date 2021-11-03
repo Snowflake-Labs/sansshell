@@ -21,10 +21,14 @@ service Process {
   // GetCore will return the output from gcore which 100% has
   // sensitive data contained within it. Be very careful where this is
   // stored/transferred/etc.
+  // NOTE: Enough disk space is required to hold the core file before streaming
+  //       the response.
   rpc GetCore(GetCoreRequest) returns (stream GetCoreReply) {}
   // GetJavaHeapDump will return the output from jmap which 100% has
   // sensitive data contained within it. Be very careful where this is
   // stored/transferred/etc.
+  // NOTE: Enough disk space is required to hold the heap file before streaming
+  //       the response.
   rpc GetJavaHeapDump(GetJavaHeapDumpRequest)
       returns (stream GetJavaHeapDumpReply) {}
 }
