@@ -16,6 +16,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -28,11 +29,6 @@ var (
 
 // server is used to implement the gRPC server
 type server struct{}
-
-// TODO(jchacon): Make this configurable
-// The chunk size we use when sending replies to Read on
-// the stream.
-var chunkSize = 128 * 1024
 
 // Read returns the contents of the named file
 func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
@@ -72,7 +68,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 		max = math.MaxInt64
 	}
 
-	buf := make([]byte, chunkSize)
+	buf := make([]byte, util.StreamingChunkSize)
 
 	reader := io.LimitReader(f, max)
 
@@ -85,7 +81,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 		}
 
 		if err != nil {
-			return status.Errorf(codes.Internal, "can't read for file %s: %v", file, err)
+			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
 		}
 
 		// Only send over the number of bytes we actually read or
@@ -95,7 +91,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 		}
 
 		// If we got back less than a full chunk we're done.
-		if n < chunkSize {
+		if n < util.StreamingChunkSize {
 			break
 		}
 	}
