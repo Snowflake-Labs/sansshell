@@ -82,3 +82,33 @@ func TestLoadServiceMap(t *testing.T) {
 		}
 	}
 }
+
+// avoid compiler elision of benchmark code
+var bmsink interface{}
+
+func BenchmarkLoadGlobalServiceMap(b *testing.B) {
+	var svcMap interface{}
+	for n := 0; n < b.N; n++ {
+		svcMap = LoadGlobalServiceMap()
+	}
+	b.StopTimer()
+	bmsink = svcMap
+}
+
+func BenchmarkDynamicRequestCreation(b *testing.B) {
+	svcMap := LoadGlobalServiceMap()
+	method := svcMap["/Testdata.TestService/TestBidiStream"]
+	if method == nil {
+		b.Fatal("could not find service method")
+	}
+	var req proto.Message
+	var rep proto.Message
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		req = method.NewRequest()
+		rep = method.NewReply()
+	}
+	b.StopTimer()
+	bmsink = req
+	bmsink = rep
+}

@@ -18,7 +18,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 )
 
-// echoTestDataServer is a TestDataServiceServer for testing.
+// echoTestDataServer is a TestDataServiceServer for testing
 type echoTestDataServer struct {
 	serverName string
 }
@@ -211,7 +211,7 @@ func TestProxyServerCancel(t *testing.T) {
 	}
 
 	// we should receive two server close messages with status
-	// cancelled.
+	// cancelled
 	for i := 0; i < 2; i++ {
 		reply := testutil.Exchange(t, proxyStream, nil)
 		switch reply.Reply.(type) {
@@ -273,7 +273,7 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 
 	// We send once request, but we'll get 4 replies:
 	// one each of streamdata and server close for each
-	// stream.
+	// stream
 	for i := 0; i < 4; i++ {
 		reply := testutil.Exchange(t, proxyStream, nil)
 		switch reply.Reply.(type) {
@@ -401,7 +401,7 @@ func TestProxyServerBidiStream(t *testing.T) {
 		}
 	}
 
-	// send a half-close, and wait for final stream status.
+	// send a half-close, and wait for final stream status
 	hc := &pb.ProxyRequest{
 		Request: &pb.ProxyRequest_ClientClose{
 			ClientClose: &pb.ClientClose{

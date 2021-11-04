@@ -1,5 +1,5 @@
 // package server provides the server-side implementation of the
-// sansshell proxy server.
+// sansshell proxy server
 package server
 
 import (
@@ -17,10 +17,10 @@ import (
 )
 
 // A TargetDialer is used by the proxy server to make connections
-// to requested targets.
+// to requested targets
 // It encapsulates the various low-level details of making target
 // connections (such as client credentials, deadlines, etc) which
-// the proxy can use without needing to understand.
+// the proxy can use without needing to understand
 type TargetDialer interface {
 	DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error)
 }
@@ -46,7 +46,7 @@ type Server struct {
 	// A map of /Package.Service/Method => ServiceMethod
 	serviceMap map[string]*ServiceMethod
 
-	// A dialer for making proxy -> target connections.
+	// A dialer for making proxy -> target connections
 	dialer TargetDialer
 }
 
@@ -58,12 +58,12 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 
 // Creates a new Server which will use the supplied TargetDialer
 // for opening new target connections, and the global protobuf
-// registry to resolve service methods.
+// registry to resolve service methods
 func New(dialer TargetDialer) *Server {
 	return NewWithServiceMap(dialer, LoadGlobalServiceMap())
 }
 
-// Creates a new Server using the supplied TargetDialer and service map.
+// Creates a new Server using the supplied TargetDialer and service map
 func NewWithServiceMap(dialer TargetDialer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
@@ -73,7 +73,7 @@ func NewWithServiceMap(dialer TargetDialer, serviceMap map[string]*ServiceMethod
 
 // Proxy implements ProxyServer.Proxy to provide a single bidirectional
 // stream which manages requests to a set of one or more backend
-// target servers.
+// target servers
 func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	log.Println("Received new proxy stream request")
 
@@ -83,46 +83,46 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	group, ctx := errgroup.WithContext(stream.Context())
 
 	// create a new TargetStreamSet to manage the target streams
-	// associated with this proxy connection.
+	// associated with this proxy connection
 	streamSet := NewTargetStreamSet(s.serviceMap, s.dialer)
 
 	// A single go-routine for handling all sends to the reply
-	// channel.
+	// channel
 	// While a stream can be safely used for both send and receive
 	// simultaneously, it is not safe for multiple goroutines
-	// to call "Send" on the same stream.
+	// to call "Send" on the same stream
 	group.Go(func() error {
 		return send(replyChan, stream)
 	})
 
 	// A single go-routine for receiving all incoming requests from
-	// the client.
+	// the client
 	// While a stream can be safely used for both send and receive
 	// simultaneously, it is not safe for multiple goroutines
-	// to call "Recv" on the same stream.
+	// to call "Recv" on the same stream
 	group.Go(func() error {
 		// Close 'requestChan' when receive returns, since we will
-		// never receive any additional messages from the client.
+		// never receive any additional messages from the client
 		// This can be used by the dispatching goroutine as a single
-		// to CloseSend on the target streams.
+		// to CloseSend on the target streams
 		defer close(requestChan)
 
 		return receive(ctx, stream, requestChan)
 	})
 
 	// This dispatching goroutine manages request dispatch to a set of
-	// active target streams.
+	// active target streams
 	group.Go(func() error {
 		// when we finish dispatching, we're done, and will send no further
 		// messages to the reply channel
-		// This will signal the Send goroutine to exit.
+		// This will signal the Send goroutine to exit
 		defer close(replyChan)
 
-		// Invoke dispatch to handle incoming requests.
+		// Invoke dispatch to handle incoming requests
 		return dispatch(ctx, requestChan, replyChan, streamSet)
 	})
 
-	// Final RPC status is the status of the waitgroup.
+	// Final RPC status is the status of the waitgroup
 	err := group.Wait()
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
@@ -130,7 +130,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	return nil
 }
 
-// send relays messages from `replyChan` to the provided stream.
+// send relays messages from `replyChan` to the provided stream
 func send(replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
@@ -142,20 +142,20 @@ func send(replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
 
 // receive relays incoming messages received from the provided stream to `requestChan`
 // until EOF (or other error) is received from the stream, or the supplied context is
-// done.
+// done
 func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan *pb.ProxyRequest) error {
 	for {
-		// Receive from the client stream.
+		// Receive from the client stream
 		// This will block, but can return early
-		// if the stream context is cancelled.
+		// if the stream context is cancelled
 		req, err := stream.Recv()
 		if err == io.EOF {
 			// On the server, io.EOF indicates that the
 			// client has issued as CloseSend(), and will
-			// issue no further requests.
+			// issue no further requests
 			// Returning here will close requestChan, which
 			// we can use as a signal to propogate the CloseSend
-			// to all running target streams.
+			// to all running target streams
 			return nil
 		}
 		if err != nil {
@@ -172,7 +172,7 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 // dispatch manages incoming requests from `requestChan` by routing them to the supplied stream set
 func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan chan *pb.ProxyReply, streamSet *TargetStreamSet) error {
 	// Channel to track streams that have completed and should
-	// be removed from the stream set.
+	// be removed from the stream set
 	doneChan := make(chan uint64)
 
 loop:
@@ -180,28 +180,29 @@ loop:
 		select {
 		case <-ctx.Done():
 			// Our context has ended. This should propogate automtically
-			// to all target streams.
+			// to all target streams
 			break loop
 		case closedStream := <-doneChan:
-			// A stream has closed, and sent its final ServerClose status.
+			// A stream has closed, and sent its final ServerClose status
 			// Remove it from the active streams list. Further messages
-			// received with this stream ID would be a client error.
+			// received with this stream ID will return an error to the
+			// client.
 			streamSet.Remove(closedStream)
 		case req, ok := <-requestChan:
 			if !ok {
-				// The request channel has been closed.
+				// The request channel has been closed
 				// This could occur if the proxy client executes
 				// a CloseSend(), or Send/Recv() from the client
-				// stream has failed with an error.
+				// stream has failed with an error
 				// In the latter case, the context cancellation
 				// should eventually propagate to the target
-				// streams, and cause them to finish.
+				// streams, and cause them to finish
 				// In either case, we should let the target streams
-				// know that no further requests will be arriving.
+				// know that no further requests will be arriving
 				streamSet.ClientCloseAll()
 				break loop
 			}
-			// We have a new request.
+			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:
 				streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan)

@@ -20,28 +20,28 @@ import (
 )
 
 // A TargetStream is a single bidirectional stream between
-// the proxy and a a target sansshell server.
+// the proxy and a target sansshell server
 type TargetStream struct {
-	// The unique indentifier of this stream.
+	// The unique indentifier of this stream
 	streamID uint64
 
 	// The address of the target server, as given in StartStream
 	target string
 
-	// The ServiceMethod spec.
+	// The ServiceMethod spec
 	serviceMethod *ServiceMethod
 
-	// The underlying grpc.ClientStream to the target server.
+	// The underlying grpc.ClientStream to the target server
 	grpcStream grpc.ClientStream
 
 	// A cancel function that can be used to request early cancellation
-	// of the stream context.
+	// of the stream context
 	cancelFunc context.CancelFunc
 
-	// A 'once' guarding CloseSend to allow it to be called idempotently.
+	// A 'once' guarding CloseSend to allow it to be called idempotently
 	closeOnce sync.Once
 
-	// the (internal) channel used to manage incoming requests.
+	// the (internal) channel used to manage incoming requests
 	reqChan chan proto.Message
 }
 
@@ -50,28 +50,28 @@ func (s *TargetStream) String() string {
 }
 
 // StreamID returns the proxy-assigned stream identifier for this
-// stream.
+// stream
 func (s *TargetStream) StreamID() uint64 {
 	return s.streamID
 }
 
 // CloseSend is used to indicate that no more client requests
-// will be sent to this stream.
+// will be sent to this stream
 func (s *TargetStream) CloseSend() {
 	s.closeOnce.Do(func() {
 		close(s.reqChan)
 	})
 }
 
-// ClientCancel requests cancellation of the stream.
+// ClientCancel requests cancellation of the stream
 func (s *TargetStream) ClientCancel() {
 	s.cancelFunc()
 }
 
-// Send the data contained in 'req' to the client stream.
+// Send the data contained in 'req' to the client stream
 func (s *TargetStream) Send(req *anypb.Any) error {
 	// Frontload the check that the message is appropriate to the
-	// method by unpacking the any here.
+	// method by unpacking the any here
 	streamReq := s.serviceMethod.NewRequest()
 	if err := req.UnmarshalTo(streamReq); err != nil {
 		return err
@@ -85,15 +85,15 @@ func (s *TargetStream) Send(req *anypb.Any) error {
 	}
 }
 
-// Run begins execution of the target stream.
+// Run begins execution of the target stream
 // All data received from target will be converted into ProxyReply
 // messages for sending to a proxy client, including the final
-// status of the target stream.
+// status of the target stream
 func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.grpcStream.Context())
 	group.Go(func() error {
 		// read from the incoming request channel, and write
-		// to the stream.
+		// to the stream
 		for {
 			var req proto.Message
 			var ok bool
@@ -102,12 +102,12 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 				return ctx.Err()
 			case req, ok = <-s.reqChan:
 				if !ok {
-					// reqChan was closed, meaning no more messages are incoming.
+					// reqChan was closed, meaning no more messages are incoming
 					// if this was a client stream, we issue a half-close
 					if s.serviceMethod.ClientStreams() {
 						return s.grpcStream.CloseSend()
 					}
-					// otherwise, we're done.
+					// otherwise, we're done
 					return nil
 				}
 			}
@@ -117,19 +117,19 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 			// should not return an error here, since that
 			// would cancel the errgroup early. Instead, we
 			// can return nil, and the error will be picked
-			// up by the receiving goroutine.
+			// up by the receiving goroutine
 			if err == io.EOF {
 				return nil
 			}
 			// Otherwise, this is the 'final' error. The underlying
 			// stream will be torn down automatically, but we
 			// can return the error here, where it will be returned
-			// by the errgroup, and sent in the ServerClose.
+			// by the errgroup, and sent in the ServerClose
 			if err != nil {
 				return err
 			}
 			// no error. If client streaming is not expected, then we're
-			// done.
+			// done
 			if !s.serviceMethod.ClientStreams() {
 				return nil
 			}
@@ -163,7 +163,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 		}
 	})
 	// Wait for final status from the errgroup, and translate it into
-	// a server-close call.
+	// a server-close call
 	err := group.Wait()
 	log.Printf("finished: %s (%v)", s, err)
 	var errStatus *pb.Status
@@ -181,7 +181,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	replyChan <- reply
 }
 
-// NewTargetStream creates a new TargetStream for calling `method` on `target`.
+// NewTargetStream creates a new TargetStream for calling `method` on `target`
 func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod) (*TargetStream, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	conn, err := dialer.DialContext(ctx, target)
@@ -205,22 +205,22 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 // A TargetStreamSet manages multiple TargetStreams
 // TargetStreamSets are not threadsafe, and should not
 // be shared by multiple goroutines without external
-// synchronization.
+// synchronization
 type TargetStreamSet struct {
-	// A service method map used to resolve incoming stream requests to service methods.
+	// A service method map used to resolve incoming stream requests to service methods
 	serviceMethods map[string]*ServiceMethod
 
-	// A TargetDialer for initiating target connections.
+	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
-	// The set of streams managed by this set.
+	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
 
-	// A WaitGroup used to track active streams.
+	// A WaitGroup used to track active streams
 	wg sync.WaitGroup
 }
 
-// NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams.
+// NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
 func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
@@ -230,11 +230,11 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 }
 
 // Add creates a new target stream for the given start stream request, and adds it to the set of streams
-// managed by this set.
+// managed by this set
+//
 // The result of stream creation, as well as any messages received from the created stream will be
-// sent directly to 'replyChan'.
-// If the stream was successfully started, it's id will eventually be sent to 'doneChan' when all work
-// has completed.
+// sent directly to 'replyChan'. If the stream was successfully started, its id will eventually be
+// sent to 'doneChan' when all work has completed
 func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyChan chan *pb.ProxyReply, doneChan chan uint64) {
 	sendReply := func(msg *pb.ProxyReply) {
 		select {
@@ -290,14 +290,14 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 
 // Remove the stream corresponding to `streamid` from the
 // stream set. Future references to this stream will return
-// an error.
+// an error
 func (t *TargetStreamSet) Remove(streamID uint64) {
 	log.Println("removing:", streamID)
 	delete(t.streams, streamID)
 }
 
 // Wait blocks until all TargetStreams associated with this
-// stream set have completed.
+// stream set have completed
 func (t *TargetStreamSet) Wait() {
 	t.wg.Wait()
 }
@@ -338,14 +338,14 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	return nil
 }
 
-// Send dispatches new message data in `req` to the identified streams.
+// Send dispatches new message data in `req` to the identified streams
 func (t *TargetStreamSet) Send(req *pb.StreamData) error {
 	// TODO(jallie): authorization check for sending to streams goes
 	// here. StreamIds are collected, translated into targets, and
-	// authorization check made before dispatch.
+	// authorization check made before dispatch
 	// TODO(jallie): this could also use parallel send, but since each
 	// stream has it's own dispatching go-routine internally, this already
-	// has some degree of underlying parallism.
+	// has some degree of underlying parallism
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
