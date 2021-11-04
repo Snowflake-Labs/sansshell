@@ -1,6 +1,7 @@
 package server
 
 import (
+  "context"
 	"fmt"
 	"net"
 
@@ -29,7 +30,7 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string) e
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(c credentials.TransportCredentials, policy string) (*grpc.Server, error) {
-	o, err := NewOPA(policy)
+	o, err := NewOPA(context.Background(), policy)
 	if err != nil {
 		return &grpc.Server{}, fmt.Errorf("NewOpa: %w", err)
 	}
