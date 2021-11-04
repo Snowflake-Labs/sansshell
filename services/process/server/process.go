@@ -53,12 +53,12 @@ var (
 		if err != nil {
 			return nil, "", err
 		}
-		file := filepath.Join(dir, fmt.Sprintf("core.%d", req.Pid))
+		file := filepath.Join(dir, "core")
 		return []string{
 			"-o",
 			file,
 			fmt.Sprintf("%d", req.Pid),
-		}, file, nil
+		}, fmt.Sprintf("%s.%d", file, req.Pid), nil
 	}
 
 	// This will return options passed to the gcore command and the path to the resulting core file.
