@@ -29,7 +29,7 @@ type CommandRun struct {
 // be run. Any other errors (starting or from waiting) are recorded in the Error field.
 // Errors returned directly will be a status.Error and Error will be whatever the exec
 // library returns.
-func RunCommand(ctx context.Context, bin string, args []string) (*CommandRun, error) {
+func RunCommand(ctx context.Context, bin string, args []string, stderrBad bool) (*CommandRun, error) {
 	if !filepath.IsAbs(bin) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not an absolute path", bin)
 	}
@@ -53,6 +53,10 @@ func RunCommand(ctx context.Context, bin string, args []string) (*CommandRun, er
 	log.Printf("Executing: %s", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
+
+	if stderrBad && len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", TrimString(run.Stderr.String()))
+	}
 	return run, nil
 }
 
