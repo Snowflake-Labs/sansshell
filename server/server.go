@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 )
 
@@ -30,11 +31,11 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string) e
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(c credentials.TransportCredentials, policy string) (*grpc.Server, error) {
-	o, err := NewOPA(context.Background(), policy)
-	if err != nil {
-		return &grpc.Server{}, fmt.Errorf("NewOpa: %w", err)
-	}
-	s := grpc.NewServer(grpc.Creds(c), grpc.UnaryInterceptor(o.Authorize), grpc.StreamInterceptor(o.AuthorizeStream))
+  authz, err := rpcauth.NewWithPolicy(context.Background(), policy)
+  if err != nil {
+    return nil, err
+  }
+	s := grpc.NewServer(grpc.Creds(c), grpc.UnaryInterceptor(authz.Authorize), grpc.StreamInterceptor(authz.AuthorizeStream))
 	for _, sansShellService := range services.ListServices() {
 		sansShellService.Register(s)
 	}
