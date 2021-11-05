@@ -218,6 +218,10 @@ type TargetStreamSet struct {
 
 	// A WaitGroup used to track active streams
 	wg sync.WaitGroup
+
+  // A set of "target|nonce" strings, used to track previously
+  // seen target/nonce pairs to prevent inadvertent re-use.
+  noncePairs map[string]bool
 }
 
 // NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
@@ -226,6 +230,7 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 		serviceMethods: serviceMethods,
 		targetDialer:   dialer,
 		streams:        make(map[uint64]*TargetStream),
+    noncePairs: make(map[string]bool),
 	}
 }
 
@@ -235,7 +240,22 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 // The result of stream creation, as well as any messages received from the created stream will be
 // sent directly to 'replyChan'. If the stream was successfully started, its id will eventually be
 // sent to 'doneChan' when all work has completed
-func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyChan chan *pb.ProxyReply, doneChan chan uint64) {
+func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyChan chan *pb.ProxyReply, doneChan chan uint64) error {
+  // Check for client reuse of a previously used target/nonce pair, to avoid
+  // the case in which a buggy client sends multiple StartStream request with
+  // the same target and nonce, and is uanble to disambiguate the responses.
+  // NB: while the check for re-use is here, the target/nonce pair is not
+  // considered to have been used unless we successfully return a stream id
+  // to the client. This permits clients to retry failing requests wihout
+  // needing to increment the nonce on each attempt.
+  targetNonce := fmt.Sprintf("%s|%d", req.GetTarget(), req.GetNonce())
+  if t.noncePairs[targetNonce] {
+    // Unlike most of the errors in this function, a nonce-reuse error will cause this function
+    // to return with an error, rather than sending a response on the reply channel, since
+    // the client would have no way to distinguish the request that generated the error.
+    return status.Errorf(codes.FailedPrecondition, "re-use of previous (target,nonce) (%s,%d)", req.GetTarget(), req.GetNonce())
+
+  }
 	sendReply := func(msg *pb.ProxyReply) {
 		select {
 		case replyChan <- msg:
@@ -257,7 +277,7 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 			ErrorStatus: convertStatus(status.Newf(codes.InvalidArgument, "unknown method %s", req.GetMethodName())),
 		}
 		sendReply(reply)
-		return
+		return nil
 	}
 	// TODO(jallie): authorization check for opening new stream goes here
 	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, serviceMethod)
@@ -266,7 +286,7 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
 		}
 		sendReply(reply)
-		return
+		return nil
 	}
 	streamID := stream.StreamID()
 	t.streams[streamID] = stream
@@ -274,6 +294,7 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 	reply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
 		StreamId: streamID,
 	}
+  t.noncePairs[targetNonce] = true
 	t.wg.Add(1)
 	go func() {
 		stream.Run(replyChan)
@@ -286,6 +307,7 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		t.wg.Done()
 	}()
 	sendReply(reply)
+  return nil
 }
 
 // Remove the stream corresponding to `streamid` from the

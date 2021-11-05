@@ -205,7 +205,9 @@ loop:
 			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:
-				streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan)
+        if err := streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan); err != nil {
+          return err
+        }
 			case *pb.ProxyRequest_StreamData:
 				if err := streamSet.Send(req.GetStreamData()); err != nil {
 					return err
