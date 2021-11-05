@@ -17,7 +17,7 @@ type server struct{}
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
 	log.Printf("Received request for Exec.Run: %+v", req)
 
-	run, err := util.RunCommand(ctx, req.Command, req.Args)
+	run, err := util.RunCommand(ctx, req.Command, req.Args, false)
 	if err != nil {
 		return nil, err
 	}
