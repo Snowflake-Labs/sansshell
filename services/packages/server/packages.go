@@ -142,7 +142,7 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:])
+	run, err := util.RunCommand(ctx, command[0], command[1:], false)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:])
+	run, err := util.RunCommand(ctx, command[0], command[1:], false)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 
-	run, err = util.RunCommand(ctx, command[0], command[1:])
+	run, err = util.RunCommand(ctx, command[0], command[1:], false)
 	if err != nil {
 		return nil, err
 	}
@@ -303,17 +303,13 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:])
+	// This shouldn't return anything to stderr.
+	run, err := util.RunCommand(ctx, command[0], command[1:], true)
 	if err != nil {
 		return nil, err
 	}
 	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
-	}
-
-	// This should never return stderr output. If they do something is off.
-	if len(run.Stderr.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "spurious output to stderr running %q\nstdout:\n%s\nstderr:\n%s", command, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return parseListInstallOutput(req.PackageSystem, run.Stdout)
@@ -414,7 +410,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:])
+	run, err := util.RunCommand(ctx, command[0], command[1:], false)
 	if err != nil {
 		return nil, err
 	}
