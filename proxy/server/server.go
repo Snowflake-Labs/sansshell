@@ -10,8 +10,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
@@ -107,7 +105,29 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		// to CloseSend on the target streams
 		defer close(requestChan)
 
-		return receive(ctx, stream, requestChan)
+		// This double-dispatch is necessary because Recv() will block
+		// until the proxy stream itself is cancelled.
+		// If dispatch has failed, we need to exit, even though Recv
+		// is still active
+		// In this case, any error returned from Recv is safe to discard
+		// since the errgroup will already contain the correct status
+		// to return to the client.
+		errChan := make(chan error)
+		go func() {
+			err := receive(ctx, stream, requestChan)
+			select {
+			case errChan <- err:
+			default:
+				// our parent has exited
+			}
+			close(errChan)
+		}()
+		select {
+		case err := <-errChan:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	})
 
 	// This dispatching goroutine manages request dispatch to a set of
@@ -118,14 +138,33 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		// This will signal the Send goroutine to exit
 		defer close(replyChan)
 
+		// Create a derived, cancellable context that we can use to tear
+		// down all streams in case of error.
+		ctx, cancel := context.WithCancel(ctx)
+
 		// Invoke dispatch to handle incoming requests
-		return dispatch(ctx, requestChan, replyChan, streamSet)
+		err := dispatch(ctx, requestChan, replyChan, streamSet)
+
+		// If dispatch returned with an error, we can cancel all
+		// running streams by cancelling their context.
+		if err != nil {
+			log.Println("canceling streams")
+			cancel()
+		}
+
+		// Wait for running streams to exit.
+		streamSet.Wait()
+		log.Println("all streams exited")
+
+		return err
 	})
 
 	// Final RPC status is the status of the waitgroup
 	err := group.Wait()
+	log.Println("after group wait")
+
 	if err != nil {
-		return status.Error(codes.Internal, err.Error())
+		return err
 	}
 	return nil
 }
@@ -175,13 +214,12 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 	// be removed from the stream set
 	doneChan := make(chan uint64)
 
-loop:
 	for {
 		select {
 		case <-ctx.Done():
 			// Our context has ended. This should propogate automtically
 			// to all target streams
-			break loop
+			return ctx.Err()
 		case closedStream := <-doneChan:
 			// A stream has closed, and sent its final ServerClose status
 			// Remove it from the active streams list. Further messages
@@ -200,14 +238,14 @@ loop:
 				// In either case, we should let the target streams
 				// know that no further requests will be arriving
 				streamSet.ClientCloseAll()
-				break loop
+				return nil
 			}
 			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:
-        if err := streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan); err != nil {
-          return err
-        }
+				if err := streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan); err != nil {
+					return err
+				}
 			case *pb.ProxyRequest_StreamData:
 				if err := streamSet.Send(req.GetStreamData()); err != nil {
 					return err
@@ -225,6 +263,4 @@ loop:
 			}
 		}
 	}
-	streamSet.Wait()
-	return ctx.Err()
 }

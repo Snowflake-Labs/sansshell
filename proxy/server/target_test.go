@@ -96,9 +96,9 @@ func TestStreamSetAddErrors(t *testing.T) {
 			Nonce:      tc.nonce,
 			MethodName: tc.method,
 		}
-    if err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/); err != nil {
-      t.Fatalf("StartStream(%+v), err was %v, want nil", rq, err)
-    }
+		if err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/); err != nil {
+			t.Fatalf("StartStream(%+v), err was %v, want nil", req, err)
+		}
 		var msg *pb.ProxyReply
 		select {
 		case msg = <-replyChan:

@@ -10,6 +10,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
@@ -418,5 +419,44 @@ func TestProxyServerBidiStream(t *testing.T) {
 	}
 	if sc.GetStatus() != nil {
 		t.Errorf("ServerClose.Status, want nil, got %+v", sc.GetStatus())
+	}
+}
+
+func TestProxyServerNonceReusePrevention(t *testing.T) {
+	ctx := context.Background()
+	testServerMap := startTestDataServers(t, "foo:456")
+	proxyStream := startTestProxy(ctx, t, testServerMap)
+
+	req := &pb.ProxyRequest{
+		Request: &pb.ProxyRequest_StartStream{
+			StartStream: &pb.StartStream{
+				Target:     "foo:456",
+				Nonce:      1,
+				MethodName: "/Testdata.TestService/TestUnary",
+			},
+		},
+	}
+	// Initial successful stream establishment
+	resp := testutil.Exchange(t, proxyStream, req)
+	if resp.GetStartStreamReply() == nil {
+		t.Fatalf("Exchange(%v) = %T, want StartStreamReply", req, resp.Reply)
+	}
+
+	// Sending a second request with the same nonce and target is
+	// a client error which will cause the proxy stream to
+	// be cancelled.
+	// This will yield Cancelled ServerClose messages for
+	// the active stream, and a final status of "FailedPrecondition"
+	// on the proxy stream.
+	resp = testutil.Exchange(t, proxyStream, req)
+	sc := resp.GetServerClose()
+	if sc == nil || !strings.Contains(sc.GetStatus().GetMessage(), "canceled") {
+		t.Fatalf("Exchange(%v) got reply %v, want ServerClose with cancel", req, resp)
+	}
+
+	// The next receive will yeild a cancellation of the initial stream
+	got, err := proxyStream.Recv()
+	if c := status.Code(err); c != codes.FailedPrecondition {
+		t.Fatalf("Recv() = %v, err was %v, want err with FailedPrecondition", got, err)
 	}
 }
