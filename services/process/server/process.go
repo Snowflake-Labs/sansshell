@@ -338,7 +338,7 @@ func openBlobForWriting(ctx context.Context, bucket string, file string) (io.Wri
 }
 
 func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_GetMemoryDumpServer) error {
-	log.Printf("Received request for GetCore: %+v", req)
+	log.Printf("Received request for GetMemoryDump: %+v", req)
 
 	if req.IsJava {
 		// This is tied to jmap so either an OS provides it or it doesn't.
