@@ -50,7 +50,3 @@ allow {
 allow {
 	input.type = "Process.GetJavaStacksRequest"
 }
-
-allow {
-	input.type = "Process.GetMemoryDumpRequest"
-}
