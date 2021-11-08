@@ -8,29 +8,37 @@ package LocalFile;
 
 // The LocalFile service definition.
 service LocalFile {
-  // Read reads a file from the disk and returns it contents
-  rpc Read (ReadRequest) returns (stream ReadReply) {}
+  // Read reads a file from the disk and returns it contents.
+  rpc Read(ReadRequest) returns (stream ReadReply) {}
 
-  // Stat returns metadata about a single filesytem path
-  rpc Stat (stream StatRequest) returns (stream StatReply) {}
+  // Stat returns metadata about a single filesytem path.
+  rpc Stat(stream StatRequest) returns (stream StatReply) {}
 
   // Sum calculates a sum over the data in a single file.
-  rpc Sum (stream SumRequest) returns (stream SumReply) {}
+  rpc Sum(stream SumRequest) returns (stream SumReply) {}
+
+  // Write writes a file from the incoming RPC to a local file.
+  rpc Write(stream WriteRequest) returns (NullReply) {}
+
+  // Copy retrieves a file from the given blob URL and writes it to a local
+  // file.
+  rpc Copy(CopyRequest) returns (NullReply) {}
 }
+
+// NullReply is a null message to be used by any service returning no data.
+message NullReply {}
 
 // ReadRequest describes the filename to be read
 message ReadRequest {
   string filename = 1;
   // If positive and non-zero skip N bytes into the file before returning data.
-  int64 offset = 2; 
+  int64 offset = 2;
   // If positive and non-zero return only this many total bytes.
   int64 length = 3;
 }
 
 // ReadResponse contains the contents of the file
-message ReadReply {
-  bytes contents = 1;
-}
+message ReadReply { bytes contents = 1; }
 
 // StatRequest specifies the filename for which to retrieve metadata.
 message StatRequest {
@@ -76,6 +84,7 @@ message SumRequest {
   SumType sum_type = 2;
 }
 
+// SumReply contains the sum output for the given filename.
 message SumReply {
   // Filename, as provided in SumRequest
   string filename = 1;
@@ -83,4 +92,22 @@ message SumReply {
   SumType sum_type = 2;
   // The sum value, as a hex-encoded string
   string sum = 3;
+}
+
+// WriteRequest streams the data for the filename to be written.
+// The first request must contain a filename and all future requests
+// must contain contents. Additional files may then be written in the
+// same sequence.
+message WriteRequest {
+  oneof request {
+    string filename = 1;
+    bytes contents = 2;
+  }
+}
+
+// CopyRequest contains the URL and filename destination to copy the
+// file from.
+message CopyRequest {
+  string url = 1;
+  string filename = 2;
 }

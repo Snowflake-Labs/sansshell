@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -190,6 +191,14 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return status.Errorf(codes.Internal, "sum: send error %v", err)
 		}
 	}
+}
+
+func (s *server) Write(stream pb.LocalFile_WriteServer) error {
+	return status.Error(codes.Unimplemented, "not implemented")
+}
+
+func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (*pb.NullReply, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 // Register is called to expose this handler to the gRPC server

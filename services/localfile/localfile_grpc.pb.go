@@ -18,12 +18,17 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type LocalFileClient interface {
-	// Read reads a file from the disk and returns it contents
+	// Read reads a file from the disk and returns it contents.
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error)
-	// Stat returns metadata about a single filesytem path
+	// Stat returns metadata about a single filesytem path.
 	Stat(ctx context.Context, opts ...grpc.CallOption) (LocalFile_StatClient, error)
 	// Sum calculates a sum over the data in a single file.
 	Sum(ctx context.Context, opts ...grpc.CallOption) (LocalFile_SumClient, error)
+	// Write writes a file from the incoming RPC to a local file.
+	Write(ctx context.Context, opts ...grpc.CallOption) (LocalFile_WriteClient, error)
+	// Copy retrieves a file from the given blob URL and writes it to a local
+	// file.
+	Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*NullReply, error)
 }
 
 type localFileClient struct {
@@ -128,16 +133,64 @@ func (x *localFileSumClient) Recv() (*SumReply, error) {
 	return m, nil
 }
 
+func (c *localFileClient) Write(ctx context.Context, opts ...grpc.CallOption) (LocalFile_WriteClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[3], "/LocalFile.LocalFile/Write", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localFileWriteClient{stream}
+	return x, nil
+}
+
+type LocalFile_WriteClient interface {
+	Send(*WriteRequest) error
+	CloseAndRecv() (*NullReply, error)
+	grpc.ClientStream
+}
+
+type localFileWriteClient struct {
+	grpc.ClientStream
+}
+
+func (x *localFileWriteClient) Send(m *WriteRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *localFileWriteClient) CloseAndRecv() (*NullReply, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(NullReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *localFileClient) Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*NullReply, error) {
+	out := new(NullReply)
+	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Copy", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LocalFileServer is the server API for LocalFile service.
 // All implementations should embed UnimplementedLocalFileServer
 // for forward compatibility
 type LocalFileServer interface {
-	// Read reads a file from the disk and returns it contents
+	// Read reads a file from the disk and returns it contents.
 	Read(*ReadRequest, LocalFile_ReadServer) error
-	// Stat returns metadata about a single filesytem path
+	// Stat returns metadata about a single filesytem path.
 	Stat(LocalFile_StatServer) error
 	// Sum calculates a sum over the data in a single file.
 	Sum(LocalFile_SumServer) error
+	// Write writes a file from the incoming RPC to a local file.
+	Write(LocalFile_WriteServer) error
+	// Copy retrieves a file from the given blob URL and writes it to a local
+	// file.
+	Copy(context.Context, *CopyRequest) (*NullReply, error)
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
@@ -152,6 +205,12 @@ func (UnimplementedLocalFileServer) Stat(LocalFile_StatServer) error {
 }
 func (UnimplementedLocalFileServer) Sum(LocalFile_SumServer) error {
 	return status.Errorf(codes.Unimplemented, "method Sum not implemented")
+}
+func (UnimplementedLocalFileServer) Write(LocalFile_WriteServer) error {
+	return status.Errorf(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedLocalFileServer) Copy(context.Context, *CopyRequest) (*NullReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Copy not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -238,13 +297,62 @@ func (x *localFileSumServer) Recv() (*SumRequest, error) {
 	return m, nil
 }
 
+func _LocalFile_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(LocalFileServer).Write(&localFileWriteServer{stream})
+}
+
+type LocalFile_WriteServer interface {
+	SendAndClose(*NullReply) error
+	Recv() (*WriteRequest, error)
+	grpc.ServerStream
+}
+
+type localFileWriteServer struct {
+	grpc.ServerStream
+}
+
+func (x *localFileWriteServer) SendAndClose(m *NullReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *localFileWriteServer) Recv() (*WriteRequest, error) {
+	m := new(WriteRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _LocalFile_Copy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CopyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalFileServer).Copy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/LocalFile.LocalFile/Copy",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalFileServer).Copy(ctx, req.(*CopyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var LocalFile_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "LocalFile.LocalFile",
 	HandlerType: (*LocalFileServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Copy",
+			Handler:    _LocalFile_Copy_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Read",
@@ -261,6 +369,11 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Sum",
 			Handler:       _LocalFile_Sum_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Write",
+			Handler:       _LocalFile_Write_Handler,
 			ClientStreams: true,
 		},
 	},
