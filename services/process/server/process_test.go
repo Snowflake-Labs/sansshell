@@ -596,10 +596,14 @@ func TestCore(t *testing.T) {
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
 	savedGcoreBin := *gcoreBin
-	savedFunc := gcoreOptionsAndLocation
+	savedGcoreFunc := gcoreOptionsAndLocation
+	savedJmapBin := *jmapBin
+	savedJmapFunc := jmapOptionsAndLocation
+
+	// The default one assumes we're just echoing file contents with cat.
 	var testInput string
-	gcoreOptionsAndLocation = func(req *pb.GetCoreRequest) ([]string, string, error) {
-		opts, file, err := savedFunc(req)
+	gcoreOptionsAndLocation = func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
+		opts, file, err := savedGcoreFunc(req)
 		if err != nil {
 			t.Fatalf("error from gcoreOptionsAndLocation for req %+v : %v", req, err)
 		}
@@ -612,13 +616,30 @@ func TestCore(t *testing.T) {
 			testInput,
 		}, testInput, nil
 	}
+	jmapOptionsAndLocation = func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
+		opts, file, err := savedJmapFunc(req)
+		if err != nil {
+			t.Fatalf("error from jmapOptionsAndLocation for req %+v : %v", req, err)
+		}
+		if len(opts) == 0 {
+			t.Fatalf("didn't get any options back from jmapOptionsAndLocation for req: %+v", req)
+		}
+		defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+		return []string{
+			testInput,
+		}, testInput, nil
+	}
 	defer func() {
 		*gcoreBin = savedGcoreBin
-		gcoreOptionsAndLocation = savedFunc
+		*jmapBin = savedJmapBin
+		gcoreOptionsAndLocation = savedGcoreFunc
+		jmapOptionsAndLocation = savedJmapFunc
 	}()
 
 	goodGcoreOptions := gcoreOptionsAndLocation
-	badGcoreOptions := func(req *pb.GetCoreRequest) ([]string, string, error) {
+	goodJmapOptions := jmapOptionsAndLocation
+	badOptions := func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
 		return nil, "", errors.New("error")
 	}
 
@@ -632,8 +653,8 @@ func TestCore(t *testing.T) {
 		name     string
 		command  string
 		input    string
-		options  func(req *pb.GetCoreRequest) ([]string, string, error)
-		req      *pb.GetCoreRequest
+		options  func(req *pb.GetMemoryDumpRequest) ([]string, string, error)
+		req      *pb.GetMemoryDumpRequest
 		noOutput bool
 		wantErr  bool
 	}{
@@ -642,8 +663,19 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+		},
+		{
+			name:    "basic contents check - java",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetMemoryDumpRequest{
+				Pid:         1,
+				IsJava:      true,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
 		},
@@ -652,7 +684,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
 				Url:         fmt.Sprintf("file://%s", testdir),
@@ -662,8 +694,19 @@ func TestCore(t *testing.T) {
 			name:    "No command",
 			input:   "./testdata/core.test",
 			options: goodGcoreOptions,
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "No command - java",
+			input:   "./testdata/core.test",
+			options: goodGcoreOptions,
+			req: &pb.GetMemoryDumpRequest{
+				Pid:         1,
+				IsJava:      true,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
 			wantErr: true,
@@ -673,7 +716,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
 			wantErr: true,
@@ -683,7 +726,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
 			},
@@ -694,7 +737,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid: 1,
 			},
 			wantErr: true,
@@ -704,7 +747,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "cat"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
 			},
@@ -713,10 +756,22 @@ func TestCore(t *testing.T) {
 		{
 			name:    "Bad options",
 			command: testutil.ResolvePath(t, "cat"),
-			options: badGcoreOptions,
+			options: badOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad options - java",
+			command: testutil.ResolvePath(t, "cat"),
+			options: badOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetMemoryDumpRequest{
+				Pid:         1,
+				IsJava:      true,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
 			wantErr: true,
@@ -726,7 +781,7 @@ func TestCore(t *testing.T) {
 			command: "//foo",
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
@@ -737,7 +792,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "false"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
@@ -748,7 +803,7 @@ func TestCore(t *testing.T) {
 			command: testutil.ResolvePath(t, "true"),
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
-			req: &pb.GetCoreRequest{
+			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
@@ -760,6 +815,8 @@ func TestCore(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			*gcoreBin = test.command
 			gcoreOptionsAndLocation = test.options
+			*jmapBin = test.command
+			jmapOptionsAndLocation = test.options
 
 			// Need a tmp dir and a copy of the test input since the options
 			// caller is expecting to cleanup the directory when it's done.
@@ -781,7 +838,7 @@ func TestCore(t *testing.T) {
 			}
 			testInput = file
 
-			stream, err := client.GetCore(ctx, test.req)
+			stream, err := client.GetMemoryDump(ctx, test.req)
 			if err != nil {
 				t.Fatalf("%s: error setting up stream: %v", test.name, err)
 			}
@@ -830,225 +887,6 @@ func TestCore(t *testing.T) {
 				defer bucket.Close()
 			}
 
-			if !test.wantErr {
-				if !bytes.Equal(testdata, data) {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
-				}
-			}
-		})
-	}
-}
-
-func TestHeapDump(t *testing.T) {
-	var err error
-	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
-
-	client := pb.NewProcessClient(conn)
-
-	// Setup for tests where we use cat and pre-canned data
-	// to submit into the server.
-	savedJmapBin := *jmapBin
-	savedFunc := jmapOptionsAndLocation
-	var testInput string
-	jmapOptionsAndLocation = func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
-		opts, file, err := savedFunc(req)
-		if err != nil {
-			t.Fatalf("error from jmapOptionsAndLocation for req %+v : %v", req, err)
-		}
-		if len(opts) == 0 {
-			t.Fatalf("didn't get any options back from jmapOptionsAndLocation for req: %+v", req)
-		}
-		defer os.RemoveAll(filepath.Dir(file)) // clean up
-
-		return []string{
-			testInput,
-		}, testInput, nil
-	}
-	defer func() {
-		*jmapBin = savedJmapBin
-		jmapOptionsAndLocation = savedFunc
-	}()
-
-	goodJmapOptions := jmapOptionsAndLocation
-	badJmapOptions := func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
-		return nil, "", errors.New("error")
-	}
-
-	for _, test := range []struct {
-		name     string
-		command  string
-		input    string
-		options  func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error)
-		req      *pb.GetJavaHeapDumpRequest
-		noOutput bool
-		wantErr  bool
-	}{
-		{
-			name:    "basic contents check",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-		},
-		{
-			name:    "No command",
-			input:   "./testdata/heapdump.test",
-			options: goodJmapOptions,
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "bad pid",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad destination - url",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad destination - unknown",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid: 1,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad destination - bad enum",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad options",
-			command: testutil.ResolvePath(t, "cat"),
-			options: badJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad command",
-			command: "//foo",
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Command returns error",
-			command: testutil.ResolvePath(t, "false"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad output file",
-			command: testutil.ResolvePath(t, "true"),
-			options: goodJmapOptions,
-			input:   "./testdata/heapdump.test",
-			req: &pb.GetJavaHeapDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
-			},
-			noOutput: true,
-			wantErr:  true,
-		},
-	} {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			*jmapBin = test.command
-			jmapOptionsAndLocation = test.options
-
-			// Need a tmp dir and a copy of the test input since the options
-			// caller is expecting to cleanup the directory when it's done.
-			dir, err := os.MkdirTemp("", "heapdumps")
-			if err != nil {
-				t.Fatalf("%s: Can't make tmpdir: %v", test.name, err)
-			}
-			file := filepath.Join(dir, "heapdump")
-			var testdata []byte
-			if !test.noOutput {
-				testdata, err = os.ReadFile(test.input)
-				if err != nil {
-					t.Fatalf("%s: can't read test input: %v", test.name, err)
-				}
-				err = os.WriteFile(file, testdata, 0666)
-				if err != nil {
-					t.Fatalf("%s: can't copy test data: %v", test.name, err)
-				}
-			}
-			testInput = file
-
-			stream, err := client.GetJavaHeapDump(ctx, test.req)
-			if err != nil {
-				t.Fatalf("%s: error setting up stream: %v", test.name, err)
-			}
-
-			var data []byte
-			for {
-				resp, err := stream.Recv()
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					t.Logf("%s - err: %v", test.name, err)
-				}
-
-				if err != nil && !test.wantErr {
-					t.Fatalf("%s: unexpected error: %v", test.name, err)
-				}
-				if err == nil && test.wantErr {
-					t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
-				}
-
-				// If we got here and expected an error the response is nil so just break.
-				if test.wantErr {
-					break
-				}
-				data = append(data, resp.Data...)
-			}
 			if !test.wantErr {
 				if !bytes.Equal(testdata, data) {
 					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
