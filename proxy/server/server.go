@@ -148,20 +148,17 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		// If dispatch returned with an error, we can cancel all
 		// running streams by cancelling their context.
 		if err != nil {
-			log.Println("canceling streams")
 			cancel()
 		}
 
 		// Wait for running streams to exit.
 		streamSet.Wait()
-		log.Println("all streams exited")
 
 		return err
 	})
 
 	// Final RPC status is the status of the waitgroup
 	err := group.Wait()
-	log.Println("after group wait")
 
 	if err != nil {
 		return err
