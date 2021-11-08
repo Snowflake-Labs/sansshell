@@ -18,7 +18,7 @@ import (
 // to requested targets
 // It encapsulates the various low-level details of making target
 // connections (such as client credentials, deadlines, etc) which
-// the proxy can use without needing to understand
+// the proxy can use without needing to understand them.
 type TargetDialer interface {
 	DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error)
 }
