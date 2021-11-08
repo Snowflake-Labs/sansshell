@@ -25,8 +25,9 @@ default allow = false
 allow {
     input.type = "HealthCheck.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.servername = "bufnet"
+    input.peer.address = "bufconn"
 }
+
 `
 	denyPolicy = `
 package sansshell.authz
@@ -36,7 +37,7 @@ default allow = false
 allow {
     input.type = "HealthCheck.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.servername = "localhost"
+    input.peer.address = "something else"
 }
 `
 	allowPeerSerialPolicy = `
