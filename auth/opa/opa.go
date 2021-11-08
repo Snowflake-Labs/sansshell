@@ -15,7 +15,7 @@ const (
 	// Any policy not using this package will be rejected.
 	SansshellRegoPackage = "sansshell.authz"
 
-	// The default query used to evalate the policy
+	// The default query used for policy evaluation.
 	DefaultAuthzQuery = "data.sansshell.authz.allow"
 )
 
@@ -48,10 +48,10 @@ func (o optionFunc) apply(opts *policyOptions) {
 	o(opts)
 }
 
-// Use `query` to evaulate the policy, instead of DefaultAuthzQuery
+// Use `query` to evaulate the policy, instead of DefaultAuthzQuery.
 // The supplied query should be simple evaluation expression that
-// defaults to true if the input satisfies the policy, and
-// should create no bindings.
+// creates no binding, and evaluates to 'true' iff the input
+// satisfies the conditions of the policy.
 func WithAllowQuery(query string) Option {
 	return optionFunc(func(o *policyOptions) {
 		o.query = query

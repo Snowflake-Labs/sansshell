@@ -26,7 +26,7 @@ type RpcAuthInput struct {
 	// The message type as 'Package.Message'
 	MessageType string `json:"type"`
 
-	// Raw grpc metdata.
+	// Raw grpc metdata associated with this call.
 	Metadata metadata.MD `json:"metadata"`
 
 	// Information about the calling peer, if available
@@ -100,7 +100,7 @@ func NewRpcAuthInput(ctx context.Context, method string, req proto.Message) (*Rp
 }
 
 // PeerInputFromContext populates peer information from the supplied
-// context.
+// context, if available.
 func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	out := &PeerAuthInput{}
 	p, ok := peer.FromContext(ctx)
@@ -115,7 +115,8 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	return out
 }
 
-// CertInputFrom
+// CertInputFrom populates certificate information from the supplied
+// credentials, if available.
 func CertInputFrom(authInfo credentials.AuthInfo) *CertAuthInput {
 	out := &CertAuthInput{}
 	tlsInfo, ok := authInfo.(credentials.TLSInfo)

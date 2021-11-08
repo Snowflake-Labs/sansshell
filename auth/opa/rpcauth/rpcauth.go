@@ -1,5 +1,5 @@
 // package rpcauth provides OPA policy authorization
-// for RPC
+// for Sansshell RPCs.
 package rpcauth
 
 import (
@@ -20,30 +20,57 @@ import (
 type Authorizer struct {
 	// The AuthzPolicy used to perform authorization checks.
 	policy *opa.AuthzPolicy
+
+	// Additional authorization hooks invoked before policy evaluation.
+	hooks []RpcAuthzHook
 }
 
-// An RpcAuthInputHook is a function that mutates or
-// augments RpcAuthInput data
-type RpcAuthInputHook func(*RpcAuthInput) error
+// An RpcAuthzHook is invoked on populated RpcAuthInput prior to policy
+// evaluation, and may augment / mutate the input, or pre-emptively
+// reject
+type RpcAuthzHook interface {
+	Apply(context.Context, *RpcAuthInput) error
+}
+
+// AuthzHookFunc implements RpcAuthzHook for a simple function
+type RpcAuthzHookFunc func(context.Context, *RpcAuthInput) error
+
+func (r RpcAuthzHookFunc) Apply(ctx context.Context, input *RpcAuthInput) error {
+	return r(ctx, input)
+}
 
 // New creates a new Authorizer from an opa.AuthzPolicy
-func New(policy *opa.AuthzPolicy) *Authorizer {
-	return &Authorizer{policy: policy}
+func New(policy *opa.AuthzPolicy, inputHooks ...RpcAuthzHook) *Authorizer {
+	return &Authorizer{policy: policy, hooks: inputHooks}
 }
 
 // NewWithPolicy creates a new Authorizer from a policy string.
-func NewWithPolicy(ctx context.Context, policy string) (*Authorizer, error) {
+func NewWithPolicy(ctx context.Context, policy string, inputHooks ...RpcAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {
 		return nil, err
 	}
-	return New(p), nil
+	return New(p, inputHooks...), nil
 }
 
 // Evalulate the supplied input against the authorization policy, returning
 // nil iff policy evaulation was successful, and the request is permitted, or
-// an appropriate status.Error otherwise.
+// an appropriate status.Error otherwise. Any input hooks will be executed
+// prior to policy evaluation, and may mutate `input`, regardless of the
+// the success or failure of policy.
 func (g *Authorizer) Eval(ctx context.Context, input *RpcAuthInput) error {
+	if input == nil {
+		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
+	}
+	for _, hook := range g.hooks {
+		if err := hook.Apply(ctx, input); err != nil {
+			if _, ok := status.FromError(err); ok {
+				// error is already an appropriate status.Status
+				return err
+			}
+			return status.Errorf(codes.Internal, "authz hook error: %v", err)
+		}
+	}
 	allowed, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
@@ -80,6 +107,7 @@ func (c *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info
 	return handler(srv, wrapped)
 }
 
+// wrappedStream wraps an existing grpc.ServerStream with authorization checking.
 type wrappedStream struct {
 	grpc.ServerStream
 	info  *grpc.StreamServerInfo
