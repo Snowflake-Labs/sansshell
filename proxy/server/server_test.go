@@ -422,6 +422,26 @@ func TestProxyServerBidiStream(t *testing.T) {
 	}
 }
 
+func TestProxyServerProxyClientClose(t *testing.T) {
+	ctx := context.Background()
+	testServerMap := startTestDataServers(t, "foo:456")
+	proxyStream := startTestProxy(ctx, t, testServerMap)
+
+	testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestBidiStream")
+
+	// sending a ClientClose to the ProxyStream will also ClientClose the streams.
+	if err := proxyStream.CloseSend(); err != nil {
+		t.Fatalf("CloseSend(); err was %v, want nil", err)
+	}
+
+	// This should trigger the close of the target stream, with no error
+	reply := testutil.Exchange(t, proxyStream, nil)
+	sc := reply.GetServerClose()
+	if sc == nil || sc.GetStatus() != nil {
+		t.Fatalf("Exchange(), want ServerClose with nil status, got %+v", reply)
+	}
+}
+
 func TestProxyServerNonceReusePrevention(t *testing.T) {
 	ctx := context.Background()
 	testServerMap := startTestDataServers(t, "foo:456")
