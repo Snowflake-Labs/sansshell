@@ -27,7 +27,7 @@ type Authorizer struct {
 
 // An RpcAuthzHook is invoked on populated RpcAuthInput prior to policy
 // evaluation, and may augment / mutate the input, or pre-emptively
-// reject
+// reject a request.
 type RpcAuthzHook interface {
 	Apply(context.Context, *RpcAuthInput) error
 }

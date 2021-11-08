@@ -60,7 +60,7 @@ allow {
 			errFunc: wantStatusCode(codes.InvalidArgument),
 		},
 		{
-			name:    "empty input, no hooks",
+			name:    "empty input, no hooks, deny",
 			input:   &RpcAuthInput{},
 			hooks:   []RpcAuthzHook{},
 			errFunc: wantStatusCode(codes.PermissionDenied),
@@ -103,6 +103,33 @@ allow {
 			errFunc: wantStatusCode(codes.FailedPrecondition),
 		},
 		{
+			name:  "multi-hook, first hook rejects with code",
+			input: &RpcAuthInput{},
+			hooks: []RpcAuthzHook{
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					return status.Error(codes.FailedPrecondition, "hook failed")
+				}),
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					// never invoked
+					return nil
+				}),
+			},
+			errFunc: wantStatusCode(codes.FailedPrecondition),
+		},
+		{
+			name:  "multi-hook, last hook rejects with code",
+			input: &RpcAuthInput{},
+			hooks: []RpcAuthzHook{
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					return nil
+				}),
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					return status.Error(codes.FailedPrecondition, "hook failed")
+				}),
+			},
+			errFunc: wantStatusCode(codes.FailedPrecondition),
+		},
+		{
 			name:  "single hook, hook reject without code",
 			input: &RpcAuthInput{},
 			hooks: []RpcAuthzHook{
@@ -111,6 +138,39 @@ allow {
 				}),
 			},
 			errFunc: wantStatusCode(codes.Internal),
+		},
+		{
+			name:  "hook ordering",
+			input: &RpcAuthInput{},
+			hooks: []RpcAuthzHook{
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					input.Method = "/Foo.Bar/Baz"
+					input.MessageType = "Foo.BarRequest"
+					return nil
+				}),
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					input.MessageType = "Foo.BazRequest"
+					return nil
+				}),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name:  "synthesize data, allow",
+			input: &RpcAuthInput{Method: "/Foo.Bar/Foo"},
+			hooks: []RpcAuthzHook{
+				RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					if input.Peer == nil {
+						input.Peer = &PeerAuthInput{
+							Principal: &PrincipalAuthInput{
+								ID: "admin@foo",
+							},
+						}
+					}
+					return nil
+				}),
+			},
+			errFunc: wantStatusCode(codes.OK),
 		},
 	} {
 		tc := tc
