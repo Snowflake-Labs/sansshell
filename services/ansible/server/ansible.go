@@ -88,7 +88,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	cmdArgs = cmdArgsTransform(cmdArgs)
 
-	run, err := util.RunCommand(ctx, *ansiblePlaybookBin, cmdArgs, false)
+	run, err := util.RunCommand(ctx, *ansiblePlaybookBin, cmdArgs)
 	if err != nil {
 		return nil, err
 	}
