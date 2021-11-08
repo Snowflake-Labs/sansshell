@@ -61,7 +61,12 @@ func TestRunCommand(t *testing.T) {
 			returnCodeNonZero: true,
 		},
 	} {
-		run, err := RunCommand(context.Background(), test.bin, test.args, test.stderrIsError)
+		var opts []Option
+		if test.stderrIsError {
+			opts = append(opts, FailOnStderr())
+		}
+
+		run, err := RunCommand(context.Background(), test.bin, test.args, opts...)
 		t.Logf("%s: response: %+v", test.name, run)
 		t.Logf("%s: error: %v", test.name, err)
 		if test.wantErr {

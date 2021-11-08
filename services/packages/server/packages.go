@@ -142,7 +142,7 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:], false)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:], false)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +206,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 
-	run, err = util.RunCommand(ctx, command[0], command[1:], false)
+	run, err = util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +304,7 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	}
 
 	// This shouldn't return anything to stderr.
-	run, err := util.RunCommand(ctx, command[0], command[1:], true)
+	run, err := util.RunCommand(ctx, command[0], command[1:], util.FailOnStderr())
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +410,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 		return nil, err
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:], false)
+	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, err
 	}

@@ -86,7 +86,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	options := psOptions()
 
 	// We gather all the processes up and then filter by pid if needed at the end.
-	run, err := util.RunCommand(ctx, cmdName, options, true)
+	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
-	run, err := util.RunCommand(ctx, cmdName, options, true)
+	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	options := jstackOptions(req)
 
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
-	run, err := util.RunCommand(ctx, cmdName, options, false)
+	run, err := util.RunCommand(ctx, cmdName, options)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 	}
 	defer os.RemoveAll(filepath.Dir(file)) // clean up
 
-	run, err := util.RunCommand(stream.Context(), cmdName, options, true)
+	run, err := util.RunCommand(stream.Context(), cmdName, options, util.FailOnStderr())
 	if err != nil {
 		return err
 	}
@@ -418,7 +418,7 @@ func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Proce
 	defer os.RemoveAll(filepath.Dir(file)) // clean up
 
 	// Don't care about stderr output since jmap produces some debug that way.
-	run, err := util.RunCommand(stream.Context(), cmdName, options, false)
+	run, err := util.RunCommand(stream.Context(), cmdName, options)
 	if err != nil {
 		return err
 	}
