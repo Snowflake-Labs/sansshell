@@ -294,7 +294,7 @@ func createOutput(path string) (*os.File, error) {
 	} else {
 		output, err = os.Create(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v", path, err)
+			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v\n", path, err)
 			return nil, err
 		}
 	}
@@ -318,7 +318,15 @@ func (*dumpCmd) Usage() string {
 func (p *dumpCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.pid, "pid", 0, "Process to generate a core dump against.")
 	f.BoolVar(&p.isJava, "is-java", false, "If true will use jmap to attempt to dump instead of core.")
-	f.StringVar(&p.output, "output", "", "Output file to write data. - indicates to use stdout.")
+	f.StringVar(&p.output, "output", "", `Output to write data. - indicates to use stdout. A normal file path applies.
+
+This will also accept URL options of the form:
+
+	s3://bucket (AWS)
+	azblob://bucket (Azure)
+        gs://bucket (GCP)
+	
+	See https://gocloud.dev/howto/blob/ for details on options.`)
 }
 
 func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -335,10 +343,18 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewProcessClient(conn)
 
+	dest := pb.BlobDestination_BLOB_DESTINATION_STREAM
+	url := ""
+	switch {
+	case strings.HasPrefix(p.output, "s3://"), strings.HasPrefix(p.output, "azblob://"), strings.HasPrefix(p.output, "gs://"):
+		dest = pb.BlobDestination_BLOB_DESTINATION_URL
+		url = p.output
+	}
 	req := &pb.GetMemoryDumpRequest{
 		Pid:         p.pid,
 		IsJava:      p.isJava,
-		Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+		Destination: dest,
+		Url:         url,
 	}
 
 	stream, err := c.GetMemoryDump(ctx, req)
@@ -347,9 +363,12 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	output, err := createOutput(p.output)
-	if err != nil {
-		return subcommands.ExitFailure
+	var output *os.File
+	if url == "" {
+		output, err = createOutput(p.output)
+		if err != nil {
+			return subcommands.ExitFailure
+		}
 	}
 
 	for {
