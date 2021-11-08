@@ -14,8 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// RpcAuthInput is used as policy input to validate
-// Sansshell RPCs
+// RpcAuthInput is used as policy input to validate Sansshell RPCs
 type RpcAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
@@ -36,8 +35,7 @@ type RpcAuthInput struct {
 	Host *HostAuthInput `json:"host"`
 }
 
-// PeerAuthInput contains policy-relevant information
-// about an RPC peer.
+// PeerAuthInput contains policy-relevant information about an RPC peer.
 type PeerAuthInput struct {
 	// The 'network' as returned by net.Addr.Network() (e.g. "tcp", "udp")
 	Network string `json:"network"`
@@ -48,20 +46,18 @@ type PeerAuthInput struct {
 	// Information about the certificate presented by the client, if any
 	Cert *CertAuthInput `json:"cert"`
 
-	// Information about the principal associated with the peer
-	// Typically derived from the Cert
+	// Information about the principal associated with the peer, if any
 	Principal *PrincipalAuthInput `json:"principal"`
 }
 
-// HostAuthInput contains policy-relevant information
-// about the system which recieves the RPC
+// HostAuthInput contains policy-relevant information about the system receiving
+// an RPC
 type HostAuthInput struct {
-	// Information about the principal associated with the host
+	// Information about the principal associated with the host, if any
 	Principal *PrincipalAuthInput `json:"principal"`
 }
 
-// CertAuthInput contains policy-relevant information
-// derived from the user-cert.
+// CertAuthInput contains policy-relevant information derived from a certificate
 type CertAuthInput struct {
 	// The certificate subject
 	Subject pkix.Name `json:"subject"`
@@ -76,8 +72,8 @@ type CertAuthInput struct {
 	SPIFFEID string `json:"spiffeid"`
 }
 
-// PrincipalAuthInput contains policy-relevant information
-// about the principal associated with an operation.
+// PrincipalAuthInput contains policy-relevant information about the principal
+// associated with an operation.
 type PrincipalAuthInput struct {
 	// The principal identifier (e.g. a username or service role)
 	ID string `json:"id"`
