@@ -6,6 +6,7 @@ require (
 	github.com/google/go-cmp v0.5.5
 	github.com/google/subcommands v1.2.0
 	github.com/open-policy-agent/opa v0.32.0
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.40.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
 	google.golang.org/protobuf v1.27.1
