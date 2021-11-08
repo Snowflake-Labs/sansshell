@@ -40,12 +40,15 @@ func (r RpcAuthzHookFunc) Hook(ctx context.Context, input *RpcAuthInput) error {
 	return r(ctx, input)
 }
 
-// New creates a new Authorizer from an opa.AuthzPolicy. Any su
+// New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
+// hooks will be executed, in the order provided, on each policy evauluation.
 func New(policy *opa.AuthzPolicy, authzHooks ...RpcAuthzHook) *Authorizer {
 	return &Authorizer{policy: policy, hooks: authzHooks}
 }
 
-// NewWithPolicy creates a new Authorizer from a policy string.
+// NewWithPolicy creates a new Authorizer from a policy string. Any supplied
+// authorization hooks will be executed, in the order provided, on each policy
+// evaluation.
 func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {

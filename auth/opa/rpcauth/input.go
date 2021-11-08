@@ -31,12 +31,15 @@ type RpcAuthInput struct {
 
 	// Information about the calling peer, if available
 	Peer *PeerAuthInput `json:"peer"`
+
+	// Information about the host serving the RPC.
+	Host *HostAuthInput `json:"host"`
 }
 
 // PeerAuthInput contains policy-relevant information
 // about an RPC peer.
 type PeerAuthInput struct {
-	// The 'network' as return by net.Addr.Network() (e.g. "tcp", "udp")
+	// The 'network' as returned by net.Addr.Network() (e.g. "tcp", "udp")
 	Network string `json:"network"`
 
 	// The address string, as returned by net.Addr.String()
@@ -45,8 +48,15 @@ type PeerAuthInput struct {
 	// Information about the certificate presented by the client, if any
 	Cert *CertAuthInput `json:"cert"`
 
-	// Information about the principal associated with the peer.
+	// Information about the principal associated with the peer
 	// Typically derived from the Cert
+	Principal *PrincipalAuthInput `json:"principal"`
+}
+
+// HostAuthInput contains policy-relevant information
+// about the system which recieves the RPC
+type HostAuthInput struct {
+	// Information about the principal associated with the host
 	Principal *PrincipalAuthInput `json:"principal"`
 }
 
