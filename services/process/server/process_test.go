@@ -582,7 +582,7 @@ func TestJstack(t *testing.T) {
 	}
 }
 
-func TestCore(t *testing.T) {
+func TestMemoryDump(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
