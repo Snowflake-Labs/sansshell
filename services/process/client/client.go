@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -54,6 +55,8 @@ func init() {
 	subcommands.Register(&psCmd{}, "process")
 	subcommands.Register(&pstackCmd{}, "process")
 	subcommands.Register(&jstackCmd{}, "process")
+	subcommands.Register(&coreCmd{}, "process")
+	subcommands.Register(&heapdumpCmd{}, "process")
 }
 
 type psCmd struct {
@@ -278,6 +281,153 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			fmt.Fprintln(os.Stdout, t)
 		}
 		fmt.Fprintln(os.Stdout)
+	}
+	return subcommands.ExitSuccess
+}
+
+// createOutput is a helper func for gcore/jmap which creates the output file or writes
+// to stderr. It will print an error so calling code should simply return.
+func createOutput(path string) (*os.File, error) {
+	var output *os.File
+	var err error
+	if path == "-" {
+		output = os.Stdout
+	} else {
+		output, err = os.Create(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v", path, err)
+			return nil, err
+		}
+	}
+	return output, nil
+}
+
+type coreCmd struct {
+	pid    int64
+	output string
+}
+
+func (*coreCmd) Name() string     { return "core" }
+func (*coreCmd) Synopsis() string { return "Create a core dump of a running process." }
+func (*coreCmd) Usage() string {
+	return `core:
+  Generate a core dump for a given process id.
+`
+}
+
+func (p *coreCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.pid, "pid", 0, "Process to generate a core dump against.")
+	f.StringVar(&p.output, "output", "", "Output file to write data. - indicates to use stdout")
+}
+
+func (p *coreCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if p.pid <= 0 {
+		fmt.Fprintln(os.Stderr, "--pid must be specified")
+		return subcommands.ExitFailure
+	}
+
+	if p.output == "" {
+		fmt.Fprintln(os.Stderr, "--output must be specified")
+		return subcommands.ExitFailure
+	}
+	conn := args[0].(grpc.ClientConnInterface)
+
+	c := pb.NewProcessClient(conn)
+
+	req := &pb.GetCoreRequest{
+		Pid: p.pid,
+	}
+
+	stream, err := c.GetCore(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "GetCore returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	output, err := createOutput(p.output)
+	if err != nil {
+		return subcommands.ExitFailure
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
+			return subcommands.ExitFailure
+		}
+		n, err := output.Write(resp.Data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
+			return subcommands.ExitFailure
+		}
+	}
+	return subcommands.ExitSuccess
+}
+
+type heapdumpCmd struct {
+	pid    int64
+	output string
+}
+
+func (*heapdumpCmd) Name() string     { return "heapdump" }
+func (*heapdumpCmd) Synopsis() string { return "Create a heap dump of a running Java process." }
+func (*heapdumpCmd) Usage() string {
+	return `heapdump:
+  Generate a heapdump for a given process id of a Java process.
+`
+}
+
+func (p *heapdumpCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.pid, "pid", 0, "Process to generate heapdump against.")
+	f.StringVar(&p.output, "output", "", "Output file to write data. - indicates to use stdout")
+}
+
+func (p *heapdumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if p.pid <= 0 {
+		fmt.Fprintln(os.Stderr, "--pid must be specified")
+		return subcommands.ExitFailure
+	}
+
+	if p.output == "" {
+		fmt.Fprintln(os.Stderr, "--output must be specified")
+		return subcommands.ExitFailure
+	}
+	conn := args[0].(grpc.ClientConnInterface)
+
+	c := pb.NewProcessClient(conn)
+
+	req := &pb.GetJavaHeapDumpRequest{
+		Pid: p.pid,
+	}
+
+	stream, err := c.GetJavaHeapDump(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "GetJavaHeapDump returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	output, err := createOutput(p.output)
+	if err != nil {
+		return subcommands.ExitFailure
+	}
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
+			return subcommands.ExitFailure
+		}
+		n, err := output.Write(resp.Data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
+			return subcommands.ExitFailure
+		}
 	}
 	return subcommands.ExitSuccess
 }

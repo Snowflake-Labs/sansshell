@@ -5,7 +5,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -39,6 +42,41 @@ var (
 			fmt.Sprintf("%d", req.Pid),
 		}
 	}
+
+	// This will return options passed to the gcore command and the path to the resulting core file.
+	// The file will be placed in a temporary directory and that entire directory should be cleaned
+	// by the caller.
+	// TODO(jchacon): This is annoying as it requires a file in order to work. We should be able to
+	//                stream the data using Googles opensource library: https://code.google.com/archive/p/google-coredumper/
+	gcoreOptionsAndLocation = func(req *pb.GetCoreRequest) ([]string, string, error) {
+		dir, err := os.MkdirTemp("", "cores")
+		if err != nil {
+			return nil, "", err
+		}
+		file := filepath.Join(dir, "core")
+		return []string{
+			"-o",
+			file,
+			fmt.Sprintf("%d", req.Pid),
+		}, fmt.Sprintf("%s.%d", file, req.Pid), nil
+	}
+
+	// This will return options passed to the jmap command and the path to the resulting heapdump file.
+	// The file will be placed in a temporary directory and that entire directory should be cleaned
+	// by the caller.
+	// TODO(jchacon): This is annoying as it requires a file in order to work. We should be able to
+	//                stream the data somehow though that may require a private fork of jmap.
+	jmapOptionsAndLocation = func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
+		dir, err := os.MkdirTemp(os.TempDir(), "heaps")
+		if err != nil {
+			return nil, "", err
+		}
+		file := filepath.Join(dir, "heap.bin")
+		return []string{
+			fmt.Sprintf("-dump:format=b,file=%s", file),
+			fmt.Sprintf("%d", req.Pid),
+		}, file, nil
+	}
 )
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
@@ -48,17 +86,13 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	options := psOptions()
 
 	// We gather all the processes up and then filter by pid if needed at the end.
-	run, err := util.RunCommand(ctx, cmdName, options)
+	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
 		return nil, err
 	}
 
 	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
-	}
-
-	if len(run.Stderr.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
 	}
 
 	entries, err := parser(run.Stdout)
@@ -98,22 +132,16 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	// TODO(jchacon): Push all of this into a util library which validates things and forces
-	//                commands to have an abs path (testing will have to resolve path first).
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
-	run, err := util.RunCommand(ctx, cmdName, options)
+	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
 		return nil, err
 	}
 
 	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
-	}
-
-	if len(run.Stderr.String()) != 0 {
-		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", util.TrimString(run.Stderr.String()))
 	}
 
 	scanner := bufio.NewScanner(run.Stdout)
@@ -179,12 +207,12 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	cmdName := *jstackBin
 	options := jstackOptions(req)
 
+	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
 	run, err := util.RunCommand(ctx, cmdName, options)
 	if err != nil {
 		return nil, err
 	}
 
-	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
 	if err := run.Error; err != nil {
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
 	}
@@ -292,11 +320,138 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 }
 
 func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer) error {
-	return status.Error(codes.Unimplemented, "not implemented")
+	log.Printf("Received request for GetCore: %+v", req)
+
+	// This is tied to gcore so either an OS provides it or it doesn't.
+	if *gcoreBin == "" {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	if req.Pid <= 0 {
+		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+
+	// Can't default to streaming as that is inherently more open to exfiltration risks
+	// and harder for policy to manage before we get the request.
+	switch req.Destination {
+	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+	case pb.BlobDestination_BLOB_DESTINATION_URL:
+		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+	case pb.BlobDestination_BLOB_DESTINATION_UNKNOWN:
+		fallthrough
+	default:
+		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
+	}
+
+	cmdName := *gcoreBin
+	options, file, err := gcoreOptionsAndLocation(req)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't generate options/core file location: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+	run, err := util.RunCommand(stream.Context(), cmdName, options, util.FailOnStderr())
+	if err != nil {
+		return err
+	}
+
+	if err := run.Error; err != nil {
+		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	}
+
+	f, err := os.Open(file)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
+	}
+	defer f.Close()
+
+	b := make([]byte, util.StreamingChunkSize)
+	for {
+		n, err := f.Read(b)
+		// We're done on EOF.
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+		}
+
+		// Only send over the number of bytes we actually read or
+		// else we'll send over garbage in the last packet potentially.
+		if err := stream.Send(&pb.GetCoreReply{Data: b[:n]}); err != nil {
+			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		}
+	}
+	return nil
 }
 
 func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Process_GetJavaHeapDumpServer) error {
-	return status.Error(codes.Unimplemented, "not implemented")
+	log.Printf("Received request for GetJavaHeapDump: %+v", req)
+
+	// This is tied to jmap so either an OS provides it or it doesn't.
+	if *jmapBin == "" {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	if req.Pid <= 0 {
+		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+
+	// Can't default to streaming as that is inherently more open to exfiltration risks
+	// and harder for policy to manage before we get the request.
+	switch req.Destination {
+	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+	case pb.BlobDestination_BLOB_DESTINATION_URL:
+		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+	case pb.BlobDestination_BLOB_DESTINATION_UNKNOWN:
+		fallthrough
+	default:
+		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
+	}
+
+	cmdName := *jmapBin
+	options, file, err := jmapOptionsAndLocation(req)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't generate options/heap dump location: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+	// Don't care about stderr output since jmap produces some debug that way.
+	run, err := util.RunCommand(stream.Context(), cmdName, options)
+	if err != nil {
+		return err
+	}
+
+	if err := run.Error; err != nil {
+		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	}
+
+	f, err := os.Open(file)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
+	}
+	defer f.Close()
+
+	b := make([]byte, util.StreamingChunkSize)
+	for {
+		n, err := f.Read(b)
+		// We're done on EOF.
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+		}
+
+		// Only send over the number of bytes we actually read or
+		// else we'll send over garbage in the last packet potentially.
+		if err := stream.Send(&pb.GetJavaHeapDumpReply{Data: b[:n]}); err != nil {
+			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		}
+	}
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server

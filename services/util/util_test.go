@@ -17,6 +17,7 @@ func TestRunCommand(t *testing.T) {
 		returnCodeNonZero bool
 		stdout            string
 		stderr            string
+		stderrIsError     bool
 	}{
 		{
 			name:    "Not absolute path",
@@ -41,6 +42,15 @@ func TestRunCommand(t *testing.T) {
 			stderr: "foo\n",
 		},
 		{
+			name:          "Command with stdout and stderr but stderr is error",
+			bin:           testutil.ResolvePath(t, "sh"),
+			args:          []string{"-c", "echo foo >&2 && echo bar"},
+			stdout:        "bar\n",
+			stderr:        "foo\n",
+			stderrIsError: true,
+			wantErr:       true,
+		},
+		{
 			name:   "Verify clean environment",
 			bin:    testutil.ResolvePath(t, "env"),
 			stdout: "",
@@ -51,7 +61,12 @@ func TestRunCommand(t *testing.T) {
 			returnCodeNonZero: true,
 		},
 	} {
-		run, err := RunCommand(context.Background(), test.bin, test.args)
+		var opts []Option
+		if test.stderrIsError {
+			opts = append(opts, FailOnStderr())
+		}
+
+		run, err := RunCommand(context.Background(), test.bin, test.args, opts...)
 		t.Logf("%s: response: %+v", test.name, run)
 		t.Logf("%s: error: %v", test.name, err)
 		if test.wantErr {

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -100,12 +101,12 @@ func TestRead(t *testing.T) {
 		// Future proof for t.Parallel()
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			oldChunk := chunkSize
+			oldChunk := util.StreamingChunkSize
 			defer func() {
-				chunkSize = oldChunk
+				util.StreamingChunkSize = oldChunk
 			}()
 
-			chunkSize = tc.Chunksize
+			util.StreamingChunkSize = tc.Chunksize
 
 			client := pb.NewLocalFileClient(conn)
 

@@ -1,10 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -298,14 +302,17 @@ func TestPstack(t *testing.T) {
 	// to submit into the server.
 	savedPstackBin := *pstackBin
 	*pstackBin = testutil.ResolvePath(t, "cat")
-	savedPstackOptions := pstackOptions
+	savedFunc := pstackOptions
 	var testInput string
-	pstackOptions = func(*pb.GetStacksRequest) []string {
+	pstackOptions = func(req *pb.GetStacksRequest) []string {
+		if opts := savedFunc(req); len(opts) != 1 {
+			t.Fatalf("bad pstack options. Expected 1 got %q", opts)
+		}
 		return []string{testInput}
 	}
 	defer func() {
 		*pstackBin = savedPstackBin
-		pstackOptions = savedPstackOptions
+		pstackOptions = savedFunc
 	}()
 
 	client := pb.NewProcessClient(conn)
@@ -323,24 +330,33 @@ func TestPstack(t *testing.T) {
 	}{
 		{
 			name:     "A program with only one thread",
+			command:  testutil.ResolvePath(t, "cat"),
 			input:    testdataPstackNoThreads,
 			validate: testdataPstackNoThreadsTextProto,
 			pid:      1,
 		},
 		{
 			name:     "A program with many threads",
+			command:  testutil.ResolvePath(t, "cat"),
 			input:    testdataPstackThreads,
 			validate: testdataPstackThreadsTextProto,
 			pid:      1,
 		},
 		{
 			name:    "bad pid - zero",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataPstackThreads,
 			wantErr: true,
 		},
 		{
 			name:    "bad command",
 			command: "/non-existant-binary",
+			input:   testdataPstackThreads,
+			pid:     1,
+			wantErr: true,
+		},
+		{
+			name:    "no command",
 			input:   testdataPstackThreads,
 			pid:     1,
 			wantErr: true,
@@ -362,24 +378,28 @@ func TestPstack(t *testing.T) {
 		},
 		{
 			name:    "Bad thread data - thread",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataPstackThreadsBadThread,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Bad thread data - number",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataPstackThreadsBadThreadNumber,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Bad thread data - id",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataPstackThreadsBadThreadId,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Bad thread data - lwp",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataPstackThreadsBadLwp,
 			pid:     1,
 			wantErr: true,
@@ -387,11 +407,7 @@ func TestPstack(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			command := testutil.ResolvePath(t, "cat")
-			if test.command != "" {
-				command = test.command
-			}
-			*pstackBin = command
+			*pstackBin = test.command
 
 			pstackOptions = goodPstackOptions
 			testInput = test.input
@@ -448,7 +464,10 @@ func TestJstack(t *testing.T) {
 	savedJstackBin := *jstackBin
 	savedFunc := jstackOptions
 	var testInput string
-	jstackOptions = func(*pb.GetJavaStacksRequest) []string {
+	jstackOptions = func(req *pb.GetJavaStacksRequest) []string {
+		if opts := savedFunc(req); len(opts) != 1 {
+			t.Fatalf("bad pstack options. Expected 1 got %q", opts)
+		}
 		return []string{
 			testInput,
 		}
@@ -470,48 +489,62 @@ func TestJstack(t *testing.T) {
 	}{
 		{
 			name:     "Basic jstack output",
+			command:  testutil.ResolvePath(t, "cat"),
 			input:    testdataJstack,
 			validate: "./testdata/jstack.textproto",
 			pid:      1,
 		},
 		{
+			name:    "No command",
+			input:   testdataJstack,
+			pid:     1,
+			wantErr: true,
+		},
+		{
 			name:    "Bad pid",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataJstack,
 			wantErr: true,
 		},
 		{
 			name:    "No end quote",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataJstackBad,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Bad field",
+			command: testutil.ResolvePath(t, "cat"),
 			input:   testdataJstackBad1,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Bad command",
+			command: "/non-existant-command",
 			input:   testdataJstack,
 			pid:     1,
-			command: "/non-existant-command",
+			wantErr: true,
+		},
+		{
+			name:    "Bad command - path",
+			command: "foo",
+			input:   testdataJstack,
+			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "Command returns error",
+			command: testutil.ResolvePath(t, "false"),
 			input:   testdataJstack,
 			pid:     1,
-			command: testutil.ResolvePath(t, "false"),
 			wantErr: true,
 		},
 	} {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
-			command := testutil.ResolvePath(t, "cat")
-			if test.command != "" {
-				command = test.command
-			}
-			*jstackBin = command
+			*jstackBin = test.command
 
 			jstackOptions = goodJstackOptions
 			testInput = test.input
@@ -540,6 +573,436 @@ func TestJstack(t *testing.T) {
 			if !test.wantErr {
 				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
 					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", test.name, resp, testdata, diff)
+				}
+			}
+		})
+	}
+}
+
+func TestCore(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewProcessClient(conn)
+
+	// Setup for tests where we use cat and pre-canned data
+	// to submit into the server.
+	savedGcoreBin := *gcoreBin
+	savedFunc := gcoreOptionsAndLocation
+	var testInput string
+	gcoreOptionsAndLocation = func(req *pb.GetCoreRequest) ([]string, string, error) {
+		opts, file, err := savedFunc(req)
+		if err != nil {
+			t.Fatalf("error from gcoreOptionsAndLocation for req %+v : %v", req, err)
+		}
+		if len(opts) == 0 {
+			t.Fatalf("didn't get any options back from gcoreOptionsAndLocation for req: %+v", req)
+		}
+		defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+		return []string{
+			testInput,
+		}, testInput, nil
+	}
+	defer func() {
+		*gcoreBin = savedGcoreBin
+		gcoreOptionsAndLocation = savedFunc
+	}()
+
+	goodGcoreOptions := gcoreOptionsAndLocation
+	badGcoreOptions := func(req *pb.GetCoreRequest) ([]string, string, error) {
+		return nil, "", errors.New("error")
+	}
+
+	for _, test := range []struct {
+		name     string
+		command  string
+		input    string
+		options  func(req *pb.GetCoreRequest) ([]string, string, error)
+		req      *pb.GetCoreRequest
+		noOutput bool
+		wantErr  bool
+	}{
+		{
+			name:    "basic contents check",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+		},
+		{
+			name:    "No command",
+			input:   "./testdata/core.test",
+			options: goodGcoreOptions,
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "bad pid",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - url",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - unknown",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid: 1,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - bad enum",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad options",
+			command: testutil.ResolvePath(t, "cat"),
+			options: badGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad command",
+			command: "//foo",
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Command returns error",
+			command: testutil.ResolvePath(t, "false"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad output file",
+			command: testutil.ResolvePath(t, "true"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			noOutput: true,
+			wantErr:  true,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			*gcoreBin = test.command
+			gcoreOptionsAndLocation = test.options
+
+			// Need a tmp dir and a copy of the test input since the options
+			// caller is expecting to cleanup the directory when it's done.
+			dir, err := os.MkdirTemp("", "cores")
+			if err != nil {
+				t.Fatalf("%s: Can't make tmpdir: %v", test.name, err)
+			}
+			file := filepath.Join(dir, "core")
+			var testdata []byte
+			if !test.noOutput {
+				testdata, err = os.ReadFile(test.input)
+				if err != nil {
+					t.Fatalf("%s: can't read test input: %v", test.name, err)
+				}
+				err = os.WriteFile(file, testdata, 0666)
+				if err != nil {
+					t.Fatalf("%s: can't copy test data: %v", test.name, err)
+				}
+			}
+			testInput = file
+
+			stream, err := client.GetCore(ctx, test.req)
+			if err != nil {
+				t.Fatalf("%s: error setting up stream: %v", test.name, err)
+			}
+
+			var data []byte
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil && !test.wantErr {
+					t.Fatalf("%s: unexpected error: %v", test.name, err)
+				}
+				if err == nil && test.wantErr {
+					t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+				}
+
+				// If we got here and expected an error the response is nil so just break.
+				if test.wantErr {
+					break
+				}
+				data = append(data, resp.Data...)
+			}
+			if !test.wantErr {
+				if !bytes.Equal(testdata, data) {
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
+				}
+			}
+		})
+	}
+}
+
+func TestHeapDump(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	client := pb.NewProcessClient(conn)
+
+	// Setup for tests where we use cat and pre-canned data
+	// to submit into the server.
+	savedJmapBin := *jmapBin
+	savedFunc := jmapOptionsAndLocation
+	var testInput string
+	jmapOptionsAndLocation = func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
+		opts, file, err := savedFunc(req)
+		if err != nil {
+			t.Fatalf("error from jmapOptionsAndLocation for req %+v : %v", req, err)
+		}
+		if len(opts) == 0 {
+			t.Fatalf("didn't get any options back from jmapOptionsAndLocation for req: %+v", req)
+		}
+		defer os.RemoveAll(filepath.Dir(file)) // clean up
+
+		return []string{
+			testInput,
+		}, testInput, nil
+	}
+	defer func() {
+		*jmapBin = savedJmapBin
+		jmapOptionsAndLocation = savedFunc
+	}()
+
+	goodJmapOptions := jmapOptionsAndLocation
+	badJmapOptions := func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error) {
+		return nil, "", errors.New("error")
+	}
+
+	for _, test := range []struct {
+		name     string
+		command  string
+		input    string
+		options  func(req *pb.GetJavaHeapDumpRequest) ([]string, string, error)
+		req      *pb.GetJavaHeapDumpRequest
+		noOutput bool
+		wantErr  bool
+	}{
+		{
+			name:    "basic contents check",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+		},
+		{
+			name:    "No command",
+			input:   "./testdata/heapdump.test",
+			options: goodJmapOptions,
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "bad pid",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - url",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - unknown",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid: 1,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad destination - bad enum",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad options",
+			command: testutil.ResolvePath(t, "cat"),
+			options: badJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad command",
+			command: "//foo",
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Command returns error",
+			command: testutil.ResolvePath(t, "false"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad output file",
+			command: testutil.ResolvePath(t, "true"),
+			options: goodJmapOptions,
+			input:   "./testdata/heapdump.test",
+			req: &pb.GetJavaHeapDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+			noOutput: true,
+			wantErr:  true,
+		},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			*jmapBin = test.command
+			jmapOptionsAndLocation = test.options
+
+			// Need a tmp dir and a copy of the test input since the options
+			// caller is expecting to cleanup the directory when it's done.
+			dir, err := os.MkdirTemp("", "heapdumps")
+			if err != nil {
+				t.Fatalf("%s: Can't make tmpdir: %v", test.name, err)
+			}
+			file := filepath.Join(dir, "heapdump")
+			var testdata []byte
+			if !test.noOutput {
+				testdata, err = os.ReadFile(test.input)
+				if err != nil {
+					t.Fatalf("%s: can't read test input: %v", test.name, err)
+				}
+				err = os.WriteFile(file, testdata, 0666)
+				if err != nil {
+					t.Fatalf("%s: can't copy test data: %v", test.name, err)
+				}
+			}
+			testInput = file
+
+			stream, err := client.GetJavaHeapDump(ctx, test.req)
+			if err != nil {
+				t.Fatalf("%s: error setting up stream: %v", test.name, err)
+			}
+
+			var data []byte
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil && !test.wantErr {
+					t.Fatalf("%s: unexpected error: %v", test.name, err)
+				}
+				if err == nil && test.wantErr {
+					t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+				}
+
+				// If we got here and expected an error the response is nil so just break.
+				if test.wantErr {
+					break
+				}
+				data = append(data, resp.Data...)
+			}
+			if !test.wantErr {
+				if !bytes.Equal(testdata, data) {
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
 				}
 			}
 		})

@@ -11,11 +11,42 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// TODO(jchacon): Make this configurable
+// The chunk size we use when sending replies on a stream.
+var StreamingChunkSize = 128 * 1024
+
 type CommandRun struct {
 	Stdout   *bytes.Buffer
 	Stderr   *bytes.Buffer
 	Error    error
 	ExitCode int
+}
+
+// There's only one now but compose into a builder pattern for Options so
+// it's easy to add more (such as dropping permissions, etc).
+type cmdOptions struct {
+	failOnStderr bool
+}
+
+type Option interface {
+	apply(*cmdOptions)
+}
+
+type optionfunc func(*cmdOptions)
+
+func (f optionfunc) apply(opts *cmdOptions) {
+	f(opts)
+}
+
+// If FailOnStderr is passed as am option the command will return an error if any output appears on stderr
+// regardless of exit code. As we're often parsing the text output of specific commands as root
+// this is a sanity check we're getting expected output. i.e. ps never returns anything on stderr
+// so if some run does that's suspect. Up to callers to decide as some tools (yum...) like to emit
+// stderr as debugging as they run.
+func FailOnStderr() Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.failOnStderr = true
+	})
 }
 
 // RunCommand will take the given binary and args and execute it returning all
@@ -25,12 +56,17 @@ type CommandRun struct {
 // be run. Any other errors (starting or from waiting) are recorded in the Error field.
 // Errors returned directly will be a status.Error and Error will be whatever the exec
 // library returns.
-func RunCommand(ctx context.Context, bin string, args []string) (*CommandRun, error) {
+func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) (*CommandRun, error) {
 	if !filepath.IsAbs(bin) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not an absolute path", bin)
 	}
 	if bin != filepath.Clean(bin) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a clean path", bin)
+	}
+
+	options := &cmdOptions{}
+	for _, opt := range opts {
+		opt.apply(options)
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
@@ -49,6 +85,10 @@ func RunCommand(ctx context.Context, bin string, args []string) (*CommandRun, er
 	log.Printf("Executing: %s", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
+
+	if options.failOnStderr && len(run.Stderr.String()) != 0 {
+		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", TrimString(run.Stderr.String()))
+	}
 	return run, nil
 }
 
