@@ -50,3 +50,11 @@ allow {
 allow {
 	input.type = "Process.GetJavaStacksRequest"
 }
+
+allow {
+	input.type = "Process.GetCoreRequest"
+}
+
+allow {
+	input.type = "Process.GetJavaHeapDumpRequest"
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -15,6 +16,8 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -619,6 +622,12 @@ func TestCore(t *testing.T) {
 		return nil, "", errors.New("error")
 	}
 
+	testdir, err := os.MkdirTemp("", "tests")
+	if err != nil {
+		t.Fatalf("Can't create temp dir: %v", err)
+	}
+	defer os.RemoveAll(testdir) // clean up
+
 	for _, test := range []struct {
 		name     string
 		command  string
@@ -636,6 +645,17 @@ func TestCore(t *testing.T) {
 			req: &pb.GetCoreRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+			},
+		},
+		{
+			name:    "basic contents check - url",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetCoreRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+				Url:         fmt.Sprintf("file://%s", testdir),
 			},
 		},
 		{
@@ -772,6 +792,10 @@ func TestCore(t *testing.T) {
 				if err == io.EOF {
 					break
 				}
+				if err != nil {
+					t.Logf("%s - err: %v", test.name, err)
+				}
+
 				if err != nil && !test.wantErr {
 					t.Fatalf("%s: unexpected error: %v", test.name, err)
 				}
@@ -785,6 +809,27 @@ func TestCore(t *testing.T) {
 				}
 				data = append(data, resp.Data...)
 			}
+
+			// If we're not expecting an error and using a URL it didn't go to data so we need
+			// to load that up for comparison.
+			if !test.wantErr && test.req.Url != "" {
+				// Need to query the bucket to see what we got.
+				bucket, err := blob.OpenBucket(ctx, test.req.Url)
+				if err != nil {
+					t.Fatalf("can't open %s bucket - %v", test.req.Url, err)
+				}
+				file := fmt.Sprintf("bufconn-core.%d", test.req.Pid)
+				rdr, err := bucket.NewReader(context.Background(), file, nil)
+				if err != nil {
+					t.Fatalf("can't open bucket %s key %s - %v", test.req.Url, file, err)
+				}
+				data, err = io.ReadAll(rdr)
+				if err != nil {
+					t.Fatalf("can't read all bytes from mem://%s - %v", file, err)
+				}
+				defer bucket.Close()
+			}
+
 			if !test.wantErr {
 				if !bytes.Equal(testdata, data) {
 					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
@@ -987,6 +1032,10 @@ func TestHeapDump(t *testing.T) {
 				if err == io.EOF {
 					break
 				}
+				if err != nil {
+					t.Logf("%s - err: %v", test.name, err)
+				}
+
 				if err != nil && !test.wantErr {
 					t.Fatalf("%s: unexpected error: %v", test.name, err)
 				}

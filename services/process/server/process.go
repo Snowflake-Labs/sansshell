@@ -11,11 +11,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gocloud.dev/blob"
+	_ "gocloud.dev/blob/azureblob"
+	_ "gocloud.dev/blob/gcsblob"
+	_ "gocloud.dev/blob/s3blob"
+
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 )
 
@@ -319,6 +325,18 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	return out, nil
 }
 
+func openBlobForWriting(ctx context.Context, bucket string, file string) (io.WriteCloser, error) {
+	b, err := blob.OpenBucket(ctx, bucket)
+	if err != nil {
+		return nil, err
+	}
+	writer, err := b.NewWriter(ctx, file, nil)
+	if err != nil {
+		return nil, err
+	}
+	return writer, nil
+}
+
 func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer) error {
 	log.Printf("Received request for GetCore: %+v", req)
 
@@ -331,15 +349,34 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	// Can't default to streaming as that is inherently more open to exfiltration risks
-	// and harder for policy to manage before we get the request.
+	var dest io.WriteCloser
+	p, ok := peer.FromContext(stream.Context())
+	if !ok {
+		return status.Error(codes.Internal, "can't get peer from context")
+	}
+	bucketFile := fmt.Sprintf("%s-core.%d", p.Addr.String(), req.Pid)
+
 	switch req.Destination {
 	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+		// Nothing to do here, we just send it back.
 	case pb.BlobDestination_BLOB_DESTINATION_URL:
-		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+		// Take the URL and append a filename composed from the remote IP and core.PID
+		var err error
+		dest, err = openBlobForWriting(stream.Context(), req.Url, bucketFile)
+		if err != nil {
+			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.Url, err)
+		}
+		defer func() {
+			err := dest.Close()
+			if err != nil {
+				log.Printf("error closing bucket %s - %v", req.Url, err)
+			}
+		}()
 	case pb.BlobDestination_BLOB_DESTINATION_UNKNOWN:
 		fallthrough
 	default:
+		// Can't default to streaming as that is inherently more open to exfiltration risks
+		// and harder for policy to manage before we get the request. So there is no default.
 		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
 	}
 
@@ -379,8 +416,16 @@ func (s *server) GetCore(req *pb.GetCoreRequest, stream pb.Process_GetCoreServer
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
-		if err := stream.Send(&pb.GetCoreReply{Data: b[:n]}); err != nil {
-			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		switch req.Destination {
+		case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+			if err := stream.Send(&pb.GetCoreReply{Data: b[:n]}); err != nil {
+				return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+			}
+		case pb.BlobDestination_BLOB_DESTINATION_URL:
+			written, err := dest.Write(b[:n])
+			if err != nil || written != n {
+				return status.Errorf(codes.Internal, "can't write to file %s in bucket %s: %v", req.Url, bucketFile, err)
+			}
 		}
 	}
 	return nil
@@ -398,15 +443,34 @@ func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Proce
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	// Can't default to streaming as that is inherently more open to exfiltration risks
-	// and harder for policy to manage before we get the request.
+	var dest io.WriteCloser
+	p, ok := peer.FromContext(stream.Context())
+	if !ok {
+		return status.Error(codes.Internal, "can't get peer from context")
+	}
+	bucketFile := fmt.Sprintf("%s-core.%d", p.Addr.String(), req.Pid)
+
 	switch req.Destination {
 	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+		// Nothing to do here, we just send it back.
 	case pb.BlobDestination_BLOB_DESTINATION_URL:
-		return status.Error(codes.Unimplemented, "only streaming destinations are implemented")
+		// Take the URL and append a filename composed from the remote IP and heapdump.PID
+		var err error
+		dest, err = openBlobForWriting(stream.Context(), req.Url, bucketFile)
+		if err != nil {
+			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.Url, err)
+		}
+		defer func() {
+			err := dest.Close()
+			if err != nil {
+				log.Printf("error closing bucket %s - %v", req.Url, err)
+			}
+		}()
 	case pb.BlobDestination_BLOB_DESTINATION_UNKNOWN:
 		fallthrough
 	default:
+		// Can't default to streaming as that is inherently more open to exfiltration risks
+		// and harder for policy to manage before we get the request. So there is no default.
 		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
 	}
 
@@ -447,8 +511,16 @@ func (s *server) GetJavaHeapDump(req *pb.GetJavaHeapDumpRequest, stream pb.Proce
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
-		if err := stream.Send(&pb.GetJavaHeapDumpReply{Data: b[:n]}); err != nil {
-			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+		switch req.Destination {
+		case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+			if err := stream.Send(&pb.GetJavaHeapDumpReply{Data: b[:n]}); err != nil {
+				return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+			}
+		case pb.BlobDestination_BLOB_DESTINATION_URL:
+			written, err := dest.Write(b[:n])
+			if err != nil || written != n {
+				return status.Errorf(codes.Internal, "can't write to file %s in bucket %s: %v", req.Url, bucketFile, err)
+			}
 		}
 	}
 	return nil
