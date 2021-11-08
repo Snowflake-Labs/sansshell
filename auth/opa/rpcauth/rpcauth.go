@@ -118,6 +118,10 @@ type wrappedStream struct {
 // see: grpc.ServerStream.RecvMsg
 func (e *wrappedStream) RecvMsg(req interface{}) error {
 	ctx := e.Context()
+	// The argument to RecvMsg is the destination message, which will
+	// be filled by the stream.
+	// Therefore, in order to check the message against the policy, it
+	// first needs to be populated by receiving from the wire.
 	if err := e.ServerStream.RecvMsg(req); err != nil {
 		return err
 	}

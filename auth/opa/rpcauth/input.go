@@ -127,6 +127,8 @@ func CertInputFrom(authInfo credentials.AuthInfo) *CertAuthInput {
 		out.SPIFFEID = tlsInfo.SPIFFEID.String()
 	}
 	if len(tlsInfo.State.PeerCertificates) > 0 {
+		// Element 0 is the 'leaf' cert, which is used to verify
+		// the connection.
 		cert := tlsInfo.State.PeerCertificates[0]
 		out.Subject = cert.Subject
 		out.Issuer = cert.Issuer
