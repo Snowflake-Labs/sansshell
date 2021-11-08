@@ -58,8 +58,8 @@ func WithAllowQuery(query string) Option {
 	})
 }
 
-// NewAuthzPolicy creates a new AuthzPolicy from a rego policy contained in
-// `policy`.
+// NewAuthzPolicy creates a new AuthzPolicy by parsing the policy given
+// in the string `policy`.
 // It returns an error if the policy cannot be parsed, or does not use
 // SansshellRegoPackage in its package declaration.
 func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (*AuthzPolicy, error) {

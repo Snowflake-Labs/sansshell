@@ -13,7 +13,8 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 )
 
-// An Authorizer performs authorization of Sanshsell RPCs
+// An Authorizer performs authorization of Sanshsell RPCs based on
+// an OPA/Rego policy.
 //
 // It can be used as both a unary and stream interceptor, or manually
 // invoked to perform policy checks using `Eval`
@@ -29,28 +30,28 @@ type Authorizer struct {
 // evaluation, and may augment / mutate the input, or pre-emptively
 // reject a request.
 type RpcAuthzHook interface {
-	Apply(context.Context, *RpcAuthInput) error
+	Hook(context.Context, *RpcAuthInput) error
 }
 
 // AuthzHookFunc implements RpcAuthzHook for a simple function
 type RpcAuthzHookFunc func(context.Context, *RpcAuthInput) error
 
-func (r RpcAuthzHookFunc) Apply(ctx context.Context, input *RpcAuthInput) error {
+func (r RpcAuthzHookFunc) Hook(ctx context.Context, input *RpcAuthInput) error {
 	return r(ctx, input)
 }
 
-// New creates a new Authorizer from an opa.AuthzPolicy
-func New(policy *opa.AuthzPolicy, inputHooks ...RpcAuthzHook) *Authorizer {
-	return &Authorizer{policy: policy, hooks: inputHooks}
+// New creates a new Authorizer from an opa.AuthzPolicy. Any su
+func New(policy *opa.AuthzPolicy, authzHooks ...RpcAuthzHook) *Authorizer {
+	return &Authorizer{policy: policy, hooks: authzHooks}
 }
 
 // NewWithPolicy creates a new Authorizer from a policy string.
-func NewWithPolicy(ctx context.Context, policy string, inputHooks ...RpcAuthzHook) (*Authorizer, error) {
+func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {
 		return nil, err
 	}
-	return New(p, inputHooks...), nil
+	return New(p, authzHooks...), nil
 }
 
 // Evalulate the supplied input against the authorization policy, returning
@@ -63,7 +64,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RpcAuthInput) error {
 		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
 	}
 	for _, hook := range g.hooks {
-		if err := hook.Apply(ctx, input); err != nil {
+		if err := hook.Hook(ctx, input); err != nil {
 			if _, ok := status.FromError(err); ok {
 				// error is already an appropriate status.Status
 				return err
