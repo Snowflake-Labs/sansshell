@@ -1,18 +1,17 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,8 +33,14 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	log.Printf("Received request for Ansible.Run: %+v", req)
 
 	// Basic sanity checking up front.
+	if req.Playbook == "" {
+		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
+	}
 	if !filepath.IsAbs(req.Playbook) {
-		return nil, status.Error(codes.InvalidArgument, "playbook path must be a full qualified path")
+		return nil, status.Errorf(codes.InvalidArgument, "playbook %s must be an absolute path", req.Playbook)
+	}
+	if req.Playbook != filepath.Clean(req.Playbook) {
+		return nil, status.Errorf(codes.InvalidArgument, "playbook %s must be a clean path", req.Playbook)
 	}
 
 	// Make sure it's a valid file and nothing something which might be malicious like
@@ -53,7 +58,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	for _, v := range req.Vars {
 		if v.Key != re.ReplaceAllString(v.Key, "") || v.Value != re.ReplaceAllString(v.Value, "") {
-			return nil, status.Errorf(codes.InvalidArgument, "vars must contain key/value that is only contains [a-zA-Z0-9_] - '%s=%s' is invalid", v.Key, v.Value)
+			return nil, status.Errorf(codes.InvalidArgument, "vars must contain key/value that is only contains %s - '%s=%s' is invalid", re.String(), v.Key, v.Value)
 		}
 		cmdArgs = append(cmdArgs, "-e")
 		cmdArgs = append(cmdArgs, fmt.Sprintf("%s=%s", v.Key, v.Value))
@@ -61,7 +66,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	if req.User != "" {
 		if req.User != re.ReplaceAllString(req.User, "") {
-			return nil, status.Errorf(codes.InvalidArgument, "user must only contain [a-zA-Z0-9_] - %q is invalid", req.User)
+			return nil, status.Errorf(codes.InvalidArgument, "user must only contain %s - %q is invalid", re.String(), req.User)
 		}
 		cmdArgs = append(cmdArgs, "--become")
 		cmdArgs = append(cmdArgs, req.User)
@@ -83,23 +88,15 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	cmdArgs = cmdArgsTransform(cmdArgs)
 
-	cmd := exec.CommandContext(ctx, *ansiblePlaybookBin, cmdArgs...)
-	var stderrBuf, stdoutBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	cmd.Stdin = nil
-
-	log.Printf("Executing: %s", cmd.String())
-	if err := cmd.Start(); err != nil {
-		return nil, status.Errorf(codes.Internal, "can't start ansible-playbook: %v", err)
+	run, err := util.RunCommand(ctx, *ansiblePlaybookBin, cmdArgs)
+	if err != nil {
+		return nil, err
 	}
 
-	cmd.Wait()
-
 	return &pb.RunReply{
-		Stdout:     stdoutBuf.String(),
-		Stderr:     stderrBuf.String(),
-		ReturnCode: int32(cmd.ProcessState.ExitCode()),
+		Stdout:     run.Stdout.String(),
+		Stderr:     run.Stderr.String(),
+		ReturnCode: int32(run.ExitCode),
 	}, nil
 }
 

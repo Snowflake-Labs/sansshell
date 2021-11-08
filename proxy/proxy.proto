@@ -66,7 +66,7 @@ message StartStreamReply {
   string target = 1;
 
   // The nonce value supplied by the client in StartStream.
-  uint64 nonce = 2;
+  uint32 nonce = 2;
 
   oneof reply {
     // The server-assigned stream identifier, which should be included

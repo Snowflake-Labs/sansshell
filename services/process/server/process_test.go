@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -107,7 +108,7 @@ func TestList(t *testing.T) {
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
 	savedPsBin := *psBin
-	*psBin = "cat"
+	*psBin = testutil.ResolvePath(t, "cat")
 	savedFunc := psOptions
 	psOptions = func() []string {
 		return []string{
@@ -208,8 +209,7 @@ func TestList(t *testing.T) {
 
 	// Test 5: Break the command which means we should error out.
 
-	// Either this is where false is or nothing is there. Either way will error.
-	*psBin = "/usr/bin/false"
+	*psBin = testutil.ResolvePath(t, "false")
 	resp, err = client.List(ctx, &pb.ListRequest{})
 	if err == nil {
 		t.Fatalf("Expected error for command returning non-zero Insteaf got %+v", resp)
@@ -223,7 +223,7 @@ func TestList(t *testing.T) {
 	}
 
 	// Test 7: Command with stderr output.
-	*psBin = "sh"
+	*psBin = testutil.ResolvePath(t, "sh")
 	psOptions = func() []string {
 		return []string{"-c",
 			"echo boo 1>&2",
@@ -297,7 +297,7 @@ func TestPstack(t *testing.T) {
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
 	savedPstackBin := *pstackBin
-	*pstackBin = "cat"
+	*pstackBin = testutil.ResolvePath(t, "cat")
 	savedPstackOptions := pstackOptions
 	var testInput string
 	pstackOptions = func(*pb.GetStacksRequest) []string {
@@ -347,14 +347,14 @@ func TestPstack(t *testing.T) {
 		},
 		{
 			name:    "bad command - returns error",
-			command: "false",
+			command: testutil.ResolvePath(t, "false"),
 			input:   testdataPstackThreads,
 			pid:     1,
 			wantErr: true,
 		},
 		{
 			name:    "bad command - returns stderr",
-			command: "sh",
+			command: testutil.ResolvePath(t, "sh"),
 			options: []string{"-c", "echo foo >&2"},
 			input:   testdataPstackThreads,
 			pid:     1,
@@ -387,7 +387,7 @@ func TestPstack(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			command := "cat"
+			command := testutil.ResolvePath(t, "cat")
 			if test.command != "" {
 				command = test.command
 			}
@@ -502,12 +502,12 @@ func TestJstack(t *testing.T) {
 			name:    "Command returns error",
 			input:   testdataJstack,
 			pid:     1,
-			command: "false",
+			command: testutil.ResolvePath(t, "false"),
 			wantErr: true,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			command := "cat"
+			command := testutil.ResolvePath(t, "cat")
 			if test.command != "" {
 				command = test.command
 			}
