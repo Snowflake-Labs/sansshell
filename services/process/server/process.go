@@ -340,18 +340,6 @@ func openBlobForWriting(ctx context.Context, bucket string, file string) (io.Wri
 func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_GetMemoryDumpServer) error {
 	log.Printf("Received request for GetMemoryDump: %+v", req)
 
-	if req.IsJava {
-		// This is tied to jmap so either an OS provides it or it doesn't.
-		if *jmapBin == "" {
-			return status.Error(codes.Unimplemented, "not implemented")
-		}
-	} else {
-		// This is tied to gcore so either an OS provides it or it doesn't.
-		if *gcoreBin == "" {
-			return status.Error(codes.Unimplemented, "not implemented")
-		}
-	}
-
 	if req.Pid <= 0 {
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
@@ -361,12 +349,37 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	if !ok {
 		return status.Error(codes.Internal, "can't get peer from context")
 	}
-	bucketFile := fmt.Sprintf("%s-core.%d", p.Addr.String(), req.Pid)
-	if req.IsJava {
+
+	var bucketFile string
+	var err error
+	var cmdName, file string
+	var options []string
+	switch req.DumpType {
+	case pb.DumpType_DUMP_TYPE_GCORE:
+		// This is tied to gcore so either an OS provides it or it doesn't.
+		if *gcoreBin == "" {
+			return status.Error(codes.Unimplemented, "not implemented")
+		}
+		cmdName = *gcoreBin
+		options, file, err = gcoreOptionsAndLocation(req)
+		bucketFile = fmt.Sprintf("%s-core.%d", p.Addr.String(), req.Pid)
+	case pb.DumpType_DUMP_TYPE_JMAP:
+		// This is tied to jmap so either an OS provides it or it doesn't.
+		if *jmapBin == "" {
+			return status.Error(codes.Unimplemented, "not implemented")
+		}
+		cmdName = *jmapBin
+		options, file, err = jmapOptionsAndLocation(req)
 		bucketFile = fmt.Sprintf("%s-heapdump.%d", p.Addr.String(), req.Pid)
+	default:
+		return status.Error(codes.InvalidArgument, "Must specify a valid dump type")
 	}
 
-	var err error
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't generate options/dump file location: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(file)) // clean up
+
 	switch req.Destination {
 	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
 		// Nothing to do here, we just send it back.
@@ -389,21 +402,6 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		// and harder for policy to manage before we get the request. So there is no default.
 		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
 	}
-
-	var cmdName, file string
-	var options []string
-	if req.IsJava {
-		cmdName = *jmapBin
-		options, file, err = jmapOptionsAndLocation(req)
-	} else {
-		cmdName = *gcoreBin
-		options, file, err = gcoreOptionsAndLocation(req)
-	}
-
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't generate options/dump file location: %v", err)
-	}
-	defer os.RemoveAll(filepath.Dir(file)) // clean up
 
 	// Don't care about stderr output since jmap produces some debug that way.
 	run, err := util.RunCommand(stream.Context(), cmdName, options)

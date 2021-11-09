@@ -156,12 +156,19 @@ enum BlobDestination {
   BLOB_DESTINATION_URL = 2;
 }
 
+// DumpType indicates the program to use to generate the dump.
+enum DumpType {
+  DUMP_TYPE_UNKNOWN = 0;
+  DUMP_TYPE_GCORE = 1;
+  DUMP_TYPE_JMAP = 2;
+}
+
 message GetMemoryDumpRequest {
   int64 pid = 1;
   // If this is true jmap will be used to dump the data instead of gcore.
   // For URL based destinations the file will be named heapdump
   // instead of core to also indicate the difference.
-  bool is_java = 2;
+  DumpType dump_type = 2;
   BlobDestination destination = 3;
   // Only used for BLOB_DESTINATION_URL
   string url = 4;

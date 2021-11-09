@@ -666,6 +666,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 		},
 		{
@@ -675,8 +676,8 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				IsJava:      true,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
 			},
 		},
 		{
@@ -688,6 +689,7 @@ func TestMemoryDump(t *testing.T) {
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
 				Url:         fmt.Sprintf("file://%s", testdir),
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 		},
 		{
@@ -697,6 +699,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -706,8 +709,8 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				IsJava:      true,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
 			},
 			wantErr: true,
 		},
@@ -718,6 +721,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -729,6 +733,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -738,7 +743,8 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
-				Pid: 1,
+				Pid:      1,
+				DumpType: pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -750,6 +756,19 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "Bad dump type - bad enum",
+			command: testutil.ResolvePath(t, "cat"),
+			options: goodGcoreOptions,
+			input:   "./testdata/core.test",
+			req: &pb.GetMemoryDumpRequest{
+				Pid:         1,
+				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE + 99,
 			},
 			wantErr: true,
 		},
@@ -761,6 +780,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -771,7 +791,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				IsJava:      true,
+				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
 			},
 			wantErr: true,
@@ -784,6 +804,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -795,6 +816,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -806,6 +828,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			noOutput: true,
 			wantErr:  true,
