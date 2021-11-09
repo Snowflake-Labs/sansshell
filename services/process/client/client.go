@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -55,8 +56,7 @@ func init() {
 	subcommands.Register(&psCmd{}, "process")
 	subcommands.Register(&pstackCmd{}, "process")
 	subcommands.Register(&jstackCmd{}, "process")
-	subcommands.Register(&coreCmd{}, "process")
-	subcommands.Register(&heapdumpCmd{}, "process")
+	subcommands.Register(&dumpCmd{}, "process")
 }
 
 type psCmd struct {
@@ -295,32 +295,67 @@ func createOutput(path string) (*os.File, error) {
 	} else {
 		output, err = os.Create(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v", path, err)
+			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v\n", path, err)
 			return nil, err
 		}
 	}
 	return output, nil
 }
 
-type coreCmd struct {
-	pid    int64
-	output string
+func flagToType(val string) (pb.DumpType, error) {
+	v := fmt.Sprintf("DUMP_TYPE_%s", strings.ToUpper(val))
+	i, ok := pb.DumpType_value[v]
+	if !ok {
+		return pb.DumpType_DUMP_TYPE_UNKNOWN, fmt.Errorf("no such sumtype value: %s", v)
+	}
+	return pb.DumpType(i), nil
 }
 
-func (*coreCmd) Name() string     { return "core" }
-func (*coreCmd) Synopsis() string { return "Create a core dump of a running process." }
-func (*coreCmd) Usage() string {
-	return `core:
-  Generate a core dump for a given process id.
+func shortDumpTypeNames() []string {
+	var shortNames []string
+	for k := range pb.DumpType_value {
+		if k != "DUMP_TYPE_UNKNOWN" {
+			shortNames = append(shortNames, strings.TrimPrefix(k, "DUMP_TYPE_"))
+		}
+	}
+	sort.Strings(shortNames)
+	return shortNames
+}
+
+type dumpCmd struct {
+	pid      int64
+	dumpType string
+	output   string
+}
+
+func (*dumpCmd) Name() string     { return "dump" }
+func (*dumpCmd) Synopsis() string { return "Create a memory dump of a running process." }
+func (*dumpCmd) Usage() string {
+	return `dump:
+  Generate a memory dump for a given process id.
 `
 }
 
-func (p *coreCmd) SetFlags(f *flag.FlagSet) {
+func (p *dumpCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.pid, "pid", 0, "Process to generate a core dump against.")
-	f.StringVar(&p.output, "output", "", "Output file to write data. - indicates to use stdout")
+	f.StringVar(&p.dumpType, "dump-type", "GCORE", fmt.Sprintf("Dump type to use(one of: [%s])", strings.Join(shortDumpTypeNames(), ",")))
+	f.StringVar(&p.output, "output", "", `Output to write data. - indicates to use stdout. A normal file path applies.
+
+This will also accept URL options of the form:
+
+	s3://bucket (AWS)
+	azblob://bucket (Azure)
+	gs://bucket (GCP)
+	
+	See https://gocloud.dev/howto/blob/ for details on options.`)
 }
 
-func (p *coreCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	dt, err := flagToType(p.dumpType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse dump type --dump-type: %s invalid\n", p.dumpType)
+		return subcommands.ExitFailure
+	}
 	if p.pid <= 0 {
 		fmt.Fprintln(os.Stderr, "--pid must be specified")
 		return subcommands.ExitFailure
@@ -334,19 +369,32 @@ func (p *coreCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewProcessClient(conn)
 
-	req := &pb.GetCoreRequest{
-		Pid: p.pid,
+	req := &pb.GetMemoryDumpRequest{
+		Pid:         p.pid,
+		DumpType:    dt,
+		Destination: &pb.GetMemoryDumpRequest_Stream{},
 	}
 
-	stream, err := c.GetCore(ctx, req)
+	if strings.HasPrefix(p.output, "s3://") || strings.HasPrefix(p.output, "azblob://") || strings.HasPrefix(p.output, "gs://") {
+		req.Destination = &pb.GetMemoryDumpRequest_Url{
+			Url: &pb.DumpDestinationUrl{
+				Url: p.output,
+			},
+		}
+	}
+
+	stream, err := c.GetMemoryDump(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GetCore returned error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "GetMemoryDump returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	output, err := createOutput(p.output)
-	if err != nil {
-		return subcommands.ExitFailure
+	var output *os.File
+	if req.GetUrl() == nil {
+		output, err = createOutput(p.output)
+		if err != nil {
+			return subcommands.ExitFailure
+		}
 	}
 
 	for {
@@ -358,75 +406,12 @@ func (p *coreCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		n, err := output.Write(resp.Data)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
-			return subcommands.ExitFailure
-		}
-	}
-	return subcommands.ExitSuccess
-}
-
-type heapdumpCmd struct {
-	pid    int64
-	output string
-}
-
-func (*heapdumpCmd) Name() string     { return "heapdump" }
-func (*heapdumpCmd) Synopsis() string { return "Create a heap dump of a running Java process." }
-func (*heapdumpCmd) Usage() string {
-	return `heapdump:
-  Generate a heapdump for a given process id of a Java process.
-`
-}
-
-func (p *heapdumpCmd) SetFlags(f *flag.FlagSet) {
-	f.Int64Var(&p.pid, "pid", 0, "Process to generate heapdump against.")
-	f.StringVar(&p.output, "output", "", "Output file to write data. - indicates to use stdout")
-}
-
-func (p *heapdumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if p.pid <= 0 {
-		fmt.Fprintln(os.Stderr, "--pid must be specified")
-		return subcommands.ExitFailure
-	}
-
-	if p.output == "" {
-		fmt.Fprintln(os.Stderr, "--output must be specified")
-		return subcommands.ExitFailure
-	}
-	conn := args[0].(grpc.ClientConnInterface)
-
-	c := pb.NewProcessClient(conn)
-
-	req := &pb.GetJavaHeapDumpRequest{
-		Pid: p.pid,
-	}
-
-	stream, err := c.GetJavaHeapDump(ctx, req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "GetJavaHeapDump returned error: %v\n", err)
-		return subcommands.ExitFailure
-	}
-
-	output, err := createOutput(p.output)
-	if err != nil {
-		return subcommands.ExitFailure
-	}
-
-	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
-			return subcommands.ExitFailure
-		}
-		n, err := output.Write(resp.Data)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
-			return subcommands.ExitFailure
+		if output != nil {
+			n, err := output.Write(resp.Data)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
+				return subcommands.ExitFailure
+			}
 		}
 	}
 	return subcommands.ExitSuccess

@@ -30,14 +30,12 @@ type ProcessClient interface {
 	// nothing sensitive in it but depending on function names could have internal
 	// details so be careful.
 	GetJavaStacks(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (*GetJavaStacksReply, error)
-	// GetCore will return the output from gcore which 100% has
+	// GetMemoryDump will return the output from gcore or jmap which 100% has
 	// sensitive data contained within it. Be very careful where this is
 	// stored/transferred/etc.
-	GetCore(ctx context.Context, in *GetCoreRequest, opts ...grpc.CallOption) (Process_GetCoreClient, error)
-	// GetJavaHeapDump will return the output from jmap which 100% has
-	// sensitive data contained within it. Be very careful where this is
-	// stored/transferred/etc.
-	GetJavaHeapDump(ctx context.Context, in *GetJavaHeapDumpRequest, opts ...grpc.CallOption) (Process_GetJavaHeapDumpClient, error)
+	// NOTE: Enough disk space is required to hold the dump file before streaming
+	//       the response.
+	GetMemoryDump(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClient, error)
 }
 
 type processClient struct {
@@ -75,12 +73,12 @@ func (c *processClient) GetJavaStacks(ctx context.Context, in *GetJavaStacksRequ
 	return out, nil
 }
 
-func (c *processClient) GetCore(ctx context.Context, in *GetCoreRequest, opts ...grpc.CallOption) (Process_GetCoreClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Process_ServiceDesc.Streams[0], "/Process.Process/GetCore", opts...)
+func (c *processClient) GetMemoryDump(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Process_ServiceDesc.Streams[0], "/Process.Process/GetMemoryDump", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &processGetCoreClient{stream}
+	x := &processGetMemoryDumpClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -90,49 +88,17 @@ func (c *processClient) GetCore(ctx context.Context, in *GetCoreRequest, opts ..
 	return x, nil
 }
 
-type Process_GetCoreClient interface {
-	Recv() (*GetCoreReply, error)
+type Process_GetMemoryDumpClient interface {
+	Recv() (*GetMemoryDumpReply, error)
 	grpc.ClientStream
 }
 
-type processGetCoreClient struct {
+type processGetMemoryDumpClient struct {
 	grpc.ClientStream
 }
 
-func (x *processGetCoreClient) Recv() (*GetCoreReply, error) {
-	m := new(GetCoreReply)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-func (c *processClient) GetJavaHeapDump(ctx context.Context, in *GetJavaHeapDumpRequest, opts ...grpc.CallOption) (Process_GetJavaHeapDumpClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Process_ServiceDesc.Streams[1], "/Process.Process/GetJavaHeapDump", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &processGetJavaHeapDumpClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Process_GetJavaHeapDumpClient interface {
-	Recv() (*GetJavaHeapDumpReply, error)
-	grpc.ClientStream
-}
-
-type processGetJavaHeapDumpClient struct {
-	grpc.ClientStream
-}
-
-func (x *processGetJavaHeapDumpClient) Recv() (*GetJavaHeapDumpReply, error) {
-	m := new(GetJavaHeapDumpReply)
+func (x *processGetMemoryDumpClient) Recv() (*GetMemoryDumpReply, error) {
+	m := new(GetMemoryDumpReply)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -155,14 +121,12 @@ type ProcessServer interface {
 	// nothing sensitive in it but depending on function names could have internal
 	// details so be careful.
 	GetJavaStacks(context.Context, *GetJavaStacksRequest) (*GetJavaStacksReply, error)
-	// GetCore will return the output from gcore which 100% has
+	// GetMemoryDump will return the output from gcore or jmap which 100% has
 	// sensitive data contained within it. Be very careful where this is
 	// stored/transferred/etc.
-	GetCore(*GetCoreRequest, Process_GetCoreServer) error
-	// GetJavaHeapDump will return the output from jmap which 100% has
-	// sensitive data contained within it. Be very careful where this is
-	// stored/transferred/etc.
-	GetJavaHeapDump(*GetJavaHeapDumpRequest, Process_GetJavaHeapDumpServer) error
+	// NOTE: Enough disk space is required to hold the dump file before streaming
+	//       the response.
+	GetMemoryDump(*GetMemoryDumpRequest, Process_GetMemoryDumpServer) error
 }
 
 // UnimplementedProcessServer should be embedded to have forward compatible implementations.
@@ -178,11 +142,8 @@ func (UnimplementedProcessServer) GetStacks(context.Context, *GetStacksRequest) 
 func (UnimplementedProcessServer) GetJavaStacks(context.Context, *GetJavaStacksRequest) (*GetJavaStacksReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetJavaStacks not implemented")
 }
-func (UnimplementedProcessServer) GetCore(*GetCoreRequest, Process_GetCoreServer) error {
-	return status.Errorf(codes.Unimplemented, "method GetCore not implemented")
-}
-func (UnimplementedProcessServer) GetJavaHeapDump(*GetJavaHeapDumpRequest, Process_GetJavaHeapDumpServer) error {
-	return status.Errorf(codes.Unimplemented, "method GetJavaHeapDump not implemented")
+func (UnimplementedProcessServer) GetMemoryDump(*GetMemoryDumpRequest, Process_GetMemoryDumpServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetMemoryDump not implemented")
 }
 
 // UnsafeProcessServer may be embedded to opt out of forward compatibility for this service.
@@ -250,45 +211,24 @@ func _Process_GetJavaStacks_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Process_GetCore_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetCoreRequest)
+func _Process_GetMemoryDump_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetMemoryDumpRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(ProcessServer).GetCore(m, &processGetCoreServer{stream})
+	return srv.(ProcessServer).GetMemoryDump(m, &processGetMemoryDumpServer{stream})
 }
 
-type Process_GetCoreServer interface {
-	Send(*GetCoreReply) error
+type Process_GetMemoryDumpServer interface {
+	Send(*GetMemoryDumpReply) error
 	grpc.ServerStream
 }
 
-type processGetCoreServer struct {
+type processGetMemoryDumpServer struct {
 	grpc.ServerStream
 }
 
-func (x *processGetCoreServer) Send(m *GetCoreReply) error {
-	return x.ServerStream.SendMsg(m)
-}
-
-func _Process_GetJavaHeapDump_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetJavaHeapDumpRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ProcessServer).GetJavaHeapDump(m, &processGetJavaHeapDumpServer{stream})
-}
-
-type Process_GetJavaHeapDumpServer interface {
-	Send(*GetJavaHeapDumpReply) error
-	grpc.ServerStream
-}
-
-type processGetJavaHeapDumpServer struct {
-	grpc.ServerStream
-}
-
-func (x *processGetJavaHeapDumpServer) Send(m *GetJavaHeapDumpReply) error {
+func (x *processGetMemoryDumpServer) Send(m *GetMemoryDumpReply) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -314,13 +254,8 @@ var Process_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "GetCore",
-			Handler:       _Process_GetCore_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "GetJavaHeapDump",
-			Handler:       _Process_GetJavaHeapDump_Handler,
+			StreamName:    "GetMemoryDump",
+			Handler:       _Process_GetMemoryDump_Handler,
 			ServerStreams: true,
 		},
 	},

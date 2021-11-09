@@ -18,19 +18,12 @@ service Process {
   // nothing sensitive in it but depending on function names could have internal
   // details so be careful.
   rpc GetJavaStacks(GetJavaStacksRequest) returns (GetJavaStacksReply) {}
-  // GetCore will return the output from gcore which 100% has
+  // GetMemoryDump will return the output from gcore or jmap which 100% has
   // sensitive data contained within it. Be very careful where this is
   // stored/transferred/etc.
-  // NOTE: Enough disk space is required to hold the core file before streaming
+  // NOTE: Enough disk space is required to hold the dump file before streaming
   //       the response.
-  rpc GetCore(GetCoreRequest) returns (stream GetCoreReply) {}
-  // GetJavaHeapDump will return the output from jmap which 100% has
-  // sensitive data contained within it. Be very careful where this is
-  // stored/transferred/etc.
-  // NOTE: Enough disk space is required to hold the heap file before streaming
-  //       the response.
-  rpc GetJavaHeapDump(GetJavaHeapDumpRequest)
-      returns (stream GetJavaHeapDumpReply) {}
+  rpc GetMemoryDump(GetMemoryDumpRequest) returns (stream GetMemoryDumpReply) {}
 }
 
 message ListRequest {
@@ -155,34 +148,36 @@ message JavaThreadStack {
 
 message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
 
-enum BlobDestination {
-  BLOB_DESTINATION_UNKNOWN = 0;
-  // Just stream it back.
-  BLOB_DESTINATION_STREAM = 1;
-  // This state requires an additional field to designate location.
-  BLOB_DESTINATION_URL = 2;
+// DumpType indicates the program to use to generate the dump.
+enum DumpType {
+  DUMP_TYPE_UNKNOWN = 0;
+  DUMP_TYPE_GCORE = 1;
+  DUMP_TYPE_JMAP = 2;
 }
 
-message GetCoreRequest {
+message DumpDestinationStream {
+  // marker message
+}
+
+message DumpDestinationUrl {
+  string url = 1;
+  // Any additional data the URL destination may need in order
+  // to succeed (such as an auth token for a blob service).
+  bytes blob_data = 2;
+}
+message GetMemoryDumpRequest {
   int64 pid = 1;
-  BlobDestination destination = 2;
-  // Only used for BLOB_DESTINATION_URL
-  string url = 3;
-  // Any additional data BLOB_DESTINATION_URL may need in order
-  // to succeed (such as an auth token for S3).
-  bytes blob_data = 4;
+  // Determine which program to use for dumping.
+  // For URL based destinations the file will be named heapdump
+  // instead of core to also indicate the difference.
+  DumpType dump_type = 2;
+  oneof destination {
+    DumpDestinationStream stream = 3;
+    DumpDestinationUrl url = 4;
+  }
 }
 
-message GetCoreReply { bytes data = 1; }
-
-message GetJavaHeapDumpRequest {
-  int64 pid = 1;
-  BlobDestination destination = 2;
-  // Only used for BLOB_DESTINATION_URL
-  string url = 3;
-  // Any additional data BLOB_DESTINATION_URL may need in order
-  // to succeed (such as an auth token for S3).
-  bytes blob_data = 4;
-}
-
-message GetJavaHeapDumpReply { bytes data = 1; }
+// If the destination is BLOB_DESTINATION_STREAM this will contain
+// the memory dump data. If not the remote write will occur and only
+// the error status on the stream will indicate success/failure.
+message GetMemoryDumpReply { bytes data = 1; }

@@ -55,7 +55,7 @@ func (*installCmd) Usage() string {
 }
 
 func (i *installCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&i.packageSystem, "package-system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&i.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&i.name, "name", "", "Name of package to install")
 	f.StringVar(&i.version, "version", "", "Version of package to install. For YUM this must be a full nevra version")
 	f.StringVar(&i.repo, "repo", "", "If set also enable this repo when resolving packages.")
@@ -64,7 +64,7 @@ func (i *installCmd) SetFlags(f *flag.FlagSet) {
 func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	ps, err := flagToType(i.packageSystem)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", i.packageSystem)
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", i.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -106,7 +106,7 @@ func (*updateCmd) Usage() string {
 }
 
 func (u *updateCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&u.packageSystem, "package-system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&u.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&u.name, "name", "", "Name of package to install")
 	f.StringVar(&u.old_version, "old_version", "", "Old version of package which must be on the system. For YUM this must be a full nevra version")
 	f.StringVar(&u.new_version, "new_version", "", "New version of package to update. For YUM this must be a full nevra version")
@@ -121,7 +121,7 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 	ps, err := flagToType(u.packageSystem)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", u.packageSystem)
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", u.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -160,13 +160,13 @@ func (*listCmd) Usage() string {
 }
 
 func (l *listCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&l.packageSystem, "package-system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&l.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 }
 
 func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	ps, err := flagToType(l.packageSystem)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", l.packageSystem)
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", l.packageSystem)
 		return subcommands.ExitFailure
 	}
 
@@ -204,14 +204,14 @@ func (*repoListCmd) Usage() string {
 }
 
 func (r *repoListCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&r.packageSystem, "package-system", "YUM", fmt.Sprintf("Paackage system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&r.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.BoolVar(&r.verbose, "verbose", false, "If true print out fully verbose outage")
 }
 
 func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	ps, err := flagToType(r.packageSystem)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse package system for --package_system: %s invalid\n", r.packageSystem)
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", r.packageSystem)
 		return subcommands.ExitFailure
 	}
 
