@@ -7,6 +7,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -28,7 +29,9 @@ type LocalFileClient interface {
 	Write(ctx context.Context, opts ...grpc.CallOption) (LocalFile_WriteClient, error)
 	// Copy retrieves a file from the given blob URL and writes it to a local
 	// file.
-	Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*NullReply, error)
+	Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetFileAttributes takes a given filename and sets the given attributes.
+	SetFileAttributes(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type localFileClient struct {
@@ -144,7 +147,7 @@ func (c *localFileClient) Write(ctx context.Context, opts ...grpc.CallOption) (L
 
 type LocalFile_WriteClient interface {
 	Send(*WriteRequest) error
-	CloseAndRecv() (*NullReply, error)
+	CloseAndRecv() (*emptypb.Empty, error)
 	grpc.ClientStream
 }
 
@@ -156,20 +159,29 @@ func (x *localFileWriteClient) Send(m *WriteRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *localFileWriteClient) CloseAndRecv() (*NullReply, error) {
+func (x *localFileWriteClient) CloseAndRecv() (*emptypb.Empty, error) {
 	if err := x.ClientStream.CloseSend(); err != nil {
 		return nil, err
 	}
-	m := new(NullReply)
+	m := new(emptypb.Empty)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
-func (c *localFileClient) Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*NullReply, error) {
-	out := new(NullReply)
+func (c *localFileClient) Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Copy", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *localFileClient) SetFileAttributes(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/SetFileAttributes", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +202,9 @@ type LocalFileServer interface {
 	Write(LocalFile_WriteServer) error
 	// Copy retrieves a file from the given blob URL and writes it to a local
 	// file.
-	Copy(context.Context, *CopyRequest) (*NullReply, error)
+	Copy(context.Context, *CopyRequest) (*emptypb.Empty, error)
+	// SetFileAttributes takes a given filename and sets the given attributes.
+	SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
@@ -209,8 +223,11 @@ func (UnimplementedLocalFileServer) Sum(LocalFile_SumServer) error {
 func (UnimplementedLocalFileServer) Write(LocalFile_WriteServer) error {
 	return status.Errorf(codes.Unimplemented, "method Write not implemented")
 }
-func (UnimplementedLocalFileServer) Copy(context.Context, *CopyRequest) (*NullReply, error) {
+func (UnimplementedLocalFileServer) Copy(context.Context, *CopyRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Copy not implemented")
+}
+func (UnimplementedLocalFileServer) SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetFileAttributes not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -302,7 +319,7 @@ func _LocalFile_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
 }
 
 type LocalFile_WriteServer interface {
-	SendAndClose(*NullReply) error
+	SendAndClose(*emptypb.Empty) error
 	Recv() (*WriteRequest, error)
 	grpc.ServerStream
 }
@@ -311,7 +328,7 @@ type localFileWriteServer struct {
 	grpc.ServerStream
 }
 
-func (x *localFileWriteServer) SendAndClose(m *NullReply) error {
+func (x *localFileWriteServer) SendAndClose(m *emptypb.Empty) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -341,6 +358,24 @@ func _LocalFile_Copy_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LocalFile_SetFileAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetFileAttributesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalFileServer).SetFileAttributes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/LocalFile.LocalFile/SetFileAttributes",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalFileServer).SetFileAttributes(ctx, req.(*SetFileAttributesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -351,6 +386,10 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Copy",
 			Handler:    _LocalFile_Copy_Handler,
+		},
+		{
+			MethodName: "SetFileAttributes",
+			Handler:    _LocalFile_SetFileAttributes_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

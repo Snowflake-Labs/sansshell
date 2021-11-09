@@ -3,6 +3,7 @@ syntax = "proto3";
 option go_package = "github.com/Snowflake-Labs/sansshell/services/localfile";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 package LocalFile;
 
@@ -18,15 +19,16 @@ service LocalFile {
   rpc Sum(stream SumRequest) returns (stream SumReply) {}
 
   // Write writes a file from the incoming RPC to a local file.
-  rpc Write(stream WriteRequest) returns (NullReply) {}
+  rpc Write(stream WriteRequest) returns (google.protobuf.Empty) {}
 
   // Copy retrieves a file from the given blob URL and writes it to a local
   // file.
-  rpc Copy(CopyRequest) returns (NullReply) {}
-}
+  rpc Copy(CopyRequest) returns (google.protobuf.Empty) {}
 
-// NullReply is a null message to be used by any service returning no data.
-message NullReply {}
+  // SetFileAttributes takes a given filename and sets the given attributes.
+  rpc SetFileAttributes(SetFileAttributesRequest)
+      returns (google.protobuf.Empty) {}
+}
 
 // ReadRequest describes the filename to be read
 message ReadRequest {
@@ -94,13 +96,40 @@ message SumReply {
   string sum = 3;
 }
 
+// FileAttributes describes a file by it's name and expected user/group and
+// permissions.
+message FileAttributes {
+  // Must be a fully qualified and clean path name (i.e. absolute and no ../
+  // style).
+  string filename = 1;
+  // Permissions for the written file in unix style (lower 12 bits only).
+  uint32 permissions = 2;
+  // If not blank the user to set as the owner of the file. If blank the
+  // file must previously exist and overwrite above is set to true.
+  string user = 3;
+  // If not blank the group to set as the group of the file. If blank the
+  // file must previously exist and overwrite above is set to true.
+  string group = 4;
+}
+
+// FileWrite describes everything about a file to be written.
+message FileWrite {
+  FileAttributes attrs = 1;
+  // If true allow to truncate and overwrite an existing file. Otherwise
+  // the file must not exist. This is still subject to races as all incoming
+  // data is written to a tempfile before moved to the final destination so
+  // multiple system calls will take place.
+  bool overwrite = 2;
+}
+
 // WriteRequest streams the data for the filename to be written.
-// The first request must contain a filename and all future requests
-// must contain contents. Additional files may then be written in the
-// same sequence.
+// The first request must contain a description and all future requests
+// must contain contents. Each write request will append contents into the
+// file until the stream is closed. Then the file is moved to it's final
+// location.
 message WriteRequest {
   oneof request {
-    string filename = 1;
+    FileWrite description = 1;
     bytes contents = 2;
   }
 }
@@ -108,6 +137,11 @@ message WriteRequest {
 // CopyRequest contains the URL and filename destination to copy the
 // file from.
 message CopyRequest {
-  string url = 1;
-  string filename = 2;
+  FileWrite description = 1;
+  string url = 2;
+  // Any additional data the URL destination may need in order
+  // to succeed (such as an auth token for a blob service).
+  bytes blob_data = 3;
 }
+
+message SetFileAttributesRequest { FileAttributes attrs = 1; }

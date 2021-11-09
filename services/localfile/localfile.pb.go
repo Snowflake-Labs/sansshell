@@ -9,6 +9,7 @@ package localfile
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -78,45 +79,6 @@ func (SumType) EnumDescriptor() ([]byte, []int) {
 	return file_localfile_proto_rawDescGZIP(), []int{0}
 }
 
-// NullReply is a null message to be used by any service returning no data.
-type NullReply struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-}
-
-func (x *NullReply) Reset() {
-	*x = NullReply{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *NullReply) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NullReply) ProtoMessage() {}
-
-func (x *NullReply) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NullReply.ProtoReflect.Descriptor instead.
-func (*NullReply) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{0}
-}
-
 // ReadRequest describes the filename to be read
 type ReadRequest struct {
 	state         protoimpl.MessageState
@@ -133,7 +95,7 @@ type ReadRequest struct {
 func (x *ReadRequest) Reset() {
 	*x = ReadRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[1]
+		mi := &file_localfile_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -146,7 +108,7 @@ func (x *ReadRequest) String() string {
 func (*ReadRequest) ProtoMessage() {}
 
 func (x *ReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[1]
+	mi := &file_localfile_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -159,7 +121,7 @@ func (x *ReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadRequest.ProtoReflect.Descriptor instead.
 func (*ReadRequest) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{1}
+	return file_localfile_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ReadRequest) GetFilename() string {
@@ -195,7 +157,7 @@ type ReadReply struct {
 func (x *ReadReply) Reset() {
 	*x = ReadReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[2]
+		mi := &file_localfile_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -208,7 +170,7 @@ func (x *ReadReply) String() string {
 func (*ReadReply) ProtoMessage() {}
 
 func (x *ReadReply) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[2]
+	mi := &file_localfile_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -221,7 +183,7 @@ func (x *ReadReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadReply.ProtoReflect.Descriptor instead.
 func (*ReadReply) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{2}
+	return file_localfile_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ReadReply) GetContents() []byte {
@@ -244,7 +206,7 @@ type StatRequest struct {
 func (x *StatRequest) Reset() {
 	*x = StatRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[3]
+		mi := &file_localfile_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -257,7 +219,7 @@ func (x *StatRequest) String() string {
 func (*StatRequest) ProtoMessage() {}
 
 func (x *StatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[3]
+	mi := &file_localfile_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -270,7 +232,7 @@ func (x *StatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatRequest.ProtoReflect.Descriptor instead.
 func (*StatRequest) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{3}
+	return file_localfile_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StatRequest) GetFilename() string {
@@ -305,7 +267,7 @@ type StatReply struct {
 func (x *StatReply) Reset() {
 	*x = StatReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[4]
+		mi := &file_localfile_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -318,7 +280,7 @@ func (x *StatReply) String() string {
 func (*StatReply) ProtoMessage() {}
 
 func (x *StatReply) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[4]
+	mi := &file_localfile_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +293,7 @@ func (x *StatReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatReply.ProtoReflect.Descriptor instead.
 func (*StatReply) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{4}
+	return file_localfile_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StatReply) GetFilename() string {
@@ -393,7 +355,7 @@ type SumRequest struct {
 func (x *SumRequest) Reset() {
 	*x = SumRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[5]
+		mi := &file_localfile_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -406,7 +368,7 @@ func (x *SumRequest) String() string {
 func (*SumRequest) ProtoMessage() {}
 
 func (x *SumRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[5]
+	mi := &file_localfile_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +381,7 @@ func (x *SumRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SumRequest.ProtoReflect.Descriptor instead.
 func (*SumRequest) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{5}
+	return file_localfile_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *SumRequest) GetFilename() string {
@@ -453,7 +415,7 @@ type SumReply struct {
 func (x *SumReply) Reset() {
 	*x = SumReply{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[6]
+		mi := &file_localfile_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -466,7 +428,7 @@ func (x *SumReply) String() string {
 func (*SumReply) ProtoMessage() {}
 
 func (x *SumReply) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[6]
+	mi := &file_localfile_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -479,7 +441,7 @@ func (x *SumReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SumReply.ProtoReflect.Descriptor instead.
 func (*SumReply) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{6}
+	return file_localfile_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SumReply) GetFilename() string {
@@ -503,17 +465,158 @@ func (x *SumReply) GetSum() string {
 	return ""
 }
 
+// FileAttributes describes a file by it's name and expected user/group and
+// permissions.
+type FileAttributes struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Must be a fully qualified and clean path name (i.e. absolute and no ../
+	// style).
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	// Permissions for the written file in unix style (lower 12 bits only).
+	Permissions uint32 `protobuf:"varint,2,opt,name=permissions,proto3" json:"permissions,omitempty"`
+	// If not blank the user to set as the owner of the file. If blank the
+	// file must previously exist and overwrite above is set to true.
+	User string `protobuf:"bytes,3,opt,name=user,proto3" json:"user,omitempty"`
+	// If not blank the group to set as the group of the file. If blank the
+	// file must previously exist and overwrite above is set to true.
+	Group string `protobuf:"bytes,4,opt,name=group,proto3" json:"group,omitempty"`
+}
+
+func (x *FileAttributes) Reset() {
+	*x = FileAttributes{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_localfile_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FileAttributes) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileAttributes) ProtoMessage() {}
+
+func (x *FileAttributes) ProtoReflect() protoreflect.Message {
+	mi := &file_localfile_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileAttributes.ProtoReflect.Descriptor instead.
+func (*FileAttributes) Descriptor() ([]byte, []int) {
+	return file_localfile_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FileAttributes) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *FileAttributes) GetPermissions() uint32 {
+	if x != nil {
+		return x.Permissions
+	}
+	return 0
+}
+
+func (x *FileAttributes) GetUser() string {
+	if x != nil {
+		return x.User
+	}
+	return ""
+}
+
+func (x *FileAttributes) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+// FileWrite describes everything about a file to be written.
+type FileWrite struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Attrs *FileAttributes `protobuf:"bytes,1,opt,name=attrs,proto3" json:"attrs,omitempty"`
+	// If true allow to truncate and overwrite an existing file. Otherwise
+	// the file must not exist. This is still subject to races as all incoming
+	// data is written to a tempfile before moved to the final destination so
+	// multiple system calls will take place.
+	Overwrite bool `protobuf:"varint,2,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
+}
+
+func (x *FileWrite) Reset() {
+	*x = FileWrite{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_localfile_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FileWrite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileWrite) ProtoMessage() {}
+
+func (x *FileWrite) ProtoReflect() protoreflect.Message {
+	mi := &file_localfile_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileWrite.ProtoReflect.Descriptor instead.
+func (*FileWrite) Descriptor() ([]byte, []int) {
+	return file_localfile_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *FileWrite) GetAttrs() *FileAttributes {
+	if x != nil {
+		return x.Attrs
+	}
+	return nil
+}
+
+func (x *FileWrite) GetOverwrite() bool {
+	if x != nil {
+		return x.Overwrite
+	}
+	return false
+}
+
 // WriteRequest streams the data for the filename to be written.
-// The first request must contain a filename and all future requests
-// must contain contents. Additional files may then be written in the
-// same sequence.
+// The first request must contain a description and all future requests
+// must contain contents. Each write request will append contents into the
+// file until the stream is closed. Then the file is moved to it's final
+// location.
 type WriteRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Request:
-	//	*WriteRequest_Filename
+	//	*WriteRequest_Description
 	//	*WriteRequest_Contents
 	Request isWriteRequest_Request `protobuf_oneof:"request"`
 }
@@ -521,7 +624,7 @@ type WriteRequest struct {
 func (x *WriteRequest) Reset() {
 	*x = WriteRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[7]
+		mi := &file_localfile_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -534,7 +637,7 @@ func (x *WriteRequest) String() string {
 func (*WriteRequest) ProtoMessage() {}
 
 func (x *WriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[7]
+	mi := &file_localfile_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -547,7 +650,7 @@ func (x *WriteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteRequest.ProtoReflect.Descriptor instead.
 func (*WriteRequest) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{7}
+	return file_localfile_proto_rawDescGZIP(), []int{8}
 }
 
 func (m *WriteRequest) GetRequest() isWriteRequest_Request {
@@ -557,11 +660,11 @@ func (m *WriteRequest) GetRequest() isWriteRequest_Request {
 	return nil
 }
 
-func (x *WriteRequest) GetFilename() string {
-	if x, ok := x.GetRequest().(*WriteRequest_Filename); ok {
-		return x.Filename
+func (x *WriteRequest) GetDescription() *FileWrite {
+	if x, ok := x.GetRequest().(*WriteRequest_Description); ok {
+		return x.Description
 	}
-	return ""
+	return nil
 }
 
 func (x *WriteRequest) GetContents() []byte {
@@ -575,15 +678,15 @@ type isWriteRequest_Request interface {
 	isWriteRequest_Request()
 }
 
-type WriteRequest_Filename struct {
-	Filename string `protobuf:"bytes,1,opt,name=filename,proto3,oneof"`
+type WriteRequest_Description struct {
+	Description *FileWrite `protobuf:"bytes,1,opt,name=description,proto3,oneof"`
 }
 
 type WriteRequest_Contents struct {
 	Contents []byte `protobuf:"bytes,2,opt,name=contents,proto3,oneof"`
 }
 
-func (*WriteRequest_Filename) isWriteRequest_Request() {}
+func (*WriteRequest_Description) isWriteRequest_Request() {}
 
 func (*WriteRequest_Contents) isWriteRequest_Request() {}
 
@@ -594,14 +697,17 @@ type CopyRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Url      string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	Filename string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	Description *FileWrite `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
+	Url         string     `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	// Any additional data the URL destination may need in order
+	// to succeed (such as an auth token for a blob service).
+	BlobData []byte `protobuf:"bytes,3,opt,name=blob_data,json=blobData,proto3" json:"blob_data,omitempty"`
 }
 
 func (x *CopyRequest) Reset() {
 	*x = CopyRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_localfile_proto_msgTypes[8]
+		mi := &file_localfile_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -614,7 +720,7 @@ func (x *CopyRequest) String() string {
 func (*CopyRequest) ProtoMessage() {}
 
 func (x *CopyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_localfile_proto_msgTypes[8]
+	mi := &file_localfile_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -627,7 +733,14 @@ func (x *CopyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyRequest.ProtoReflect.Descriptor instead.
 func (*CopyRequest) Descriptor() ([]byte, []int) {
-	return file_localfile_proto_rawDescGZIP(), []int{8}
+	return file_localfile_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CopyRequest) GetDescription() *FileWrite {
+	if x != nil {
+		return x.Description
+	}
+	return nil
 }
 
 func (x *CopyRequest) GetUrl() string {
@@ -637,11 +750,58 @@ func (x *CopyRequest) GetUrl() string {
 	return ""
 }
 
-func (x *CopyRequest) GetFilename() string {
+func (x *CopyRequest) GetBlobData() []byte {
 	if x != nil {
-		return x.Filename
+		return x.BlobData
 	}
-	return ""
+	return nil
+}
+
+type SetFileAttributesRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Attrs *FileAttributes `protobuf:"bytes,1,opt,name=attrs,proto3" json:"attrs,omitempty"`
+}
+
+func (x *SetFileAttributesRequest) Reset() {
+	*x = SetFileAttributesRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_localfile_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetFileAttributesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetFileAttributesRequest) ProtoMessage() {}
+
+func (x *SetFileAttributesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_localfile_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetFileAttributesRequest.ProtoReflect.Descriptor instead.
+func (*SetFileAttributesRequest) Descriptor() ([]byte, []int) {
+	return file_localfile_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *SetFileAttributesRequest) GetAttrs() *FileAttributes {
+	if x != nil {
+		return x.Attrs
+	}
+	return nil
 }
 
 var File_localfile_proto protoreflect.FileDescriptor
@@ -650,8 +810,9 @@ var file_localfile_proto_rawDesc = []byte{
 	0x0a, 0x0f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x66, 0x69, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
 	0x6f, 0x12, 0x09, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x1a, 0x1f, 0x67, 0x6f,
 	0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69,
-	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x0b, 0x0a,
-	0x09, 0x4e, 0x75, 0x6c, 0x6c, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x59, 0x0a, 0x0b, 0x52, 0x65,
+	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1b, 0x67,
+	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x65,
+	0x6d, 0x70, 0x74, 0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x59, 0x0a, 0x0b, 0x52, 0x65,
 	0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1a, 0x0a, 0x08, 0x66, 0x69, 0x6c,
 	0x65, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x69, 0x6c,
 	0x65, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x6f, 0x66, 0x66, 0x73, 0x65, 0x74, 0x18,
@@ -685,43 +846,72 @@ var file_localfile_proto_rawDesc = []byte{
 	0x70, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x12, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c,
 	0x46, 0x69, 0x6c, 0x65, 0x2e, 0x53, 0x75, 0x6d, 0x54, 0x79, 0x70, 0x65, 0x52, 0x07, 0x73, 0x75,
 	0x6d, 0x54, 0x79, 0x70, 0x65, 0x12, 0x10, 0x0a, 0x03, 0x73, 0x75, 0x6d, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x03, 0x73, 0x75, 0x6d, 0x22, 0x55, 0x0a, 0x0c, 0x57, 0x72, 0x69, 0x74, 0x65,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1c, 0x0a, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e,
-	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x08, 0x66, 0x69, 0x6c,
-	0x65, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74,
-	0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x48, 0x00, 0x52, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65,
-	0x6e, 0x74, 0x73, 0x42, 0x09, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x3b,
-	0x0a, 0x0b, 0x43, 0x6f, 0x70, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a,
-	0x03, 0x75, 0x72, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72, 0x6c, 0x12,
-	0x1a, 0x0a, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65, 0x2a, 0x77, 0x0a, 0x07, 0x53,
-	0x75, 0x6d, 0x54, 0x79, 0x70, 0x65, 0x12, 0x14, 0x0a, 0x10, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59,
-	0x50, 0x45, 0x5f, 0x55, 0x4e, 0x4b, 0x4e, 0x4f, 0x57, 0x4e, 0x10, 0x00, 0x12, 0x16, 0x0a, 0x12,
-	0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x43, 0x52, 0x43, 0x33, 0x32, 0x49, 0x45,
-	0x45, 0x45, 0x10, 0x01, 0x12, 0x10, 0x0a, 0x0c, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45,
-	0x5f, 0x4d, 0x44, 0x35, 0x10, 0x02, 0x12, 0x13, 0x0a, 0x0f, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59,
-	0x50, 0x45, 0x5f, 0x53, 0x48, 0x41, 0x32, 0x35, 0x36, 0x10, 0x03, 0x12, 0x17, 0x0a, 0x13, 0x53,
-	0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x53, 0x48, 0x41, 0x35, 0x31, 0x32, 0x5f, 0x32,
-	0x35, 0x36, 0x10, 0x04, 0x32, 0xae, 0x02, 0x0a, 0x09, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69,
-	0x6c, 0x65, 0x12, 0x38, 0x0a, 0x04, 0x52, 0x65, 0x61, 0x64, 0x12, 0x16, 0x2e, 0x4c, 0x6f, 0x63,
-	0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x52, 0x65, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x14, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x52,
-	0x65, 0x61, 0x64, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x30, 0x01, 0x12, 0x3a, 0x0a, 0x04,
-	0x53, 0x74, 0x61, 0x74, 0x12, 0x16, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65,
-	0x2e, 0x53, 0x74, 0x61, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x4c,
-	0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x52, 0x65, 0x70,
-	0x6c, 0x79, 0x22, 0x00, 0x28, 0x01, 0x30, 0x01, 0x12, 0x37, 0x0a, 0x03, 0x53, 0x75, 0x6d, 0x12,
-	0x15, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x53, 0x75, 0x6d, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69,
-	0x6c, 0x65, 0x2e, 0x53, 0x75, 0x6d, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x28, 0x01, 0x30,
-	0x01, 0x12, 0x3a, 0x0a, 0x05, 0x57, 0x72, 0x69, 0x74, 0x65, 0x12, 0x17, 0x2e, 0x4c, 0x6f, 0x63,
-	0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x57, 0x72, 0x69, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e,
-	0x4e, 0x75, 0x6c, 0x6c, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x28, 0x01, 0x12, 0x36, 0x0a,
-	0x04, 0x43, 0x6f, 0x70, 0x79, 0x12, 0x16, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c,
-	0x65, 0x2e, 0x43, 0x6f, 0x70, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e,
-	0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x4e, 0x75, 0x6c, 0x6c, 0x52, 0x65,
-	0x70, 0x6c, 0x79, 0x22, 0x00, 0x42, 0x38, 0x5a, 0x36, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
+	0x28, 0x09, 0x52, 0x03, 0x73, 0x75, 0x6d, 0x22, 0x78, 0x0a, 0x0e, 0x46, 0x69, 0x6c, 0x65, 0x41,
+	0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x12, 0x1a, 0x0a, 0x08, 0x66, 0x69, 0x6c,
+	0x65, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x69, 0x6c,
+	0x65, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x20, 0x0a, 0x0b, 0x70, 0x65, 0x72, 0x6d, 0x69, 0x73, 0x73,
+	0x69, 0x6f, 0x6e, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0b, 0x70, 0x65, 0x72, 0x6d,
+	0x69, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x75, 0x73, 0x65, 0x72, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x75, 0x73, 0x65, 0x72, 0x12, 0x14, 0x0a, 0x05, 0x67,
+	0x72, 0x6f, 0x75, 0x70, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x67, 0x72, 0x6f, 0x75,
+	0x70, 0x22, 0x5a, 0x0a, 0x09, 0x46, 0x69, 0x6c, 0x65, 0x57, 0x72, 0x69, 0x74, 0x65, 0x12, 0x2f,
+	0x0a, 0x05, 0x61, 0x74, 0x74, 0x72, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e,
+	0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x46, 0x69, 0x6c, 0x65, 0x41, 0x74,
+	0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x05, 0x61, 0x74, 0x74, 0x72, 0x73, 0x12,
+	0x1c, 0x0a, 0x09, 0x6f, 0x76, 0x65, 0x72, 0x77, 0x72, 0x69, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x08, 0x52, 0x09, 0x6f, 0x76, 0x65, 0x72, 0x77, 0x72, 0x69, 0x74, 0x65, 0x22, 0x71, 0x0a,
+	0x0c, 0x57, 0x72, 0x69, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x38, 0x0a,
+	0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x14, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x46,
+	0x69, 0x6c, 0x65, 0x57, 0x72, 0x69, 0x74, 0x65, 0x48, 0x00, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63,
+	0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x1c, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65,
+	0x6e, 0x74, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x48, 0x00, 0x52, 0x08, 0x63, 0x6f, 0x6e,
+	0x74, 0x65, 0x6e, 0x74, 0x73, 0x42, 0x09, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x22, 0x74, 0x0a, 0x0b, 0x43, 0x6f, 0x70, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x36, 0x0a, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65,
+	0x2e, 0x46, 0x69, 0x6c, 0x65, 0x57, 0x72, 0x69, 0x74, 0x65, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63,
+	0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x10, 0x0a, 0x03, 0x75, 0x72, 0x6c, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72, 0x6c, 0x12, 0x1b, 0x0a, 0x09, 0x62, 0x6c, 0x6f,
+	0x62, 0x5f, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x08, 0x62, 0x6c,
+	0x6f, 0x62, 0x44, 0x61, 0x74, 0x61, 0x22, 0x4b, 0x0a, 0x18, 0x53, 0x65, 0x74, 0x46, 0x69, 0x6c,
+	0x65, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x2f, 0x0a, 0x05, 0x61, 0x74, 0x74, 0x72, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x19, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x46, 0x69,
+	0x6c, 0x65, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x52, 0x05, 0x61, 0x74,
+	0x74, 0x72, 0x73, 0x2a, 0x77, 0x0a, 0x07, 0x53, 0x75, 0x6d, 0x54, 0x79, 0x70, 0x65, 0x12, 0x14,
+	0x0a, 0x10, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x55, 0x4e, 0x4b, 0x4e, 0x4f,
+	0x57, 0x4e, 0x10, 0x00, 0x12, 0x16, 0x0a, 0x12, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45,
+	0x5f, 0x43, 0x52, 0x43, 0x33, 0x32, 0x49, 0x45, 0x45, 0x45, 0x10, 0x01, 0x12, 0x10, 0x0a, 0x0c,
+	0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x4d, 0x44, 0x35, 0x10, 0x02, 0x12, 0x13,
+	0x0a, 0x0f, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f, 0x53, 0x48, 0x41, 0x32, 0x35,
+	0x36, 0x10, 0x03, 0x12, 0x17, 0x0a, 0x13, 0x53, 0x55, 0x4d, 0x5f, 0x54, 0x59, 0x50, 0x45, 0x5f,
+	0x53, 0x48, 0x41, 0x35, 0x31, 0x32, 0x5f, 0x32, 0x35, 0x36, 0x10, 0x04, 0x32, 0x86, 0x03, 0x0a,
+	0x09, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x12, 0x38, 0x0a, 0x04, 0x52, 0x65,
+	0x61, 0x64, 0x12, 0x16, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x52,
+	0x65, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x4c, 0x6f, 0x63,
+	0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x52, 0x65, 0x61, 0x64, 0x52, 0x65, 0x70, 0x6c, 0x79,
+	0x22, 0x00, 0x30, 0x01, 0x12, 0x3a, 0x0a, 0x04, 0x53, 0x74, 0x61, 0x74, 0x12, 0x16, 0x2e, 0x4c,
+	0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x53, 0x74, 0x61, 0x74, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65,
+	0x2e, 0x53, 0x74, 0x61, 0x74, 0x52, 0x65, 0x70, 0x6c, 0x79, 0x22, 0x00, 0x28, 0x01, 0x30, 0x01,
+	0x12, 0x37, 0x0a, 0x03, 0x53, 0x75, 0x6d, 0x12, 0x15, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46,
+	0x69, 0x6c, 0x65, 0x2e, 0x53, 0x75, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13,
+	0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x53, 0x75, 0x6d, 0x52, 0x65,
+	0x70, 0x6c, 0x79, 0x22, 0x00, 0x28, 0x01, 0x30, 0x01, 0x12, 0x3c, 0x0a, 0x05, 0x57, 0x72, 0x69,
+	0x74, 0x65, 0x12, 0x17, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x57,
+	0x72, 0x69, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d,
+	0x70, 0x74, 0x79, 0x22, 0x00, 0x28, 0x01, 0x12, 0x38, 0x0a, 0x04, 0x43, 0x6f, 0x70, 0x79, 0x12,
+	0x16, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69, 0x6c, 0x65, 0x2e, 0x43, 0x6f, 0x70, 0x79,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22,
+	0x00, 0x12, 0x52, 0x0a, 0x11, 0x53, 0x65, 0x74, 0x46, 0x69, 0x6c, 0x65, 0x41, 0x74, 0x74, 0x72,
+	0x69, 0x62, 0x75, 0x74, 0x65, 0x73, 0x12, 0x23, 0x2e, 0x4c, 0x6f, 0x63, 0x61, 0x6c, 0x46, 0x69,
+	0x6c, 0x65, 0x2e, 0x53, 0x65, 0x74, 0x46, 0x69, 0x6c, 0x65, 0x41, 0x74, 0x74, 0x72, 0x69, 0x62,
+	0x75, 0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d,
+	0x70, 0x74, 0x79, 0x22, 0x00, 0x42, 0x38, 0x5a, 0x36, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
 	0x63, 0x6f, 0x6d, 0x2f, 0x53, 0x6e, 0x6f, 0x77, 0x66, 0x6c, 0x61, 0x6b, 0x65, 0x2d, 0x4c, 0x61,
 	0x62, 0x73, 0x2f, 0x73, 0x61, 0x6e, 0x73, 0x73, 0x68, 0x65, 0x6c, 0x6c, 0x2f, 0x73, 0x65, 0x72,
 	0x76, 0x69, 0x63, 0x65, 0x73, 0x2f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x66, 0x69, 0x6c, 0x65, 0x62,
@@ -741,39 +931,48 @@ func file_localfile_proto_rawDescGZIP() []byte {
 }
 
 var file_localfile_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_localfile_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_localfile_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_localfile_proto_goTypes = []interface{}{
-	(SumType)(0),                  // 0: LocalFile.SumType
-	(*NullReply)(nil),             // 1: LocalFile.NullReply
-	(*ReadRequest)(nil),           // 2: LocalFile.ReadRequest
-	(*ReadReply)(nil),             // 3: LocalFile.ReadReply
-	(*StatRequest)(nil),           // 4: LocalFile.StatRequest
-	(*StatReply)(nil),             // 5: LocalFile.StatReply
-	(*SumRequest)(nil),            // 6: LocalFile.SumRequest
-	(*SumReply)(nil),              // 7: LocalFile.SumReply
-	(*WriteRequest)(nil),          // 8: LocalFile.WriteRequest
-	(*CopyRequest)(nil),           // 9: LocalFile.CopyRequest
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(SumType)(0),                     // 0: LocalFile.SumType
+	(*ReadRequest)(nil),              // 1: LocalFile.ReadRequest
+	(*ReadReply)(nil),                // 2: LocalFile.ReadReply
+	(*StatRequest)(nil),              // 3: LocalFile.StatRequest
+	(*StatReply)(nil),                // 4: LocalFile.StatReply
+	(*SumRequest)(nil),               // 5: LocalFile.SumRequest
+	(*SumReply)(nil),                 // 6: LocalFile.SumReply
+	(*FileAttributes)(nil),           // 7: LocalFile.FileAttributes
+	(*FileWrite)(nil),                // 8: LocalFile.FileWrite
+	(*WriteRequest)(nil),             // 9: LocalFile.WriteRequest
+	(*CopyRequest)(nil),              // 10: LocalFile.CopyRequest
+	(*SetFileAttributesRequest)(nil), // 11: LocalFile.SetFileAttributesRequest
+	(*timestamppb.Timestamp)(nil),    // 12: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),            // 13: google.protobuf.Empty
 }
 var file_localfile_proto_depIdxs = []int32{
-	10, // 0: LocalFile.StatReply.modtime:type_name -> google.protobuf.Timestamp
+	12, // 0: LocalFile.StatReply.modtime:type_name -> google.protobuf.Timestamp
 	0,  // 1: LocalFile.SumRequest.sum_type:type_name -> LocalFile.SumType
 	0,  // 2: LocalFile.SumReply.sum_type:type_name -> LocalFile.SumType
-	2,  // 3: LocalFile.LocalFile.Read:input_type -> LocalFile.ReadRequest
-	4,  // 4: LocalFile.LocalFile.Stat:input_type -> LocalFile.StatRequest
-	6,  // 5: LocalFile.LocalFile.Sum:input_type -> LocalFile.SumRequest
-	8,  // 6: LocalFile.LocalFile.Write:input_type -> LocalFile.WriteRequest
-	9,  // 7: LocalFile.LocalFile.Copy:input_type -> LocalFile.CopyRequest
-	3,  // 8: LocalFile.LocalFile.Read:output_type -> LocalFile.ReadReply
-	5,  // 9: LocalFile.LocalFile.Stat:output_type -> LocalFile.StatReply
-	7,  // 10: LocalFile.LocalFile.Sum:output_type -> LocalFile.SumReply
-	1,  // 11: LocalFile.LocalFile.Write:output_type -> LocalFile.NullReply
-	1,  // 12: LocalFile.LocalFile.Copy:output_type -> LocalFile.NullReply
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	7,  // 3: LocalFile.FileWrite.attrs:type_name -> LocalFile.FileAttributes
+	8,  // 4: LocalFile.WriteRequest.description:type_name -> LocalFile.FileWrite
+	8,  // 5: LocalFile.CopyRequest.description:type_name -> LocalFile.FileWrite
+	7,  // 6: LocalFile.SetFileAttributesRequest.attrs:type_name -> LocalFile.FileAttributes
+	1,  // 7: LocalFile.LocalFile.Read:input_type -> LocalFile.ReadRequest
+	3,  // 8: LocalFile.LocalFile.Stat:input_type -> LocalFile.StatRequest
+	5,  // 9: LocalFile.LocalFile.Sum:input_type -> LocalFile.SumRequest
+	9,  // 10: LocalFile.LocalFile.Write:input_type -> LocalFile.WriteRequest
+	10, // 11: LocalFile.LocalFile.Copy:input_type -> LocalFile.CopyRequest
+	11, // 12: LocalFile.LocalFile.SetFileAttributes:input_type -> LocalFile.SetFileAttributesRequest
+	2,  // 13: LocalFile.LocalFile.Read:output_type -> LocalFile.ReadReply
+	4,  // 14: LocalFile.LocalFile.Stat:output_type -> LocalFile.StatReply
+	6,  // 15: LocalFile.LocalFile.Sum:output_type -> LocalFile.SumReply
+	13, // 16: LocalFile.LocalFile.Write:output_type -> google.protobuf.Empty
+	13, // 17: LocalFile.LocalFile.Copy:output_type -> google.protobuf.Empty
+	13, // 18: LocalFile.LocalFile.SetFileAttributes:output_type -> google.protobuf.Empty
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_localfile_proto_init() }
@@ -783,18 +982,6 @@ func file_localfile_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_localfile_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NullReply); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_localfile_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ReadRequest); i {
 			case 0:
 				return &v.state
@@ -806,7 +993,7 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
-		file_localfile_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+		file_localfile_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ReadReply); i {
 			case 0:
 				return &v.state
@@ -818,7 +1005,7 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
-		file_localfile_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+		file_localfile_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*StatRequest); i {
 			case 0:
 				return &v.state
@@ -830,7 +1017,7 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
-		file_localfile_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_localfile_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*StatReply); i {
 			case 0:
 				return &v.state
@@ -842,7 +1029,7 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
-		file_localfile_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_localfile_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SumRequest); i {
 			case 0:
 				return &v.state
@@ -854,7 +1041,7 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
-		file_localfile_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+		file_localfile_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*SumReply); i {
 			case 0:
 				return &v.state
@@ -866,8 +1053,20 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
+		file_localfile_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FileAttributes); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 		file_localfile_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WriteRequest); i {
+			switch v := v.(*FileWrite); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -879,6 +1078,18 @@ func file_localfile_proto_init() {
 			}
 		}
 		file_localfile_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WriteRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_localfile_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CopyRequest); i {
 			case 0:
 				return &v.state
@@ -890,9 +1101,21 @@ func file_localfile_proto_init() {
 				return nil
 			}
 		}
+		file_localfile_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*SetFileAttributesRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
-	file_localfile_proto_msgTypes[7].OneofWrappers = []interface{}{
-		(*WriteRequest_Filename)(nil),
+	file_localfile_proto_msgTypes[8].OneofWrappers = []interface{}{
+		(*WriteRequest_Description)(nil),
 		(*WriteRequest_Contents)(nil),
 	}
 	type x struct{}
@@ -901,7 +1124,7 @@ func file_localfile_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_localfile_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
