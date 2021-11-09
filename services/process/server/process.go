@@ -380,27 +380,21 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	}
 	defer os.RemoveAll(filepath.Dir(file)) // clean up
 
-	switch req.Destination {
-	case pb.BlobDestination_BLOB_DESTINATION_STREAM:
+	switch req.Destination.(type) {
+	case *pb.GetMemoryDumpRequest_Stream:
 		// Nothing to do here, we just send it back.
-	case pb.BlobDestination_BLOB_DESTINATION_URL:
+	case *pb.GetMemoryDumpRequest_Url:
 		// Take the URL and append a filename composed above (either heap or core).
-		dest, err = openBlobForWriting(stream.Context(), req.Url, bucketFile)
+		dest, err = openBlobForWriting(stream.Context(), req.GetUrl().Url, bucketFile)
 		if err != nil {
-			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.Url, err)
+			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.GetUrl().Url, err)
 		}
 		defer func() {
 			err := dest.Close()
 			if err != nil {
-				log.Printf("error closing bucket %s - %v", req.Url, err)
+				log.Printf("error closing bucket %s - %v", req.GetUrl().Url, err)
 			}
 		}()
-	case pb.BlobDestination_BLOB_DESTINATION_UNKNOWN:
-		fallthrough
-	default:
-		// Can't default to streaming as that is inherently more open to exfiltration risks
-		// and harder for policy to manage before we get the request. So there is no default.
-		return status.Error(codes.InvalidArgument, "Must specify a valid destination type")
 	}
 
 	// Don't care about stderr output since jmap produces some debug that way.
@@ -420,6 +414,23 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	defer f.Close()
 
 	b := make([]byte, util.StreamingChunkSize)
+
+	if req.GetUrl() != nil {
+		written, err := io.CopyBuffer(dest, f, b)
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't copy to remote URL %s - %v", req.GetUrl().Url, err)
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't stat dump file %s - %v", file, err)
+		}
+		if got, want := written, fi.Size(); got != want {
+			return status.Errorf(codes.Internal, "didn't write correct bytes to URL %s. Expected %d and wrote %d", req.GetUrl().Url, want, got)
+		}
+		// URL so we're done.
+		return nil
+	}
+
 	for {
 		n, err := f.Read(b)
 		// We're done on EOF.
@@ -433,16 +444,8 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
-		switch req.Destination {
-		case pb.BlobDestination_BLOB_DESTINATION_STREAM:
-			if err := stream.Send(&pb.GetMemoryDumpReply{Data: b[:n]}); err != nil {
-				return status.Errorf(codes.Internal, "can't send on stream: %v", err)
-			}
-		case pb.BlobDestination_BLOB_DESTINATION_URL:
-			written, err := dest.Write(b[:n])
-			if err != nil || written != n {
-				return status.Errorf(codes.Internal, "can't write to file %s in bucket %s: %v", req.Url, bucketFile, err)
-			}
+		if err := stream.Send(&pb.GetMemoryDumpReply{Data: b[:n]}); err != nil {
+			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
 		}
 	}
 	return nil

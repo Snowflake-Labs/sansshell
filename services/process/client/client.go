@@ -303,7 +303,7 @@ func createOutput(path string) (*os.File, error) {
 }
 
 func flagToType(val string) (pb.DumpType, error) {
-	v := fmt.Sprintf("PACKAGE_SYSTEM_%s", strings.ToUpper(val))
+	v := fmt.Sprintf("DUMP_TYPE_%s", strings.ToUpper(val))
 	i, ok := pb.DumpType_value[v]
 	if !ok {
 		return pb.DumpType_DUMP_TYPE_UNKNOWN, fmt.Errorf("no such sumtype value: %s", v)
@@ -314,7 +314,9 @@ func flagToType(val string) (pb.DumpType, error) {
 func shortDumpTypeNames() []string {
 	var shortNames []string
 	for k := range pb.DumpType_value {
-		shortNames = append(shortNames, strings.TrimPrefix(k, "DUMP_TYPE_"))
+		if k != "DUMP_TYPE_UNKNOWN" {
+			shortNames = append(shortNames, strings.TrimPrefix(k, "DUMP_TYPE_"))
+		}
 	}
 	sort.Strings(shortNames)
 	return shortNames
@@ -343,7 +345,7 @@ This will also accept URL options of the form:
 
 	s3://bucket (AWS)
 	azblob://bucket (Azure)
-        gs://bucket (GCP)
+	gs://bucket (GCP)
 	
 	See https://gocloud.dev/howto/blob/ for details on options.`)
 }
@@ -367,19 +369,18 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	c := pb.NewProcessClient(conn)
 
-	dest := pb.BlobDestination_BLOB_DESTINATION_STREAM
-	url := ""
-	switch {
-	case strings.HasPrefix(p.output, "s3://"), strings.HasPrefix(p.output, "azblob://"), strings.HasPrefix(p.output, "gs://"):
-		dest = pb.BlobDestination_BLOB_DESTINATION_URL
-		url = p.output
-	}
-
 	req := &pb.GetMemoryDumpRequest{
 		Pid:         p.pid,
 		DumpType:    dt,
-		Destination: dest,
-		Url:         url,
+		Destination: &pb.GetMemoryDumpRequest_Stream{},
+	}
+
+	if strings.HasPrefix(p.output, "s3://") || strings.HasPrefix(p.output, "azblob://") || strings.HasPrefix(p.output, "gs://") {
+		req.Destination = &pb.GetMemoryDumpRequest_Url{
+			Url: &pb.DumpDestinationUrl{
+				Url: p.output,
+			},
+		}
 	}
 
 	stream, err := c.GetMemoryDump(ctx, req)
@@ -389,7 +390,7 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 
 	var output *os.File
-	if url == "" {
+	if req.GetUrl() == nil {
 		output, err = createOutput(p.output)
 		if err != nil {
 			return subcommands.ExitFailure
@@ -405,10 +406,12 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		n, err := output.Write(resp.Data)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
-			return subcommands.ExitFailure
+		if output != nil {
+			n, err := output.Write(resp.Data)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
+				return subcommands.ExitFailure
+			}
 		}
 	}
 	return subcommands.ExitSuccess

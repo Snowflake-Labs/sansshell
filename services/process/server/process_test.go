@@ -665,7 +665,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 		},
@@ -676,7 +676,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
 			},
 		},
@@ -686,10 +686,13 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
-				Url:         fmt.Sprintf("file://%s", testdir),
-				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
+				Pid: 1,
+				Destination: &pb.GetMemoryDumpRequest_Url{
+					Url: &pb.DumpDestinationUrl{
+						Url: fmt.Sprintf("file://%s", testdir),
+					},
+				},
+				DumpType: pb.DumpType_DUMP_TYPE_GCORE,
 			},
 		},
 		{
@@ -698,7 +701,7 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
@@ -709,7 +712,7 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
 			},
 			wantErr: true,
@@ -720,7 +723,7 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
@@ -731,32 +734,11 @@ func TestMemoryDump(t *testing.T) {
 			options: goodGcoreOptions,
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
-				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad destination - unknown",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodGcoreOptions,
-			input:   "./testdata/core.test",
-			req: &pb.GetMemoryDumpRequest{
-				Pid:      1,
+				Pid: 1,
+				Destination: &pb.GetMemoryDumpRequest_Url{
+					Url: &pb.DumpDestinationUrl{},
+				},
 				DumpType: pb.DumpType_DUMP_TYPE_GCORE,
-			},
-			wantErr: true,
-		},
-		{
-			name:    "Bad destination - bad enum",
-			command: testutil.ResolvePath(t, "cat"),
-			options: goodGcoreOptions,
-			input:   "./testdata/core.test",
-			req: &pb.GetMemoryDumpRequest{
-				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL + 99,
-				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
 		},
@@ -767,7 +749,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_URL,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE + 99,
 			},
 			wantErr: true,
@@ -779,7 +761,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
@@ -792,7 +774,7 @@ func TestMemoryDump(t *testing.T) {
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
 				DumpType:    pb.DumpType_DUMP_TYPE_JMAP,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 			},
 			wantErr: true,
 		},
@@ -803,7 +785,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
@@ -815,7 +797,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			wantErr: true,
@@ -827,7 +809,7 @@ func TestMemoryDump(t *testing.T) {
 			input:   "./testdata/core.test",
 			req: &pb.GetMemoryDumpRequest{
 				Pid:         1,
-				Destination: pb.BlobDestination_BLOB_DESTINATION_STREAM,
+				Destination: &pb.GetMemoryDumpRequest_Stream{},
 				DumpType:    pb.DumpType_DUMP_TYPE_GCORE,
 			},
 			noOutput: true,
@@ -892,16 +874,16 @@ func TestMemoryDump(t *testing.T) {
 
 			// If we're not expecting an error and using a URL it didn't go to data so we need
 			// to load that up for comparison.
-			if !test.wantErr && test.req.Url != "" {
+			if !test.wantErr && test.req.GetUrl() != nil {
 				// Need to query the bucket to see what we got.
-				bucket, err := blob.OpenBucket(ctx, test.req.Url)
+				bucket, err := blob.OpenBucket(ctx, test.req.GetUrl().Url)
 				if err != nil {
-					t.Fatalf("can't open %s bucket - %v", test.req.Url, err)
+					t.Fatalf("can't open %s bucket - %v", test.req.GetUrl().Url, err)
 				}
 				file := fmt.Sprintf("bufconn-core.%d", test.req.Pid)
 				rdr, err := bucket.NewReader(context.Background(), file, nil)
 				if err != nil {
-					t.Fatalf("can't open bucket %s key %s - %v", test.req.Url, file, err)
+					t.Fatalf("can't open bucket %s key %s - %v", test.req.GetUrl().Url, file, err)
 				}
 				data, err = io.ReadAll(rdr)
 				if err != nil {

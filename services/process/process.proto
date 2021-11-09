@@ -148,14 +148,6 @@ message JavaThreadStack {
 
 message GetJavaStacksReply { repeated JavaThreadStack stacks = 1; }
 
-enum BlobDestination {
-  BLOB_DESTINATION_UNKNOWN = 0;
-  // Just stream it back.
-  BLOB_DESTINATION_STREAM = 1;
-  // This state requires an additional field to designate location.
-  BLOB_DESTINATION_URL = 2;
-}
-
 // DumpType indicates the program to use to generate the dump.
 enum DumpType {
   DUMP_TYPE_UNKNOWN = 0;
@@ -163,18 +155,26 @@ enum DumpType {
   DUMP_TYPE_JMAP = 2;
 }
 
+message DumpDestinationStream {
+  // marker message
+}
+
+message DumpDestinationUrl {
+  string url = 1;
+  // Any additional data the URL destination may need in order
+  // to succeed (such as an auth token for a blob service).
+  bytes blob_data = 2;
+}
 message GetMemoryDumpRequest {
   int64 pid = 1;
-  // If this is true jmap will be used to dump the data instead of gcore.
+  // Determine which program to use for dumping.
   // For URL based destinations the file will be named heapdump
   // instead of core to also indicate the difference.
   DumpType dump_type = 2;
-  BlobDestination destination = 3;
-  // Only used for BLOB_DESTINATION_URL
-  string url = 4;
-  // Any additional data BLOB_DESTINATION_URL may need in order
-  // to succeed (such as an auth token for a blob service).
-  bytes blob_data = 5;
+  oneof destination {
+    DumpDestinationStream stream = 3;
+    DumpDestinationUrl url = 4;
+  }
 }
 
 // If the destination is BLOB_DESTINATION_STREAM this will contain
