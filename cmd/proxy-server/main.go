@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"flag"
 	"fmt"
 	"log"
@@ -24,6 +25,9 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 )
 
+//go:embed default-policy.rego
+var defaultPolicy string
+
 func main() {
 
 	hostport := flag.String("hostport", "localhost:50043", "Where to listen for connections.")
@@ -44,8 +48,6 @@ func main() {
 		log.Fatalf("mtls.LoadClientCredentials(%s) %v", *credSource, err)
 	}
 
-	// go:embed default-policy.rego
-	var defaultPolicy string
 	policy := defaultPolicy
 	if *policyFile != "" {
 		data, err := os.ReadFile(*policyFile)
