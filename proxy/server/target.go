@@ -243,7 +243,7 @@ type TargetStreamSet struct {
 	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
-	// an Authorizer, for making policy checks
+	// an Authorizer, for authorizing requests sent to targets.
 	authorizer *rpcauth.Authorizer
 
 	// The set of streams managed by this set
@@ -381,7 +381,7 @@ func (t *TargetStreamSet) ClientCloseAll() {
 	}
 }
 
-// ClientClose cancels TargetStreams identified by ID in `req`
+// ClientCancel cancels TargetStreams identified by ID in `req`
 func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
@@ -394,15 +394,17 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	return nil
 }
 
-// Send dispatches new message data in `req` to the identified streams
+// Send dispatches new message data in `req` to the streams specified in req.
+// It will return an error if a requested stream does not exist, the message
+// type for the stream is incorrect, or if authorization data for the request
+// cannot be generated.
+// Before dispatching to the stream, an authorization check will be made to
+// ensure that the request is permitted. On failure, the affected stream
+// will be closed with an appropriate, but other streams are unaffected.
 func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
-	// TODO(jallie): authorization check for sending to streams goes
-	// here. StreamIds are collected, translated into targets, and
-	// authorization check made before dispatch
 	// TODO(jallie): this could also use parallel send, but since each
 	// stream has it's own dispatching go-routine internally, this already
 	// has some degree of underlying parallism
-
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
@@ -419,8 +421,9 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 		authinput.Host = &rpcauth.HostAuthInput{
 			Address: stream.Target(),
 		}
+
 		if err := t.authorizer.Eval(ctx, authinput); err != nil {
-			log.Println("closing stream with err", err)
+			log.Printf("authorization error %s : %v", stream, err)
 			stream.CloseWith(err)
 			continue
 		}

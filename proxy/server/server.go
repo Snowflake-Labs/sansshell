@@ -48,7 +48,7 @@ type Server struct {
 	// A dialer for making proxy -> target connections
 	dialer TargetDialer
 
-	// A policy authorizer, for authorizing proxy connections
+	// A policy authorizer, for authorizing proxy -> target requests
 	authorizer *rpcauth.Authorizer
 }
 
@@ -61,11 +61,15 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 // Creates a new Server which will use the supplied TargetDialer
 // for opening new target connections, and the global protobuf
 // registry to resolve service methods
+// The supplied authorizer is used to authorize requests made
+// to targets.
 func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
 	return NewWithServiceMap(dialer, authorizer, LoadGlobalServiceMap())
 }
 
 // Creates a new Server using the supplied TargetDialer and service map
+// The supplied authorizer is used to authorize requests made
+// to targets.
 func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
