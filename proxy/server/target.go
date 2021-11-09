@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
@@ -43,6 +44,9 @@ type TargetStream struct {
 
 	// the (internal) channel used to manage incoming requests
 	reqChan chan proto.Message
+
+	// A channel used to carry an error from proxy-induced closure
+	errChan chan error
 }
 
 func (s *TargetStream) String() string {
@@ -53,6 +57,21 @@ func (s *TargetStream) String() string {
 // stream
 func (s *TargetStream) StreamID() uint64 {
 	return s.streamID
+}
+
+// Method returns the full method name associated with this stream
+func (s *TargetStream) Method() string {
+	return s.serviceMethod.FullName()
+}
+
+// Target returns the address of the target
+func (s *TargetStream) Target() string {
+	return s.target
+}
+
+// NewRequest returns a new, empty request message for this target stream.
+func (s *TargetStream) NewRequest() proto.Message {
+	return s.serviceMethod.NewRequest()
 }
 
 // CloseSend is used to indicate that no more client requests
@@ -68,17 +87,24 @@ func (s *TargetStream) ClientCancel() {
 	s.cancelFunc()
 }
 
-// Send the data contained in 'req' to the client stream
-func (s *TargetStream) Send(req *anypb.Any) error {
-	// Frontload the check that the message is appropriate to the
-	// method by unpacking the any here
-	streamReq := s.serviceMethod.NewRequest()
-	if err := req.UnmarshalTo(streamReq); err != nil {
-		return err
+// Force closure of the stream. The supplied error will be
+// delivered in the ServerClose message.
+// If `err` is convertible to a grpc.Status, it will preserved,
+// otherwise, it will be sent with codes.Internal
+func (s *TargetStream) CloseWith(err error) {
+	select {
+	case s.errChan <- err:
+		s.cancelFunc()
+	default:
+		// an error is already pending. Do nothing
 	}
+}
+
+// Send the data contained in 'req' to the client stream
+func (s *TargetStream) Send(req proto.Message) error {
 	ctx := s.grpcStream.Context()
 	select {
-	case s.reqChan <- streamReq:
+	case s.reqChan <- req:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -165,16 +191,19 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	// Wait for final status from the errgroup, and translate it into
 	// a server-close call
 	err := group.Wait()
-	log.Printf("finished: %s (%v)", s, err)
-	var errStatus *pb.Status
-	if err != nil {
-		errStatus = convertStatus(status.New(codes.Internal, err.Error()))
+
+	// The error status may by set/overidden if CloseWith was used to
+	// terminate the stream.
+	select {
+	case err = <-s.errChan:
+	default:
 	}
+	log.Printf("finished: %s (%v)", s, err)
 	reply := &pb.ProxyReply{
 		Reply: &pb.ProxyReply_ServerClose{
 			ServerClose: &pb.ServerClose{
 				StreamIds: []uint64{s.streamID},
-				Status:    errStatus,
+				Status:    convertStatus(status.Convert(err)),
 			},
 		},
 	}
@@ -199,6 +228,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 		grpcStream:    clientStream,
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message),
+		errChan:       make(chan error, 1),
 	}, nil
 }
 
@@ -213,6 +243,9 @@ type TargetStreamSet struct {
 	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
+	// an Authorizer, for making policy checks
+	authorizer *rpcauth.Authorizer
+
 	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
 
@@ -225,10 +258,11 @@ type TargetStreamSet struct {
 }
 
 // NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
-func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer) *TargetStreamSet {
+func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer *rpcauth.Authorizer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
 		targetDialer:   dialer,
+		authorizer:     authorizer,
 		streams:        make(map[uint64]*TargetStream),
 		noncePairs:     make(map[string]bool),
 	}
@@ -361,19 +395,36 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 }
 
 // Send dispatches new message data in `req` to the identified streams
-func (t *TargetStreamSet) Send(req *pb.StreamData) error {
+func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	// TODO(jallie): authorization check for sending to streams goes
 	// here. StreamIds are collected, translated into targets, and
 	// authorization check made before dispatch
 	// TODO(jallie): this could also use parallel send, but since each
 	// stream has it's own dispatching go-routine internally, this already
 	// has some degree of underlying parallism
+
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
-		if err := stream.Send(req.Payload); err != nil {
+		streamReq := stream.NewRequest()
+		if err := req.Payload.UnmarshalTo(streamReq); err != nil {
+			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
+		}
+		authinput, err := rpcauth.NewRpcAuthInput(ctx, stream.Method(), streamReq)
+		if err != nil {
+			return status.Errorf(codes.Internal, "error creating authz input %v", err)
+		}
+		authinput.Host = &rpcauth.HostAuthInput{
+			Address: stream.Target(),
+		}
+		if err := t.authorizer.Eval(ctx, authinput); err != nil {
+			log.Println("closing stream with err", err)
+			stream.CloseWith(err)
+			continue
+		}
+		if err := stream.Send(streamReq); err != nil {
 			return err
 		}
 	}

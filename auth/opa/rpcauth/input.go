@@ -53,6 +53,9 @@ type PeerAuthInput struct {
 // HostAuthInput contains policy-relevant information about the system receiving
 // an RPC
 type HostAuthInput struct {
+	// The host address string.
+	Address string `json:"address"`
+
 	// Information about the principal associated with the host, if any
 	Principal *PrincipalAuthInput `json:"principal"`
 }

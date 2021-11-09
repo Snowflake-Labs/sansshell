@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
@@ -46,6 +47,9 @@ type Server struct {
 
 	// A dialer for making proxy -> target connections
 	dialer TargetDialer
+
+	// A policy authorizer, for authorizing proxy connections
+	authorizer *rpcauth.Authorizer
 }
 
 // Register registers this server with the given ServiceRegistar
@@ -57,15 +61,16 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 // Creates a new Server which will use the supplied TargetDialer
 // for opening new target connections, and the global protobuf
 // registry to resolve service methods
-func New(dialer TargetDialer) *Server {
-	return NewWithServiceMap(dialer, LoadGlobalServiceMap())
+func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
+	return NewWithServiceMap(dialer, authorizer, LoadGlobalServiceMap())
 }
 
 // Creates a new Server using the supplied TargetDialer and service map
-func NewWithServiceMap(dialer TargetDialer, serviceMap map[string]*ServiceMethod) *Server {
+func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
 		dialer:     dialer,
+		authorizer: authorizer,
 	}
 }
 
@@ -82,7 +87,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 
 	// create a new TargetStreamSet to manage the target streams
 	// associated with this proxy connection
-	streamSet := NewTargetStreamSet(s.serviceMap, s.dialer)
+	streamSet := NewTargetStreamSet(s.serviceMap, s.dialer, s.authorizer)
 
 	// A single go-routine for handling all sends to the reply
 	// channel
@@ -244,7 +249,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			case *pb.ProxyRequest_StreamData:
-				if err := streamSet.Send(req.GetStreamData()); err != nil {
+				if err := streamSet.Send(ctx, req.GetStreamData()); err != nil {
 					return err
 				}
 			case *pb.ProxyRequest_ClientCancel:
