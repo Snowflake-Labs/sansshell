@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -301,10 +302,28 @@ func createOutput(path string) (*os.File, error) {
 	return output, nil
 }
 
+func flagToType(val string) (pb.DumpType, error) {
+	v := fmt.Sprintf("PACKAGE_SYSTEM_%s", strings.ToUpper(val))
+	i, ok := pb.DumpType_value[v]
+	if !ok {
+		return pb.DumpType_DUMP_TYPE_UNKNOWN, fmt.Errorf("no such sumtype value: %s", v)
+	}
+	return pb.DumpType(i), nil
+}
+
+func shortDumpTypeNames() []string {
+	var shortNames []string
+	for k := range pb.DumpType_value {
+		shortNames = append(shortNames, strings.TrimPrefix(k, "DUMP_TYPE_"))
+	}
+	sort.Strings(shortNames)
+	return shortNames
+}
+
 type dumpCmd struct {
-	pid    int64
-	isJava bool
-	output string
+	pid      int64
+	dumpType string
+	output   string
 }
 
 func (*dumpCmd) Name() string     { return "dump" }
@@ -317,7 +336,7 @@ func (*dumpCmd) Usage() string {
 
 func (p *dumpCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.pid, "pid", 0, "Process to generate a core dump against.")
-	f.BoolVar(&p.isJava, "is-java", false, "If true will use jmap to attempt to dump instead of core.")
+	f.StringVar(&p.dumpType, "dump-type", "GCORE", fmt.Sprintf("Dump type to use(one of: [%s])", strings.Join(shortDumpTypeNames(), ",")))
 	f.StringVar(&p.output, "output", "", `Output to write data. - indicates to use stdout. A normal file path applies.
 
 This will also accept URL options of the form:
@@ -330,6 +349,11 @@ This will also accept URL options of the form:
 }
 
 func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	dt, err := flagToType(p.dumpType)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse dump type --dump-type: %s invalid\n", p.dumpType)
+		return subcommands.ExitFailure
+	}
 	if p.pid <= 0 {
 		fmt.Fprintln(os.Stderr, "--pid must be specified")
 		return subcommands.ExitFailure
@@ -350,9 +374,10 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		dest = pb.BlobDestination_BLOB_DESTINATION_URL
 		url = p.output
 	}
+
 	req := &pb.GetMemoryDumpRequest{
 		Pid:         p.pid,
-		IsJava:      p.isJava,
+		DumpType:    dt,
 		Destination: dest,
 		Url:         url,
 	}
