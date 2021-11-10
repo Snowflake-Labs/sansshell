@@ -125,7 +125,7 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 		return status.Errorf(codes.Internal, "didn't get reply back. Server closed with code: %s message: %s", codes.Code(code).String(), msg)
 	}
 
-	// Ok, one more receive
+	// Ok, one more receive for the server close.
 	resp, err = stream.Recv()
 	if err != nil {
 		return status.Errorf(codes.Internal, "can't get response data for %s on stream - %v", method, err)
