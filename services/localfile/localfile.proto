@@ -137,8 +137,10 @@ message WriteRequest {
 // CopyRequest contains the URL and filename destination to copy the
 // file from.
 message CopyRequest {
-  FileWrite description = 1;
-  string url = 2;
+  FileWrite destination = 1;
+  // The source URL to copy from. See implementations for details on schemes
+  // but will at a minimum support file://<path> for local copies.
+  string source_url = 2;
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
   bytes blob_data = 3;
