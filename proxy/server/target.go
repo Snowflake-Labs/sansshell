@@ -45,7 +45,7 @@ type TargetStream struct {
 	// the (internal) channel used to manage incoming requests
 	reqChan chan proto.Message
 
-	// A channel used to carry an error from proxy-induced closure
+	// A channel used to carry an error from proxy-initiated closure
 	errChan chan error
 }
 
@@ -88,9 +88,9 @@ func (s *TargetStream) ClientCancel() {
 }
 
 // Force closure of the stream. The supplied error will be
-// delivered in the ServerClose message.
-// If `err` is convertible to a grpc.Status, it will preserved,
-// otherwise, it will be sent with codes.Internal
+// delivered in the ServerClose message, if no status has
+// already been sent.
+// If `err` is convertible to a grpc.Status, it will preserved.
 func (s *TargetStream) CloseWith(err error) {
 	select {
 	case s.errChan <- err:
@@ -100,7 +100,7 @@ func (s *TargetStream) CloseWith(err error) {
 	}
 }
 
-// Send the data contained in 'req' to the client stream
+// Send the supplied request to the target stream.
 func (s *TargetStream) Send(req proto.Message) error {
 	ctx := s.grpcStream.Context()
 	select {
@@ -273,7 +273,10 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 //
 // The result of stream creation, as well as any messages received from the created stream will be
 // sent directly to 'replyChan'. If the stream was successfully started, its id will eventually be
-// sent to 'doneChan' when all work has completed
+// sent to 'doneChan' when all work has completed.
+//
+// Returns a non-nil error only on unrecoverable client error, such as the re-use of a nonce/target
+// pair, which cannot be represented by a stream-specific status.
 func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyChan chan *pb.ProxyReply, doneChan chan uint64) error {
 	// Check for client reuse of a previously used target/nonce pair, to avoid
 	// the case in which a buggy client sends multiple StartStream request with
@@ -400,7 +403,7 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 // cannot be generated.
 // Before dispatching to the stream, an authorization check will be made to
 // ensure that the request is permitted. On failure, the affected stream
-// will be closed with an appropriate, but other streams are unaffected.
+// will be closed with an appropriate error, but other streams are unaffected.
 func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	// TODO(jallie): this could also use parallel send, but since each
 	// stream has it's own dispatching go-routine internally, this already
