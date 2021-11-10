@@ -1,4 +1,5 @@
 .DS_Store
+cmd/proxy-server/proxy-server
 cmd/sanssh/sanssh
 cmd/sansshell-server/sansshell-server
 certs/
