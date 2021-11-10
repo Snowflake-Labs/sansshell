@@ -23,6 +23,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
+	_ "github.com/Snowflake-Labs/sansshell/services/process"
 )
 
 //go:embed default-policy.rego
