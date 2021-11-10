@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -190,6 +192,18 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return status.Errorf(codes.Internal, "sum: send error %v", err)
 		}
 	}
+}
+
+func (s *server) Write(stream pb.LocalFile_WriteServer) error {
+	return status.Error(codes.Unimplemented, "not implemented")
+}
+
+func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
+func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
 // Register is called to expose this handler to the gRPC server
