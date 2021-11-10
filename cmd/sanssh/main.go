@@ -37,6 +37,7 @@ var (
 
 func main() {
 	subcommands.ImportantFlag("address")
+	subcommands.ImportantFlag("proxy")
 	subcommands.ImportantFlag("credential-source")
 	subcommands.Register(subcommands.HelpCommand(), "")
 	subcommands.Register(subcommands.FlagsCommand(), "")
