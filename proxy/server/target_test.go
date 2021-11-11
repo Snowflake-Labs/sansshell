@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	_ "github.com/Snowflake-Labs/sansshell/proxy/testdata"
@@ -59,8 +60,11 @@ func TestEmptyStreamSet(t *testing.T) {
 		t.Errorf("TargetStream.ClientCancel(1) err code was %v, want code.InvalidArgument", status.Code(err))
 	}
 
+	// arbitrary payload
+	payload, _ := anypb.New(&pb.StreamData{})
+
 	// Send to nonexistent ids is an error
-	if err := ss.Send(ctx, &pb.StreamData{StreamIds: []uint64{1}}); status.Code(err) != codes.InvalidArgument {
+	if err := ss.Send(ctx, &pb.StreamData{StreamIds: []uint64{1}, Payload: payload}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("TargetStream.ClientCancel(0) err code was %v, want code.InvalidArgument", status.Code(err))
 	}
 }

@@ -52,7 +52,7 @@ type Server struct {
 	authorizer *rpcauth.Authorizer
 }
 
-// Register registers this server with the given ServiceRegistar
+// Register registers this server with the given ServiceRegistrar
 // (typically a grpc.Server)
 func (s *Server) Register(sr grpc.ServiceRegistrar) {
 	pb.RegisterProxyServer(sr, s)

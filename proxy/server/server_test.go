@@ -136,7 +136,7 @@ func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[stri
 	t.Helper()
 	targetDialer := NewDialer(withBufDialer(targets), grpc.WithInsecure())
 	lis := bufconn.Listen(bufSize)
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
 	proxyServer := New(targetDialer, authz)
 	proxyServer.Register(grpcServer)
 	go func() {
@@ -506,12 +506,62 @@ func TestProxyServerNonceReusePrevention(t *testing.T) {
 	}
 }
 
+func TestProxyServerStartStreamAuth(t *testing.T) {
+	ctx := context.Background()
+	policy := `
+
+package sansshell.authz
+
+default allow = false
+
+# Only allow starting streams to foo:123"
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+  input.message.start_stream.target = "foo:123"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+
+	// startStream to foo:123 is successful
+	testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+
+	req := &pb.ProxyRequest{
+		Request: &pb.ProxyRequest_StartStream{
+			StartStream: &pb.StartStream{
+				Target:     "bar:456",
+				MethodName: "/Testdata.TestService/TestUnary",
+				Nonce:      42,
+			},
+		},
+	}
+	// Attempting to start a second stream will first yield a Cancel on the
+	// initial stream as the proxy stream is torn down, followed by a
+	// final error with a PermissionDenied
+	reply := testutil.Exchange(t, proxyStream, req)
+	if reply.GetServerClose() == nil {
+		t.Fatalf("Exchange(%v) reply was %v, want ServerClose", req, reply)
+	}
+
+	// subsequent recv gets the final status, which is PermissionDenied
+	_, err := proxyStream.Recv()
+	if err == nil || status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("Recv() err was %v, want err with code PermissionDenied", err)
+	}
+}
+
 func TestProxyServerAuthzPolicyUnary(t *testing.T) {
 	ctx := context.Background()
 	policy := `
 package sansshell.authz
 
 default allow = false
+
+# Allow connections to the proxy
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
 
 # allow TestUnary with any value to foo:123
 allow {
@@ -609,6 +659,10 @@ package sansshell.authz
 default allow = false
 
 allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
+
+allow {
   input.method = "/Testdata.TestService/TestBidiStream"
   input.message.input = "allowed_input"
 }
@@ -635,5 +689,60 @@ allow {
 	sc := reply.GetServerClose()
 	if sc == nil || sc.GetStatus().GetCode() != int32(codes.PermissionDenied) {
 		t.Fatalf("Exchange(%v), want ServerClose with PermissionDenied, got %v", deniedReq, reply)
+	}
+}
+
+func TestProxyServerAuthzPolicyPartialFailure(t *testing.T) {
+	ctx := context.Background()
+	// policy which permits foo:123, but not bar:456
+	policy := `
+package sansshell.authz
+
+default allow = false
+
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
+
+allow {
+  input.method = "/Testdata.TestService/TestUnary"
+  input.host.address = "foo:123"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+
+	fooid := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+	barid := testutil.MustStartStream(t, proxyStream, "bar:456", "/Testdata.TestService/TestUnary")
+
+	req := testutil.PackStreamData(t, &td.TestRequest{Input: "whatever"}, fooid, barid)
+
+	// we'll eventually get 2 replies, but the order is undefined, so we'll collect both
+	replies := []*pb.ProxyReply{
+		// first reply after exchanging req
+		testutil.Exchange(t, proxyStream, req),
+	}
+	// second reply
+	replies = append(replies, testutil.Exchange(t, proxyStream, nil))
+	for _, reply := range replies {
+		sc := reply.GetServerClose()
+		if sc == nil || len(sc.StreamIds) != 1 {
+			t.Fatalf("Proxy reply was %v, want ServerClose with single streamID", reply)
+		}
+		switch sc.StreamIds[0] {
+		case barid:
+			// barID is not permitted by the policy, we we get a PermissionDenied
+			if sc.GetStatus().GetCode() != int32(codes.PermissionDenied) {
+				t.Errorf("Status for bar was %v, want status with PermissionDenied", sc.GetStatus())
+			}
+		case fooid:
+			// fooID is permitted, but won't be sent due to the failure in bar
+			if sc.GetStatus().GetCode() != int32(codes.Aborted) {
+				t.Errorf("Status for foo was %v, want status with Aborted", sc.GetStatus())
+			}
+		default:
+			t.Errorf("Got ServerClose with streamid %d, want streamid in [%d, %d]", sc.StreamIds[0], fooid, barid)
+		}
 	}
 }

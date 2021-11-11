@@ -42,7 +42,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("mtls.LoadServerCredentials(%s) %v", *credSource, err)
 	}
-	g := grpc.NewServer(grpc.Creds(serverCreds))
 	clientCreds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
 		log.Fatalf("mtls.LoadClientCredentials(%s) %v", *credSource, err)
@@ -66,6 +65,9 @@ func main() {
 
 	targetDialer := server.NewDialer(grpc.WithTransportCredentials(clientCreds))
 	server := server.New(targetDialer, authz)
+
+	g := grpc.NewServer(grpc.Creds(serverCreds), grpc.StreamInterceptor(authz.AuthorizeStream))
+
 	server.Register(g)
 	log.Println("initialized Proxy service using credentials from", *credSource)
 

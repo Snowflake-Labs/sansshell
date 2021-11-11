@@ -98,7 +98,7 @@ func NewRpcAuthInput(ctx context.Context, method string, req proto.Message) (*Rp
 
 	if req != nil {
 		out.MessageType = string(req.ProtoReflect().Descriptor().FullName())
-		marshaled, err := protojson.Marshal(req)
+		marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(req)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
 		}

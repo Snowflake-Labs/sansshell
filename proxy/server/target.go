@@ -90,7 +90,8 @@ func (s *TargetStream) ClientCancel() {
 // Force closure of the stream. The supplied error will be
 // delivered in the ServerClose message, if no status has
 // already been sent.
-// If `err` is convertible to a grpc.Status, it will preserved.
+// If `err` is convertible to a grpc.Status, the status code
+// will be preserved.
 func (s *TargetStream) CloseWith(err error) {
 	select {
 	case s.errChan <- err:
@@ -401,22 +402,32 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 // It will return an error if a requested stream does not exist, the message
 // type for the stream is incorrect, or if authorization data for the request
 // cannot be generated.
-// Before dispatching to the stream, an authorization check will be made to
-// ensure that the request is permitted. On failure, the affected stream
-// will be closed with an appropriate error, but other streams are unaffected.
+// Before dispatching to the stream(s), an authorization check will be made to
+// ensure that the request is permitted for all specified streams. On failure,
+// streams that failed authorization will be closed with PermissionDenied,
+// while other streams in the same request which would otherwise have been
+// permitted with be closed with status Aborted.
 func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
-	// TODO(jallie): this could also use parallel send, but since each
-	// stream has it's own dispatching go-routine internally, this already
-	// has some degree of underlying parallism
+	// The set of streams which are permitted to receive the request, after
+	// authorization checks of all streams have completed.
+	var queued []*TargetStream
+
+	streamReq, err := req.Payload.UnmarshalNew()
+	if err != nil {
+		return status.Errorf(codes.Internal, "error unmarshalling request %v", err)
+	}
+	msgName := proto.MessageName(streamReq)
+
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
-		streamReq := stream.NewRequest()
-		if err := req.Payload.UnmarshalTo(streamReq); err != nil {
+
+		if msgName != proto.MessageName(stream.NewRequest()) {
 			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
 		}
+
 		authinput, err := rpcauth.NewRpcAuthInput(ctx, stream.Method(), streamReq)
 		if err != nil {
 			return status.Errorf(codes.Internal, "error creating authz input %v", err)
@@ -425,15 +436,34 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 			Address: stream.Target(),
 		}
 
+		// If authz fails, close immediately with an error
 		if err := t.authorizer.Eval(ctx, authinput); err != nil {
 			log.Printf("authorization error %s : %v", stream, err)
 			stream.CloseWith(err)
 			continue
 		}
-		if err := stream.Send(streamReq); err != nil {
+		// Otherwise, enqueue this request pending the completion of authz checks
+		queued = append(queued, stream)
+	}
+
+	// if at least one of the authz checks failed, we abort all other streams specified
+	// in this request, since we couldn't transactionally complete the request.
+	if len(queued) != len(req.StreamIds) {
+		err := status.Error(codes.Aborted, "aborted due to proxy authz failure in related stream")
+		for _, stream := range queued {
+			stream.CloseWith(err)
+		}
+		return nil
+	}
+
+	// All authz checks succeeded, send to all streams
+	for _, stream := range queued {
+		reqClone := proto.Clone(streamReq)
+		if err := stream.Send(reqClone); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
