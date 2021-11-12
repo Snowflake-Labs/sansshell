@@ -28,8 +28,8 @@ import (
 //go:embed default-policy.rego
 var defaultPolicy string
 
-func main() {
 
+func main() {
 	hostport := flag.String("hostport", "localhost:50043", "Where to listen for connections.")
 	credSource := flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	policyFile := flag.String("policy-file", "", "Path to an authorization file")
@@ -47,6 +47,12 @@ func main() {
 		log.Fatalf("mtls.LoadClientCredentials(%s) %v", *credSource, err)
 	}
 
+	lis, err := net.Listen("tcp", *hostport)
+	if err != nil {
+		log.Fatalf("net.Listen(%s): %v", *hostport, err)
+	}
+	log.Println("listening on", *hostport)
+
 	policy := defaultPolicy
 	if *policyFile != "" {
 		data, err := os.ReadFile(*policyFile)
@@ -58,7 +64,12 @@ func main() {
 	} else {
 		log.Println("using default authorization policy")
 	}
-	authz, err := rpcauth.NewWithPolicy(ctx, policy)
+
+  addr := lis.Addr().String()
+  addressHook := rpcauth.HookIf(rpcauth.HostAddressHook(addr), func(input *rpcauth.RpcAuthInput) bool {
+    return input.Host == nil || len(input.Host.Address) == 0
+  })
+	authz, err := rpcauth.NewWithPolicy(ctx, policy, addressHook)
 	if err != nil {
 		log.Fatalf("error initializing authorization : %v", err)
 	}
@@ -71,11 +82,6 @@ func main() {
 	server.Register(g)
 	log.Println("initialized Proxy service using credentials from", *credSource)
 
-	lis, err := net.Listen("tcp", *hostport)
-	if err != nil {
-		log.Fatalf("net.Listen(%s): %v", *hostport, err)
-	}
-	log.Println("listening on", *hostport)
 	if err := g.Serve(lis); err != nil {
 		log.Fatalf("gRPCServer.Serve() %v", err)
 	}

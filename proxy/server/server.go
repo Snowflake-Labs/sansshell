@@ -58,7 +58,7 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 	pb.RegisterProxyServer(sr, s)
 }
 
-// Creates a new Server which will use the supplied TargetDialer
+// New creates a new Server which will use the supplied TargetDialer
 // for opening new target connections, and the global protobuf
 // registry to resolve service methods
 // The supplied authorizer is used to authorize requests made
@@ -67,7 +67,8 @@ func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
 	return NewWithServiceMap(dialer, authorizer, LoadGlobalServiceMap())
 }
 
-// Creates a new Server using the supplied TargetDialer and service map
+// NewWithServiceMap create a new Server using the supplied TargetDialer
+// and service map.
 // The supplied authorizer is used to authorize requests made
 // to targets.
 func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {

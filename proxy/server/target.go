@@ -69,6 +69,11 @@ func (s *TargetStream) Target() string {
 	return s.target
 }
 
+// PeerAuthInfo returns authz-relevant information about the stream peer
+func (s *TargetStream) PeerAuthInfo() *rpcauth.PeerAuthInput {
+	return rpcauth.PeerInputFromContext(s.grpcStream.Context())
+}
+
 // NewRequest returns a new, empty request message for this target stream.
 func (s *TargetStream) NewRequest() proto.Message {
 	return s.serviceMethod.NewRequest()
@@ -87,8 +92,8 @@ func (s *TargetStream) ClientCancel() {
 	s.cancelFunc()
 }
 
-// Force closure of the stream. The supplied error will be
-// delivered in the ServerClose message, if no status has
+// CloseWith initiates a closer of the stream, with the supplied
+// error delivered in the ServerClose message, if no status has
 // already been sent.
 // If `err` is convertible to a grpc.Status, the status code
 // will be preserved.
@@ -433,8 +438,9 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 		if err != nil {
 			return status.Errorf(codes.Internal, "error creating authz input %v", err)
 		}
+		streamPeerInfo := stream.PeerAuthInfo()
 		authinput.Host = &rpcauth.HostAuthInput{
-			Address: stream.Target(),
+			Address: streamPeerInfo.Address,
 		}
 
 		// If authz fails, close immediately with an error

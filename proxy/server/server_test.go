@@ -99,11 +99,36 @@ func withBufDialer(m map[string]*bufconn.Listener) grpc.DialOption {
 		if l == nil {
 			return nil, fmt.Errorf("no conn for target %s", target)
 		}
-		return l.Dial()
+		c, err := l.Dial()
+		if err != nil {
+			return nil, err
+		}
+		return &targetConn{Conn: c, target: target}, nil
 	})
 }
 
 const bufSize = 1024 * 1024
+
+// targetAddr is a net.Addr that returns a target as it's address.
+type targetAddr string
+
+func (t targetAddr) String() string {
+	return string(t)
+}
+func (t targetAddr) Network() string {
+	return "bufconn"
+}
+
+// targetConn is a net.Conn that returns a targetAddr for its
+// remote address
+type targetConn struct {
+	net.Conn
+	target string
+}
+
+func (t *targetConn) RemoteAddr() net.Addr {
+	return targetAddr(t.target)
+}
 
 func startTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
 	t.Helper()
