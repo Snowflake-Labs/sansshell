@@ -31,6 +31,8 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	if len(file.Services) == 0 {
 		return
 	}
+
+	// Create the output file and add the header + includes.
 	fn := file.GeneratedFilenamePrefix + "_grpcproxy.pb.go"
 	g := plugin.NewGeneratedFile(fn, file.GoImportPath)
 	g.P("// Auto generated code by protoc-gen-go-grpcproxy")
@@ -81,11 +83,18 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		g.P("*", clientStruct)
 		g.P("}")
 		g.P()
+
+		// Now add a NewFooClientProxy which is equiv to NewFooClient except the
+		// object it hands back also had FooOneMany methods. This allows us to use
+		// this regardless of using a proxy or not since it also implements Foo methods
+		// via embedding and taking any ClientConnInterface (so proxy or the grpc one).
 		g.P("func New", interfaceNameProxy, "(cc ", g.QualifiedGoIdent(grpcPackage.Ident("ClientConnInterface")), ") ", interfaceNameProxy, " {")
 		g.P("return &", clientStructProxy, "{New", interfaceName, "(cc).(*", clientStruct, ")}")
 		g.P("}")
 		g.P()
 
+		// For each method we have to create the typed response struct
+		// (which comes over the channel) and then generate the OneMany methods.
 		for _, method := range service.Methods {
 			g.P("type ", method.GoName, "ManyResponse struct {")
 			g.P("Target string")
@@ -97,12 +106,15 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 			methodSignature(true, clientStructProxy, g, method, true)
 			unary := !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
 			if unary {
+				// Unary is simple since we send one thing and just loop over a channel waiting
+				// for replies. The only annoyance is type converting from Any in the InvokeMany
+				// to the typed response callers expect.
 				g.P("manyRet, err := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ").InvokeOneMany(ctx, \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", in, opts...)")
 				g.P("if err != nil {")
 				g.P("return nil, err")
 				g.P("}")
 				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
-				g.P("// A goroutine to retrive untyped responses and convert them to typed ones")
+				g.P("// A goroutine to retrive untyped responses and convert them to typed ones.")
 				g.P("go func() {")
 				g.P("var resp *grpcproxy.ProxyRet")
 				g.P("var typedResp *", method.GoName, "ManyResponse")
@@ -119,6 +131,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("ret <- typedResp")
 				g.P("default:")
 				g.P("// All done so we can shut down.")
+				g.P("close(ret)")
 				g.P("return")
 				g.P("}")
 				g.P("}")
@@ -135,6 +148,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	}
 }
 
+// methodSignature generates the function signature for a OneMany method in both interface form
+// and when actually declaring the function (by adding the trailing open brace). It's a little
+// clunky but g.P() always adds a newline.
 func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile, method *protogen.Method, addBrace bool) {
 	prefix := ""
 	if genFunc {
