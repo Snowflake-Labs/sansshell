@@ -106,7 +106,8 @@ func (s *TargetStream) CloseWith(err error) {
 	}
 }
 
-// Send the supplied request to the target stream.
+// Send the supplied request to the target stream, returning
+// and error if the context has already been cancelled.
 func (s *TargetStream) Send(req proto.Message) error {
 	ctx := s.grpcStream.Context()
 	select {
@@ -466,6 +467,8 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	// All authz checks succeeded, send to all streams
 	for _, stream := range queued {
 		reqClone := proto.Clone(streamReq)
+		// TargetStream send only enqueues the message to the stream, and only fails
+		// if the stream is being torn down, and is unable to accept it.
 		if err := stream.Send(reqClone); err != nil {
 			return err
 		}
