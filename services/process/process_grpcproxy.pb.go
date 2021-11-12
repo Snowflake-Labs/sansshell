@@ -47,7 +47,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 		return nil, err
 	}
 	ret := make(chan *ListManyResponse)
-	// A goroutine to retrive untyped responses and convert them to typed ones
+	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		var resp *grpcproxy.ProxyRet
 		var typedResp *ListManyResponse
@@ -64,6 +64,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 				ret <- typedResp
 			default:
 				// All done so we can shut down.
+				close(ret)
 				return
 			}
 		}
@@ -84,7 +85,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 		return nil, err
 	}
 	ret := make(chan *GetStacksManyResponse)
-	// A goroutine to retrive untyped responses and convert them to typed ones
+	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		var resp *grpcproxy.ProxyRet
 		var typedResp *GetStacksManyResponse
@@ -101,6 +102,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 				ret <- typedResp
 			default:
 				// All done so we can shut down.
+				close(ret)
 				return
 			}
 		}
@@ -121,7 +123,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 		return nil, err
 	}
 	ret := make(chan *GetJavaStacksManyResponse)
-	// A goroutine to retrive untyped responses and convert them to typed ones
+	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		var resp *grpcproxy.ProxyRet
 		var typedResp *GetJavaStacksManyResponse
@@ -138,6 +140,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 				ret <- typedResp
 			default:
 				// All done so we can shut down.
+				close(ret)
 				return
 			}
 		}
