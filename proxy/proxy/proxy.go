@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
-	anypb "google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
@@ -156,19 +156,19 @@ func (p *ProxyConn) getNonce() uint32 {
 
 // NewStream implements grpc.ClientConnInterface
 func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	return nil, status.Error(codes.Unimplemented, "NewStream not implemented")
 }
 
 // Additional methods needed for 1:N and N:N below.
 type ProxyRet struct {
 	Target string
-	Ret    anypb.Any
+	Resp   *anypb.Any
 	Error  error
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
 func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	return nil, status.Error(codes.Unimplemented, "InvokeOneMany not implemented")
 }
 
 // Close tears down the ProxyConn and closes all connections to it.
