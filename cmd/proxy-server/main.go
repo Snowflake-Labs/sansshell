@@ -28,7 +28,6 @@ import (
 //go:embed default-policy.rego
 var defaultPolicy string
 
-
 func main() {
 	hostport := flag.String("hostport", "localhost:50043", "Where to listen for connections.")
 	credSource := flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
@@ -53,6 +52,9 @@ func main() {
 	}
 	log.Println("listening on", *hostport)
 
+	// TODO(jallie): implement the ability to 'hot reload' policy, since
+	// that could likely be done underneath the authorizer, with little
+	// disruption to existing connections.
 	policy := defaultPolicy
 	if *policyFile != "" {
 		data, err := os.ReadFile(*policyFile)
@@ -65,10 +67,10 @@ func main() {
 		log.Println("using default authorization policy")
 	}
 
-  addr := lis.Addr().String()
-  addressHook := rpcauth.HookIf(rpcauth.HostAddressHook(addr), func(input *rpcauth.RpcAuthInput) bool {
-    return input.Host == nil || len(input.Host.Address) == 0
-  })
+	addr := lis.Addr().String()
+	addressHook := rpcauth.HookIf(rpcauth.HostAddressHook(addr), func(input *rpcauth.RpcAuthInput) bool {
+		return input.Host == nil || len(input.Host.Address) == 0
+	})
 	authz, err := rpcauth.NewWithPolicy(ctx, policy, addressHook)
 	if err != nil {
 		log.Fatalf("error initializing authorization : %v", err)
