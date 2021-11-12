@@ -14,7 +14,7 @@ func (r RpcAuthzHookFunc) Hook(ctx context.Context, input *RpcAuthInput) error {
 // An HookPredicate returns true if a conditional hook should run
 type HookPredicate func(*RpcAuthInput) bool
 
-// ConditionalHook wraps an existing hook, and only executes it when
+// HookIf wraps an existing hook, and only executes it when
 // the provided condition returns true
 func HookIf(hook RpcAuthzHook, condition HookPredicate) RpcAuthzHook {
 	return &conditionalHook{
