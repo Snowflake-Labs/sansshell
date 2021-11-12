@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 func init() {
@@ -68,9 +68,8 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitFailure
 	}
 
-	conn := args[0].(grpc.ClientConnInterface)
-
-	c := pb.NewPackagesClient(conn)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClient(state.Conn)
 
 	req := &pb.InstallRequest{
 		PackageSystem: ps,
@@ -125,9 +124,8 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		return subcommands.ExitFailure
 	}
 
-	conn := args[0].(grpc.ClientConnInterface)
-
-	c := pb.NewPackagesClient(conn)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClient(state.Conn)
 
 	req := &pb.UpdateRequest{
 		PackageSystem: ps,
@@ -170,9 +168,8 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	conn := args[0].(grpc.ClientConnInterface)
-
-	c := pb.NewPackagesClient(conn)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClient(state.Conn)
 
 	resp, err := c.ListInstalled(ctx, &pb.ListInstalledRequest{
 		PackageSystem: ps,
@@ -215,9 +212,8 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitFailure
 	}
 
-	conn := args[0].(grpc.ClientConnInterface)
-
-	c := pb.NewPackagesClient(conn)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClient(state.Conn)
 
 	resp, err := c.RepoList(ctx, &pb.RepoListRequest{
 		PackageSystem: ps,

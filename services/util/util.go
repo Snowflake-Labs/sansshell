@@ -4,12 +4,22 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// ExecuteState is used by client packages in services to pass
+// relevant state down to subcommands.
+type ExecuteState struct {
+	Conn            grpc.ClientConnInterface
+	Out             *os.File
+	MultipleTargets bool
+}
 
 // TODO(jchacon): Make this configurable
 // The chunk size we use when sending replies on a stream.

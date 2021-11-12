@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 func init() {
@@ -30,8 +30,8 @@ func (*healthcheckCmd) Usage() string {
 func (p *healthcheckCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(grpc.ClientConnInterface)
-	c := pb.NewHealthCheckClient(conn)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewHealthCheckClient(state.Conn)
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

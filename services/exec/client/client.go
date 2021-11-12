@@ -7,8 +7,8 @@ import (
 	"os"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 )
 
 func init() {
@@ -32,13 +32,13 @@ func (*execCmd) Usage() string {
 func (p *execCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(grpc.ClientConnInterface)
+	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a command to execute.\n")
 		return subcommands.ExitUsageError
 	}
 
-	c := pb.NewExecClient(conn)
+	c := pb.NewExecClient(state.Conn)
 
 	resp, err := c.Run(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
 	if err != nil {

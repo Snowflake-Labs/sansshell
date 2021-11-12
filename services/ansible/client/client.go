@@ -11,9 +11,9 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 // A type for a custom flag for a list of strings in a comma separated list.
@@ -90,9 +90,9 @@ func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitFailure
 	}
 
-	conn := args[0].(grpc.ClientConnInterface)
+	state := args[0].(*util.ExecuteState)
 
-	c := pb.NewPlaybookClient(conn)
+	c := pb.NewPlaybookClient(state.Conn)
 
 	req := &pb.RunRequest{
 		Playbook: a.playbook,
