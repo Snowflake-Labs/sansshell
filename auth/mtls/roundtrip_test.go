@@ -80,13 +80,13 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.
 	if err != nil {
 		t.Fatalf("Failed to load client cert: %v", err)
 	}
-	s, err := server.BuildServer(creds, policy)
+	lis = bufconn.Listen(bufSize)
+	s, err := server.BuildServer(creds, policy, lis.Addr().String())
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
 	}
 	listening := make(chan struct{})
 	go func() {
-		lis = bufconn.Listen(bufSize)
 		defer lis.Close()
 		listening <- struct{}{}
 		if err := s.Serve(lis); err != nil {
