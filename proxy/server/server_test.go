@@ -8,12 +8,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	td "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
@@ -72,17 +76,59 @@ func (e *echoTestDataServer) TestBidiStream(stream td.TestService_TestBidiStream
 	}
 }
 
+func newRpcAuthorizer(ctx context.Context, t *testing.T, policy string) *rpcauth.Authorizer {
+	t.Helper()
+	auth, err := rpcauth.NewWithPolicy(ctx, policy)
+	if err != nil {
+		t.Fatalf("rpcauth.NewWithPolicy(%s) err was %v, want nil", policy, err)
+	}
+	return auth
+}
+
+func newAllowAllRpcAuthorizer(ctx context.Context, t *testing.T) *rpcauth.Authorizer {
+	policy := `
+package sansshell.authz
+default allow = true
+`
+	return newRpcAuthorizer(ctx, t, policy)
+}
+
 func withBufDialer(m map[string]*bufconn.Listener) grpc.DialOption {
 	return grpc.WithContextDialer(func(ctx context.Context, target string) (net.Conn, error) {
 		l := m[target]
 		if l == nil {
 			return nil, fmt.Errorf("no conn for target %s", target)
 		}
-		return l.Dial()
+		c, err := l.Dial()
+		if err != nil {
+			return nil, err
+		}
+		return &targetConn{Conn: c, target: target}, nil
 	})
 }
 
 const bufSize = 1024 * 1024
+
+// targetAddr is a net.Addr that returns a target as it's address.
+type targetAddr string
+
+func (t targetAddr) String() string {
+	return string(t)
+}
+func (t targetAddr) Network() string {
+	return "bufconn"
+}
+
+// targetConn is a net.Conn that returns a targetAddr for its
+// remote address
+type targetConn struct {
+	net.Conn
+	target string
+}
+
+func (t *targetConn) RemoteAddr() net.Addr {
+	return targetAddr(t.target)
+}
 
 func startTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
 	t.Helper()
@@ -111,12 +157,12 @@ func startTestDataServers(t *testing.T, serverNames ...string) map[string]*bufco
 	return out
 }
 
-func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) pb.Proxy_ProxyClient {
+func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz *rpcauth.Authorizer) pb.Proxy_ProxyClient {
 	t.Helper()
 	targetDialer := NewDialer(withBufDialer(targets), grpc.WithInsecure())
 	lis := bufconn.Listen(bufSize)
-	grpcServer := grpc.NewServer()
-	proxyServer := New(targetDialer)
+	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
+	proxyServer := New(targetDialer, authz)
 	proxyServer.Register(grpcServer)
 	go func() {
 		if err := grpcServer.Serve(lis); err != nil {
@@ -136,6 +182,10 @@ func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufco
 		t.Fatalf("proxy.Proxy(), err was %v, want nil", err)
 	}
 	return stream
+}
+
+func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) pb.Proxy_ProxyClient {
+	return startTestProxyWithAuthz(ctx, t, targets, newAllowAllRpcAuthorizer(ctx, t))
 }
 
 func TestProxyServerStartStream(t *testing.T) {
@@ -478,5 +528,246 @@ func TestProxyServerNonceReusePrevention(t *testing.T) {
 	got, err := proxyStream.Recv()
 	if c := status.Code(err); c != codes.FailedPrecondition {
 		t.Fatalf("Recv() = %v, err was %v, want err with FailedPrecondition", got, err)
+	}
+}
+
+func TestProxyServerStartStreamAuth(t *testing.T) {
+	ctx := context.Background()
+	policy := `
+
+package sansshell.authz
+
+default allow = false
+
+# Only allow starting streams to foo:123"
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+  input.message.start_stream.target = "foo:123"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+
+	// startStream to foo:123 is successful
+	testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+
+	req := &pb.ProxyRequest{
+		Request: &pb.ProxyRequest_StartStream{
+			StartStream: &pb.StartStream{
+				Target:     "bar:456",
+				MethodName: "/Testdata.TestService/TestUnary",
+				Nonce:      42,
+			},
+		},
+	}
+	// Attempting to start a second stream will first yield a Cancel on the
+	// initial stream as the proxy stream is torn down, followed by a
+	// final error with a PermissionDenied
+	reply := testutil.Exchange(t, proxyStream, req)
+	if reply.GetServerClose() == nil {
+		t.Fatalf("Exchange(%v) reply was %v, want ServerClose", req, reply)
+	}
+
+	// subsequent recv gets the final status, which is PermissionDenied
+	_, err := proxyStream.Recv()
+	if err == nil || status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("Recv() err was %v, want err with code PermissionDenied", err)
+	}
+}
+
+func TestProxyServerAuthzPolicyUnary(t *testing.T) {
+	ctx := context.Background()
+	policy := `
+package sansshell.authz
+
+default allow = false
+
+# Allow connections to the proxy
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
+
+# allow TestUnary with any value to foo:123
+allow {
+  input.method = "/Testdata.TestService/TestUnary"
+  input.host.net.address = "foo"
+}
+
+# allow TestRequest with value "allowed_bar" to bar:456
+allow {
+  input.type = "Testdata.TestRequest"
+  input.message.input = "allowed_bar"
+  input.host.net.address = "bar"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+
+	packReply := func(t *testing.T, reply *td.TestResponse) *pb.ProxyReply {
+		packed, err := anypb.New(reply)
+		if err != nil {
+			t.Fatalf("anypby.New(%v) err was %v, want nil", reply, err)
+		}
+		return &pb.ProxyReply{
+			Reply: &pb.ProxyReply_StreamData{
+				StreamData: &pb.StreamData{
+					Payload: packed,
+				},
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		target string
+		req    *td.TestRequest
+		reply  *pb.ProxyReply
+	}{
+		{
+			name:   "allowed bar",
+			target: "bar:456",
+			req:    &td.TestRequest{Input: "allowed_bar"},
+			reply:  packReply(t, &td.TestResponse{Output: "bar:456 allowed_bar"}),
+		},
+		{
+			name:   "allowed foo 1",
+			target: "foo:123",
+			req:    &td.TestRequest{Input: "allowed_foo"},
+			reply:  packReply(t, &td.TestResponse{Output: "foo:123 allowed_foo"}),
+		},
+		{
+			name:   "allowed foo 1",
+			target: "foo:123",
+			req:    &td.TestRequest{Input: "allowed_bar"},
+			reply:  packReply(t, &td.TestResponse{Output: "foo:123 allowed_bar"}),
+		},
+		{
+			name:   "denied bar",
+			target: "bar:456",
+			req:    &td.TestRequest{Input: "denied_bar"},
+			reply: &pb.ProxyReply{
+				Reply: &pb.ProxyReply_ServerClose{
+					ServerClose: &pb.ServerClose{
+						Status: &pb.Status{
+							Code:    int32(codes.PermissionDenied),
+							Message: "OPA policy does not permit this request",
+						},
+					},
+				},
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+			streamid := testutil.MustStartStream(t, proxyStream, tc.target, "/Testdata.TestService/TestUnary")
+			packed := testutil.PackStreamData(t, tc.req, streamid)
+			got := testutil.Exchange(t, proxyStream, packed)
+			diffOpts := []cmp.Option{
+				protocmp.Transform(),
+				protocmp.IgnoreFields(&pb.ServerClose{}, "stream_ids"),
+				protocmp.IgnoreFields(&pb.StreamData{}, "stream_ids"),
+			}
+			if diff := cmp.Diff(tc.reply, got, diffOpts...); diff != "" {
+				t.Errorf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
+			}
+		})
+	}
+}
+
+func TestProxyServerAuthzPolicyBidi(t *testing.T) {
+	ctx := context.Background()
+	policy := `
+package sansshell.authz
+
+default allow = false
+
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
+
+allow {
+  input.method = "/Testdata.TestService/TestBidiStream"
+  input.message.input = "allowed_input"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:456")
+	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+
+	streamid := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestBidiStream")
+
+	// Initial valid request is allowed
+	allowedReq := testutil.PackStreamData(t, &td.TestRequest{Input: "allowed_input"}, streamid)
+
+	reply := testutil.Exchange(t, proxyStream, allowedReq)
+	ids, _ := testutil.UnpackStreamData(t, reply)
+	if len(ids) == 0 || ids[0] != streamid {
+		t.Fatalf("Exchange(), want StreamData reply to stream %d, got %+v", streamid, reply)
+	}
+
+	// subsequent 'bad' request is denied.
+	deniedReq := testutil.PackStreamData(t, &td.TestRequest{Input: "not allowed"}, streamid)
+
+	reply = testutil.Exchange(t, proxyStream, deniedReq)
+	sc := reply.GetServerClose()
+	if sc == nil || sc.GetStatus().GetCode() != int32(codes.PermissionDenied) {
+		t.Fatalf("Exchange(%v), want ServerClose with PermissionDenied, got %v", deniedReq, reply)
+	}
+}
+
+func TestProxyServerAuthzPolicyPartialFailure(t *testing.T) {
+	ctx := context.Background()
+	// policy which permits foo:123, but not bar:456
+	policy := `
+package sansshell.authz
+
+default allow = false
+
+allow {
+  input.method = "/Proxy.Proxy/Proxy"
+}
+
+allow {
+  input.method = "/Testdata.TestService/TestUnary"
+  input.host.net.address = "foo"
+}
+`
+	authz := newRpcAuthorizer(ctx, t, policy)
+	testServerMap := startTestDataServers(t, "foo:123", "bar:456")
+	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
+
+	fooid := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+	barid := testutil.MustStartStream(t, proxyStream, "bar:456", "/Testdata.TestService/TestUnary")
+
+	req := testutil.PackStreamData(t, &td.TestRequest{Input: "whatever"}, fooid, barid)
+
+	// we'll eventually get 2 replies, but the order is undefined, so we'll collect both
+	replies := []*pb.ProxyReply{
+		// first reply after exchanging req
+		testutil.Exchange(t, proxyStream, req),
+	}
+	// second reply
+	replies = append(replies, testutil.Exchange(t, proxyStream, nil))
+	for _, reply := range replies {
+		sc := reply.GetServerClose()
+		if sc == nil || len(sc.StreamIds) != 1 {
+			t.Fatalf("Proxy reply was %v, want ServerClose with single streamID", reply)
+		}
+		switch sc.StreamIds[0] {
+		case barid:
+			// barID is not permitted by the policy, we we get a PermissionDenied
+			if sc.GetStatus().GetCode() != int32(codes.PermissionDenied) {
+				t.Errorf("Status for bar was %v, want status with PermissionDenied", sc.GetStatus())
+			}
+		case fooid:
+			// fooID is permitted, but won't be sent due to the failure in bar
+			if sc.GetStatus().GetCode() != int32(codes.Aborted) {
+				t.Errorf("Status for foo was %v, want status with Aborted", sc.GetStatus())
+			}
+		default:
+			t.Errorf("Got ServerClose with streamid %d, want streamid in [%d, %d]", sc.StreamIds[0], fooid, barid)
+		}
 	}
 }
