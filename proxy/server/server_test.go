@@ -591,14 +591,14 @@ allow {
 # allow TestUnary with any value to foo:123
 allow {
   input.method = "/Testdata.TestService/TestUnary"
-  input.host.address = "foo:123"
+  input.host.net.address = "foo"
 }
 
 # allow TestRequest with value "allowed_bar" to bar:456
 allow {
   input.type = "Testdata.TestRequest"
   input.message.input = "allowed_bar"
-  input.host.address = "bar:456"
+  input.host.net.address = "bar"
 }
 `
 	authz := newRpcAuthorizer(ctx, t, policy)
@@ -731,7 +731,7 @@ allow {
 
 allow {
   input.method = "/Testdata.TestService/TestUnary"
-  input.host.address = "foo:123"
+  input.host.net.address = "foo"
 }
 `
 	authz := newRpcAuthorizer(ctx, t, policy)

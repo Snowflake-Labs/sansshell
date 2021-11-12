@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509/pkix"
 	"encoding/json"
+	"net"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -37,24 +38,33 @@ type RpcAuthInput struct {
 
 // PeerAuthInput contains policy-relevant information about an RPC peer.
 type PeerAuthInput struct {
-	// The 'network' as returned by net.Addr.Network() (e.g. "tcp", "udp")
-	Network string `json:"network"`
+	// Network information about the peer
+	Net *NetAuthInput `json:"net"`
 
-	// The address string, as returned by net.Addr.String()
-	Address string `json:"address"`
-
-	// Information about the certificate presented by the client, if any
+	// Information about the certificate presented by the peer, if any
 	Cert *CertAuthInput `json:"cert"`
 
 	// Information about the principal associated with the peer, if any
 	Principal *PrincipalAuthInput `json:"principal"`
 }
 
+// NetAuthInput contains policy-relevant information related to a network endpoint
+type NetAuthInput struct {
+	// The 'network' as returned by net.Addr.Network() (e.g. "tcp", "udp")
+	Network string `json:"network"`
+
+	// The address string, as returned by net.Addr.String(), with port (if any) removed
+	Address string `json:"address"`
+
+	// The port, as parsed from net.Addr.String(), if present
+	Port string `json:"port"`
+}
+
 // HostAuthInput contains policy-relevant information about the system receiving
 // an RPC
 type HostAuthInput struct {
-	// The host address string.
-	Address string `json:"address"`
+	// The host address
+	Net *NetAuthInput `json:"net"`
 
 	// Information about the principal associated with the host, if any
 	Principal *PrincipalAuthInput `json:"principal"`
@@ -97,7 +107,7 @@ func NewRpcAuthInput(ctx context.Context, method string, req proto.Message) (*Rp
 	}
 
 	if req != nil {
-		out.MessageType = string(req.ProtoReflect().Descriptor().FullName())
+		out.MessageType = string(proto.MessageName(req))
 		marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(req)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
@@ -116,10 +126,23 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	if !ok {
 		return out
 	}
-	out.Network = p.Addr.Network()
-	out.Address = p.Addr.String()
-	if p.AuthInfo != nil {
-		out.Cert = CertInputFrom(p.AuthInfo)
+	out.Net = NetInputFromAddr(p.Addr)
+	out.Cert = CertInputFrom(p.AuthInfo)
+	return out
+}
+
+// NetInputFrom returns NetAuthInput from the supplied net.Addr
+func NetInputFromAddr(addr net.Addr) *NetAuthInput {
+	if addr == nil {
+		return nil
+	}
+	out := &NetAuthInput{
+		Network: addr.Network(),
+		Address: addr.String(),
+	}
+	if host, port, err := net.SplitHostPort(addr.String()); err == nil {
+		out.Address = host
+		out.Port = port
 	}
 	return out
 }
@@ -127,6 +150,9 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 // CertInputFrom populates certificate information from the supplied
 // credentials, if available.
 func CertInputFrom(authInfo credentials.AuthInfo) *CertAuthInput {
+	if authInfo == nil {
+		return nil
+	}
 	out := &CertAuthInput{}
 	tlsInfo, ok := authInfo.(credentials.TLSInfo)
 	if !ok {

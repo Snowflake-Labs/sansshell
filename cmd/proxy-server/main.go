@@ -67,9 +67,8 @@ func main() {
 		log.Println("using default authorization policy")
 	}
 
-	addr := lis.Addr().String()
-	addressHook := rpcauth.HookIf(rpcauth.HostAddressHook(addr), func(input *rpcauth.RpcAuthInput) bool {
-		return input.Host == nil || len(input.Host.Address) == 0
+	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RpcAuthInput) bool {
+		return input.Host == nil || input.Host.Net == nil
 	})
 	authz, err := rpcauth.NewWithPolicy(ctx, policy, addressHook)
 	if err != nil {

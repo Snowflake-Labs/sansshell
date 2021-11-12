@@ -47,7 +47,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy, lis.Addr().String())
+	s, err := BuildServer(nil, policy, lis.Addr())
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}

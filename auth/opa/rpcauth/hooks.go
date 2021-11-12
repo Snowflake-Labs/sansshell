@@ -2,6 +2,7 @@ package rpcauth
 
 import (
 	"context"
+	"net"
 )
 
 // AuthzHookFunc implements RpcAuthzHook for a simple function
@@ -35,13 +36,13 @@ func (c *conditionalHook) Hook(ctx context.Context, input *RpcAuthInput) error {
 	return nil
 }
 
-// HostAddressHook is an RpcAuthzHook that sets the Host address to a string
-type HostAddressHook string
-
-func (s HostAddressHook) Hook(ctx context.Context, input *RpcAuthInput) error {
-	if input.Host == nil {
-		input.Host = &HostAuthInput{}
-	}
-	input.Host.Address = string(s)
-	return nil
+// HostNetHook returns an RpcAuthzHook that sets host networking information.
+func HostNetHook(addr net.Addr) RpcAuthzHook {
+	return RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+		if input.Host == nil {
+			input.Host = &HostAuthInput{}
+		}
+		input.Host.Net = NetInputFromAddr(addr)
+		return nil
+	})
 }

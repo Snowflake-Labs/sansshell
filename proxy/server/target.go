@@ -412,7 +412,7 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 // ensure that the request is permitted for all specified streams. On failure,
 // streams that failed authorization will be closed with PermissionDenied,
 // while other streams in the same request which would otherwise have been
-// permitted with be closed with status Aborted. Any other open TargetStream
+// permitted will be closed with status Aborted. Any other open TargetStreams
 // which are not specified in the request are unaffected.
 func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	// The set of streams which are permitted to receive the request, after
@@ -441,7 +441,7 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 		}
 		streamPeerInfo := stream.PeerAuthInfo()
 		authinput.Host = &rpcauth.HostAuthInput{
-			Address: streamPeerInfo.Address,
+			Net: streamPeerInfo.Net,
 		}
 
 		// If authz fails, close immediately with an error

@@ -39,7 +39,7 @@ allow {
 # allow {
 #  input.method = "/LocalFile.LocalFile/Stat"
 #  startswith(input.message.filename, "/etc/")
-#  net.cidr_contains("10.0.0.0/8", split(input.host.address, ":")[0])
+#  net.cidr_contains("10.0.0.0/8", input.host.address)
 #  some i
 #  input.peer.principal.groups[i] = "admin"
 # }
