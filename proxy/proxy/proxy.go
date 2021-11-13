@@ -120,8 +120,8 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 			return status.Errorf(codes.Internal, "can't unmarshall Any -> reply - %v", err)
 		}
 	case resp.GetServerClose() != nil:
-		code := resp.GetServerClose().Status.Code
-		msg := resp.GetServerClose().Status.Message
+		code := resp.GetServerClose().GetStatus().GetCode()
+		msg := resp.GetServerClose().GetStatus().GetMessage()
 		return status.Errorf(codes.Internal, "didn't get reply back. Server closed with code: %s message: %s", codes.Code(code).String(), msg)
 	}
 
@@ -168,7 +168,164 @@ type ProxyRet struct {
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
 func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
-	return nil, status.Error(codes.Unimplemented, "InvokeOneMany not implemented")
+	requestMsg, ok := args.(proto.Message)
+	if !ok {
+		return nil, status.Error(codes.InvalidArgument, "args must be a proto.Message")
+	}
+
+	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
+	}
+
+	nonces := make(map[string]uint32)
+	streamIds := make(map[uint64]string)
+
+	for _, t := range p.targets {
+		nonces[t] = p.getNonce()
+		req := &proxypb.ProxyRequest{
+			Request: &proxypb.ProxyRequest_StartStream{
+				StartStream: &proxypb.StartStream{
+					Target:     t,
+					MethodName: method,
+					Nonce:      nonces[t],
+				},
+			},
+		}
+
+		err = stream.Send(req)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
+		}
+		resp, err := stream.Recv()
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
+		}
+
+		// Validate we got an answer and it has expected reflected values.
+		r := resp.GetStartStreamReply()
+		if r == nil {
+			return nil, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
+		}
+
+		if s := r.GetErrorStatus(); s != nil {
+			return nil, status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code).String(), s.Message)
+		}
+
+		if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
+			return nil, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
+		}
+
+		// Save stream ID for later matching.
+		streamIds[r.GetStreamId()] = r.GetTarget()
+	}
+
+	// Now construct a single request with all of our streamIds.
+	anydata, err := anypb.New(requestMsg)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't marshall request data to Any - %v", err)
+	}
+
+	var ids []uint64
+	for s := range streamIds {
+		ids = append(ids, s)
+	}
+	data := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_StreamData{
+			StreamData: &proxypb.StreamData{
+				StreamIds: ids,
+				Payload:   anydata,
+			},
+		},
+	}
+
+	// Now send the request down.
+	err = stream.Send(data)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", method, err)
+	}
+
+	retChan := make(chan *ProxyRet)
+
+	// Fire off a separate routine to read from the stream and send the responses down retChan.
+	go func() {
+		// An error that may occur in processing we'll do in bulk.
+		var chanErr error
+
+		// Now do receives until we get all the responses or closes for each stream ID.
+	processing:
+		for {
+			resp, err := stream.Recv()
+			if err != nil {
+				chanErr = status.Errorf(codes.Internal, "can't get response data for %s on stream - %v", method, err)
+				break
+			}
+
+			d := resp.GetStreamData()
+			cl := resp.GetServerClose()
+
+			switch {
+			case d != nil:
+				for _, id := range d.StreamIds {
+					// Validate it's a stream we know.
+					if _, ok := streamIds[id]; !ok {
+						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received", id)
+						break processing
+					}
+					msg := &ProxyRet{
+						Target: streamIds[id],
+						Resp:   d.Payload,
+					}
+					retChan <- msg
+				}
+			case cl != nil:
+				code := cl.GetStatus().GetCode()
+				msg := cl.GetStatus().GetMessage()
+
+				// Do a one time check all the returned ids are ones we know.
+				for _, id := range cl.StreamIds {
+					if _, ok := streamIds[id]; !ok {
+						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received", id)
+						break processing
+					}
+				}
+
+				// See if it's normal close. We can ignore those except to remove tracking.
+				// Otherwise send errors back for each target and then remove.
+				if code != int32(codes.OK) {
+					for _, id := range cl.StreamIds {
+						msg := &ProxyRet{
+							Target: streamIds[id],
+							Error:  status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg),
+						}
+						retChan <- msg
+					}
+				}
+				for _, id := range cl.StreamIds {
+					delete(streamIds, id)
+				}
+			}
+
+			// We've gotten closes for everything so we're done.
+			if len(streamIds) == 0 {
+				break
+			}
+		}
+
+		// Any stream IDs left in the map haven't had a proper close on them so push the
+		// current chanErr down to them.
+		for _, t := range streamIds {
+			msg := &ProxyRet{
+				Target: t,
+				Error:  chanErr,
+			}
+			retChan <- msg
+		}
+		close(retChan)
+	}()
+
+	// Any further error handling happens in-band with the responses.
+	return retChan, nil
 }
 
 // Close tears down the ProxyConn and closes all connections to it.
