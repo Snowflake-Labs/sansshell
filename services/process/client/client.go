@@ -98,21 +98,19 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			fmt.Fprintf(os.Stderr, "ListOneMany returned error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-
-	responses:
 		for {
-			select {
-			case resp := <-respChan:
-				fmt.Fprintf(state.Out, "\nTarget: %s\n\n", resp.Target)
-				if resp.Error != nil {
-					fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
-					continue
-				}
-				outputPsEntry(resp.Resp, state.Out)
-			default:
+			resp, ok := <-respChan
+			if !ok {
 				// It's closed, we're done
-				break responses
+				break
 			}
+
+			fmt.Fprintf(state.Out, "\nTarget: %s\n\n", resp.Target)
+			if resp.Error != nil {
+				fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
+				continue
+			}
+			outputPsEntry(resp.Resp, state.Out)
 		}
 	}
 
