@@ -14,17 +14,15 @@ import (
 import (
 	"errors"
 	"fmt"
-
-	grpcproxy "github.com/Snowflake-Labs/sansshell/proxy/proxy"
 )
 
 // ProcessClientProxy is the superset of ProcessClient which additionally includes the OneMany proxy methods
 type ProcessClientProxy interface {
 	ProcessClient
-	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (chan *ListManyResponse, error)
-	GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (chan *GetStacksManyResponse, error)
-	GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (chan *GetJavaStacksManyResponse, error)
-	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (chan *GetMemoryDumpManyResponse, error)
+	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error)
+	GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error)
+	GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error)
+	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error)
 }
 
 type processClientProxy struct {
@@ -41,7 +39,7 @@ type ListManyResponse struct {
 	Error  error
 }
 
-func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (chan *ListManyResponse, error) {
+func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/List", in, opts...)
 	if err != nil {
 		return nil, err
@@ -49,24 +47,25 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	ret := make(chan *ListManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		var resp *grpcproxy.ProxyRet
-		var typedResp *ListManyResponse
+		typedResp := &ListManyResponse{
+			Resp: &ListReply{},
+		}
+
 		for {
-			select {
-			case resp = <-manyRet:
-				typedResp.Target = resp.Target
-				typedResp.Error = resp.Error
-				if resp.Error == nil {
-					if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
-						typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
-					}
-				}
-				ret <- typedResp
-			default:
+			resp, ok := <-manyRet
+			if !ok {
 				// All done so we can shut down.
 				close(ret)
 				return
 			}
+			typedResp.Target = resp.Target
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
 		}
 	}()
 
@@ -79,7 +78,7 @@ type GetStacksManyResponse struct {
 	Error  error
 }
 
-func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (chan *GetStacksManyResponse, error) {
+func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetStacks", in, opts...)
 	if err != nil {
 		return nil, err
@@ -87,24 +86,25 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 	ret := make(chan *GetStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		var resp *grpcproxy.ProxyRet
-		var typedResp *GetStacksManyResponse
+		typedResp := &GetStacksManyResponse{
+			Resp: &GetStacksReply{},
+		}
+
 		for {
-			select {
-			case resp = <-manyRet:
-				typedResp.Target = resp.Target
-				typedResp.Error = resp.Error
-				if resp.Error == nil {
-					if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
-						typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
-					}
-				}
-				ret <- typedResp
-			default:
+			resp, ok := <-manyRet
+			if !ok {
 				// All done so we can shut down.
 				close(ret)
 				return
 			}
+			typedResp.Target = resp.Target
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
 		}
 	}()
 
@@ -117,7 +117,7 @@ type GetJavaStacksManyResponse struct {
 	Error  error
 }
 
-func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (chan *GetJavaStacksManyResponse, error) {
+func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetJavaStacks", in, opts...)
 	if err != nil {
 		return nil, err
@@ -125,24 +125,25 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 	ret := make(chan *GetJavaStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		var resp *grpcproxy.ProxyRet
-		var typedResp *GetJavaStacksManyResponse
+		typedResp := &GetJavaStacksManyResponse{
+			Resp: &GetJavaStacksReply{},
+		}
+
 		for {
-			select {
-			case resp = <-manyRet:
-				typedResp.Target = resp.Target
-				typedResp.Error = resp.Error
-				if resp.Error == nil {
-					if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
-						typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
-					}
-				}
-				ret <- typedResp
-			default:
+			resp, ok := <-manyRet
+			if !ok {
 				// All done so we can shut down.
 				close(ret)
 				return
 			}
+			typedResp.Target = resp.Target
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
 		}
 	}()
 
@@ -155,6 +156,6 @@ type GetMemoryDumpManyResponse struct {
 	Error  error
 }
 
-func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (chan *GetMemoryDumpManyResponse, error) {
+func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error) {
 	return nil, errors.New("not implemented")
 }

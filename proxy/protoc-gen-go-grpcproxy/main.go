@@ -46,7 +46,6 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	g.P(`"errors"`)
 	g.P(`"fmt"`)
 	g.P()
-	g.P(`grpcproxy "github.com/Snowflake-Labs/sansshell/proxy/proxy"`)
 	g.P(")")
 	g.P()
 
@@ -116,11 +115,17 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
 				g.P("// A goroutine to retrive untyped responses and convert them to typed ones.")
 				g.P("go func() {")
-				g.P("var resp *grpcproxy.ProxyRet")
-				g.P("var typedResp *", method.GoName, "ManyResponse")
+				g.P("typedResp := &", method.GoName, "ManyResponse{")
+				g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
+				g.P("}")
+				g.P()
 				g.P("for {")
-				g.P("select {")
-				g.P("case resp = <-manyRet:")
+				g.P("resp, ok := <-manyRet")
+				g.P("if !ok {")
+				g.P("// All done so we can shut down.")
+				g.P("close(ret)")
+				g.P("return")
+				g.P("}")
 				g.P("typedResp.Target = resp.Target")
 				g.P("typedResp.Error = resp.Error")
 				g.P("if resp.Error == nil {")
@@ -129,11 +134,6 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("}")
 				g.P("}")
 				g.P("ret <- typedResp")
-				g.P("default:")
-				g.P("// All done so we can shut down.")
-				g.P("close(ret)")
-				g.P("return")
-				g.P("}")
 				g.P("}")
 				g.P("}()")
 				g.P()
@@ -166,5 +166,5 @@ func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile,
 	if addBrace {
 		brace = " {"
 	}
-	g.P(sig, "opts ...", g.QualifiedGoIdent(grpcPackage.Ident("CallOption")), ") (chan *", method.GoName, "ManyResponse, error)", brace)
+	g.P(sig, "opts ...", g.QualifiedGoIdent(grpcPackage.Ident("CallOption")), ") (<-chan *", method.GoName, "ManyResponse, error)", brace)
 }
