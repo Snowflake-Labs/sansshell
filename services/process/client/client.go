@@ -79,7 +79,6 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	state := args[0].(*util.ExecuteState)
 
 	c := pb.NewProcessClientProxy(state.Conn)
-
 	req := &pb.ListRequest{}
 	for _, pid := range p.pids {
 		req.Pids = append(req.Pids, pid)
@@ -105,7 +104,7 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				break
 			}
 
-			fmt.Fprintf(state.Out, "\nTarget: %s\n\n", resp.Target)
+			fmt.Fprintf(state.Out, "\nTarget: %s Entries: %d\n\n", resp.Target, len(resp.Resp.ProcessEntries))
 			if resp.Error != nil {
 				fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
 				continue

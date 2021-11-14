@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"time"
@@ -107,11 +106,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer func() {
-		if closer, ok := conn.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "error closing connection - %v", err)
-			}
-
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing connection - %v", err)
 		}
 	}()
 

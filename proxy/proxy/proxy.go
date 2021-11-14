@@ -1,4 +1,6 @@
 // Package proxy provides the client side API for working with a proxy server.
+//
+// If called without a proxy simply acts as a pass though and normal ClientConnInterface.
 package proxy
 
 import (
@@ -22,12 +24,18 @@ type ProxyConn struct {
 	// The current unused nonce. Always incrementing as we send requests.
 	nonce uint32
 
+	// If this is true we're not proxy but instead direct connect.
+	direct bool
+
 	// Protects nonce
 	mu sync.Mutex
 }
 
 // Invoke implements grpc.ClientConnInterface
 func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+	if p.direct {
+		return p.cc.Invoke(ctx, method, args, reply, opts...)
+	}
 	if len(p.targets) != 1 {
 		return status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
 	}
@@ -156,7 +164,10 @@ func (p *ProxyConn) getNonce() uint32 {
 
 // NewStream implements grpc.ClientConnInterface
 func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	return nil, status.Error(codes.Unimplemented, "NewStream not implemented")
+	if p.direct {
+		return p.cc.NewStream(ctx, desc, method, opts...)
+	}
+	return nil, status.Error(codes.Unimplemented, "NewStream not implemented for proxy")
 }
 
 // Additional methods needed for 1:N and N:N below.
@@ -336,29 +347,31 @@ func (p *ProxyConn) Close() error {
 // Dial will connect to the given proxy and setup to send RPCs to the listed targets.
 // If proxy is blank and there is only one target this will return a normal grpc connection object (*grpc.ClientConn).
 // Otherwise this will return a *ProxyConn setup to act with the proxy.
-func Dial(proxy string, targets []string, opts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*ProxyConn, error) {
 	return DialContext(context.Background(), proxy, targets, opts...)
 }
 
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
 // By default dial operations are non-blocking. See grpc.Dial for a complete explanation.
-func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*ProxyConn, error) {
+	if len(targets) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no targets passed")
+	}
+
+	dialTarget := proxy
+	ret := &ProxyConn{}
 	if proxy == "" {
 		if len(targets) != 1 {
 			return nil, status.Error(codes.InvalidArgument, "no proxy specified but more than one target set")
 		}
-		return grpc.DialContext(ctx, targets[0], opts...)
+		dialTarget = targets[0]
+		ret.direct = true
 	}
-	if len(targets) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "no targets passed")
-	}
-	conn, err := grpc.DialContext(ctx, proxy, opts...)
+	conn, err := grpc.DialContext(ctx, dialTarget, opts...)
 	if err != nil {
 		return nil, err
 	}
-	ret := &ProxyConn{
-		cc: conn,
-	}
+	ret.cc = conn
 	// Make our own copy of these.
 	ret.targets = append(ret.targets, targets...)
 	return ret, nil

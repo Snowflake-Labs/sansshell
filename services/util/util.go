@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"google.golang.org/grpc"
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -16,7 +16,7 @@ import (
 // ExecuteState is used by client packages in services to pass
 // relevant state down to subcommands.
 type ExecuteState struct {
-	Conn            grpc.ClientConnInterface
+	Conn            *proxy.ProxyConn
 	Out             *os.File
 	MultipleTargets bool
 }

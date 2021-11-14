@@ -29,7 +29,9 @@ type processClientProxy struct {
 	*processClient
 }
 
-func NewProcessClientProxy(cc grpc.ClientConnInterface) ProcessClientProxy {
+// NewProcessClientProxy creates a ProcessClientProxy for use in proxied connections.
+// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
+func NewProcessClientProxy(cc *proxy.ProxyConn) ProcessClientProxy {
 	return &processClientProxy{NewProcessClient(cc).(*processClient)}
 }
 
@@ -47,11 +49,11 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	ret := make(chan *ListManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		typedResp := &ListManyResponse{
-			Resp: &ListReply{},
-		}
-
 		for {
+			typedResp := &ListManyResponse{
+				Resp: &ListReply{},
+			}
+
 			resp, ok := <-manyRet
 			if !ok {
 				// All done so we can shut down.
@@ -86,11 +88,11 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 	ret := make(chan *GetStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		typedResp := &GetStacksManyResponse{
-			Resp: &GetStacksReply{},
-		}
-
 		for {
+			typedResp := &GetStacksManyResponse{
+				Resp: &GetStacksReply{},
+			}
+
 			resp, ok := <-manyRet
 			if !ok {
 				// All done so we can shut down.
@@ -125,11 +127,11 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 	ret := make(chan *GetJavaStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
-		typedResp := &GetJavaStacksManyResponse{
-			Resp: &GetJavaStacksReply{},
-		}
-
 		for {
+			typedResp := &GetJavaStacksManyResponse{
+				Resp: &GetJavaStacksReply{},
+			}
+
 			resp, ok := <-manyRet
 			if !ok {
 				// All done so we can shut down.

@@ -87,7 +87,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		// object it hands back also had FooOneMany methods. This allows us to use
 		// this regardless of using a proxy or not since it also implements Foo methods
 		// via embedding and taking any ClientConnInterface (so proxy or the grpc one).
-		g.P("func New", interfaceNameProxy, "(cc ", g.QualifiedGoIdent(grpcPackage.Ident("ClientConnInterface")), ") ", interfaceNameProxy, " {")
+		g.P("// New", interfaceNameProxy, " creates a ", interfaceNameProxy, " for use in proxied connections.")
+		g.P("// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.")
+		g.P("func New", interfaceNameProxy, "(cc *", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ") ", interfaceNameProxy, " {")
 		g.P("return &", clientStructProxy, "{New", interfaceName, "(cc).(*", clientStruct, ")}")
 		g.P("}")
 		g.P()
@@ -115,11 +117,11 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
 				g.P("// A goroutine to retrive untyped responses and convert them to typed ones.")
 				g.P("go func() {")
+				g.P("for {")
 				g.P("typedResp := &", method.GoName, "ManyResponse{")
 				g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
 				g.P("}")
 				g.P()
-				g.P("for {")
 				g.P("resp, ok := <-manyRet")
 				g.P("if !ok {")
 				g.P("// All done so we can shut down.")
