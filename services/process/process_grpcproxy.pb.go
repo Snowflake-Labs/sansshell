@@ -25,6 +25,7 @@ type ProcessClientProxy interface {
 	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error)
 }
 
+// Embed the original client inside of this so we get the other generated methods automatically.
 type processClientProxy struct {
 	*processClient
 }

@@ -78,6 +78,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		}
 		g.P("}")
 		g.P()
+		g.P("// Embed the original client inside of this so we get the other generated methods automatically.")
 		g.P("type ", clientStructProxy, " struct {")
 		g.P("*", clientStruct)
 		g.P("}")
