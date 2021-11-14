@@ -31,130 +31,6 @@ type ProxyConn struct {
 	mu sync.Mutex
 }
 
-// Invoke implements grpc.ClientConnInterface
-func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
-	if p.direct {
-		return p.cc.Invoke(ctx, method, args, reply, opts...)
-	}
-	if len(p.targets) != 1 {
-		return status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
-	}
-
-	requestMsg, ok := args.(proto.Message)
-	if !ok {
-		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
-	}
-	replyMsg, ok := reply.(proto.Message)
-	if !ok {
-		return status.Error(codes.InvalidArgument, "reply must be a proto.Message")
-	}
-
-	nonce := p.getNonce()
-	req := &proxypb.ProxyRequest{
-		Request: &proxypb.ProxyRequest_StartStream{
-			StartStream: &proxypb.StartStream{
-				Target:     p.targets[0],
-				MethodName: method,
-				Nonce:      nonce,
-			},
-		},
-	}
-
-	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
-	}
-	err = stream.Send(req)
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
-	}
-	resp, err := stream.Recv()
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
-	}
-
-	// Validate we got an answer and it has expected reflected values.
-	r := resp.GetStartStreamReply()
-	if r == nil {
-		return status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
-	}
-
-	if s := r.GetErrorStatus(); s != nil {
-		return status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code).String(), s.Message)
-	}
-
-	if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
-		return status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
-	}
-
-	// Save stream ID for later matching.
-	streamId := r.GetStreamId()
-
-	anydata, err := anypb.New(requestMsg)
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't marshall request data to Any - %v", err)
-	}
-
-	// Now send the request down.
-	data := &proxypb.ProxyRequest{
-		Request: &proxypb.ProxyRequest_StreamData{
-			StreamData: &proxypb.StreamData{
-				StreamIds: []uint64{streamId},
-				Payload:   anydata,
-			},
-		},
-	}
-	err = stream.Send(data)
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", method, err)
-	}
-
-	// Get the response back which should be the unary RPC response.
-	resp, err = stream.Recv()
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't get response data for %s on stream - %v", method, err)
-	}
-
-	switch {
-	case resp.GetStreamData() != nil:
-		// Validate it's the stream we want.
-		ids := resp.GetStreamData().StreamIds
-		if len(ids) != 1 || ids[0] != streamId {
-			return status.Errorf(codes.Internal, "didn't get back expected stream id %d. Got %+v instead", streamId, ids)
-		}
-		// What we expected - an answer to the RPC.
-		err = resp.GetStreamData().Payload.UnmarshalTo(replyMsg)
-		if err != nil {
-			return status.Errorf(codes.Internal, "can't unmarshall Any -> reply - %v", err)
-		}
-	case resp.GetServerClose() != nil:
-		code := resp.GetServerClose().GetStatus().GetCode()
-		msg := resp.GetServerClose().GetStatus().GetMessage()
-		return status.Errorf(codes.Internal, "didn't get reply back. Server closed with code: %s message: %s", codes.Code(code).String(), msg)
-	}
-
-	// Ok, one more receive for the server close.
-	resp, err = stream.Recv()
-	if err != nil {
-		return status.Errorf(codes.Internal, "can't get response data for %s on stream - %v", method, err)
-	}
-	close := resp.GetServerClose()
-	if close == nil {
-		return status.Error(codes.Internal, "didn't get ServerClose message as expected on stream")
-	}
-	ids := close.StreamIds
-	if len(ids) != 1 || ids[0] != streamId {
-		return status.Errorf(codes.Internal, "ServerClose for wrong stream. Want %d and got %v", streamId, ids)
-	}
-
-	// No error, we're good.
-	if close.GetStatus().GetCode() == int32(codes.OK) {
-		return nil
-	}
-
-	return status.Errorf(codes.Internal, "Stream ended with error. Code: %s message: %s", codes.Code(close.Status.Code).String(), close.Status.Message)
-}
-
 func (p *ProxyConn) getNonce() uint32 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -162,9 +38,61 @@ func (p *ProxyConn) getNonce() uint32 {
 	return p.nonce
 }
 
+// Invoke implements grpc.ClientConnInterface
+func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+	if p.direct {
+		// TODO(jchacon): Add V1 style logging indicating pass through in use.
+		return p.cc.Invoke(ctx, method, args, reply, opts...)
+	}
+	if len(p.targets) != 1 {
+		return status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
+	}
+
+	// This is just the degenerate case of OneMany with a single target. Just use it to do all the heavy lifting.
+	retChan, err := p.InvokeOneMany(ctx, method, args, opts...)
+	if err != nil {
+		return status.Errorf(codes.Internal, "Calling InvokeOneMany with 1 request error - %v", err)
+	}
+
+	replyMsg, ok := reply.(proto.Message)
+	if !ok {
+		return status.Error(codes.InvalidArgument, "reply must be a proto.Message")
+	}
+
+	// We should only get one response.
+	gotResponse := false
+	for {
+		resp, ok := <-retChan
+		if !ok {
+			break
+		}
+
+		if gotResponse {
+			return status.Errorf(codes.Internal, "Got a 2nd response from InvokeMany for 1 request - %+v, resp")
+		}
+
+		gotResponse = true
+		if resp.Error != nil {
+			return resp.Error
+		}
+		if got, want := resp.Target, p.targets[0]; got != want {
+			return status.Errorf(codes.Internal, "Response for wrong target. Want %s and got %s", want, got)
+		}
+		if err := resp.Resp.UnmarshalTo(replyMsg); err != nil {
+			return status.Errorf(codes.Internal, "Can't decode response - %v", err)
+		}
+	}
+
+	if !gotResponse {
+		return status.Errorf(codes.Internal, "Didn't get response for InvokeMany with 1 request")
+	}
+	return nil
+}
+
 // NewStream implements grpc.ClientConnInterface
 func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	if p.direct {
+		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.NewStream(ctx, desc, method, opts...)
 	}
 	return nil, status.Error(codes.Unimplemented, "NewStream not implemented for proxy")
