@@ -41,6 +41,7 @@ code generation plugins using `go install`.
 ```
 $ go install google.golang.org/protobuf/cmd/protoc-gen-go
 $ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+$ go install github.com/Snowflake-Labs/sansshell/proxy/protoc-gen-go-grpcproxy
 ```
 
 Note that, you'll need to make certain that your `PATH` includes the gobinary
