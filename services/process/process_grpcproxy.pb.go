@@ -42,6 +42,8 @@ type ListManyResponse struct {
 	Error  error
 }
 
+// ListOneMany provides the same API as List but sends the same request to N destinations at once.
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/List", in, opts...)
 	if err != nil {
@@ -81,6 +83,8 @@ type GetStacksManyResponse struct {
 	Error  error
 }
 
+// GetStacksOneMany provides the same API as GetStacks but sends the same request to N destinations at once.
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetStacks", in, opts...)
 	if err != nil {
@@ -120,6 +124,8 @@ type GetJavaStacksManyResponse struct {
 	Error  error
 }
 
+// GetJavaStacksOneMany provides the same API as GetJavaStacks but sends the same request to N destinations at once.
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
 	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetJavaStacks", in, opts...)
 	if err != nil {
@@ -159,6 +165,8 @@ type GetMemoryDumpManyResponse struct {
 	Error  error
 }
 
+// GetMemoryDumpOneMany provides the same API as GetMemoryDump but sends the same request to N destinations at once.
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error) {
 	return nil, errors.New("not implemented")
 }

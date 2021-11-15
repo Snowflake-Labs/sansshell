@@ -157,7 +157,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile, method *protogen.Method, addBrace bool) {
 	prefix := ""
 	if genFunc {
-		prefix = "func (c *" + structName + ") "
+		prefix = fmt.Sprintf("// %sOneMany provides the same API as %s but sends the same request to N destinations at once.\n", method.GoName, method.GoName)
+		prefix += "// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.\n"
+		prefix += "func (c *" + structName + ") "
 	}
 	sig := fmt.Sprintf("%s %sOneMany(ctx %s, ", prefix, method.GoName, g.QualifiedGoIdent(contextPackage.Ident("Context")))
 	unary := !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
