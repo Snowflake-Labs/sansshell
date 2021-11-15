@@ -5,6 +5,8 @@ package proxy
 
 import (
 	"context"
+	"io"
+	"log"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -19,8 +21,10 @@ import (
 type ProxyConn struct {
 	// The targets we're proxying for currently.
 	targets []string
+
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
+
 	// The current unused nonce. Always incrementing as we send requests.
 	nonce uint32
 
@@ -54,6 +58,13 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 		return status.Errorf(codes.Internal, "Calling InvokeOneMany with 1 request error - %v", err)
 	}
 
+	// In case we return before this is drained make sure it gets drained (and therefore closed)
+	defer func() {
+		for m := range retChan {
+			log.Printf("Discarding msg: %+v", m)
+		}
+	}()
+
 	replyMsg, ok := reply.(proto.Message)
 	if !ok {
 		return status.Error(codes.InvalidArgument, "reply must be a proto.Message")
@@ -61,12 +72,7 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 
 	// We should only get one response.
 	gotResponse := false
-	for {
-		resp, ok := <-retChan
-		if !ok {
-			break
-		}
-
+	for resp := range retChan {
 		if gotResponse {
 			return status.Errorf(codes.Internal, "Got a 2nd response from InvokeMany for 1 request - %+v", resp)
 		}
@@ -106,6 +112,7 @@ type ProxyRet struct {
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
 	requestMsg, ok := args.(proto.Message)
 	if !ok {
@@ -117,7 +124,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		return nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
 	}
 
-	streamIds := make(map[uint64]string)
+	streamIds := make(map[uint64]*ProxyRet)
 
 	for _, t := range p.targets {
 		req := &proxypb.ProxyRequest{
@@ -154,7 +161,9 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		}
 
 		// Save stream ID for later matching.
-		streamIds[r.GetStreamId()] = r.GetTarget()
+		streamIds[r.GetStreamId()] = &ProxyRet{
+			Target: r.GetTarget(),
+		}
 	}
 
 	// Now construct a single request with all of our streamIds.
@@ -193,6 +202,9 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 	processing:
 		for {
 			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
 			if err != nil {
 				chanErr = status.Errorf(codes.Internal, "can't get response data for %s on stream - %v", method, err)
 				break
@@ -206,14 +218,11 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 				for _, id := range d.StreamIds {
 					// Validate it's a stream we know.
 					if _, ok := streamIds[id]; !ok {
-						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received", id)
+						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
 						break processing
 					}
-					msg := &ProxyRet{
-						Target: streamIds[id],
-						Resp:   d.Payload,
-					}
-					retChan <- msg
+					streamIds[id].Resp = d.Payload
+					retChan <- streamIds[id]
 				}
 			case cl != nil:
 				code := cl.GetStatus().GetCode()
@@ -231,16 +240,28 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 				// Otherwise send errors back for each target and then remove.
 				if code != int32(codes.OK) {
 					for _, id := range cl.StreamIds {
-						msg := &ProxyRet{
-							Target: streamIds[id],
-							Error:  status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg),
+						if streamIds[id].Resp != nil {
+							chanErr = status.Errorf(codes.Internal, "Got a non OK error code for a target we've already responded. Code: %s for target: %s", codes.Code(code).String(), streamIds[id].Target)
+							// Remove it from the map so we don't double send responses for this target.
+							delete(streamIds, id)
+							break processing
 						}
-						retChan <- msg
+
+						// Validate it's a stream we know.
+						if _, ok := streamIds[id]; !ok {
+							chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received for ServerClose", id)
+							break processing
+						}
+						streamIds[id].Error = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+						retChan <- streamIds[id]
 					}
 				}
 				for _, id := range cl.StreamIds {
 					delete(streamIds, id)
 				}
+			default:
+				chanErr = status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
+				break processing
 			}
 
 			// We've gotten closes for everything so we're done.
@@ -251,11 +272,8 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 
 		// Any stream IDs left in the map haven't had a proper close on them so push the
 		// current chanErr down to them.
-		for _, t := range streamIds {
-			msg := &ProxyRet{
-				Target: t,
-				Error:  chanErr,
-			}
+		for _, msg := range streamIds {
+			msg.Error = chanErr
 			retChan <- msg
 		}
 		close(retChan)
