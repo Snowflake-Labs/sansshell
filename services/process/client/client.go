@@ -91,28 +91,22 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			return subcommands.ExitFailure
 		}
 		outputPsEntry(resp, state.Out)
-	} else {
-		respChan, err := c.ListOneMany(ctx, req)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ListOneMany returned error: %v\n", err)
-			return subcommands.ExitFailure
-		}
-		for {
-			resp, ok := <-respChan
-			if !ok {
-				// It's closed, we're done
-				break
-			}
-
-			fmt.Fprintf(state.Out, "\nTarget: %s Entries: %d\n\n", resp.Target, len(resp.Resp.ProcessEntries))
-			if resp.Error != nil {
-				fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
-				continue
-			}
-			outputPsEntry(resp.Resp, state.Out)
-		}
+		return subcommands.ExitSuccess
 	}
 
+	respChan, err := c.ListOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ListOneMany returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+	for resp := range respChan {
+		fmt.Fprintf(state.Out, "\nTarget: %s Entries: %d\n\n", resp.Target, len(resp.Resp.ProcessEntries))
+		if resp.Error != nil {
+			fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
+			continue
+		}
+		outputPsEntry(resp.Resp, state.Out)
+	}
 	return subcommands.ExitSuccess
 }
 
