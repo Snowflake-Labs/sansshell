@@ -366,6 +366,12 @@ This will also accept URL options of the form:
 	See https://gocloud.dev/howto/blob/ for details on options.`)
 }
 
+var validOutputPrefixes = []string{
+	"s3://",
+	"azblob://",
+	"gs://",
+}
+
 func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	dt, err := flagToType(p.dumpType)
 	if err != nil {
@@ -390,11 +396,14 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		Destination: &pb.GetMemoryDumpRequest_Stream{},
 	}
 
-	if strings.HasPrefix(p.output, "s3://") || strings.HasPrefix(p.output, "azblob://") || strings.HasPrefix(p.output, "gs://") {
-		req.Destination = &pb.GetMemoryDumpRequest_Url{
-			Url: &pb.DumpDestinationUrl{
-				Url: p.output,
-			},
+	for _, pre := range validOutputPrefixes {
+		if strings.HasPrefix(p.output, pre) {
+			req.Destination = &pb.GetMemoryDumpRequest_Url{
+				Url: &pb.DumpDestinationUrl{
+					Url: p.output,
+				},
+			}
+			break
 		}
 	}
 
