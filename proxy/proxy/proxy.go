@@ -117,17 +117,15 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		return nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
 	}
 
-	nonces := make(map[string]uint32)
 	streamIds := make(map[uint64]string)
 
 	for _, t := range p.targets {
-		nonces[t] = p.getNonce()
 		req := &proxypb.ProxyRequest{
 			Request: &proxypb.ProxyRequest_StartStream{
 				StartStream: &proxypb.StartStream{
 					Target:     t,
 					MethodName: method,
-					Nonce:      nonces[t],
+					Nonce:      p.getNonce(),
 				},
 			},
 		}
