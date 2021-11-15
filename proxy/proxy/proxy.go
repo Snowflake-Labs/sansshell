@@ -68,7 +68,7 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 		}
 
 		if gotResponse {
-			return status.Errorf(codes.Internal, "Got a 2nd response from InvokeMany for 1 request - %+v, resp")
+			return status.Errorf(codes.Internal, "Got a 2nd response from InvokeMany for 1 request - %+v", resp)
 		}
 
 		gotResponse = true
