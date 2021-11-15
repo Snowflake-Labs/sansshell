@@ -104,7 +104,7 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 	return nil, status.Error(codes.Unimplemented, "NewStream not implemented for proxy")
 }
 
-// Additional methods needed for 1:N and N:N below.
+// Additional methods needed for 1:N below.
 type ProxyRet struct {
 	Target string
 	Resp   *anypb.Any
