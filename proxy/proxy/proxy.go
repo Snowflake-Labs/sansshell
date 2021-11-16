@@ -247,11 +247,6 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 							break processing
 						}
 
-						// Validate it's a stream we know.
-						if _, ok := streamIds[id]; !ok {
-							chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received for ServerClose", id)
-							break processing
-						}
 						streamIds[id].Error = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
 						retChan <- streamIds[id]
 					}
