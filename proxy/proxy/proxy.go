@@ -20,7 +20,7 @@ import (
 
 type ProxyConn struct {
 	// The targets we're proxying for currently.
-	targets []string
+	Targets []string
 
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
@@ -42,13 +42,23 @@ func (p *ProxyConn) getNonce() uint32 {
 	return p.nonce
 }
 
+// Direct indicates whether the proxy is in use or a direct connection is being made.
+func (p *ProxyConn) Direct() bool {
+	return p.direct
+}
+
+// NumTargets returns the number of targets ProxyConn is addressing (through the proxy or not).
+func (p *ProxyConn) NumTargets() int {
+	return len(p.Targets)
+}
+
 // Invoke implements grpc.ClientConnInterface
 func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
-	if p.direct {
+	if p.Direct() {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.Invoke(ctx, method, args, reply, opts...)
 	}
-	if len(p.targets) != 1 {
+	if p.NumTargets() != 1 {
 		return status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
 	}
 
@@ -81,7 +91,7 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 		if resp.Error != nil {
 			return resp.Error
 		}
-		if got, want := resp.Target, p.targets[0]; got != want {
+		if got, want := resp.Target, p.Targets[0]; got != want {
 			return status.Errorf(codes.Internal, "Response for wrong target. Want %s and got %s", want, got)
 		}
 		if err := resp.Resp.UnmarshalTo(replyMsg); err != nil {
@@ -126,7 +136,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 
 	streamIds := make(map[uint64]*ProxyRet)
 
-	for _, t := range p.targets {
+	for _, t := range p.Targets {
 		req := &proxypb.ProxyRequest{
 			Request: &proxypb.ProxyRequest_StartStream{
 				StartStream: &proxypb.StartStream{
@@ -312,6 +322,6 @@ func DialContext(ctx context.Context, proxy string, targets []string, opts ...gr
 	}
 	ret.cc = conn
 	// Make our own copy of these.
-	ret.targets = append(ret.targets, targets...)
+	ret.Targets = append(ret.Targets, targets...)
 	return ret, nil
 }

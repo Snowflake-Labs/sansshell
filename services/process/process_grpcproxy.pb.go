@@ -43,9 +43,30 @@ type ListManyResponse struct {
 }
 
 // ListOneMany provides the same API as List but sends the same request to N destinations at once.
+// N can be a single destination.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
-	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/List", in, opts...)
+	conn := c.cc.(*proxy.ProxyConn)
+	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	if conn.NumTargets() == 1 {
+		out := &ListManyResponse{
+			Target: conn.Targets[0],
+			Resp:   &ListReply{},
+		}
+		err := conn.Invoke(ctx, "/Process.Process/List", in, out.Resp, opts...)
+		if err != nil {
+			out.Error = err
+		}
+		ret := make(chan *ListManyResponse)
+		go func() {
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Process.Process/List", in, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +105,30 @@ type GetStacksManyResponse struct {
 }
 
 // GetStacksOneMany provides the same API as GetStacks but sends the same request to N destinations at once.
+// N can be a single destination.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
-	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetStacks", in, opts...)
+	conn := c.cc.(*proxy.ProxyConn)
+	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	if conn.NumTargets() == 1 {
+		out := &GetStacksManyResponse{
+			Target: conn.Targets[0],
+			Resp:   &GetStacksReply{},
+		}
+		err := conn.Invoke(ctx, "/Process.Process/GetStacks", in, out.Resp, opts...)
+		if err != nil {
+			out.Error = err
+		}
+		ret := make(chan *GetStacksManyResponse)
+		go func() {
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Process.Process/GetStacks", in, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -125,9 +167,30 @@ type GetJavaStacksManyResponse struct {
 }
 
 // GetJavaStacksOneMany provides the same API as GetJavaStacks but sends the same request to N destinations at once.
+// N can be a single destination.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
-	manyRet, err := c.cc.(*proxy.ProxyConn).InvokeOneMany(ctx, "/Process.Process/GetJavaStacks", in, opts...)
+	conn := c.cc.(*proxy.ProxyConn)
+	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	if conn.NumTargets() == 1 {
+		out := &GetJavaStacksManyResponse{
+			Target: conn.Targets[0],
+			Resp:   &GetJavaStacksReply{},
+		}
+		err := conn.Invoke(ctx, "/Process.Process/GetJavaStacks", in, out.Resp, opts...)
+		if err != nil {
+			out.Error = err
+		}
+		ret := make(chan *GetJavaStacksManyResponse)
+		go func() {
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Process.Process/GetJavaStacks", in, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,6 +229,8 @@ type GetMemoryDumpManyResponse struct {
 }
 
 // GetMemoryDumpOneMany provides the same API as GetMemoryDump but sends the same request to N destinations at once.
+// N can be a single destination.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error) {
 	return nil, errors.New("not implemented")

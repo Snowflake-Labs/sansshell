@@ -111,7 +111,26 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				// Unary is simple since we send one thing and just loop over a channel waiting
 				// for replies. The only annoyance is type converting from Any in the InvokeMany
 				// to the typed response callers expect.
-				g.P("manyRet, err := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ").InvokeOneMany(ctx, \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", in, opts...)")
+				g.P("conn := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ")")
+				g.P("// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.")
+				g.P("if conn.NumTargets() == 1 {")
+				g.P("out := &", method.GoName, "ManyResponse{")
+				g.P("Target: conn.Targets[0],")
+				g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
+				g.P("}")
+				g.P("err := conn.Invoke(ctx, \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", in, out.Resp, opts...)")
+				g.P("if err != nil {")
+				g.P("out.Error = err")
+				g.P("}")
+				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
+				g.P("go func() {")
+				g.P("// Send and close.")
+				g.P("ret <- out")
+				g.P("close(ret)")
+				g.P("}()")
+				g.P("return ret, nil")
+				g.P("}")
+				g.P("manyRet, err := conn.InvokeOneMany(ctx, \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", in, opts...)")
 				g.P("if err != nil {")
 				g.P("return nil, err")
 				g.P("}")
@@ -158,7 +177,8 @@ func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile,
 	prefix := ""
 	if genFunc {
 		prefix = fmt.Sprintf("// %sOneMany provides the same API as %s but sends the same request to N destinations at once.\n", method.GoName, method.GoName)
-		prefix += "// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.\n"
+		prefix += "// N can be a single destination.\n"
+		prefix += "//\n// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.\n"
 		prefix += "func (c *" + structName + ") "
 	}
 	sig := fmt.Sprintf("%s %sOneMany(ctx %s, ", prefix, method.GoName, g.QualifiedGoIdent(contextPackage.Ident("Context")))
