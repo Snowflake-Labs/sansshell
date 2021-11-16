@@ -56,6 +56,7 @@ func (s *stringSliceVar) String() string {
 
 func init() {
 	targetsFlag.target = &targets
+	targets = append(targets, defaultAddress)
 	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
 
 	subcommands.ImportantFlag("credential-source")
