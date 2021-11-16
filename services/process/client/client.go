@@ -84,16 +84,6 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		req.Pids = append(req.Pids, pid)
 	}
 
-	if !state.MultipleTargets {
-		resp, err := c.List(ctx, req)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "List returned error: %v\n", err)
-			return subcommands.ExitFailure
-		}
-		outputPsEntry(resp, state.Out)
-		return subcommands.ExitSuccess
-	}
-
 	respChan, err := c.ListOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ListOneMany returned error: %v\n", err)

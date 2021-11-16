@@ -29,8 +29,7 @@ var (
 	defaultAddress = "localhost:50042"
 	defaultTimeout = 3 * time.Second
 
-	address    = flag.String("address", defaultAddress, "Address to contact sansshell-server. Implies a single RPC only and cannot be set with --targets.")
-	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to --address will be made")
+	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
 	timeout    = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
 	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 
@@ -57,9 +56,8 @@ func (s *stringSliceVar) String() string {
 
 func init() {
 	targetsFlag.target = &targets
-	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. Cannot be set with --address and --proxy must be set.")
+	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
 
-	subcommands.ImportantFlag("address")
 	subcommands.ImportantFlag("credential-source")
 	subcommands.ImportantFlag("proxy")
 	subcommands.ImportantFlag("targets")
@@ -72,37 +70,26 @@ func main() {
 	flag.Parse()
 
 	// Bunch of flag sanity checking
-	if *address == "" && len(targets) == 0 {
-		fmt.Fprintln(os.Stderr, "Must set one of --address or --targets")
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stderr, "Must set --targets")
 		os.Exit(1)
 	}
-	if *address != "" && len(targets) > 0 {
-		fmt.Fprintln(os.Stderr, "Can't set both --address and --targets together")
-		os.Exit(1)
-	}
-	if len(targets) > 0 && *proxyAddr == "" {
-		fmt.Fprintln(os.Stderr, "Can't set --targets without --proxy")
+	if len(targets) > 1 && *proxyAddr == "" {
+		fmt.Fprintln(os.Stderr, "Can't set --targets to multiple entries without --proxy")
 		os.Exit(1)
 	}
 
 	ctx := context.Background()
 	creds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
+		fmt.Fprintf(os.Stderr, "Could not load creds from %s - %v", *credSource, err)
 		os.Exit(1)
 	}
 
-	// Setup endpoints.
-	var t []string
-	if *address != "" {
-		t = append(t, *address)
-	}
-	t = append(t, targets...)
-
 	// Set up a connection to the sansshell-server (possibly via proxy).
-	conn, err := proxy.Dial(*proxyAddr, t, grpc.WithTransportCredentials(creds))
+	conn, err := proxy.Dial(*proxyAddr, targets, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
+		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", targets, err)
 		os.Exit(1)
 	}
 	defer func() {
@@ -116,7 +103,7 @@ func main() {
 		Out:  os.Stdout,
 	}
 	// Indicate to command whether we want N targets.
-	if len(t) > 1 {
+	if len(targets) > 1 {
 		state.MultipleTargets = true
 	}
 
