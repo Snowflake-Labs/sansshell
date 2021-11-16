@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +18,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
@@ -86,8 +86,6 @@ var (
 )
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
-	log.Printf("Received request for List: %+v", req)
-
 	cmdName := *psBin
 	options := psOptions()
 
@@ -127,8 +125,6 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 }
 
 func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.GetStacksReply, error) {
-	log.Printf("Received request for GetStacks: %+v", req)
-
 	// This is tied to pstack so either an OS provides it or it doesn't.
 	if *pstackBin == "" {
 		return nil, status.Error(codes.Unimplemented, "not implemented")
@@ -199,8 +195,6 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 }
 
 func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest) (*pb.GetJavaStacksReply, error) {
-	log.Printf("Received request for GetJavaStacks: %+v", req)
-
 	// This is tied to pstack so either an OS provides it or it doesn't.
 	if *jstackBin == "" {
 		return nil, status.Error(codes.Unimplemented, "not implemented")
@@ -338,8 +332,6 @@ func openBlobForWriting(ctx context.Context, bucket string, file string) (io.Wri
 }
 
 func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_GetMemoryDumpServer) error {
-	log.Printf("Received request for GetMemoryDump: %+v", req)
-
 	if req.Pid <= 0 {
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
@@ -392,11 +384,10 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		defer func() {
 			err := dest.Close()
 			if err != nil {
-				log.Printf("error closing bucket %s - %v", req.GetUrl().Url, err)
+				logr.FromContextOrDiscard(stream.Context()).Error(err, "bucket Close", "url", req.GetUrl().Url)
 			}
 		}()
 	}
-
 	// Don't care about stderr output since jmap produces some debug that way.
 	run, err := util.RunCommand(stream.Context(), cmdName, options)
 	if err != nil {

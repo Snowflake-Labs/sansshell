@@ -3,9 +3,10 @@ package util
 import (
 	"bytes"
 	"context"
-	"log"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/go-logr/logr"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -57,6 +58,8 @@ func FailOnStderr() Option {
 // Errors returned directly will be a status.Error and Error will be whatever the exec
 // library returns.
 func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) (*CommandRun, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+
 	if !filepath.IsAbs(bin) {
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not an absolute path", bin)
 	}
@@ -82,7 +85,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	// Set to an empty slice to get an empty environment. Nil means inherit.
 	cmd.Env = []string{}
 
-	log.Printf("Executing: %s", cmd.String())
+	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
 

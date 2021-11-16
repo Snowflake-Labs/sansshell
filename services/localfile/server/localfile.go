@@ -9,7 +9,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -18,6 +17,8 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,10 +35,10 @@ type server struct{}
 
 // Read returns the contents of the named file
 func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
-	log.Printf("Received request for LocalFile.Read: %+v", req)
+	logger := logr.FromContextOrDiscard(stream.Context())
 
 	file := req.Filename
-	log.Printf("Received request for: %v", file)
+	logger.Info("read request", "filename", req.Filename)
 	if !filepath.IsAbs(file) {
 		return AbsolutePathError
 	}
@@ -48,7 +49,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Printf("Can't close file %s: %v", file, err)
+			logger.Error(err, "file.Close()", "file", file)
 		}
 	}()
 
@@ -101,18 +102,17 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 }
 
 func (s *server) Stat(stream pb.LocalFile_StatServer) error {
+	logger := logr.FromContextOrDiscard(stream.Context())
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
-			log.Printf("stat: recv error %v", err)
 			return status.Errorf(codes.Internal, "stat: recv error %v", err)
 		}
-		log.Printf("Received request for LocalFile.Stat: %+v", req)
 
-		log.Printf("stat: request for file: %v", req.Filename)
+		logger.Info("stat", "filename", req.Filename)
 		if !filepath.IsAbs(req.Filename) {
 			return AbsolutePathError
 		}
@@ -132,23 +132,22 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 			Uid:      stat_t.Uid,
 			Gid:      stat_t.Gid,
 		}); err != nil {
-			log.Printf("stat: send error %v", err)
 			return status.Errorf(codes.Internal, "stat: send error %v", err)
 		}
 	}
 }
 
 func (s *server) Sum(stream pb.LocalFile_SumServer) error {
+	logger := logr.FromContextOrDiscard(stream.Context())
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
-			log.Printf("sum: recv error %v", err)
 			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
-		log.Printf("Received request for Localfile.Sum: %+v", req)
+		logger.Info("sum request", "file", req.Filename, "sumtype", req.SumType.String())
 		if !filepath.IsAbs(req.Filename) {
 			return AbsolutePathError
 		}
@@ -169,7 +168,6 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 		case pb.SumType_SUM_TYPE_CRC32IEEE:
 			hasher = crc32.NewIEEE()
 		default:
-			log.Printf("sum: invalid sum type %v", req.SumType)
 			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", req.SumType)
 		}
 		if err := func() error {
@@ -179,8 +177,8 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			}
 			defer f.Close()
 			if _, err := io.Copy(hasher, f); err != nil {
-				log.Printf("sum: copy error %v", err)
-				return err
+				logger.Error(err, "io.Copy", "file", req.Filename)
+				return status.Errorf(codes.Internal, "copy/read error: %v", err)
 			}
 			out.Sum = hex.EncodeToString(hasher.Sum(nil))
 			return nil
@@ -188,7 +186,6 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return status.Errorf(codes.Internal, "can't create sum: %v", err)
 		}
 		if err := stream.Send(out); err != nil {
-			log.Printf("sum: send error %v", err)
 			return status.Errorf(codes.Internal, "sum: send error %v", err)
 		}
 	}

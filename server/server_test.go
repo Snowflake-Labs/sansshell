@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -47,7 +48,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy)
+	s, err := BuildServer(nil, policy, logr.Discard())
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}

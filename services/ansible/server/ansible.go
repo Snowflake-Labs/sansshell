@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,8 +29,6 @@ type server struct{}
 var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
-	log.Printf("Received request for Ansible.Run: %+v", req)
-
 	// Basic sanity checking up front.
 	if req.Playbook == "" {
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
