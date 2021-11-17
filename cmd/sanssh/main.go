@@ -103,10 +103,6 @@ func main() {
 		Conn: conn,
 		Out:  os.Stdout,
 	}
-	// Indicate to command whether we want N targets.
-	if len(targets) > 1 {
-		state.MultipleTargets = true
-	}
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()

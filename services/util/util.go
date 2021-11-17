@@ -3,8 +3,8 @@ package util
 import (
 	"bytes"
 	"context"
+	"io"
 	"log"
-	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -16,9 +16,8 @@ import (
 // ExecuteState is used by client packages in services to pass
 // relevant state down to subcommands.
 type ExecuteState struct {
-	Conn            *proxy.ProxyConn
-	Out             *os.File
-	MultipleTargets bool
+	Conn *proxy.ProxyConn
+	Out  io.Writer
 }
 
 // TODO(jchacon): Make this configurable
