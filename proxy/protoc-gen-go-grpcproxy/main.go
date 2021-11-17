@@ -112,8 +112,10 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				// for replies. The only annoyance is type converting from Any in the InvokeMany
 				// to the typed response callers expect.
 				g.P("conn := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ")")
+				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
 				g.P("// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.")
 				g.P("if conn.NumTargets() == 1 {")
+				g.P("go func() {")
 				g.P("out := &", method.GoName, "ManyResponse{")
 				g.P("Target: conn.Targets[0],")
 				g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
@@ -122,8 +124,6 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("if err != nil {")
 				g.P("out.Error = err")
 				g.P("}")
-				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
-				g.P("go func() {")
 				g.P("// Send and close.")
 				g.P("ret <- out")
 				g.P("close(ret)")
@@ -134,7 +134,6 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("if err != nil {")
 				g.P("return nil, err")
 				g.P("}")
-				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
 				g.P("// A goroutine to retrive untyped responses and convert them to typed ones.")
 				g.P("go func() {")
 				g.P("for {")

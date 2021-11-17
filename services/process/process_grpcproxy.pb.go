@@ -48,18 +48,18 @@ type ListManyResponse struct {
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
+	ret := make(chan *ListManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
 	if conn.NumTargets() == 1 {
-		out := &ListManyResponse{
-			Target: conn.Targets[0],
-			Resp:   &ListReply{},
-		}
-		err := conn.Invoke(ctx, "/Process.Process/List", in, out.Resp, opts...)
-		if err != nil {
-			out.Error = err
-		}
-		ret := make(chan *ListManyResponse)
 		go func() {
+			out := &ListManyResponse{
+				Target: conn.Targets[0],
+				Resp:   &ListReply{},
+			}
+			err := conn.Invoke(ctx, "/Process.Process/List", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
 			// Send and close.
 			ret <- out
 			close(ret)
@@ -70,7 +70,6 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	if err != nil {
 		return nil, err
 	}
-	ret := make(chan *ListManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		for {
@@ -110,18 +109,18 @@ type GetStacksManyResponse struct {
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
+	ret := make(chan *GetStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
 	if conn.NumTargets() == 1 {
-		out := &GetStacksManyResponse{
-			Target: conn.Targets[0],
-			Resp:   &GetStacksReply{},
-		}
-		err := conn.Invoke(ctx, "/Process.Process/GetStacks", in, out.Resp, opts...)
-		if err != nil {
-			out.Error = err
-		}
-		ret := make(chan *GetStacksManyResponse)
 		go func() {
+			out := &GetStacksManyResponse{
+				Target: conn.Targets[0],
+				Resp:   &GetStacksReply{},
+			}
+			err := conn.Invoke(ctx, "/Process.Process/GetStacks", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
 			// Send and close.
 			ret <- out
 			close(ret)
@@ -132,7 +131,6 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 	if err != nil {
 		return nil, err
 	}
-	ret := make(chan *GetStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		for {
@@ -172,18 +170,18 @@ type GetJavaStacksManyResponse struct {
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
+	ret := make(chan *GetJavaStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
 	if conn.NumTargets() == 1 {
-		out := &GetJavaStacksManyResponse{
-			Target: conn.Targets[0],
-			Resp:   &GetJavaStacksReply{},
-		}
-		err := conn.Invoke(ctx, "/Process.Process/GetJavaStacks", in, out.Resp, opts...)
-		if err != nil {
-			out.Error = err
-		}
-		ret := make(chan *GetJavaStacksManyResponse)
 		go func() {
+			out := &GetJavaStacksManyResponse{
+				Target: conn.Targets[0],
+				Resp:   &GetJavaStacksReply{},
+			}
+			err := conn.Invoke(ctx, "/Process.Process/GetJavaStacks", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
 			// Send and close.
 			ret <- out
 			close(ret)
@@ -194,7 +192,6 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 	if err != nil {
 		return nil, err
 	}
-	ret := make(chan *GetJavaStacksManyResponse)
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		for {
