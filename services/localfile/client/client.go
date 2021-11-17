@@ -134,6 +134,13 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		outTmpl := "File: %s\nSize: %d\nType: %s\nAccess: %s Uid: %d Gid: %d\nModify: %s\n"
 		fmt.Fprintf(os.Stdout, outTmpl, reply.Filename, reply.Size, fileTypeString(mode), mode, reply.Uid, reply.Gid, reply.Modtime.AsTime())
 	}
+	// Close the sending stream to notify the server not to expect any further data,
+	// and perform a final Recv() to cleanly finish the stream.
+	// At this point, we've successfully processed all of our input files,
+	// but closing politely avoids the server viewing this as a cancellation
+	stream.CloseSend()
+	stream.Recv()
+
 	return subcommands.ExitSuccess
 }
 
@@ -225,5 +232,13 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 		fmt.Fprintf(os.Stdout, "%s %s\n", reply.Sum, reply.Filename)
 	}
+
+	// Close the sending stream to notify the server not to expect any further data,
+	// and perform a final Recv() to cleanly finish the stream.
+	// At this point, we've successfully processed all of our input files,
+	// but closing politely avoids the server viewing this as a cancellation.
+	stream.CloseSend()
+	stream.Recv()
+
 	return subcommands.ExitSuccess
 }
