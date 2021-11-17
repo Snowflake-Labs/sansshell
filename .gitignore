@@ -1,4 +1,6 @@
 .DS_Store
+cmd/proxy-server/proxy-server
+proxy/protoc-gen-go-grpcproxy/protoc-gen-go-grpcproxy
 cmd/sanssh/sanssh
 cmd/sansshell-server/sansshell-server
 certs/

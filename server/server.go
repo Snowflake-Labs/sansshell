@@ -21,7 +21,7 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string, l
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	s, err := BuildServer(c, policy, logger)
+	s, err := BuildServer(c, policy, lis.Addr(), logger)
 	if err != nil {
 		return err
 	}
@@ -32,8 +32,8 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string, l
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor,
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
-func BuildServer(c credentials.TransportCredentials, policy string, logger logr.Logger) (*grpc.Server, error) {
-	authz, err := rpcauth.NewWithPolicy(context.Background(), policy)
+func BuildServer(c credentials.TransportCredentials, policy string, address net.Addr, logger logr.Logger) (*grpc.Server, error) {
+	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, rpcauth.HostNetHook(address))
 	if err != nil {
 		return nil, err
 	}

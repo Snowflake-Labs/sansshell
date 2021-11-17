@@ -34,13 +34,6 @@ type RpcAuthzHook interface {
 	Hook(context.Context, *RpcAuthInput) error
 }
 
-// AuthzHookFunc implements RpcAuthzHook for a simple function
-type RpcAuthzHookFunc func(context.Context, *RpcAuthInput) error
-
-func (r RpcAuthzHookFunc) Hook(ctx context.Context, input *RpcAuthInput) error {
-	return r(ctx, input)
-}
-
 // New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
 func New(policy *opa.AuthzPolicy, authzHooks ...RpcAuthzHook) *Authorizer {

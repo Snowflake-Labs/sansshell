@@ -26,7 +26,7 @@ default allow = false
 allow {
     input.type = "HealthCheck.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-    input.peer.address = "bufconn"
+    input.peer.net.network = "bufconn"
 }
 
 `
@@ -38,7 +38,7 @@ default allow = false
 allow {
     input.type = "HealthCheck.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-    input.peer.address = "something else"
+    input.peer.net.network = "something else"
 }
 `
 	allowPeerSerialPolicy = `
@@ -81,14 +81,13 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.
 	if err != nil {
 		t.Fatalf("Failed to load client cert: %v", err)
 	}
-	s, err := server.BuildServer(creds, policy, logr.Discard())
+	lis = bufconn.Listen(bufSize)
+	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard())
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
 	}
 	listening := make(chan struct{})
 	go func() {
-		lis = bufconn.Listen(bufSize)
-		defer lis.Close()
 		listening <- struct{}{}
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Server exited with error: %v", err)

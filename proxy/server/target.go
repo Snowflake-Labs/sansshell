@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
@@ -43,6 +44,9 @@ type TargetStream struct {
 
 	// the (internal) channel used to manage incoming requests
 	reqChan chan proto.Message
+
+	// A channel used to carry an error from proxy-initiated closure
+	errChan chan error
 }
 
 func (s *TargetStream) String() string {
@@ -53,6 +57,26 @@ func (s *TargetStream) String() string {
 // stream
 func (s *TargetStream) StreamID() uint64 {
 	return s.streamID
+}
+
+// Method returns the full method name associated with this stream
+func (s *TargetStream) Method() string {
+	return s.serviceMethod.FullName()
+}
+
+// Target returns the address of the target
+func (s *TargetStream) Target() string {
+	return s.target
+}
+
+// PeerAuthInfo returns authz-relevant information about the stream peer
+func (s *TargetStream) PeerAuthInfo() *rpcauth.PeerAuthInput {
+	return rpcauth.PeerInputFromContext(s.grpcStream.Context())
+}
+
+// NewRequest returns a new, empty request message for this target stream.
+func (s *TargetStream) NewRequest() proto.Message {
+	return s.serviceMethod.NewRequest()
 }
 
 // CloseSend is used to indicate that no more client requests
@@ -68,17 +92,26 @@ func (s *TargetStream) ClientCancel() {
 	s.cancelFunc()
 }
 
-// Send the data contained in 'req' to the client stream
-func (s *TargetStream) Send(req *anypb.Any) error {
-	// Frontload the check that the message is appropriate to the
-	// method by unpacking the any here
-	streamReq := s.serviceMethod.NewRequest()
-	if err := req.UnmarshalTo(streamReq); err != nil {
-		return err
+// CloseWith initiates a closer of the stream, with the supplied
+// error delivered in the ServerClose message, if no status has
+// already been sent.
+// If `err` is convertible to a grpc.Status, the status code
+// will be preserved.
+func (s *TargetStream) CloseWith(err error) {
+	select {
+	case s.errChan <- err:
+		s.cancelFunc()
+	default:
+		// an error is already pending. Do nothing
 	}
+}
+
+// Send the supplied request to the target stream, returning
+// and error if the context has already been cancelled.
+func (s *TargetStream) Send(req proto.Message) error {
 	ctx := s.grpcStream.Context()
 	select {
-	case s.reqChan <- streamReq:
+	case s.reqChan <- req:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -165,16 +198,19 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	// Wait for final status from the errgroup, and translate it into
 	// a server-close call
 	err := group.Wait()
-	log.Printf("finished: %s (%v)", s, err)
-	var errStatus *pb.Status
-	if err != nil {
-		errStatus = convertStatus(status.New(codes.Internal, err.Error()))
+
+	// The error status may by set/overidden if CloseWith was used to
+	// terminate the stream.
+	select {
+	case err = <-s.errChan:
+	default:
 	}
+	log.Printf("finished: %s (%v)", s, err)
 	reply := &pb.ProxyReply{
 		Reply: &pb.ProxyReply_ServerClose{
 			ServerClose: &pb.ServerClose{
 				StreamIds: []uint64{s.streamID},
-				Status:    errStatus,
+				Status:    convertStatus(status.Convert(err)),
 			},
 		},
 	}
@@ -199,6 +235,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 		grpcStream:    clientStream,
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message),
+		errChan:       make(chan error, 1),
 	}, nil
 }
 
@@ -213,6 +250,9 @@ type TargetStreamSet struct {
 	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
+	// an Authorizer, for authorizing requests sent to targets.
+	authorizer *rpcauth.Authorizer
+
 	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
 
@@ -225,10 +265,11 @@ type TargetStreamSet struct {
 }
 
 // NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
-func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer) *TargetStreamSet {
+func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer *rpcauth.Authorizer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
 		targetDialer:   dialer,
+		authorizer:     authorizer,
 		streams:        make(map[uint64]*TargetStream),
 		noncePairs:     make(map[string]bool),
 	}
@@ -239,7 +280,10 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 //
 // The result of stream creation, as well as any messages received from the created stream will be
 // sent directly to 'replyChan'. If the stream was successfully started, its id will eventually be
-// sent to 'doneChan' when all work has completed
+// sent to 'doneChan' when all work has completed.
+//
+// Returns a non-nil error only on unrecoverable client error, such as the re-use of a nonce/target
+// pair, which cannot be represented by a stream-specific status.
 func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyChan chan *pb.ProxyReply, doneChan chan uint64) error {
 	// Check for client reuse of a previously used target/nonce pair, to avoid
 	// the case in which a buggy client sends multiple StartStream request with
@@ -347,7 +391,7 @@ func (t *TargetStreamSet) ClientCloseAll() {
 	}
 }
 
-// ClientClose cancels TargetStreams identified by ID in `req`
+// ClientCancel cancels TargetStreams identified by ID in `req`
 func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
@@ -360,23 +404,76 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	return nil
 }
 
-// Send dispatches new message data in `req` to the identified streams
-func (t *TargetStreamSet) Send(req *pb.StreamData) error {
-	// TODO(jallie): authorization check for sending to streams goes
-	// here. StreamIds are collected, translated into targets, and
-	// authorization check made before dispatch
-	// TODO(jallie): this could also use parallel send, but since each
-	// stream has it's own dispatching go-routine internally, this already
-	// has some degree of underlying parallism
+// Send dispatches new message data in `req` to the streams specified in req.
+// It will return an error if a requested stream does not exist, the message
+// type for the stream is incorrect, or if authorization data for the request
+// cannot be generated.
+// Before dispatching to the stream(s), an authorization check will be made to
+// ensure that the request is permitted for all specified streams. On failure,
+// streams that failed authorization will be closed with PermissionDenied,
+// while other streams in the same request which would otherwise have been
+// permitted will be closed with status Aborted. Any other open TargetStreams
+// which are not specified in the request are unaffected.
+func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
+	// The set of streams which are permitted to receive the request, after
+	// authorization checks of all streams have completed.
+	var queued []*TargetStream
+
+	streamReq, err := req.Payload.UnmarshalNew()
+	if err != nil {
+		return status.Errorf(codes.Internal, "error unmarshalling request %v", err)
+	}
+	msgName := proto.MessageName(streamReq)
+
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
-		if err := stream.Send(req.Payload); err != nil {
+
+		if msgName != proto.MessageName(stream.NewRequest()) {
+			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
+		}
+
+		authinput, err := rpcauth.NewRpcAuthInput(ctx, stream.Method(), streamReq)
+		if err != nil {
+			return status.Errorf(codes.Internal, "error creating authz input %v", err)
+		}
+		streamPeerInfo := stream.PeerAuthInfo()
+		authinput.Host = &rpcauth.HostAuthInput{
+			Net: streamPeerInfo.Net,
+		}
+
+		// If authz fails, close immediately with an error
+		if err := t.authorizer.Eval(ctx, authinput); err != nil {
+			log.Printf("authorization error %s : %v", stream, err)
+			stream.CloseWith(err)
+			continue
+		}
+		// Otherwise, enqueue this request pending the completion of authz checks
+		queued = append(queued, stream)
+	}
+
+	// if at least one of the authz checks failed, we abort all other streams specified
+	// in this request, since we couldn't transactionally complete the request.
+	if len(queued) != len(req.StreamIds) {
+		err := status.Error(codes.Aborted, "aborted due to proxy authz failure in related stream")
+		for _, stream := range queued {
+			stream.CloseWith(err)
+		}
+		return nil
+	}
+
+	// All authz checks succeeded, send to all streams
+	for _, stream := range queued {
+		reqClone := proto.Clone(streamReq)
+		// TargetStream send only enqueues the message to the stream, and only fails
+		// if the stream is being torn down, and is unable to accept it.
+		if err := stream.Send(reqClone); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 

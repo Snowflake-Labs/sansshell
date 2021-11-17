@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	_ "github.com/Snowflake-Labs/sansshell/proxy/testdata"
@@ -32,8 +33,9 @@ func (e errClientConn) NewStream(context.Context, *grpc.StreamDesc, string, ...g
 }
 
 func TestEmptyStreamSet(t *testing.T) {
+	ctx := context.Background()
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
-	ss := NewTargetStreamSet(map[string]*ServiceMethod{}, errDialer)
+	ss := NewTargetStreamSet(map[string]*ServiceMethod{}, errDialer, nil)
 
 	// wait does not block when no work is being done
 	finishedWait := make(chan struct{})
@@ -58,8 +60,11 @@ func TestEmptyStreamSet(t *testing.T) {
 		t.Errorf("TargetStream.ClientCancel(1) err code was %v, want code.InvalidArgument", status.Code(err))
 	}
 
+	// arbitrary payload
+	payload, _ := anypb.New(&pb.StreamData{})
+
 	// Send to nonexistent ids is an error
-	if err := ss.Send(&pb.StreamData{StreamIds: []uint64{1}}); status.Code(err) != codes.InvalidArgument {
+	if err := ss.Send(ctx, &pb.StreamData{StreamIds: []uint64{1}, Payload: payload}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("TargetStream.ClientCancel(0) err code was %v, want code.InvalidArgument", status.Code(err))
 	}
 }
@@ -67,7 +72,7 @@ func TestEmptyStreamSet(t *testing.T) {
 func TestStreamSetAddErrors(t *testing.T) {
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
 	serviceMap := LoadGlobalServiceMap()
-	ss := NewTargetStreamSet(serviceMap, errDialer)
+	ss := NewTargetStreamSet(serviceMap, errDialer, nil)
 
 	// buffered reply channel, so that Add will not block
 	replyChan := make(chan *pb.ProxyReply, 1)

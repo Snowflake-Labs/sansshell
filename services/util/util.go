@@ -3,14 +3,22 @@ package util
 import (
 	"bytes"
 	"context"
+	"io"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/go-logr/logr"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// ExecuteState is used by client packages in services to pass
+// relevant state down to subcommands.
+type ExecuteState struct {
+	Conn *proxy.ProxyConn
+	Out  io.Writer
+}
 
 // TODO(jchacon): Make this configurable
 // The chunk size we use when sending replies on a stream.

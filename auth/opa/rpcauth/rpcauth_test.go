@@ -172,6 +172,42 @@ allow {
 			},
 			errFunc: wantStatusCode(codes.OK),
 		},
+		{
+			name:  "conditional hook, triggered",
+			input: &RpcAuthInput{Method: "/Some.Random/Method"},
+			// Set principal to admin if method = "/Some.Random/Method"
+			hooks: []RpcAuthzHook{
+				HookIf(RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					input.Peer = &PeerAuthInput{
+						Principal: &PrincipalAuthInput{
+							ID: "admin@foo",
+						},
+					}
+					return nil
+				}), func(input *RpcAuthInput) bool {
+					return input.Method == "/Some.Random/Method"
+				}),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name:  "conditional hook, not-triggered",
+			input: &RpcAuthInput{Method: "/Some.Other/Method"},
+			// Set principal to admin if method = "/Some.Random/Method"
+			hooks: []RpcAuthzHook{
+				HookIf(RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+					input.Peer = &PeerAuthInput{
+						Principal: &PrincipalAuthInput{
+							ID: "admin@foo",
+						},
+					}
+					return nil
+				}), func(input *RpcAuthInput) bool {
+					return input.Method == "/Some.Random/Method"
+				}),
+			},
+			errFunc: wantStatusCode(codes.PermissionDenied),
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
