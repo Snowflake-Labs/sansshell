@@ -162,8 +162,13 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 }
 
 // see grpc.ClientStream
-// This only works for the 1:1 stream case.
 func (p *proxyStream) RecvMsg(m interface{}) error {
+	oneMany := false
+	_, ok := m.([]*ProxyRet)
+	if ok {
+		oneMany = true
+	}
+
 	msg, ok := m.(proto.Message)
 	if !ok {
 		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
@@ -180,7 +185,10 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 	switch {
 	case d != nil:
-		for i, id := range d.StreamIds {
+		if !oneMany && len(d.StreamIds) > 1 {
+			return status.Error(codes.Internal, "Called in 1:1 context but receiving multiple stream ids")
+		}
+		for _, id := range d.StreamIds {
 			// Validate it's a stream we know.
 			if _, ok := p.ids[id]; !ok {
 				return status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
@@ -190,14 +198,17 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 				return status.Errorf(codes.Internal, "can't unmarshal anypb: %v", err)
 			}
 			p.ids[id].Resp = d.Payload
-			// TODO(jchacon): Handle N case
-			if i == 0 {
+			if !oneMany {
 				return nil
 			}
 		}
 	case cl != nil:
 		code := cl.GetStatus().GetCode()
 		msg := cl.GetStatus().GetMessage()
+
+		if !oneMany && len(cl.StreamIds) > 1 {
+			return status.Error(codes.Internal, "Called in 1:1 context but receiving multiple stream ids")
+		}
 
 		// Do a one time check all the returned ids are ones we know.
 		for _, id := range cl.StreamIds {
@@ -208,16 +219,21 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 		// See if it's normal close. We can ignore those except to remove tracking.
 		// Otherwise send errors back for each target and then remove.
+		returnErr := io.EOF
 		if code != int32(codes.OK) {
 			for _, id := range cl.StreamIds {
 				err = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
 				p.ids[id].Error = err
-				// TODO(jchacon): Handle N case
-				return err
+				if !oneMany {
+					returnErr = err
+				}
 			}
 		}
 		for _, id := range cl.StreamIds {
 			delete(p.ids, id)
+		}
+		if returnErr != nil {
+			return returnErr
 		}
 	default:
 		return status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
