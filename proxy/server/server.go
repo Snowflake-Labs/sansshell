@@ -72,6 +72,7 @@ func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
 // The supplied authorizer is used to authorize requests made
 // to targets.
 func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {
+	log.Printf("service map: %+v", serviceMap)
 	return &Server{
 		serviceMap: serviceMap,
 		dialer:     dialer,

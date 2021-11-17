@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 	"time"
@@ -23,50 +22,92 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 var (
 	defaultAddress = "localhost:50042"
 	defaultTimeout = 3 * time.Second
 
-	address    = flag.String("address", defaultAddress, "Address to contact sansshell-server")
-	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to --address will be made")
+	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
 	timeout    = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
 	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+
+	// targets will be bound to --targets for sending a single request to N nodes.
+	targetsFlag stringSliceVar
+	targets     []string
 )
 
-func main() {
-	subcommands.ImportantFlag("address")
+type stringSliceVar struct {
+	target *[]string
+}
+
+func (s *stringSliceVar) Set(val string) error {
+	*s.target = strings.Split(val, ",")
+	return nil
+}
+
+func (s *stringSliceVar) String() string {
+	if s.target == nil {
+		return ""
+	}
+	return strings.Join(*s.target, ",")
+}
+
+func init() {
+	targetsFlag.target = &targets
+	targets = append(targets, defaultAddress)
+	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
+
 	subcommands.ImportantFlag("credential-source")
+	subcommands.ImportantFlag("proxy")
+	subcommands.ImportantFlag("targets")
 	subcommands.Register(subcommands.HelpCommand(), "")
 	subcommands.Register(subcommands.FlagsCommand(), "")
 	subcommands.Register(subcommands.CommandsCommand(), "")
+}
 
+func main() {
 	flag.Parse()
 
-	ctx := context.Background()
-
-	creds, err := mtls.LoadClientCredentials(ctx, *credSource)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
+	// Bunch of flag sanity checking
+	if len(targets) == 0 {
+		fmt.Fprintln(os.Stderr, "Must set --targets")
+		os.Exit(1)
+	}
+	if len(targets) > 1 && *proxyAddr == "" {
+		fmt.Fprintln(os.Stderr, "Can't set --targets to multiple entries without --proxy")
 		os.Exit(1)
 	}
 
-	// Set up a connection to the sansshell-server.
-	conn, err := proxy.Dial(*proxyAddr, []string{*address}, grpc.WithTransportCredentials(creds))
+	ctx := context.Background()
+	creds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *address, err)
+		fmt.Fprintf(os.Stderr, "Could not load creds from %s - %v", *credSource, err)
+		os.Exit(1)
+	}
+
+	// Set up a connection to the sansshell-server (possibly via proxy).
+	conn, err := proxy.Dial(*proxyAddr, targets, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", targets, err)
 		os.Exit(1)
 	}
 	defer func() {
-		if closer, ok := conn.(io.Closer); ok {
-			closer.Close()
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing connection - %v", err)
 		}
 	}()
+
+	state := &util.ExecuteState{
+		Conn: conn,
+		Out:  os.Stdout,
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)
 	defer cancel()
 
 	// Invoke the subcommand, passing the dialed connection object
-	os.Exit(int(subcommands.Execute(ctx, conn)))
+	// TODO(jchacon): Pass a struct instead of 3 args.
+	os.Exit(int(subcommands.Execute(ctx, state)))
 }

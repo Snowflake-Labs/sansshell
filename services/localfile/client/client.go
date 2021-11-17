@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 func init() {
@@ -41,14 +42,14 @@ func (p *readCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(grpc.ClientConnInterface)
+	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a filename to read.\n")
 		return subcommands.ExitUsageError
 	}
 
 	for _, filename := range f.Args() {
-		err := ReadFile(ctx, conn, filename, p.offset, p.length, os.Stdout)
+		err := ReadFile(ctx, state.Conn, filename, p.offset, p.length, os.Stdout)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
 			return subcommands.ExitFailure
@@ -102,13 +103,13 @@ func (s *statCmd) Usage() string {
 func (s *statCmd) SetFlags(f *flag.FlagSet) {}
 
 func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(grpc.ClientConnInterface)
+	state := args[0].(*util.ExecuteState)
 
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "please specify at least one path to stat\n")
 		return subcommands.ExitUsageError
 	}
-	client := pb.NewLocalFileClient(conn)
+	client := pb.NewLocalFileClient(state.Conn)
 	stream, err := client.Stat(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stat client error: %v\n", err)
@@ -191,7 +192,7 @@ func (s *sumCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	conn := args[0].(grpc.ClientConnInterface)
+	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "please specify a filename to sum\n")
 		return subcommands.ExitUsageError
@@ -201,7 +202,7 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintf(os.Stderr, "flag error: %v\n", err)
 		return subcommands.ExitUsageError
 	}
-	client := pb.NewLocalFileClient(conn)
+	client := pb.NewLocalFileClient(state.Conn)
 	stream, err := client.Sum(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sum client error: %v\n", err)
