@@ -90,7 +90,7 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitFailure
 	}
 	for resp := range respChan {
-		fmt.Fprintf(state.Out, "\nTarget: %s Entries: %d\n\n", resp.Target, len(resp.Resp.ProcessEntries))
+		fmt.Fprintf(state.Out, "\nTarget: %s Index: %d Entries: %d\n\n", resp.Target, resp.Index, len(resp.Resp.ProcessEntries))
 		if resp.Error != nil {
 			fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
 			continue

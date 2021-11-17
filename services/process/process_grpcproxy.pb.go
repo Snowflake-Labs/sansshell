@@ -38,8 +38,10 @@ func NewProcessClientProxy(cc *proxy.ProxyConn) ProcessClientProxy {
 
 type ListManyResponse struct {
 	Target string
-	Resp   *ListReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *ListReply
+	Error error
 }
 
 // ListOneMany provides the same API as List but sends the same request to N destinations at once.
@@ -54,6 +56,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 		go func() {
 			out := &ListManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &ListReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/List", in, out.Resp, opts...)
@@ -84,6 +87,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -99,8 +103,10 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 
 type GetStacksManyResponse struct {
 	Target string
-	Resp   *GetStacksReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetStacksReply
+	Error error
 }
 
 // GetStacksOneMany provides the same API as GetStacks but sends the same request to N destinations at once.
@@ -115,6 +121,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 		go func() {
 			out := &GetStacksManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &GetStacksReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/GetStacks", in, out.Resp, opts...)
@@ -145,6 +152,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -160,8 +168,10 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 
 type GetJavaStacksManyResponse struct {
 	Target string
-	Resp   *GetJavaStacksReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetJavaStacksReply
+	Error error
 }
 
 // GetJavaStacksOneMany provides the same API as GetJavaStacks but sends the same request to N destinations at once.
@@ -176,6 +186,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 		go func() {
 			out := &GetJavaStacksManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &GetJavaStacksReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/GetJavaStacks", in, out.Resp, opts...)
@@ -206,6 +217,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -221,8 +233,10 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 
 type GetMemoryDumpManyResponse struct {
 	Target string
-	Resp   *GetMemoryDumpReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetMemoryDumpReply
+	Error error
 }
 
 // GetMemoryDumpOneMany provides the same API as GetMemoryDump but sends the same request to N destinations at once.

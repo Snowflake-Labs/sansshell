@@ -163,14 +163,19 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 
 // see grpc.ClientStream
 func (p *proxyStream) RecvMsg(m interface{}) error {
+	// Since the API is an interface{} we can overload this for the 2 use cases.
+	// 1:1 - it's a proto.Message
+	// 1:N - it's a *[]*ProxyRet
+	//
+	// Anything else is an error.
 	oneMany := false
-	_, ok := m.([]*ProxyRet)
+	manyRet, ok := m.(*[]*ProxyRet)
 	if ok {
 		oneMany = true
 	}
 
 	msg, ok := m.(proto.Message)
-	if !ok {
+	if !ok && !oneMany {
 		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
 	}
 
@@ -193,14 +198,17 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 			if _, ok := p.ids[id]; !ok {
 				return status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
 			}
-			err = d.Payload.UnmarshalTo(msg)
-			if err != nil {
-				return status.Errorf(codes.Internal, "can't unmarshal anypb: %v", err)
-			}
-			p.ids[id].Resp = d.Payload
+			// In the singular case we unmarshall back into the supplied proto.Message and just return.
 			if !oneMany {
+				err = d.Payload.UnmarshalTo(msg)
+				if err != nil {
+					return status.Errorf(codes.Internal, "can't unmarshal anypb: %v", err)
+				}
 				return nil
 			}
+			p.ids[id].Resp = d.Payload
+			p.ids[id].Error = nil
+			*manyRet = append(*manyRet, p.ids[id])
 		}
 	case cl != nil:
 		code := cl.GetStatus().GetCode()
@@ -219,21 +227,23 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 		// See if it's normal close. We can ignore those except to remove tracking.
 		// Otherwise send errors back for each target and then remove.
-		returnErr := io.EOF
+
+		// A normal close actually returns this as an error so map it so clients know the stream closed.
+		closedErr := io.EOF
 		if code != int32(codes.OK) {
-			for _, id := range cl.StreamIds {
-				err = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
-				p.ids[id].Error = err
-				if !oneMany {
-					returnErr = err
-				}
-			}
+			closedErr = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+		}
+
+		for _, id := range cl.StreamIds {
+			p.ids[id].Error = closedErr
+			p.ids[id].Resp = nil
+			*manyRet = append(*manyRet, p.ids[id])
 		}
 		for _, id := range cl.StreamIds {
 			delete(p.ids, id)
 		}
-		if returnErr != nil {
-			return returnErr
+		if !oneMany {
+			return closedErr
 		}
 	default:
 		return status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
@@ -271,7 +281,7 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 type ProxyRet struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
-	Index uint32
+	Index int
 	Resp  *anypb.Any
 	Error error
 }
@@ -321,7 +331,7 @@ func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.P
 		// Save stream ID/nonce for later matching.
 		streamIds[r.GetStreamId()] = &ProxyRet{
 			Target: r.GetTarget(),
-			Index:  r.GetNonce(),
+			Index:  int(r.GetNonce()),
 		}
 	}
 	return stream, streamIds, nil
