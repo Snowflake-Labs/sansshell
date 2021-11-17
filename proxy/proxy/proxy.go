@@ -7,10 +7,10 @@ import (
 	"context"
 	"io"
 	"log"
-	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -25,21 +25,8 @@ type ProxyConn struct {
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
 
-	// The current unused nonce. Always incrementing as we send requests.
-	nonce uint32
-
 	// If this is true we're not proxy but instead direct connect.
 	direct bool
-
-	// Protects nonce
-	mu sync.Mutex
-}
-
-func (p *ProxyConn) getNonce() uint32 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.nonce++
-	return p.nonce
 }
 
 // Direct indicates whether the proxy is in use or a direct connection is being made.
@@ -105,20 +92,223 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 	return nil
 }
 
-// NewStream implements grpc.ClientConnInterface
+// proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
+// we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
+type proxyStream struct {
+	conn       *ProxyConn
+	desc       *grpc.StreamDesc
+	method     string
+	stream     proxypb.Proxy_ProxyClient
+	ids        map[uint64]*ProxyRet
+	sendClosed bool
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) Header() (metadata.MD, error) {
+	return nil, status.Error(codes.Unimplemented, "Not implemented for proxy")
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) Trailer() metadata.MD {
+	return nil
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) CloseSend() error {
+	p.sendClosed = true
+	return nil
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) Context() context.Context {
+	return p.stream.Context()
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) SendMsg(args interface{}) error {
+	if p.sendClosed {
+		return status.Error(codes.FailedPrecondition, "sending on a closed connection")
+	}
+
+	m, ok := args.(proto.Message)
+	if !ok {
+		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
+	}
+	// Now construct a single request with all of our streamIds.
+	anydata, err := anypb.New(m)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't marshall request data to Any - %v", err)
+	}
+
+	var ids []uint64
+	for s := range p.ids {
+		ids = append(ids, s)
+	}
+	data := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_StreamData{
+			StreamData: &proxypb.StreamData{
+				StreamIds: ids,
+				Payload:   anydata,
+			},
+		},
+	}
+
+	// Now send the request down.
+	err = p.stream.Send(data)
+	if err != nil {
+		return status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", p.method, err)
+	}
+	return nil
+}
+
+// see grpc.ClientStream
+// This only works for the 1:1 stream case.
+func (p *proxyStream) RecvMsg(m interface{}) error {
+	msg, ok := m.(proto.Message)
+	if !ok {
+		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
+	}
+
+	resp, err := p.stream.Recv()
+	// If it's io.EOF the upper level code will handle that.
+	if err != nil {
+		return err
+	}
+
+	d := resp.GetStreamData()
+	cl := resp.GetServerClose()
+
+	switch {
+	case d != nil:
+		for i, id := range d.StreamIds {
+			// Validate it's a stream we know.
+			if _, ok := p.ids[id]; !ok {
+				return status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
+			}
+			err = d.Payload.UnmarshalTo(msg)
+			if err != nil {
+				return status.Errorf(codes.Internal, "can't unmarshal anypb: %v", err)
+			}
+			p.ids[id].Resp = d.Payload
+			// TODO(jchacon): Handle N case
+			if i == 0 {
+				return nil
+			}
+		}
+	case cl != nil:
+		code := cl.GetStatus().GetCode()
+		msg := cl.GetStatus().GetMessage()
+
+		// Do a one time check all the returned ids are ones we know.
+		for _, id := range cl.StreamIds {
+			if _, ok := p.ids[id]; !ok {
+				return status.Errorf(codes.Internal, "unexpected stream id %d received for ServerClose", id)
+			}
+		}
+
+		// See if it's normal close. We can ignore those except to remove tracking.
+		// Otherwise send errors back for each target and then remove.
+		if code != int32(codes.OK) {
+			for _, id := range cl.StreamIds {
+				err = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+				p.ids[id].Error = err
+				// TODO(jchacon): Handle N case
+				return err
+			}
+		}
+		for _, id := range cl.StreamIds {
+			delete(p.ids, id)
+		}
+	default:
+		return status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
+	}
+	return nil
+}
+
+// See grpc.ClientConnInterface
 func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	if p.direct {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.NewStream(ctx, desc, method, opts...)
 	}
-	return nil, status.Error(codes.Unimplemented, "NewStream not implemented for proxy")
+	if p.NumTargets() != 1 {
+		return nil, status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
+	}
+
+	stream, streamIds, err := p.createStreams(ctx, method)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &proxyStream{
+		conn:   p,
+		desc:   desc,
+		method: method,
+		stream: stream,
+		ids:    streamIds,
+	}
+
+	return s, nil
 }
 
 // Additional methods needed for 1:N below.
 type ProxyRet struct {
 	Target string
-	Resp   *anypb.Any
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index uint32
+	Resp  *anypb.Any
+	Error error
+}
+
+func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*ProxyRet, error) {
+	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
+	if err != nil {
+		return nil, nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
+	}
+
+	streamIds := make(map[uint64]*ProxyRet)
+
+	for i, t := range p.Targets {
+		req := &proxypb.ProxyRequest{
+			Request: &proxypb.ProxyRequest_StartStream{
+				StartStream: &proxypb.StartStream{
+					Target:     t,
+					MethodName: method,
+					Nonce:      uint32(i),
+				},
+			},
+		}
+
+		err = stream.Send(req)
+		if err != nil {
+			return nil, nil, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
+		}
+		resp, err := stream.Recv()
+		if err != nil {
+			return nil, nil, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
+		}
+
+		// Validate we got an answer and it has expected reflected values.
+		r := resp.GetStartStreamReply()
+		if r == nil {
+			return nil, nil, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
+		}
+
+		if s := r.GetErrorStatus(); s != nil {
+			return nil, nil, status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code).String(), s.Message)
+		}
+
+		if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
+			return nil, nil, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
+		}
+
+		// Save stream ID/nonce for later matching.
+		streamIds[r.GetStreamId()] = &ProxyRet{
+			Target: r.GetTarget(),
+			Index:  r.GetNonce(),
+		}
+	}
+	return stream, streamIds, nil
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
@@ -129,51 +319,9 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		return nil, status.Error(codes.InvalidArgument, "args must be a proto.Message")
 	}
 
-	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
+	stream, streamIds, err := p.createStreams(ctx, method)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
-	}
-
-	streamIds := make(map[uint64]*ProxyRet)
-
-	for _, t := range p.Targets {
-		req := &proxypb.ProxyRequest{
-			Request: &proxypb.ProxyRequest_StartStream{
-				StartStream: &proxypb.StartStream{
-					Target:     t,
-					MethodName: method,
-					Nonce:      p.getNonce(),
-				},
-			},
-		}
-
-		err = stream.Send(req)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
-		}
-		resp, err := stream.Recv()
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
-		}
-
-		// Validate we got an answer and it has expected reflected values.
-		r := resp.GetStartStreamReply()
-		if r == nil {
-			return nil, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
-		}
-
-		if s := r.GetErrorStatus(); s != nil {
-			return nil, status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code).String(), s.Message)
-		}
-
-		if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
-			return nil, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
-		}
-
-		// Save stream ID for later matching.
-		streamIds[r.GetStreamId()] = &ProxyRet{
-			Target: r.GetTarget(),
-		}
+		return nil, err
 	}
 
 	// Now construct a single request with all of our streamIds.
