@@ -51,7 +51,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *ListManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &ListManyResponse{
 				Target: conn.Targets[0],
@@ -116,7 +116,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetStacksManyResponse{
 				Target: conn.Targets[0],
@@ -181,7 +181,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetJavaStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetJavaStacksManyResponse{
 				Target: conn.Targets[0],
@@ -248,7 +248,7 @@ type processClientGetMemoryDumpClientProxy struct {
 }
 
 func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResponse, error) {
-	ret := []*GetMemoryDumpManyResponse{}
+	var ret []*GetMemoryDumpManyResponse
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err

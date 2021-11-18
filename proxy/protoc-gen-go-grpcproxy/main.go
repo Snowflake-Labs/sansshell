@@ -191,7 +191,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("conn := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ")")
 				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
 				g.P("// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.")
-				g.P("if conn.NumTargets() == 1 {")
+				g.P("if len(conn.Targets) == 1 {")
 				g.P("go func() {")
 				g.P("out := &", method.GoName, "ManyResponse{")
 				g.P("Target: conn.Targets[0],")
