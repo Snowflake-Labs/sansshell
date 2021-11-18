@@ -303,6 +303,9 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	return nil
 }
 
+// createStreams is a helper which does the heavy lifting of creating N tracked streams to the proxy
+// for later RPCs to flow across. It returns a proxy stream object (for clients), and a map of stream ids to prefilled ProxyRet
+// objects. These will have Index/Target already filled in so clients can map them to their requests.
 func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*ProxyRet, error) {
 	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
 	if err != nil {
@@ -311,6 +314,8 @@ func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.P
 
 	streamIds := make(map[uint64]*ProxyRet)
 
+	// For every target we have to send a separate StartStream (with a nonce which in our case is the target index so clients can map too).
+	// We then validate the nonce matches and record the stream ID so later processing can match responses to the right targets.
 	for i, t := range p.Targets {
 		req := &proxypb.ProxyRequest{
 			Request: &proxypb.ProxyRequest_StartStream{
@@ -355,6 +360,9 @@ func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.P
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
+// This returns ProxyRet objects from the channel which contain anypb.Any so the caller (generally generated code)
+// will need to convert those to the proper expected specific types.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
 	requestMsg, ok := args.(proto.Message)
