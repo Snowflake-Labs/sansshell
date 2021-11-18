@@ -111,6 +111,8 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 
 			methodStruct := method.GoName + "ClientProxy"
 			if !unary {
+				// If this isn't a unary RPC we need a number of support structs/interface/methods
+				// depending on the type of streaming (client, server or both).
 				g.P("type ", service.GoName, "_", methodStruct, " interface {")
 				if method.Desc.IsStreamingClient() {
 					g.P("Send(*", g.QualifiedGoIdent(method.Input.GoIdent), ") error")
@@ -131,12 +133,15 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 
 				funcPrelude := fmt.Sprintf("func (x *%s%s) ", clientStruct, methodStruct)
 				if method.Desc.IsStreamingClient() {
+					// Client streaming (or bidi) need Send
 					g.P(funcPrelude, "Send(m *", g.QualifiedGoIdent(method.Input.GoIdent), ") error {")
 					g.P("return x.ClientStream.SendMsg(m)")
 					g.P("}")
 					g.P()
 				}
 				if clientOnly {
+					// If it's client and not bidi need CloseAndRecv() which cleans up the stream after
+					// sending the initial request.
 					g.P(funcPrelude, "CloseAndRecv() (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error) {")
 					g.P("if err := x.ClientStream.CloseSend(); err != nil {")
 					g.P("return nil, err")
@@ -150,8 +155,11 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P()
 				}
 				if method.Desc.IsStreamingServer() {
+					// Server streaming (or bidi) needs Recv. This is a bit more complicated than
+					// grpc base impl because we have to convert a slice of *ProxyRet back into
+					// the proper typed slice the caller expects.
 					g.P(funcPrelude, "Recv() ([]*", method.GoName, "ManyResponse, error) {")
-					g.P("ret := []*", method.GoName, "ManyResponse{}")
+					g.P("var ret []*", method.GoName, "ManyResponse")
 					g.P("m := []*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyRet")), "{}")
 					g.P("if err := x.ClientStream.RecvMsg(&m); err != nil {")
 					g.P("return nil, err")
@@ -231,24 +239,28 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P()
 				g.P("return ret, nil")
 				g.P("}")
-			} else {
-				g.P("stream, err := c.cc.NewStream(ctx, &", service.GoName, "_", "ServiceDesc.Streams[", numStreams, "], \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", opts...)")
-				g.P("if err != nil {")
+				g.P()
+				continue
+			}
+
+			// If it's not unary we create a stream and return it.
+			// Client only streams also get the request in so they send it and close the sending end before returning.
+			g.P("stream, err := c.cc.NewStream(ctx, &", service.GoName, "_", "ServiceDesc.Streams[", numStreams, "], \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", opts...)")
+			g.P("if err != nil {")
+			g.P("return nil, err")
+			g.P("}")
+			g.P("x := &", clientStruct, methodStruct, "{stream}")
+			if !method.Desc.IsStreamingClient() {
+				g.P("if err := x.ClientStream.SendMsg(in); err != nil {")
 				g.P("return nil, err")
 				g.P("}")
-				g.P("x := &", clientStruct, methodStruct, "{stream}")
-				if !method.Desc.IsStreamingClient() {
-					g.P("if err := x.ClientStream.SendMsg(in); err != nil {")
-					g.P("return nil, err")
-					g.P("}")
-					g.P("if err := x.ClientStream.CloseSend(); err != nil {")
-					g.P("return nil, err")
-					g.P("}")
-				}
-				g.P("return x, nil")
+				g.P("if err := x.ClientStream.CloseSend(); err != nil {")
+				g.P("return nil, err")
 				g.P("}")
-				numStreams++
 			}
+			g.P("return x, nil")
+			g.P("}")
+			numStreams++
 			g.P()
 		}
 	}
