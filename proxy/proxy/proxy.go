@@ -256,6 +256,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 				}
 				return nil
 			}
+			// This is always the 1:N case.
 			p.ids[id].Resp = d.Payload
 			p.ids[id].Error = nil
 			*manyRet = append(*manyRet, p.ids[id])
@@ -283,19 +284,16 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		if code != int32(codes.OK) {
 			closedErr = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
 		}
+		// For 1:1 we can just return the error
+		if !oneMany {
+			return closedErr
+		}
 
 		for _, id := range cl.StreamIds {
 			p.ids[id].Error = closedErr
 			p.ids[id].Resp = nil
-			if oneMany {
-				*manyRet = append(*manyRet, p.ids[id])
-			}
-		}
-		for _, id := range cl.StreamIds {
+			*manyRet = append(*manyRet, p.ids[id])
 			delete(p.ids, id)
-		}
-		if !oneMany {
-			return closedErr
 		}
 	default:
 		return status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
@@ -423,7 +421,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 				// Do a one time check all the returned ids are ones we know.
 				for _, id := range cl.StreamIds {
 					if _, ok := s.ids[id]; !ok {
-						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received", id)
+						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received for ServerClose", id)
 						break processing
 					}
 				}
