@@ -12,7 +12,6 @@ import (
 )
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -22,7 +21,7 @@ type ProcessClientProxy interface {
 	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error)
 	GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error)
 	GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error)
-	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error)
+	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClientProxy, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -239,10 +238,53 @@ type GetMemoryDumpManyResponse struct {
 	Error error
 }
 
+type Process_GetMemoryDumpClientProxy interface {
+	Recv() ([]*GetMemoryDumpManyResponse, error)
+	grpc.ClientStream
+}
+
+type processClientGetMemoryDumpClientProxy struct {
+	grpc.ClientStream
+}
+
+func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResponse, error) {
+	ret := []*GetMemoryDumpManyResponse{}
+	m := []*proxy.ProxyRet{}
+	if err := x.ClientStream.RecvMsg(&m); err != nil {
+		return nil, err
+	}
+	for _, r := range m {
+		typedResp := &GetMemoryDumpManyResponse{
+			Resp: &GetMemoryDumpReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
+}
+
 // GetMemoryDumpOneMany provides the same API as GetMemoryDump but sends the same request to N destinations at once.
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error) {
-	return nil, errors.New("not implemented")
+func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClientProxy, error) {
+	stream, err := c.cc.NewStream(ctx, &Process_ServiceDesc.Streams[0], "/Process.Process/GetMemoryDump", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &processClientGetMemoryDumpClientProxy{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
