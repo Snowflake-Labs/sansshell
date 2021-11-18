@@ -5,6 +5,7 @@ package rpcauth
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,6 +57,8 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHoo
 // prior to policy evaluation, and may mutate `input`, regardless of the
 // the success or failure of policy.
 func (g *Authorizer) Eval(ctx context.Context, input *RpcAuthInput) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.V(1).Info("evaluating authz policy", "input", input)
 	if input == nil {
 		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
 	}

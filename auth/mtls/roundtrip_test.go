@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -81,7 +82,7 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.
 		t.Fatalf("Failed to load client cert: %v", err)
 	}
 	lis = bufconn.Listen(bufSize)
-	s, err := server.BuildServer(creds, policy, lis.Addr())
+	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard())
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
 	}

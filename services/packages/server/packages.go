@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"regexp"
 	"strings"
 
@@ -124,8 +123,6 @@ func validateField(param string, name string) error {
 }
 
 func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.InstallReply, error) {
-	log.Printf("Received request for Packages.Install: %+v", req)
-
 	if err := validateField("name", req.Name); err != nil {
 		return nil, err
 	}
@@ -161,8 +158,6 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 var nevraRe = regexp.MustCompile(`^([^-]+-)?[^:]+:[^-]+-[^\.]+\..+$`)
 
 func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateReply, error) {
-	log.Printf("Received request for Packages.Update: %+v", req)
-
 	if err := validateField("name", req.Name); err != nil {
 		return nil, err
 	}
@@ -291,8 +286,6 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 }
 
 func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest) (*pb.ListInstalledReply, error) {
-	log.Printf("Received request for Packages.ListInstalled: %+v", req)
-
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -398,8 +391,6 @@ func parseYumRepoListOutput(r io.Reader) (*pb.RepoListReply, error) {
 }
 
 func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.RepoListReply, error) {
-	log.Printf("Received request for Packages.RepoList: %+v", req)
-
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM

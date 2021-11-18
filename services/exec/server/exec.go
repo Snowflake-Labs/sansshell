@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"log"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
@@ -15,8 +14,6 @@ type server struct{}
 
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
-	log.Printf("Received request for Exec.Run: %+v", req)
-
 	run, err := util.RunCommand(ctx, req.Command, req.Args)
 	if err != nil {
 		return nil, err

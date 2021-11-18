@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-logr/stdr"
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/server"
@@ -63,6 +65,9 @@ func choosePolicy() string {
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetOutput(os.Stderr)
+
 	flag.Parse()
 
 	policy := choosePolicy()
@@ -73,7 +78,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := server.Serve(*hostport, creds, policy); err != nil {
+	logger := stdr.New(log.Default())
+
+	if err := server.Serve(*hostport, creds, policy, logger); err != nil {
 		log.Fatal(err)
 	}
 }
