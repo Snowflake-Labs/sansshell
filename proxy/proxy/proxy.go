@@ -95,8 +95,6 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 // proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
 // we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
 type proxyStream struct {
-	conn       *ProxyConn
-	desc       *grpc.StreamDesc
 	method     string
 	stream     proxypb.Proxy_ProxyClient
 	ids        map[uint64]*ProxyRet
@@ -283,8 +281,6 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 	}
 
 	s := &proxyStream{
-		conn:   p,
-		desc:   desc,
 		method: method,
 		stream: stream,
 		ids:    streamIds,
