@@ -51,7 +51,7 @@ func (c *testServiceClientProxy) TestUnaryOneMany(ctx context.Context, in *TestR
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *TestUnaryManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &TestUnaryManyResponse{
 				Target: conn.Targets[0],
@@ -118,11 +118,26 @@ type testServiceClientTestServerStreamClientProxy struct {
 }
 
 func (x *testServiceClientTestServerStreamClientProxy) Recv() ([]*TestServerStreamManyResponse, error) {
-	m := []*TestServerStreamManyResponse{}
+	var ret []*TestServerStreamManyResponse
+	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &TestServerStreamManyResponse{
+			Resp: &TestResponse{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // TestServerStreamOneMany provides the same API as TestServerStream but sends the same request to N destinations at once.
@@ -213,11 +228,26 @@ func (x *testServiceClientTestBidiStreamClientProxy) Send(m *TestRequest) error 
 }
 
 func (x *testServiceClientTestBidiStreamClientProxy) Recv() ([]*TestBidiStreamManyResponse, error) {
-	m := []*TestBidiStreamManyResponse{}
+	var ret []*TestBidiStreamManyResponse
+	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &TestBidiStreamManyResponse{
+			Resp: &TestResponse{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // TestBidiStreamOneMany provides the same API as TestBidiStream but sends the same request to N destinations at once.

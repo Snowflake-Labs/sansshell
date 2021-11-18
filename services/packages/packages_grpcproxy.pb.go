@@ -51,7 +51,7 @@ func (c *packagesClientProxy) InstallOneMany(ctx context.Context, in *InstallReq
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *InstallManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &InstallManyResponse{
 				Target: conn.Targets[0],
@@ -116,7 +116,7 @@ func (c *packagesClientProxy) UpdateOneMany(ctx context.Context, in *UpdateReque
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *UpdateManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &UpdateManyResponse{
 				Target: conn.Targets[0],
@@ -181,7 +181,7 @@ func (c *packagesClientProxy) ListInstalledOneMany(ctx context.Context, in *List
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *ListInstalledManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &ListInstalledManyResponse{
 				Target: conn.Targets[0],
@@ -246,7 +246,7 @@ func (c *packagesClientProxy) RepoListOneMany(ctx context.Context, in *RepoListR
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *RepoListManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &RepoListManyResponse{
 				Target: conn.Targets[0],

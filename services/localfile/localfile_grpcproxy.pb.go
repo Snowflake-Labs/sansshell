@@ -56,11 +56,26 @@ type localFileClientReadClientProxy struct {
 }
 
 func (x *localFileClientReadClientProxy) Recv() ([]*ReadManyResponse, error) {
-	m := []*ReadManyResponse{}
+	var ret []*ReadManyResponse
+	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &ReadManyResponse{
+			Resp: &ReadReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // ReadOneMany provides the same API as Read but sends the same request to N destinations at once.
@@ -105,11 +120,26 @@ func (x *localFileClientStatClientProxy) Send(m *StatRequest) error {
 }
 
 func (x *localFileClientStatClientProxy) Recv() ([]*StatManyResponse, error) {
-	m := []*StatManyResponse{}
+	var ret []*StatManyResponse
+	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &StatManyResponse{
+			Resp: &StatReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // StatOneMany provides the same API as Stat but sends the same request to N destinations at once.
@@ -148,11 +178,26 @@ func (x *localFileClientSumClientProxy) Send(m *SumRequest) error {
 }
 
 func (x *localFileClientSumClientProxy) Recv() ([]*SumManyResponse, error) {
-	m := []*SumManyResponse{}
+	var ret []*SumManyResponse
+	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &SumManyResponse{
+			Resp: &SumReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // SumOneMany provides the same API as Sum but sends the same request to N destinations at once.
@@ -230,7 +275,7 @@ func (c *localFileClientProxy) CopyOneMany(ctx context.Context, in *CopyRequest,
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *CopyManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &CopyManyResponse{
 				Target: conn.Targets[0],
@@ -295,7 +340,7 @@ func (c *localFileClientProxy) SetFileAttributesOneMany(ctx context.Context, in 
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *SetFileAttributesManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &SetFileAttributesManyResponse{
 				Target: conn.Targets[0],

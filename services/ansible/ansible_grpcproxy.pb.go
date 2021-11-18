@@ -48,7 +48,7 @@ func (c *playbookClientProxy) RunOneMany(ctx context.Context, in *RunRequest, op
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *RunManyResponse)
 	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &RunManyResponse{
 				Target: conn.Targets[0],
