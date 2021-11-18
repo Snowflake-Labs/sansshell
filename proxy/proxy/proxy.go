@@ -18,6 +18,8 @@ import (
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
+// ProxyConn is a grpc.ClientConnInterface which is connected to the proxy
+// converting calls into RPC the proxy understands.
 type ProxyConn struct {
 	// The targets we're proxying for currently.
 	Targets []string
@@ -29,23 +31,28 @@ type ProxyConn struct {
 	direct bool
 }
 
+// ProxyRet defines the internal API for getting responses from the proxy.
+// Callers will need to convert the anypb.Any into their final type (generally via generated code).
+type ProxyRet struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *anypb.Any
+	Error error
+}
+
 // Direct indicates whether the proxy is in use or a direct connection is being made.
 func (p *ProxyConn) Direct() bool {
 	return p.direct
 }
 
-// NumTargets returns the number of targets ProxyConn is addressing (through the proxy or not).
-func (p *ProxyConn) NumTargets() int {
-	return len(p.Targets)
-}
-
-// Invoke implements grpc.ClientConnInterface
+// See grpc.ClientConnInterface
 func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
 	if p.Direct() {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.Invoke(ctx, method, args, reply, opts...)
 	}
-	if p.NumTargets() != 1 {
+	if len(p.Targets) != 1 {
 		return status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
 	}
 
@@ -92,6 +99,27 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 	return nil
 }
 
+// See grpc.ClientConnInterface
+func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	if p.direct {
+		// TODO(jchacon): Add V1 style logging indicating pass through in use.
+		return p.cc.NewStream(ctx, desc, method, opts...)
+	}
+
+	stream, streamIds, err := p.createStreams(ctx, method)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &proxyStream{
+		method: method,
+		stream: stream,
+		ids:    streamIds,
+	}
+
+	return s, nil
+}
+
 // proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
 // we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
 type proxyStream struct {
@@ -135,18 +163,10 @@ func (p *proxyStream) Context() context.Context {
 	return p.stream.Context()
 }
 
-// see grpc.ClientStream
-func (p *proxyStream) SendMsg(args interface{}) error {
-	if p.sendClosed {
-		return status.Error(codes.FailedPrecondition, "sending on a closed connection")
-	}
-
-	m, ok := args.(proto.Message)
-	if !ok {
-		return status.Errorf(codes.InvalidArgument, "args for SendMsg must be a proto.Message %T", args)
-	}
+// send provides a helper for bundling up a single request to the proxy to N hosts.
+func (p *proxyStream) send(requestMsg proto.Message) error {
 	// Now construct a single request with all of our streamIds.
-	anydata, err := anypb.New(m)
+	anydata, err := anypb.New(requestMsg)
 	if err != nil {
 		return status.Errorf(codes.Internal, "can't marshall request data to Any - %v", err)
 	}
@@ -164,11 +184,26 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 		},
 	}
 
-	// Now send the request down.
+	// Send the request to the proxy.
 	if err := p.stream.Send(data); err != nil {
 		return status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", p.method, err)
 	}
 	return nil
+}
+
+// see grpc.ClientStream
+func (p *proxyStream) SendMsg(args interface{}) error {
+	if p.sendClosed {
+		return status.Error(codes.FailedPrecondition, "sending on a closed connection")
+	}
+
+	m, ok := args.(proto.Message)
+	if !ok {
+		return status.Errorf(codes.InvalidArgument, "args for SendMsg must be a proto.Message %T", args)
+	}
+
+	// Now send the request down.
+	return p.send(m)
 }
 
 // see grpc.ClientStream
@@ -268,36 +303,6 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	return nil
 }
 
-// See grpc.ClientConnInterface
-func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	if p.direct {
-		// TODO(jchacon): Add V1 style logging indicating pass through in use.
-		return p.cc.NewStream(ctx, desc, method, opts...)
-	}
-
-	stream, streamIds, err := p.createStreams(ctx, method)
-	if err != nil {
-		return nil, err
-	}
-
-	s := &proxyStream{
-		method: method,
-		stream: stream,
-		ids:    streamIds,
-	}
-
-	return s, nil
-}
-
-// Additional methods needed for 1:N below.
-type ProxyRet struct {
-	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
-	Index int
-	Resp  *anypb.Any
-	Error error
-}
-
 func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*ProxyRet, error) {
 	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
 	if err != nil {
@@ -362,31 +367,14 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		return nil, err
 	}
 
-	// Now construct a single request with all of our streamIds.
-	anydata, err := anypb.New(requestMsg)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "can't marshall request data to Any - %v", err)
+	s := &proxyStream{
+		method: method,
+		stream: stream,
+		ids:    streamIds,
 	}
-
-	var ids []uint64
-	for s := range streamIds {
-		ids = append(ids, s)
+	if err := s.send(requestMsg); err != nil {
+		return nil, err
 	}
-	data := &proxypb.ProxyRequest{
-		Request: &proxypb.ProxyRequest_StreamData{
-			StreamData: &proxypb.StreamData{
-				StreamIds: ids,
-				Payload:   anydata,
-			},
-		},
-	}
-
-	// Now send the request down.
-	err = stream.Send(data)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", method, err)
-	}
-
 	retChan := make(chan *ProxyRet)
 
 	// Fire off a separate routine to read from the stream and send the responses down retChan.
@@ -397,7 +385,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 		// Now do receives until we get all the responses or closes for each stream ID.
 	processing:
 		for {
-			resp, err := stream.Recv()
+			resp, err := s.stream.Recv()
 			if err == io.EOF {
 				break
 			}
@@ -413,12 +401,12 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 			case d != nil:
 				for _, id := range d.StreamIds {
 					// Validate it's a stream we know.
-					if _, ok := streamIds[id]; !ok {
+					if _, ok := s.ids[id]; !ok {
 						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
 						break processing
 					}
-					streamIds[id].Resp = d.Payload
-					retChan <- streamIds[id]
+					s.ids[id].Resp = d.Payload
+					retChan <- s.ids[id]
 				}
 			case cl != nil:
 				code := cl.GetStatus().GetCode()
@@ -426,7 +414,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 
 				// Do a one time check all the returned ids are ones we know.
 				for _, id := range cl.StreamIds {
-					if _, ok := streamIds[id]; !ok {
+					if _, ok := s.ids[id]; !ok {
 						chanErr = status.Errorf(codes.Internal, "unexpected stream id %d received", id)
 						break processing
 					}
@@ -436,19 +424,19 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 				// Otherwise send errors back for each target and then remove.
 				if code != int32(codes.OK) {
 					for _, id := range cl.StreamIds {
-						if streamIds[id].Resp != nil {
-							chanErr = status.Errorf(codes.Internal, "Got a non OK error code for a target we've already responded. Code: %s for target: %s", codes.Code(code).String(), streamIds[id].Target)
+						if s.ids[id].Resp != nil {
+							chanErr = status.Errorf(codes.Internal, "Got a non OK error code for a target we've already responded. Code: %s for target: %s", codes.Code(code).String(), s.ids[id].Target)
 							// Remove it from the map so we don't double send responses for this target.
-							delete(streamIds, id)
+							delete(s.ids, id)
 							break processing
 						}
 
-						streamIds[id].Error = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
-						retChan <- streamIds[id]
+						s.ids[id].Error = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+						retChan <- s.ids[id]
 					}
 				}
 				for _, id := range cl.StreamIds {
-					delete(streamIds, id)
+					delete(s.ids, id)
 				}
 			default:
 				chanErr = status.Errorf(codes.Internal, "unexpected answer on stream. Wanted StreamData or ServerClose and got %+v instead", resp.Reply)
@@ -456,14 +444,14 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 			}
 
 			// We've gotten closes for everything so we're done.
-			if len(streamIds) == 0 {
+			if len(s.ids) == 0 {
 				break
 			}
 		}
 
 		// Any stream IDs left in the map haven't had a proper close on them so push the
 		// current chanErr down to them.
-		for _, msg := range streamIds {
+		for _, msg := range s.ids {
 			msg.Error = chanErr
 			retChan <- msg
 		}
