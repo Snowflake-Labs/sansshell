@@ -115,22 +115,20 @@ func (p *proxyStream) Trailer() metadata.MD {
 
 // see grpc.ClientStream
 func (p *proxyStream) CloseSend() error {
-	var ids []uint64
-	for s := range p.ids {
-		ids = append(ids, s)
+	// Already closed, just return.
+	if p.sendClosed {
+		return nil
 	}
-	data := &proxypb.ProxyRequest{
-		Request: &proxypb.ProxyRequest_ClientClose{
-			ClientClose: &proxypb.ClientClose{
-				StreamIds: ids,
-			},
-		},
-	}
-	// Now send the close down.
-	if err := p.stream.Send(data); err != nil {
-		return status.Errorf(codes.Internal, "can't send client close for %s on stream - %v", p.method, err)
-	}
+
+	// Even if we get an error below there's nothing much to do so
+	// mark it closed always.
 	p.sendClosed = true
+
+	// Close our end of it since we have nothing else to send.
+	// The proxy will internally close send on each client stream as a result.
+	if err := p.stream.CloseSend(); err != nil {
+		return status.Errorf(codes.Internal, "can't send client close on stream - %v", err)
+	}
 	return nil
 }
 
