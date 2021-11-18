@@ -27,6 +27,7 @@ import (
 
 var (
 	defaultAddress = "localhost:50042"
+	defaultOutput  = "-"
 	defaultTimeout = 3 * time.Second
 
 	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
@@ -36,6 +37,10 @@ var (
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag stringSliceVar
 	targets     []string
+
+	// outputs will be found to --outputs for directing output from a single request to N nodes.
+	outputsFlag stringSliceVar
+	outputs     []string
 )
 
 type stringSliceVar struct {
@@ -57,11 +62,17 @@ func (s *stringSliceVar) String() string {
 func init() {
 	targetsFlag.target = &targets
 	targets = append(targets, defaultAddress)
+	outputsFlag.target = &outputs
+	outputs = append(outputs, defaultOutput)
+
 	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
+	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into. Use - to indicated stdout.
+	NOTE: This must map 1:1 with --targets.`)
 
 	subcommands.ImportantFlag("credential-source")
 	subcommands.ImportantFlag("proxy")
 	subcommands.ImportantFlag("targets")
+	subcommands.ImportantFlag("outputs")
 	subcommands.Register(subcommands.HelpCommand(), "")
 	subcommands.Register(subcommands.FlagsCommand(), "")
 	subcommands.Register(subcommands.CommandsCommand(), "")
@@ -77,6 +88,11 @@ func main() {
 	}
 	if len(targets) > 1 && *proxyAddr == "" {
 		fmt.Fprintln(os.Stderr, "Can't set --targets to multiple entries without --proxy")
+		os.Exit(1)
+	}
+
+	if len(outputs) != len(targets) {
+		fmt.Fprintln(os.Stderr, "--outputs and --targets must contain the same number of entries")
 		os.Exit(1)
 	}
 
@@ -101,7 +117,18 @@ func main() {
 
 	state := &util.ExecuteState{
 		Conn: conn,
-		Out:  os.Stdout,
+	}
+	for _, out := range outputs {
+		if out == "-" {
+			state.Out = append(state.Out, os.Stdout)
+			continue
+		}
+		file, err := os.Create(out)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Can't create output file %s - %v", out, err)
+			os.Exit(1)
+		}
+		state.Out = append(state.Out, file)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)

@@ -115,6 +115,21 @@ func (p *proxyStream) Trailer() metadata.MD {
 
 // see grpc.ClientStream
 func (p *proxyStream) CloseSend() error {
+	var ids []uint64
+	for s := range p.ids {
+		ids = append(ids, s)
+	}
+	data := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_ClientClose{
+			ClientClose: &proxypb.ClientClose{
+				StreamIds: ids,
+			},
+		},
+	}
+	// Now send the close down.
+	if err := p.stream.Send(data); err != nil {
+		return status.Errorf(codes.Internal, "can't send client close for %s on stream - %v", p.method, err)
+	}
 	p.sendClosed = true
 	return nil
 }
@@ -132,7 +147,7 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 
 	m, ok := args.(proto.Message)
 	if !ok {
-		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
+		return status.Errorf(codes.InvalidArgument, "args for SendMsg must be a proto.Message %T", args)
 	}
 	// Now construct a single request with all of our streamIds.
 	anydata, err := anypb.New(m)
@@ -154,8 +169,7 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 	}
 
 	// Now send the request down.
-	err = p.stream.Send(data)
-	if err != nil {
+	if err := p.stream.Send(data); err != nil {
 		return status.Errorf(codes.Internal, "can't send request data for %s on stream - %v", p.method, err)
 	}
 	return nil
@@ -163,6 +177,11 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 
 // see grpc.ClientStream
 func (p *proxyStream) RecvMsg(m interface{}) error {
+	// Up front check for nothing left since we closed all streams.
+	if len(p.ids) == 0 {
+		return io.EOF
+	}
+
 	// Since the API is an interface{} we can overload this for the 2 use cases.
 	// 1:1 - it's a proto.Message
 	// 1:N - it's a *[]*ProxyRet
@@ -176,7 +195,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 	msg, ok := m.(proto.Message)
 	if !ok && !oneMany {
-		return status.Error(codes.InvalidArgument, "args must be a proto.Message")
+		return status.Errorf(codes.InvalidArgument, "args for RecvMsg must be a proto.Message %T", m)
 	}
 
 	resp, err := p.stream.Recv()
@@ -237,7 +256,9 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		for _, id := range cl.StreamIds {
 			p.ids[id].Error = closedErr
 			p.ids[id].Resp = nil
-			*manyRet = append(*manyRet, p.ids[id])
+			if oneMany {
+				*manyRet = append(*manyRet, p.ids[id])
+			}
 		}
 		for _, id := range cl.StreamIds {
 			delete(p.ids, id)
@@ -256,9 +277,6 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 	if p.direct {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.NewStream(ctx, desc, method, opts...)
-	}
-	if p.NumTargets() != 1 {
-		return nil, status.Error(codes.InvalidArgument, "cannot invoke 1:1 RPC's with multiple targets")
 	}
 
 	stream, streamIds, err := p.createStreams(ctx, method)
