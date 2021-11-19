@@ -12,7 +12,6 @@ import (
 )
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -22,7 +21,7 @@ type ProcessClientProxy interface {
 	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error)
 	GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error)
 	GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error)
-	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error)
+	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClientProxy, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -38,8 +37,10 @@ func NewProcessClientProxy(cc *proxy.ProxyConn) ProcessClientProxy {
 
 type ListManyResponse struct {
 	Target string
-	Resp   *ListReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *ListReply
+	Error error
 }
 
 // ListOneMany provides the same API as List but sends the same request to N destinations at once.
@@ -49,11 +50,12 @@ type ListManyResponse struct {
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *ListManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &ListManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &ListReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/List", in, out.Resp, opts...)
@@ -84,6 +86,7 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -99,8 +102,10 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 
 type GetStacksManyResponse struct {
 	Target string
-	Resp   *GetStacksReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetStacksReply
+	Error error
 }
 
 // GetStacksOneMany provides the same API as GetStacks but sends the same request to N destinations at once.
@@ -110,11 +115,12 @@ type GetStacksManyResponse struct {
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetStacksManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetStacksManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &GetStacksReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/GetStacks", in, out.Resp, opts...)
@@ -145,6 +151,7 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -160,8 +167,10 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 
 type GetJavaStacksManyResponse struct {
 	Target string
-	Resp   *GetJavaStacksReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetJavaStacksReply
+	Error error
 }
 
 // GetJavaStacksOneMany provides the same API as GetJavaStacks but sends the same request to N destinations at once.
@@ -171,11 +180,12 @@ type GetJavaStacksManyResponse struct {
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetJavaStacksManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
-	if conn.NumTargets() == 1 {
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetJavaStacksManyResponse{
 				Target: conn.Targets[0],
+				Index:  0,
 				Resp:   &GetJavaStacksReply{},
 			}
 			err := conn.Invoke(ctx, "/Process.Process/GetJavaStacks", in, out.Resp, opts...)
@@ -206,6 +216,7 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 				return
 			}
 			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
 			typedResp.Error = resp.Error
 			if resp.Error == nil {
 				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
@@ -221,14 +232,59 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 
 type GetMemoryDumpManyResponse struct {
 	Target string
-	Resp   *GetMemoryDumpReply
-	Error  error
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *GetMemoryDumpReply
+	Error error
+}
+
+type Process_GetMemoryDumpClientProxy interface {
+	Recv() ([]*GetMemoryDumpManyResponse, error)
+	grpc.ClientStream
+}
+
+type processClientGetMemoryDumpClientProxy struct {
+	grpc.ClientStream
+}
+
+func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResponse, error) {
+	var ret []*GetMemoryDumpManyResponse
+	m := []*proxy.ProxyRet{}
+	if err := x.ClientStream.RecvMsg(&m); err != nil {
+		return nil, err
+	}
+	for _, r := range m {
+		typedResp := &GetMemoryDumpManyResponse{
+			Resp: &GetMemoryDumpReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // GetMemoryDumpOneMany provides the same API as GetMemoryDump but sends the same request to N destinations at once.
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (<-chan *GetMemoryDumpManyResponse, error) {
-	return nil, errors.New("not implemented")
+func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClientProxy, error) {
+	stream, err := c.cc.NewStream(ctx, &Process_ServiceDesc.Streams[0], "/Process.Process/GetMemoryDump", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &processClientGetMemoryDumpClientProxy{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }

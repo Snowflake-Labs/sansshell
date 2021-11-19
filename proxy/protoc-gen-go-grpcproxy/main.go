@@ -43,7 +43,6 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	g.P("package ", file.GoPackageName)
 	g.P()
 	g.P("import (")
-	g.P(`"errors"`)
 	g.P(`"fmt"`)
 	g.P()
 	g.P(")")
@@ -74,7 +73,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		g.P("type ", interfaceNameProxy, " interface {")
 		g.P(interfaceName)
 		for _, method := range service.Methods {
-			methodSignature(false, "", g, method, false)
+			methodSignature(false, "", g, service, method)
 		}
 		g.P("}")
 		g.P()
@@ -97,27 +96,106 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 
 		// For each method we have to create the typed response struct
 		// (which comes over the channel) and then generate the OneMany methods.
+		var numStreams int
 		for _, method := range service.Methods {
+			unary := !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
+			clientOnly := method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
 			g.P("type ", method.GoName, "ManyResponse struct {")
 			g.P("Target string")
+			g.P("// As targets can be duplicated this is the index into the slice passed to ProxyConn.")
+			g.P("Index int")
 			g.P("Resp *", g.QualifiedGoIdent(method.Output.GoIdent))
 			g.P("Error error")
 			g.P("}")
 			g.P()
 
-			methodSignature(true, clientStructProxy, g, method, true)
-			unary := !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
+			methodStruct := method.GoName + "ClientProxy"
+			if !unary {
+				// If this isn't a unary RPC we need a number of support structs/interface/methods
+				// depending on the type of streaming (client, server or both).
+				g.P("type ", service.GoName, "_", methodStruct, " interface {")
+				if method.Desc.IsStreamingClient() {
+					g.P("Send(*", g.QualifiedGoIdent(method.Input.GoIdent), ") error")
+				}
+				if clientOnly {
+					g.P("CloseAndRecv() (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error)")
+				}
+				if method.Desc.IsStreamingServer() {
+					g.P("Recv() ([]*", method.GoName, "ManyResponse, error)")
+				}
+				g.P(g.QualifiedGoIdent(grpcPackage.Ident("ClientStream")))
+				g.P("}")
+				g.P()
+				g.P("type ", clientStruct, methodStruct, " struct {")
+				g.P(g.QualifiedGoIdent(grpcPackage.Ident("ClientStream")))
+				g.P("}")
+				g.P()
+
+				funcPrelude := fmt.Sprintf("func (x *%s%s) ", clientStruct, methodStruct)
+				if method.Desc.IsStreamingClient() {
+					// Client streaming (or bidi) need Send
+					g.P(funcPrelude, "Send(m *", g.QualifiedGoIdent(method.Input.GoIdent), ") error {")
+					g.P("return x.ClientStream.SendMsg(m)")
+					g.P("}")
+					g.P()
+				}
+				if clientOnly {
+					// If it's client and not bidi need CloseAndRecv() which cleans up the stream after
+					// sending the initial request.
+					g.P(funcPrelude, "CloseAndRecv() (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error) {")
+					g.P("if err := x.ClientStream.CloseSend(); err != nil {")
+					g.P("return nil, err")
+					g.P("}")
+					g.P("m := new(", g.QualifiedGoIdent(method.Output.GoIdent), ")")
+					g.P("if err := x.ClientStream.RecvMsg(m); err != nil {")
+					g.P("return nil, err")
+					g.P("}")
+					g.P("return m, nil")
+					g.P("}")
+					g.P()
+				}
+				if method.Desc.IsStreamingServer() {
+					// Server streaming (or bidi) needs Recv. This is a bit more complicated than
+					// grpc base impl because we have to convert a slice of *ProxyRet back into
+					// the proper typed slice the caller expects.
+					g.P(funcPrelude, "Recv() ([]*", method.GoName, "ManyResponse, error) {")
+					g.P("var ret []*", method.GoName, "ManyResponse")
+					g.P("m := []*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyRet")), "{}")
+					g.P("if err := x.ClientStream.RecvMsg(&m); err != nil {")
+					g.P("return nil, err")
+					g.P("}")
+					g.P("for _, r := range m {")
+					g.P("typedResp := &", method.GoName, "ManyResponse{")
+					g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
+					g.P("}")
+					g.P("typedResp.Target = r.Target")
+					g.P("typedResp.Index = r.Index")
+					g.P("typedResp.Error = r.Error")
+					g.P("if r.Error == nil {")
+					g.P("if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {")
+					g.P(`typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)`)
+					g.P("}")
+					g.P("}")
+					g.P("ret = append(ret, typedResp)")
+					g.P("}")
+					g.P("return ret, nil")
+					g.P("}")
+					g.P()
+				}
+			}
+			methodSignature(true, clientStructProxy, g, service, method)
 			if unary {
 				// Unary is simple since we send one thing and just loop over a channel waiting
 				// for replies. The only annoyance is type converting from Any in the InvokeMany
 				// to the typed response callers expect.
 				g.P("conn := c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), ")")
 				g.P("ret := make(chan *", method.GoName, "ManyResponse)")
-				g.P("// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.")
-				g.P("if conn.NumTargets() == 1 {")
+				g.P("// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.")
+				g.P("if len(conn.Targets) == 1 {")
 				g.P("go func() {")
 				g.P("out := &", method.GoName, "ManyResponse{")
 				g.P("Target: conn.Targets[0],")
+				g.P("Index: 0,")
 				g.P("Resp: &", g.QualifiedGoIdent(method.Output.GoIdent), "{},")
 				g.P("}")
 				g.P("err := conn.Invoke(ctx, \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", in, out.Resp, opts...)")
@@ -148,6 +226,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("return")
 				g.P("}")
 				g.P("typedResp.Target = resp.Target")
+				g.P("typedResp.Index = resp.Index")
 				g.P("typedResp.Error = resp.Error")
 				g.P("if resp.Error == nil {")
 				g.P("if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {")
@@ -160,10 +239,28 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P()
 				g.P("return ret, nil")
 				g.P("}")
-			} else {
-				g.P(`return nil, errors.New("not implemented")`)
+				g.P()
+				continue
+			}
+
+			// If it's not unary we create a stream and return it.
+			// Client only streams also get the request in so they send it and close the sending end before returning.
+			g.P("stream, err := c.cc.NewStream(ctx, &", service.GoName, "_", "ServiceDesc.Streams[", numStreams, "], \"/", service.Desc.FullName(), "/", method.Desc.Name(), "\", opts...)")
+			g.P("if err != nil {")
+			g.P("return nil, err")
+			g.P("}")
+			g.P("x := &", clientStruct, methodStruct, "{stream}")
+			if !method.Desc.IsStreamingClient() {
+				g.P("if err := x.ClientStream.SendMsg(in); err != nil {")
+				g.P("return nil, err")
+				g.P("}")
+				g.P("if err := x.ClientStream.CloseSend(); err != nil {")
+				g.P("return nil, err")
 				g.P("}")
 			}
+			g.P("return x, nil")
+			g.P("}")
+			numStreams++
 			g.P()
 		}
 	}
@@ -172,7 +269,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 // methodSignature generates the function signature for a OneMany method in both interface form
 // and when actually declaring the function (by adding the trailing open brace). It's a little
 // clunky but g.P() always adds a newline.
-func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile, method *protogen.Method, addBrace bool) {
+func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	prefix := ""
 	if genFunc {
 		prefix = fmt.Sprintf("// %sOneMany provides the same API as %s but sends the same request to N destinations at once.\n", method.GoName, method.GoName)
@@ -180,15 +277,19 @@ func methodSignature(genFunc bool, structName string, g *protogen.GeneratedFile,
 		prefix += "//\n// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.\n"
 		prefix += "func (c *" + structName + ") "
 	}
-	sig := fmt.Sprintf("%s %sOneMany(ctx %s, ", prefix, method.GoName, g.QualifiedGoIdent(contextPackage.Ident("Context")))
+	sig := fmt.Sprintf("%s%sOneMany(ctx %s, ", prefix, method.GoName, g.QualifiedGoIdent(contextPackage.Ident("Context")))
 	unary := !method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer()
 	serverOnly := !method.Desc.IsStreamingClient() && method.Desc.IsStreamingServer()
 	if unary || serverOnly {
 		sig = fmt.Sprintf("%s in *%s, ", sig, g.QualifiedGoIdent(method.Input.GoIdent))
 	}
 	brace := ""
-	if addBrace {
+	if genFunc {
 		brace = " {"
 	}
-	g.P(sig, "opts ...", g.QualifiedGoIdent(grpcPackage.Ident("CallOption")), ") (<-chan *", method.GoName, "ManyResponse, error)", brace)
+	returnTypes := fmt.Sprintf("(<-chan *%sManyResponse, error)", method.GoName)
+	if !unary {
+		returnTypes = fmt.Sprintf("(%s_%sClientProxy, error)", service.GoName, method.GoName)
+	}
+	g.P(sig, "opts ...", g.QualifiedGoIdent(grpcPackage.Ident("CallOption")), ") ", returnTypes, brace)
 }

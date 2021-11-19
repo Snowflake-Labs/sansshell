@@ -17,7 +17,7 @@ import (
 // relevant state down to subcommands.
 type ExecuteState struct {
 	Conn *proxy.ProxyConn
-	Out  io.Writer
+	Out  []io.Writer
 }
 
 // TODO(jchacon): Make this configurable

@@ -59,6 +59,10 @@ func init() {
 	subcommands.Register(&dumpCmd{}, "process")
 }
 
+func outputEntryHeader(out io.Writer, target string, index int) {
+	fmt.Fprintf(out, "\nTarget: %s Index: %d \n\n", target, index)
+}
+
 type psCmd struct {
 	pids intList
 }
@@ -90,12 +94,12 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitFailure
 	}
 	for resp := range respChan {
-		fmt.Fprintf(state.Out, "\nTarget: %s Entries: %d\n\n", resp.Target, len(resp.Resp.ProcessEntries))
 		if resp.Error != nil {
-			fmt.Fprintf(state.Out, "Got error from target %s - %v\n", resp.Target, resp.Error)
+			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
 			continue
 		}
-		outputPsEntry(resp.Resp, state.Out)
+		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
+		outputPsEntry(resp.Resp, state.Out[resp.Index])
 	}
 	return subcommands.ExitSuccess
 }
@@ -208,24 +212,31 @@ func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewProcessClient(state.Conn)
+	c := pb.NewProcessClientProxy(state.Conn)
 
 	req := &pb.GetStacksRequest{
 		Pid: p.pid,
 	}
 
-	resp, err := c.GetStacks(ctx, req)
+	respChan, err := c.GetStacksOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "GetStacks returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	for _, s := range resp.Stacks {
-		if s.ThreadNumber != 0 {
-			fmt.Fprintf(os.Stdout, "Thread %d (Thread 0x%x (LWP %d)):\n", s.ThreadNumber, s.ThreadId, s.Lwp)
+	for resp := range respChan {
+		if resp.Error != nil {
+			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			continue
 		}
-		for _, t := range s.Stacks {
-			fmt.Fprintln(os.Stdout, t)
+		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
+		for _, s := range resp.Resp.Stacks {
+			if s.ThreadNumber != 0 {
+				fmt.Fprintf(state.Out[resp.Index], "Thread %d (Thread 0x%x (LWP %d)):\n", s.ThreadNumber, s.ThreadId, s.Lwp)
+			}
+			for _, t := range s.Stacks {
+				fmt.Fprintln(state.Out[resp.Index], t)
+			}
 		}
 	}
 	return subcommands.ExitSuccess
@@ -254,58 +265,48 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewProcessClient(state.Conn)
+	c := pb.NewProcessClientProxy(state.Conn)
 
 	req := &pb.GetJavaStacksRequest{
 		Pid: p.pid,
 	}
 
-	resp, err := c.GetJavaStacks(ctx, req)
+	respChan, err := c.GetJavaStacksOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "GetJavaStacks returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	for _, s := range resp.Stacks {
-		fmt.Fprintf(os.Stdout, "%q ", s.Name)
-		if s.ThreadNumber != 0 {
-			fmt.Fprintf(os.Stdout, "#%d ", s.ThreadNumber)
+	for resp := range respChan {
+		if resp.Error != nil {
+			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			continue
 		}
-		daemon := ""
-		if s.Daemon {
-			daemon = "daemon "
+		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
+		for _, s := range resp.Resp.Stacks {
+			fmt.Fprintf(state.Out[resp.Index], "%q ", s.Name)
+			if s.ThreadNumber != 0 {
+				fmt.Fprintf(state.Out[resp.Index], "#%d ", s.ThreadNumber)
+			}
+			daemon := ""
+			if s.Daemon {
+				daemon = "daemon "
+			}
+			fmt.Fprintf(state.Out[resp.Index], "%s", daemon)
+			if s.ThreadNumber != 0 {
+				fmt.Fprintf(state.Out[resp.Index], "prio=%d ", s.Priority)
+			}
+			fmt.Fprintf(state.Out[resp.Index], "os_prio=%d cpu=%fms elapsed=%fs tid=0x%016x nid=0x%x %s ", s.OsPriority, s.CpuMs, s.ElapsedSec, s.ThreadId, s.NativeThreadId, s.State)
+			if s.ThreadNumber != 0 {
+				fmt.Fprintf(state.Out[resp.Index], "[0x%016x]\n", s.Pc)
+			}
+			for _, t := range s.Stacks {
+				fmt.Fprintln(state.Out[resp.Index], t)
+			}
+			fmt.Fprintln(state.Out[resp.Index])
 		}
-		fmt.Fprintf(os.Stdout, "%s", daemon)
-		if s.ThreadNumber != 0 {
-			fmt.Fprintf(os.Stdout, "prio=%d ", s.Priority)
-		}
-		fmt.Fprintf(os.Stdout, "os_prio=%d cpu=%fms elapsed=%fs tid=0x%016x nid=0x%x %s ", s.OsPriority, s.CpuMs, s.ElapsedSec, s.ThreadId, s.NativeThreadId, s.State)
-		if s.ThreadNumber != 0 {
-			fmt.Fprintf(os.Stdout, "[0x%016x]\n", s.Pc)
-		}
-		for _, t := range s.Stacks {
-			fmt.Fprintln(os.Stdout, t)
-		}
-		fmt.Fprintln(os.Stdout)
 	}
 	return subcommands.ExitSuccess
-}
-
-// createOutput is a helper func for gcore/jmap which creates the output file or writes
-// to stderr. It will print an error so calling code should simply return.
-func createOutput(path string) (*os.File, error) {
-	var output *os.File
-	var err error
-	if path == "-" {
-		output = os.Stdout
-	} else {
-		output, err = os.Create(path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Can't create output file %s: %v\n", path, err)
-			return nil, err
-		}
-	}
-	return output, nil
 }
 
 func flagToType(val string) (pb.DumpType, error) {
@@ -345,7 +346,7 @@ func (*dumpCmd) Usage() string {
 func (p *dumpCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.pid, "pid", 0, "Process to generate a core dump against.")
 	f.StringVar(&p.dumpType, "dump-type", "GCORE", fmt.Sprintf("Dump type to use(one of: [%s])", strings.Join(shortDumpTypeNames(), ",")))
-	f.StringVar(&p.output, "output", "", `Output to write data. - indicates to use stdout. A normal file path applies.
+	f.StringVar(&p.output, "output", "", `Output to write data remotely. Leave blank and --outputs will be used for local destinations.
 
 This will also accept URL options of the form:
 
@@ -373,12 +374,8 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	if p.output == "" {
-		fmt.Fprintln(os.Stderr, "--output must be specified")
-		return subcommands.ExitFailure
-	}
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewProcessClient(state.Conn)
+	c := pb.NewProcessClientProxy(state.Conn)
 
 	req := &pb.GetMemoryDumpRequest{
 		Pid:         p.pid,
@@ -397,18 +394,10 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 	}
 
-	stream, err := c.GetMemoryDump(ctx, req)
+	stream, err := c.GetMemoryDumpOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "GetMemoryDump returned error: %v\n", err)
 		return subcommands.ExitFailure
-	}
-
-	var output *os.File
-	if req.GetUrl() == nil {
-		output, err = createOutput(p.output)
-		if err != nil {
-			return subcommands.ExitFailure
-		}
 	}
 
 	for {
@@ -420,11 +409,17 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		if output != nil {
-			n, err := output.Write(resp.Data)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(resp.Data), err)
-				return subcommands.ExitFailure
+		if p.output == "" {
+			for _, r := range resp {
+				if r.Error != nil && r.Error != io.EOF {
+					fmt.Fprintf(os.Stderr, "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
+					continue
+				}
+				n, err := state.Out[r.Index].Write(r.Resp.Data)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(r.Resp.Data), err)
+					return subcommands.ExitFailure
+				}
 			}
 		}
 	}
