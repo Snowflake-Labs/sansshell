@@ -67,21 +67,21 @@ allow {
 
 var (
 	bufSize = 1024 * 1024
-	lis     *bufconn.Listener
-	conn    *grpc.ClientConn
 )
 
-func bufDialer(context.Context, string) (net.Conn, error) {
-	return lis.Dial()
+func bufDialer(lis *bufconn.Listener) func(context.Context, string) (net.Conn, error) {
+	return func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
 }
 
-func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.Server {
+func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) (*bufconn.Listener, *grpc.Server) {
 	t.Helper()
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
 	if err != nil {
 		t.Fatalf("Failed to load client cert: %v", err)
 	}
-	lis = bufconn.Listen(bufSize)
+	lis := bufconn.Listen(bufSize)
 	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard())
 	if err != nil {
 		t.Fatalf("Could not build server: %s", err)
@@ -94,7 +94,7 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) *grpc.
 		}
 	}()
 	<-listening
-	return s
+	return lis, s
 }
 
 func TestHealthCheck(t *testing.T) {
@@ -136,8 +136,8 @@ func TestHealthCheck(t *testing.T) {
 	}
 	for _, tc := range ts {
 		t.Run(tc.Name, func(t *testing.T) {
-			s := serverWithPolicy(t, tc.Policy, CAPool)
-			conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(creds))
+			l, s := serverWithPolicy(t, tc.Policy, CAPool)
+			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
 			if err != nil {
 				t.Fatalf("Failed to dial bufnet: %v", err)
 			}
