@@ -128,6 +128,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Can't create output file %s - %v", out, err)
 			os.Exit(1)
 		}
+		defer file.Close()
 		state.Out = append(state.Out, file)
 	}
 
