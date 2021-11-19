@@ -218,12 +218,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	// 1:N - it's a *[]*ProxyRet
 	//
 	// Anything else is an error.
-	oneMany := false
-	manyRet, ok := m.(*[]*ProxyRet)
-	if ok {
-		oneMany = true
-	}
-
+	manyRet, oneMany := m.(*[]*ProxyRet)
 	msg, ok := m.(proto.Message)
 	if !ok && !oneMany {
 		return status.Errorf(codes.InvalidArgument, "args for RecvMsg must be a proto.Message %T", m)
@@ -248,7 +243,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 			if _, ok := p.ids[id]; !ok {
 				return status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
 			}
-			// In the singular case we unmarshall back into the supplied proto.Message and just return.
+			// In the singular case we unmarshal back into the supplied proto.Message and just return.
 			if !oneMany {
 				err = d.Payload.UnmarshalTo(msg)
 				if err != nil {
@@ -262,7 +257,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 			*manyRet = append(*manyRet, p.ids[id])
 		}
 	case cl != nil:
-		code := cl.GetStatus().GetCode()
+		code := codes.Code(cl.GetStatus().GetCode())
 		msg := cl.GetStatus().GetMessage()
 
 		if !oneMany && len(cl.StreamIds) > 1 {
@@ -281,9 +276,12 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 		// A normal close actually returns this as an error so map it so clients know the stream closed.
 		closedErr := io.EOF
-		if code != int32(codes.OK) {
-			closedErr = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+		streamStatus := status.New(code, msg)
+
+		if streamStatus.Code() != codes.OK {
+			closedErr = streamStatus.Err()
 		}
+
 		// For 1:1 we can just return the error
 		if !oneMany {
 			return closedErr
@@ -415,7 +413,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 					retChan <- s.ids[id]
 				}
 			case cl != nil:
-				code := cl.GetStatus().GetCode()
+				code := codes.Code(cl.GetStatus().GetCode())
 				msg := cl.GetStatus().GetMessage()
 
 				// Do a one time check all the returned ids are ones we know.
@@ -428,16 +426,16 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 
 				// See if it's normal close. We can ignore those except to remove tracking.
 				// Otherwise send errors back for each target and then remove.
-				if code != int32(codes.OK) {
+				if code != codes.OK {
 					for _, id := range cl.StreamIds {
 						if s.ids[id].Resp != nil {
-							chanErr = status.Errorf(codes.Internal, "Got a non OK error code for a target we've already responded. Code: %s for target: %s", codes.Code(code).String(), s.ids[id].Target)
+							chanErr = status.Errorf(codes.Internal, "Got a non OK error code for a target we've already responded. Code: %s for target: %s (%d) - %s", code.String(), s.ids[id].Target, s.ids[id].Index, msg)
 							// Remove it from the map so we don't double send responses for this target.
 							delete(s.ids, id)
 							break processing
 						}
 
-						s.ids[id].Error = status.Errorf(codes.Internal, "Server closed with code: %s message: %s", codes.Code(code).String(), msg)
+						s.ids[id].Error = status.New(code, msg).Err()
 						retChan <- s.ids[id]
 					}
 				}
