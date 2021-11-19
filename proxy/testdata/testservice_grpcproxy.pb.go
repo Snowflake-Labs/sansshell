@@ -50,7 +50,7 @@ type TestUnaryManyResponse struct {
 func (c *testServiceClientProxy) TestUnaryOneMany(ctx context.Context, in *TestRequest, opts ...grpc.CallOption) (<-chan *TestUnaryManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *TestUnaryManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &TestUnaryManyResponse{

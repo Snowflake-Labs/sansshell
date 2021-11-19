@@ -50,7 +50,7 @@ type InstallManyResponse struct {
 func (c *packagesClientProxy) InstallOneMany(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (<-chan *InstallManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *InstallManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &InstallManyResponse{
@@ -115,7 +115,7 @@ type UpdateManyResponse struct {
 func (c *packagesClientProxy) UpdateOneMany(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (<-chan *UpdateManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *UpdateManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &UpdateManyResponse{
@@ -180,7 +180,7 @@ type ListInstalledManyResponse struct {
 func (c *packagesClientProxy) ListInstalledOneMany(ctx context.Context, in *ListInstalledRequest, opts ...grpc.CallOption) (<-chan *ListInstalledManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *ListInstalledManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &ListInstalledManyResponse{
@@ -245,7 +245,7 @@ type RepoListManyResponse struct {
 func (c *packagesClientProxy) RepoListOneMany(ctx context.Context, in *RepoListRequest, opts ...grpc.CallOption) (<-chan *RepoListManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *RepoListManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &RepoListManyResponse{

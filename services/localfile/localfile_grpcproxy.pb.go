@@ -274,7 +274,7 @@ type CopyManyResponse struct {
 func (c *localFileClientProxy) CopyOneMany(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (<-chan *CopyManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *CopyManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &CopyManyResponse{
@@ -339,7 +339,7 @@ type SetFileAttributesManyResponse struct {
 func (c *localFileClientProxy) SetFileAttributesOneMany(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (<-chan *SetFileAttributesManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *SetFileAttributesManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &SetFileAttributesManyResponse{

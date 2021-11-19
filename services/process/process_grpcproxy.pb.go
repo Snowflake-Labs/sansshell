@@ -50,7 +50,7 @@ type ListManyResponse struct {
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *ListManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &ListManyResponse{
@@ -115,7 +115,7 @@ type GetStacksManyResponse struct {
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetStacksManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetStacksManyResponse{
@@ -180,7 +180,7 @@ type GetJavaStacksManyResponse struct {
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *GetJavaStacksManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &GetJavaStacksManyResponse{

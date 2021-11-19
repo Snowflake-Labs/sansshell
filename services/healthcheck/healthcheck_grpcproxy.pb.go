@@ -47,7 +47,7 @@ type OkManyResponse struct {
 func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *OkManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &OkManyResponse{

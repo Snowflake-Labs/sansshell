@@ -47,7 +47,7 @@ type RunManyResponse struct {
 func (c *playbookClientProxy) RunOneMany(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (<-chan *RunManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *RunManyResponse)
-	// If this is a single case we can just use Invoke and marshall it onto the channel once and be done.
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
 			out := &RunManyResponse{
