@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -47,6 +47,9 @@ type TargetStream struct {
 
 	// A channel used to carry an error from proxy-initiated closure
 	errChan chan error
+
+	// a logger used to log additional information
+	logger logr.Logger
 }
 
 func (s *TargetStream) String() string {
@@ -205,7 +208,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	case err = <-s.errChan:
 	default:
 	}
-	log.Printf("finished: %s (%v)", s, err)
+	s.logger.Info("finished", "status", err)
 	reply := &pb.ProxyReply{
 		Reply: &pb.ProxyReply_ServerClose{
 			ServerClose: &pb.ServerClose{
@@ -219,6 +222,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
 func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod) (*TargetStream, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 	conn, err := dialer.DialContext(ctx, target)
 	if err != nil {
@@ -228,7 +232,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 	if err != nil {
 		return nil, err
 	}
-	return &TargetStream{
+	ts := &TargetStream{
 		streamID:      rand.Uint64(),
 		target:        target,
 		serviceMethod: method,
@@ -236,7 +240,10 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message),
 		errChan:       make(chan error, 1),
-	}, nil
+	}
+	ts.logger = logger.WithValues("stream", ts.String())
+	ts.logger.Info("created")
+	return ts, nil
 }
 
 // A TargetStreamSet manages multiple TargetStreams
@@ -334,7 +341,6 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 	}
 	streamID := stream.StreamID()
 	t.streams[streamID] = stream
-	log.Println("new:", stream)
 	reply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
 		StreamId: streamID,
 	}
@@ -358,7 +364,6 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 // stream set. Future references to this stream will return
 // an error
 func (t *TargetStreamSet) Remove(streamID uint64) {
-	log.Println("removing:", streamID)
 	delete(t.streams, streamID)
 }
 
@@ -376,7 +381,6 @@ func (t *TargetStreamSet) ClientClose(req *pb.ClientClose) error {
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
-		log.Println("client close:", stream)
 		stream.CloseSend()
 	}
 	return nil
@@ -384,9 +388,7 @@ func (t *TargetStreamSet) ClientClose(req *pb.ClientClose) error {
 
 // ClientCloseAll() issues ClientClose to all associated TargetStreams
 func (t *TargetStreamSet) ClientCloseAll() {
-	log.Println("client close all")
 	for _, stream := range t.streams {
-		log.Println("client close:", stream)
 		stream.CloseSend()
 	}
 }
@@ -398,7 +400,6 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
-		log.Println("cancel:", stream)
 		stream.ClientCancel()
 	}
 	return nil
@@ -446,7 +447,6 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 
 		// If authz fails, close immediately with an error
 		if err := t.authorizer.Eval(ctx, authinput); err != nil {
-			log.Printf("authorization error %s : %v", stream, err)
 			stream.CloseWith(err)
 			continue
 		}

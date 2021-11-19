@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -72,7 +71,6 @@ func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
 // The supplied authorizer is used to authorize requests made
 // to targets.
 func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {
-	log.Printf("service map: %+v", serviceMap)
 	return &Server{
 		serviceMap: serviceMap,
 		dialer:     dialer,
@@ -84,8 +82,6 @@ func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serv
 // stream which manages requests to a set of one or more backend
 // target servers
 func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
-	log.Println("Received new proxy stream request")
-
 	requestChan := make(chan *pb.ProxyRequest)
 	replyChan := make(chan *pb.ProxyReply)
 

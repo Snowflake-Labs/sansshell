@@ -4,11 +4,89 @@ package telemetry
 
 import (
 	"context"
+	"io"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/peer"
 )
+
+// UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
+// outgoing requests using the supplied logger, as well as injecting it into the
+// context of the invoker.
+func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		l := logger.WithValues("method", method, "target", cc.Target())
+		logCtx := logr.NewContext(ctx, l)
+		l.Info("new client request")
+		err := invoker(logCtx, method, req, reply, cc, opts...)
+		if err != nil {
+			l.Error(err, "")
+		}
+		return err
+	}
+}
+
+// StreamClientLogInterceptor returns a new grpc.StreamClientInterceptor that logs
+// client requests using the supplied logger, as as as injecting into into the Context
+// of the created stream.
+func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		l := logger.WithValues("method", method, "target", cc.Target())
+		l.Info("new client stream")
+		logCtx := logr.NewContext(ctx, l)
+		stream, err := streamer(logCtx, desc, cc, method, opts...)
+		if err != nil {
+			l.Error(err, "create stream")
+		}
+		return &loggedClientStream{
+			ClientStream: stream,
+			ctx:          logCtx,
+			logger:       l,
+		}, nil
+	}
+}
+
+type loggedClientStream struct {
+	grpc.ClientStream
+	ctx    context.Context
+	logger logr.Logger
+}
+
+// See: grpc.ClientStream.Context()
+func (l *loggedClientStream) Context() context.Context {
+	return l.ctx
+}
+
+// See: grpc.ClientStream.SendMsg()
+func (l *loggedClientStream) SendMsg(m interface{}) error {
+	l.logger.V(1).Info("SendMsg")
+	err := l.ClientStream.SendMsg(m)
+	if err != nil {
+		l.logger.Error(err, "SendMsg")
+	}
+	return err
+}
+
+// See: grpc.ClientStream.RecvMsg()
+func (l *loggedClientStream) RecvMsg(m interface{}) error {
+	l.logger.V(1).Info("RecvMsg")
+	err := l.ClientStream.RecvMsg(m)
+	if err != nil && err != io.EOF {
+		l.logger.Error(err, "RecvMsg")
+	}
+	return err
+}
+
+// See: grpc.ClientStream.CloseSend()
+func (l *loggedClientStream) CloseSend() error {
+	l.logger.Info("CloseSend")
+	err := l.ClientStream.CloseSend()
+	if err != nil {
+		l.logger.Error(err, "CloseSend")
+	}
+	return err
+}
 
 // UnaryServerLogInterceptor returns a new gprc.UnaryServerInterceptor that logs
 // incoming requests using the supplied logger, as well as injecting it into the
@@ -23,7 +101,7 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 		logCtx := logr.NewContext(ctx, l)
 		resp, err := handler(logCtx, req)
 		if err != nil {
-			l.Error(err, "")
+			l.Error(err, "handler")
 		}
 		return resp, err
 	}
@@ -44,7 +122,11 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 			logger:       l,
 			logCtx:       logr.NewContext(ss.Context(), l),
 		}
-		return handler(srv, stream)
+		err := handler(srv, stream)
+		if err != nil {
+			l.Error(err, "handler")
+		}
+		return err
 	}
 }
 
@@ -63,7 +145,7 @@ func (l *loggedStream) SendMsg(m interface{}) error {
 	l.logger.V(1).Info("SendMsg")
 	err := l.ServerStream.SendMsg(m)
 	if err != nil {
-		l.logger.Error(err, "")
+		l.logger.Error(err, "SendMsg")
 	}
 	return err
 }
@@ -71,8 +153,8 @@ func (l *loggedStream) SendMsg(m interface{}) error {
 func (l *loggedStream) RecvMsg(m interface{}) error {
 	l.logger.V(1).Info("RecvMsg")
 	err := l.ServerStream.RecvMsg(m)
-	if err != nil {
-		l.logger.Error(err, "")
+	if err != nil && err != io.EOF {
+		l.logger.Error(err, "RecvMsg")
 	}
 	return err
 }
