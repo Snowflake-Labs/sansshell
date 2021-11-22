@@ -117,24 +117,29 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		fmt.Fprintf(os.Stderr, "stat client error: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	// NB: we could gain more performance by asynchronously processing
-	// requests and responses, at the expense of needing to manage a
-	// goroutine, and non-straightline error handling.
-	// Instead, for the sake of simplicity, we're treating the bidirectional
-	// stream as a simple request/reply channel where we pipe the requests down
-	// and then read replies till it's done.
-	for _, filename := range f.Args() {
-		if err := stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
-			fmt.Fprintf(os.Stderr, "stat: send error: %v\n", err)
-			return subcommands.ExitFailure
+
+	waitc := make(chan error)
+
+	// Push all the sends into their own routine so we're receiving replies
+	// at the same time. This way we can't deadlock if we send so much this
+	// blocks which makes the server block its sends waiting on us to receive.
+	go func() {
+		var err error
+		for _, filename := range f.Args() {
+			if err = stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
+				fmt.Fprintf(os.Stderr, "stat: send error: %v\n", err)
+				break
+			}
 		}
-	}
+		// Close the sending stream to notify the server not to expect any further data.
+		// We'll process below but this let's the server politely know we're done sending
+		// as otherwise it'll see this as a cancellation.
+		stream.CloseSend()
+		waitc <- err
+		close(waitc)
+	}()
 
-	// Close the sending stream to notify the server not to expect any further data.
-	// We'll process below but this let's the server politely know we're done sending
-	// as otherwise it'll see this as a cancellation.
-	stream.CloseSend()
-
+	retCode := subcommands.ExitSuccess
 	for {
 		reply, err := stream.Recv()
 		if err == io.EOF {
@@ -145,13 +150,25 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			return subcommands.ExitFailure
 		}
 		for _, r := range reply {
+			if r.Error != nil {
+				if r.Error != io.EOF {
+					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					retCode = subcommands.ExitFailure
+				}
+				continue
+			}
 			mode := os.FileMode(r.Resp.Mode)
 			outTmpl := "File: %s\nSize: %d\nType: %s\nAccess: %s Uid: %d Gid: %d\nModify: %s\n"
 			fmt.Fprintf(state.Out[r.Index], outTmpl, r.Resp.Filename, r.Resp.Size, fileTypeString(mode), mode, r.Resp.Uid, r.Resp.Gid, r.Resp.Modtime.AsTime())
 		}
 	}
+	for err := range waitc {
+		if err != nil {
+			retCode = subcommands.ExitFailure
+		}
+	}
 
-	return subcommands.ExitSuccess
+	return retCode
 }
 
 func fileTypeString(mode os.FileMode) string {
@@ -225,24 +242,29 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintf(os.Stderr, "sum client error: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	// NB: we could gain more performance by asynchronously processing
-	// requests and responses, at the expense of needing to manage a
-	// goroutine, and non-straightline error handling.
-	// Instead, for the sake of simplicity, we're treating the bidirectional
-	// stream as a simple request/reply channel where we pipe the requests down
-	// and then read replies till it's done.
-	for _, filename := range f.Args() {
-		if err := stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
-			fmt.Fprintf(os.Stderr, "sum: send error: %v\n", err)
-			return subcommands.ExitFailure
+
+	waitc := make(chan error)
+
+	// Push all the sends into their own routine so we're receiving replies
+	// at the same time. This way we can't deadlock if we send so much this
+	// blocks which makes the server block its sends waiting on us to receive.
+	go func() {
+		var err error
+		for _, filename := range f.Args() {
+			if err = stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
+				fmt.Fprintf(os.Stderr, "sum: send error: %v\n", err)
+				break
+			}
 		}
-	}
+		// Close the sending stream to notify the server not to expect any further data.
+		// We'll process below but this let's the server politely know we're done sending
+		// as otherwise it'll see this as a cancellation.
+		stream.CloseSend()
+		waitc <- err
+		close(waitc)
+	}()
 
-	// Close the sending stream to notify the server not to expect any further data.
-	// We'll process below but this let's the server politely know we're done sending
-	// as otherwise it'll see this as a cancellation.
-	stream.CloseSend()
-
+	retCode := subcommands.ExitSuccess
 	for {
 		reply, err := stream.Recv()
 		if err == io.EOF {
@@ -250,12 +272,26 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "stat: receive error: %v\n", err)
-			return subcommands.ExitFailure
+			retCode = subcommands.ExitFailure
+			break
 		}
 		for _, r := range reply {
+			if r.Error != nil {
+				if r.Error != io.EOF {
+					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					retCode = subcommands.ExitFailure
+				}
+				continue
+			}
 			fmt.Fprintf(state.Out[r.Index], "%s %s\n", r.Resp.Sum, r.Resp.Filename)
 		}
 	}
 
-	return subcommands.ExitSuccess
+	for err := range waitc {
+		if err != nil {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
 }
