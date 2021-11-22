@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -29,10 +28,10 @@ type readCmd struct {
 }
 
 func (*readCmd) Name() string     { return "read" }
-func (*readCmd) Synopsis() string { return "Print a file to stdout." }
+func (*readCmd) Synopsis() string { return "Read a file." }
 func (*readCmd) Usage() string {
-	return `read <path> [<path>...]:
-  Read from the remote file named by <path> and print it to stdout.
+	return `read <path>:
+  Read from the remote file named by <path> and write it to the appropriate --output destination.
 `
 }
 
@@ -48,20 +47,18 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitUsageError
 	}
 
-	for _, filename := range f.Args() {
-		err := ReadFile(ctx, state.Conn, filename, p.offset, p.length, os.Stdout)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
-			return subcommands.ExitFailure
-		}
-
+	filename := f.Args()[0]
+	err := ReadFile(ctx, state, filename, p.offset, p.length)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
+		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
 }
 
-func ReadFile(ctx context.Context, conn grpc.ClientConnInterface, filename string, offset int64, length int64, writer io.Writer) error {
-	c := pb.NewLocalFileClient(conn)
-	stream, err := c.Read(ctx, &pb.ReadRequest{
+func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, offset int64, length int64) error {
+	c := pb.NewLocalFileClientProxy(state.Conn)
+	stream, err := c.ReadOneMany(ctx, &pb.ReadRequest{
 		Filename: filename,
 		Offset:   offset,
 		Length:   length,
@@ -78,13 +75,18 @@ func ReadFile(ctx context.Context, conn grpc.ClientConnInterface, filename strin
 		if err != nil {
 			return err
 		}
-		contents := resp.GetContents()
-		n, err := writer.Write(contents)
-		if got, want := n, len(contents); got != want {
-			return fmt.Errorf("can't write into buffer at correct length. Got %d want %d", got, want)
-		}
-		if err != nil {
-			return err
+		for _, r := range resp {
+			contents := r.Resp.Contents
+			if r.Error != nil {
+				contents = []byte(fmt.Sprintf("Target %s (%d) returned error - %v", r.Target, r.Index, r.Error))
+			}
+			n, err := state.Out[r.Index].Write(contents)
+			if got, want := n, len(contents); got != want {
+				return fmt.Errorf("can't write into buffer at correct length. Got %d want %d", got, want)
+			}
+			if err != nil {
+				return fmt.Errorf("error writing output to output index %d - %v", r.Index, err)
+			}
 		}
 	}
 	return nil
@@ -109,8 +111,8 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		fmt.Fprintf(os.Stderr, "please specify at least one path to stat\n")
 		return subcommands.ExitUsageError
 	}
-	client := pb.NewLocalFileClient(state.Conn)
-	stream, err := client.Stat(ctx)
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	stream, err := client.StatOneMany(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stat client error: %v\n", err)
 		return subcommands.ExitFailure
@@ -119,27 +121,35 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	// requests and responses, at the expense of needing to manage a
 	// goroutine, and non-straightline error handling.
 	// Instead, for the sake of simplicity, we're treating the bidirectional
-	// stream as a simple request/reply channel
+	// stream as a simple request/reply channel where we pipe the requests down
+	// and then read replies till it's done.
 	for _, filename := range f.Args() {
 		if err := stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
 			fmt.Fprintf(os.Stderr, "stat: send error: %v\n", err)
 			return subcommands.ExitFailure
 		}
+	}
+
+	// Close the sending stream to notify the server not to expect any further data.
+	// We'll process below but this let's the server politely know we're done sending
+	// as otherwise it'll see this as a cancellation.
+	stream.CloseSend()
+
+	for {
 		reply, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "stat: receive error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		mode := os.FileMode(reply.Mode)
-		outTmpl := "File: %s\nSize: %d\nType: %s\nAccess: %s Uid: %d Gid: %d\nModify: %s\n"
-		fmt.Fprintf(os.Stdout, outTmpl, reply.Filename, reply.Size, fileTypeString(mode), mode, reply.Uid, reply.Gid, reply.Modtime.AsTime())
+		for _, r := range reply {
+			mode := os.FileMode(r.Resp.Mode)
+			outTmpl := "File: %s\nSize: %d\nType: %s\nAccess: %s Uid: %d Gid: %d\nModify: %s\n"
+			fmt.Fprintf(state.Out[r.Index], outTmpl, r.Resp.Filename, r.Resp.Size, fileTypeString(mode), mode, r.Resp.Uid, r.Resp.Gid, r.Resp.Modtime.AsTime())
+		}
 	}
-	// Close the sending stream to notify the server not to expect any further data,
-	// and perform a final Recv() to cleanly finish the stream.
-	// At this point, we've successfully processed all of our input files,
-	// but closing politely avoids the server viewing this as a cancellation
-	stream.CloseSend()
-	stream.Recv()
 
 	return subcommands.ExitSuccess
 }
@@ -209,8 +219,8 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintf(os.Stderr, "flag error: %v\n", err)
 		return subcommands.ExitUsageError
 	}
-	client := pb.NewLocalFileClient(state.Conn)
-	stream, err := client.Sum(ctx)
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	stream, err := client.SumOneMany(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sum client error: %v\n", err)
 		return subcommands.ExitFailure
@@ -219,26 +229,33 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	// requests and responses, at the expense of needing to manage a
 	// goroutine, and non-straightline error handling.
 	// Instead, for the sake of simplicity, we're treating the bidirectional
-	// stream as a simple request/reply channel
+	// stream as a simple request/reply channel where we pipe the requests down
+	// and then read replies till it's done.
 	for _, filename := range f.Args() {
 		if err := stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
 			fmt.Fprintf(os.Stderr, "sum: send error: %v\n", err)
 			return subcommands.ExitFailure
 		}
+	}
+
+	// Close the sending stream to notify the server not to expect any further data.
+	// We'll process below but this let's the server politely know we're done sending
+	// as otherwise it'll see this as a cancellation.
+	stream.CloseSend()
+
+	for {
 		reply, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "stat: receive error: %v\n", err)
 			return subcommands.ExitFailure
 		}
-		fmt.Fprintf(os.Stdout, "%s %s\n", reply.Sum, reply.Filename)
+		for _, r := range reply {
+			fmt.Fprintf(state.Out[r.Index], "%s %s\n", r.Resp.Sum, r.Resp.Filename)
+		}
 	}
-
-	// Close the sending stream to notify the server not to expect any further data,
-	// and perform a final Recv() to cleanly finish the stream.
-	// At this point, we've successfully processed all of our input files,
-	// but closing politely avoids the server viewing this as a cancellation.
-	stream.CloseSend()
-	stream.Recv()
 
 	return subcommands.ExitSuccess
 }
