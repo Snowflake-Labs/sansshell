@@ -479,12 +479,6 @@ func TestListInstalled(t *testing.T) {
 				return []string{testutil.ResolvePath(t, "false")}, nil
 			},
 		},
-		{
-			name: "stderr output",
-			generate: func(pb.PackageSystem) ([]string, error) {
-				return []string{testutil.ResolvePath(t, "sh"), "-c", "echo foo >&2"}, nil
-			},
-		},
 	} {
 		generateListInstalled = test.generate
 		resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
