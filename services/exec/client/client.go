@@ -38,18 +38,23 @@ func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitUsageError
 	}
 
-	c := pb.NewExecClient(state.Conn)
+	c := pb.NewExecClientProxy(state.Conn)
 
-	resp, err := c.Run(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
+	resp, err := c.RunOneMany(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not execute due to likely program failure: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	if len(resp.Stderr) > 0 {
-		fmt.Fprintf(os.Stderr, "Command execution failure: %v\n", string(resp.Stderr))
-		return subcommands.ExitStatus(resp.RetCode)
-	}
 
-	fmt.Fprintf(os.Stdout, "Command execution success: %v\n", string(resp.Stdout))
-	return subcommands.ExitSuccess
+	returnCode := subcommands.ExitSuccess
+	for r := range resp {
+		// TODO(jchacon): Is stderr output really an error? We should just depend on return code most likely.
+		if r.Error != nil || len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Out[r.Index], "Command execution failure for target %s (%d) - error - %v\nStderr:\n%v\n", r.Target, r.Index, r.Error, string(r.Resp.Stderr))
+			returnCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Command execution success: %v\n", string(r.Resp.Stdout))
+	}
+	return returnCode
 }
