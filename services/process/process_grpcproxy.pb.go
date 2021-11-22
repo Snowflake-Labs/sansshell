@@ -244,11 +244,29 @@ type Process_GetMemoryDumpClientProxy interface {
 }
 
 type processClientGetMemoryDumpClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
 func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResponse, error) {
 	var ret []*GetMemoryDumpManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &GetMemoryDumpReply{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &GetMemoryDumpManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -279,7 +297,7 @@ func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMe
 	if err != nil {
 		return nil, err
 	}
-	x := &processClientGetMemoryDumpClientProxy{stream}
+	x := &processClientGetMemoryDumpClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}

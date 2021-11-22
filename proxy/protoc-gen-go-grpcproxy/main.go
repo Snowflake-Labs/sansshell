@@ -127,6 +127,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P("}")
 				g.P()
 				g.P("type ", clientStruct, methodStruct, " struct {")
+				g.P("cc *", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")))
 				g.P(g.QualifiedGoIdent(grpcPackage.Ident("ClientStream")))
 				g.P("}")
 				g.P()
@@ -157,9 +158,28 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				if method.Desc.IsStreamingServer() {
 					// Server streaming (or bidi) needs Recv. This is a bit more complicated than
 					// grpc base impl because we have to convert a slice of *ProxyRet back into
-					// the proper typed slice the caller expects.
+					// the proper typed slice the caller expects. We also need to handle the case where
+					// we're invoked with no proxy as that code uses a standard grpc.ClientStream which
+					// expects different behaviors for the RecvMsg call.
 					g.P(funcPrelude, "Recv() ([]*", method.GoName, "ManyResponse, error) {")
 					g.P("var ret []*", method.GoName, "ManyResponse")
+					g.P("// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream")
+					g.P("// and not our proxy based one. This means we need to receive a typed response and")
+					g.P("// convert it into a single slice entry return. This ensures the OneMany style calls")
+					g.P("// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.")
+					g.P("if x.cc.Direct() {")
+					g.P("m := &", g.QualifiedGoIdent(method.Output.GoIdent), "{}")
+					g.P("if err := x.ClientStream.RecvMsg(m); err != nil {")
+					g.P("return nil, err")
+					g.P("}")
+					g.P("ret = append(ret, &", method.GoName, "ManyResponse{")
+					g.P("Resp:   m,")
+					g.P("Target: x.cc.Targets[0],")
+					g.P("Index:  0,")
+					g.P("})")
+					g.P("return ret, nil")
+					g.P("}")
+					g.P()
 					g.P("m := []*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyRet")), "{}")
 					g.P("if err := x.ClientStream.RecvMsg(&m); err != nil {")
 					g.P("return nil, err")
@@ -249,7 +269,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 			g.P("if err != nil {")
 			g.P("return nil, err")
 			g.P("}")
-			g.P("x := &", clientStruct, methodStruct, "{stream}")
+			g.P("x := &", clientStruct, methodStruct, "{c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), "), stream}")
 			if !method.Desc.IsStreamingClient() {
 				g.P("if err := x.ClientStream.SendMsg(in); err != nil {")
 				g.P("return nil, err")

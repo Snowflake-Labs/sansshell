@@ -52,11 +52,29 @@ type LocalFile_ReadClientProxy interface {
 }
 
 type localFileClientReadClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
 func (x *localFileClientReadClientProxy) Recv() ([]*ReadManyResponse, error) {
 	var ret []*ReadManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &ReadReply{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &ReadManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -87,7 +105,7 @@ func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadRequest,
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientReadClientProxy{stream}
+	x := &localFileClientReadClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -112,6 +130,7 @@ type LocalFile_StatClientProxy interface {
 }
 
 type localFileClientStatClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
@@ -121,6 +140,23 @@ func (x *localFileClientStatClientProxy) Send(m *StatRequest) error {
 
 func (x *localFileClientStatClientProxy) Recv() ([]*StatManyResponse, error) {
 	var ret []*StatManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &StatReply{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &StatManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -151,7 +187,7 @@ func (c *localFileClientProxy) StatOneMany(ctx context.Context, opts ...grpc.Cal
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientStatClientProxy{stream}
+	x := &localFileClientStatClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	return x, nil
 }
 
@@ -170,6 +206,7 @@ type LocalFile_SumClientProxy interface {
 }
 
 type localFileClientSumClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
@@ -179,6 +216,23 @@ func (x *localFileClientSumClientProxy) Send(m *SumRequest) error {
 
 func (x *localFileClientSumClientProxy) Recv() ([]*SumManyResponse, error) {
 	var ret []*SumManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &SumReply{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &SumManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -209,7 +263,7 @@ func (c *localFileClientProxy) SumOneMany(ctx context.Context, opts ...grpc.Call
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientSumClientProxy{stream}
+	x := &localFileClientSumClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	return x, nil
 }
 
@@ -228,6 +282,7 @@ type LocalFile_WriteClientProxy interface {
 }
 
 type localFileClientWriteClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
@@ -255,7 +310,7 @@ func (c *localFileClientProxy) WriteOneMany(ctx context.Context, opts ...grpc.Ca
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientWriteClientProxy{stream}
+	x := &localFileClientWriteClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	return x, nil
 }
 

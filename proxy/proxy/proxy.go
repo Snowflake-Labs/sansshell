@@ -46,6 +46,15 @@ func (p *ProxyConn) Direct() bool {
 	return p.direct
 }
 
+// proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
+// we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
+type proxyStream struct {
+	method     string
+	stream     proxypb.Proxy_ProxyClient
+	ids        map[uint64]*ProxyRet
+	sendClosed bool
+}
+
 // See grpc.ClientConnInterface
 func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
 	if p.Direct() {
@@ -118,15 +127,6 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 	}
 
 	return s, nil
-}
-
-// proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
-// we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
-type proxyStream struct {
-	method     string
-	stream     proxypb.Proxy_ProxyClient
-	ids        map[uint64]*ProxyRet
-	sendClosed bool
 }
 
 // see grpc.ClientStream
@@ -213,15 +213,13 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		return io.EOF
 	}
 
-	// Since the API is an interface{} we can overload this for the 2 use cases.
-	// 1:1 - it's a proto.Message
-	// 1:N - it's a *[]*ProxyRet
+	// Since the API is an interface{} we can change what this normally
+	// expects from a proto.Message to a *[]*ProxyRet instead.
 	//
 	// Anything else is an error.
-	manyRet, oneMany := m.(*[]*ProxyRet)
-	msg, ok := m.(proto.Message)
-	if !ok && !oneMany {
-		return status.Errorf(codes.InvalidArgument, "args for RecvMsg must be a proto.Message %T", m)
+	manyRet, ok := m.(*[]*ProxyRet)
+	if !ok {
+		return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*ProxyRet) - got %T", m)
 	}
 
 	resp, err := p.stream.Recv()
@@ -235,23 +233,11 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 	switch {
 	case d != nil:
-		if !oneMany && len(d.StreamIds) > 1 {
-			return status.Error(codes.Internal, "Called in 1:1 context but receiving multiple stream ids")
-		}
 		for _, id := range d.StreamIds {
 			// Validate it's a stream we know.
 			if _, ok := p.ids[id]; !ok {
 				return status.Errorf(codes.Internal, "unexpected stream id %d received for StreamData", id)
 			}
-			// In the singular case we unmarshal back into the supplied proto.Message and just return.
-			if !oneMany {
-				err = d.Payload.UnmarshalTo(msg)
-				if err != nil {
-					return status.Errorf(codes.Internal, "can't unmarshal anypb: %v", err)
-				}
-				return nil
-			}
-			// This is always the 1:N case.
 			p.ids[id].Resp = d.Payload
 			p.ids[id].Error = nil
 			*manyRet = append(*manyRet, p.ids[id])
@@ -259,10 +245,6 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	case cl != nil:
 		code := codes.Code(cl.GetStatus().GetCode())
 		msg := cl.GetStatus().GetMessage()
-
-		if !oneMany && len(cl.StreamIds) > 1 {
-			return status.Error(codes.Internal, "Called in 1:1 context but receiving multiple stream ids")
-		}
 
 		// Do a one time check all the returned ids are ones we know.
 		for _, id := range cl.StreamIds {
@@ -280,11 +262,6 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 		if streamStatus.Code() != codes.OK {
 			closedErr = streamStatus.Err()
-		}
-
-		// For 1:1 we can just return the error
-		if !oneMany {
-			return closedErr
 		}
 
 		for _, id := range cl.StreamIds {

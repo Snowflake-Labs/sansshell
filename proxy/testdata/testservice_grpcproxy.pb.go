@@ -114,11 +114,29 @@ type TestService_TestServerStreamClientProxy interface {
 }
 
 type testServiceClientTestServerStreamClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
 func (x *testServiceClientTestServerStreamClientProxy) Recv() ([]*TestServerStreamManyResponse, error) {
 	var ret []*TestServerStreamManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &TestResponse{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &TestServerStreamManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -149,7 +167,7 @@ func (c *testServiceClientProxy) TestServerStreamOneMany(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestServerStreamClientProxy{stream}
+	x := &testServiceClientTestServerStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -174,6 +192,7 @@ type TestService_TestClientStreamClientProxy interface {
 }
 
 type testServiceClientTestClientStreamClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
@@ -201,7 +220,7 @@ func (c *testServiceClientProxy) TestClientStreamOneMany(ctx context.Context, op
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestClientStreamClientProxy{stream}
+	x := &testServiceClientTestClientStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	return x, nil
 }
 
@@ -220,6 +239,7 @@ type TestService_TestBidiStreamClientProxy interface {
 }
 
 type testServiceClientTestBidiStreamClientProxy struct {
+	cc *proxy.ProxyConn
 	grpc.ClientStream
 }
 
@@ -229,6 +249,23 @@ func (x *testServiceClientTestBidiStreamClientProxy) Send(m *TestRequest) error 
 
 func (x *testServiceClientTestBidiStreamClientProxy) Recv() ([]*TestBidiStreamManyResponse, error) {
 	var ret []*TestBidiStreamManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &TestResponse{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &TestBidiStreamManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
 	m := []*proxy.ProxyRet{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
@@ -259,6 +296,6 @@ func (c *testServiceClientProxy) TestBidiStreamOneMany(ctx context.Context, opts
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestBidiStreamClientProxy{stream}
+	x := &testServiceClientTestBidiStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
 	return x, nil
 }
