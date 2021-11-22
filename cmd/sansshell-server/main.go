@@ -1,5 +1,5 @@
-//go:build go1.16
-// +build go1.16
+//go:build go1.17
+// +build go1.17
 
 // Package main implements the SansShell server.
 package main
@@ -7,12 +7,14 @@ package main
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -39,25 +41,26 @@ var (
 
 // choosePolicy selects an OPA policy based on the flags, or calls log.Fatal if
 // an invalid combination is provided.
-func choosePolicy() string {
+func choosePolicy(logger logr.Logger) string {
 	if *policyFlag != defaultPolicy && *policyFile != "" {
-		log.Fatal("Do not set both --policy and --policy-file.")
+		logger.Error(errors.New("invalid policy flags"), "do not set both --policy and --policy-file")
+		os.Exit(1)
 	}
 
 	var policy string
 	if *policyFile != "" {
 		pff, err := os.ReadFile(*policyFile)
 		if err != nil {
-			log.Fatal(err)
+			logger.Error(err, "os.ReadFile(policyFile)", "file", *policyFile)
 		}
-		log.Println("Using policy from --policy-file")
+		logger.Info("using policy from --policy-file", "file", *policyFile)
 		policy = string(pff)
 	} else {
 		if *policyFlag != defaultPolicy {
-			log.Println("Using policy from --policy")
+			logger.Info("using policy from --policy")
 			policy = *policyFlag
 		} else {
-			log.Println("Using built-in policy")
+			logger.Info("using built-in policy")
 			policy = defaultPolicy
 		}
 	}
@@ -65,22 +68,21 @@ func choosePolicy() string {
 }
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
-	log.SetOutput(os.Stderr)
-
+	logOpts := log.Ldate | log.Ltime | log.Lshortfile
+	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")
 	flag.Parse()
 
-	policy := choosePolicy()
+	policy := choosePolicy(logger)
 	ctx := context.Background()
 
 	creds, err := mtls.LoadServerCredentials(ctx, *credSource)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err, "mtls.LoadServerCredentials", "credsource", *credSource)
+		os.Exit(1)
 	}
 
-	logger := stdr.New(log.Default())
-
 	if err := server.Serve(*hostport, creds, policy, logger); err != nil {
-		log.Fatal(err)
+		logger.Error(err, "server.Serve", "hostport", *hostport)
+		os.Exit(1)
 	}
 }
