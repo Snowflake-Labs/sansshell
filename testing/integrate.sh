@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -o nounset
 
 function check_status {
   if [ $? != 0 ]; then
@@ -9,9 +10,7 @@ function check_status {
 
 function shutdown {
   echo "Shutting down"
-  # Undo policy changes
-  sed -i -e 's:default allow = true:default allow = false:g' ./cmd/proxy-server/default-policy.rego
-  sed -i -e 's:default allow = true:default allow = false:g' ./cmd/sansshell-server/default-policy.rego
+  rm -rf /tmp/policy.$$
   kill ${PROXY_PID}
   sudo killall sansshell-server
 }
@@ -111,14 +110,14 @@ function run_a_test {
     echo "${CMD} passed"
 }
 
-trap shutdown 0
+trap shutdown EXIT
   
 # Make sure we're at the top level which is one below where this script lives
 cd $(dirname $PWD/$BASH_SOURCE)/..
 
 # Open up policy for testing
-sed -i -e 's:default allow = false:default allow = true:g' ./cmd/proxy-server/default-policy.rego
-sed -i -e 's:default allow = false:default allow = true:g' ./cmd/sansshell-server/default-policy.rego
+echo "package sansshell.authz" > /tmp/policy.$$
+echo "default allow = true" >> /tmp/policy.$$
 
 # Build everything (this won't rebuild the binaries)
 go build -v ./...
@@ -146,11 +145,11 @@ sudo yum remove -y zziplib
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./cmd/proxy-server/proxy-server --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./cmd/proxy-server/proxy-server --policy-file=/tmp/policy.$$ --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo -b ./cmd/sansshell-server/sansshell-server --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=/tmp/policy.$$ --hostport=localhost:50042 >& ${LOGS}/server.log
 
 SANSSH_NOPROXY="./cmd/sanssh/sanssh --timeout=120s"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
