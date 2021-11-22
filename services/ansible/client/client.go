@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -92,7 +91,7 @@ func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	state := args[0].(*util.ExecuteState)
 
-	c := pb.NewPlaybookClient(state.Conn)
+	c := pb.NewPlaybookClientProxy(state.Conn)
 
 	req := &pb.RunRequest{
 		Playbook: a.playbook,
@@ -103,11 +102,21 @@ func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		Verbose:  a.verbose,
 	}
 
-	resp, err := c.Run(ctx, req)
+	resp, err := c.RunOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Run returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
-	log.Printf("Return code: %d\nStdout:%s\nStderr:%s\n", resp.ReturnCode, resp.Stdout, resp.Stderr)
-	return subcommands.ExitSuccess
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		fmt.Fprintf(state.Out[r.Index], "Target: %s (%d)\n\n", r.Target, r.Index)
+		if r.Error != nil {
+			fmt.Fprintf(state.Out[r.Index], "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Return code: %d\nStdout:%s\nStderr:%s\n", r.Resp.ReturnCode, r.Resp.Stdout, r.Resp.Stderr)
+	}
+	return retCode
 }

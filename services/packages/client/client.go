@@ -69,7 +69,7 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewPackagesClient(state.Conn)
+	c := pb.NewPackagesClientProxy(state.Conn)
 
 	req := &pb.InstallRequest{
 		PackageSystem: ps,
@@ -78,14 +78,22 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		Repo:          i.repo,
 	}
 
-	resp, err := c.Install(ctx, req)
+	resp, err := c.InstallOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Install returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	fmt.Fprintf(os.Stdout, "Success!\n\nOutput from installation:\n%s\n", resp.DebugOutput)
-	return subcommands.ExitSuccess
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Out[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Success!\n\nOutput from installation:\n%s\n", r.Resp.DebugOutput)
+	}
+	return retCode
 }
 
 type updateCmd struct {
@@ -125,7 +133,7 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewPackagesClient(state.Conn)
+	c := pb.NewPackagesClientProxy(state.Conn)
 
 	req := &pb.UpdateRequest{
 		PackageSystem: ps,
@@ -135,14 +143,22 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		Repo:          u.repo,
 	}
 
-	resp, err := c.Update(ctx, req)
+	resp, err := c.UpdateOneMany(ctx, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Update returned error: %v\n", err)
 		return subcommands.ExitFailure
 	}
 
-	fmt.Fprintf(os.Stdout, "Success!\n\nOutput from update:\n%s\n", resp.DebugOutput)
-	return subcommands.ExitSuccess
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Out[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Success!\n\nOutput from update:\n%s\n", r.Resp.DebugOutput)
+	}
+	return retCode
 }
 
 type listCmd struct {
@@ -169,9 +185,9 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewPackagesClient(state.Conn)
+	c := pb.NewPackagesClientProxy(state.Conn)
 
-	resp, err := c.ListInstalled(ctx, &pb.ListInstalledRequest{
+	resp, err := c.ListInstalledOneMany(ctx, &pb.ListInstalledRequest{
 		PackageSystem: ps,
 	})
 	if err != nil {
@@ -179,12 +195,20 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	fmt.Fprint(os.Stdout, "Installed Packages\n")
-	for _, pkg := range resp.Packages {
-		// Print the package name, version and repo with some reasonable spacing.
-		fmt.Fprintf(os.Stdout, "%40s %16s %32s\n", pkg.Name, pkg.Version, pkg.Repo)
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Out[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
+		for _, pkg := range r.Resp.Packages {
+			// Print the package name, version and repo with some reasonable spacing.
+			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", pkg.Name, pkg.Version, pkg.Repo)
+		}
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
 
 type repoListCmd struct {
@@ -213,9 +237,9 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewPackagesClient(state.Conn)
+	c := pb.NewPackagesClientProxy(state.Conn)
 
-	resp, err := c.RepoList(ctx, &pb.RepoListRequest{
+	resp, err := c.RepoListOneMany(ctx, &pb.RepoListRequest{
 		PackageSystem: ps,
 	})
 	if err != nil {
@@ -223,25 +247,33 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitFailure
 	}
 
-	// Print the repo id, name and status with some reasonable spacing.
-	if r.verbose {
-		// Print like "yum repolist all -v would.
-		for _, repo := range resp.Repos {
-			fmt.Fprintf(os.Stdout, "Repo-id      : %s\n", repo.Id)
-			fmt.Fprintf(os.Stdout, "Repo-name    : %s\n", repo.Name)
-			fmt.Fprintf(os.Stdout, "Repo-status  : %s\n", getStatus(repo.Status))
-			fmt.Fprintf(os.Stdout, "Repo-baseurl : %s\n", repo.Url)
-			fmt.Fprintf(os.Stdout, "Repo-filename: %s\n", repo.Filename)
-			fmt.Fprintln(os.Stdout)
+	retCode := subcommands.ExitSuccess
+	for s := range resp {
+		if s.Error != nil {
+			fmt.Fprintf(state.Out[s.Index], "Repo list for target %s (%d) returned error: %v\n", s.Target, s.Index, s.Error)
+			retCode = subcommands.ExitFailure
+			continue
 		}
-	} else {
-		format := "%35s %65s %10s\n"
-		fmt.Fprintf(os.Stdout, format, "repo id", "repo name", "status")
-		for _, repo := range resp.Repos {
-			fmt.Fprintf(os.Stdout, format, repo.Id, repo.Name, getStatus(repo.Status))
+		// Print the repo id, name and status with some reasonable spacing.
+		if r.verbose {
+			// Print like "yum repolist all -v would.
+			for _, repo := range s.Resp.Repos {
+				fmt.Fprintf(state.Out[s.Index], "Repo-id      : %s\n", repo.Id)
+				fmt.Fprintf(state.Out[s.Index], "Repo-name    : %s\n", repo.Name)
+				fmt.Fprintf(state.Out[s.Index], "Repo-status  : %s\n", getStatus(repo.Status))
+				fmt.Fprintf(state.Out[s.Index], "Repo-baseurl : %s\n", repo.Url)
+				fmt.Fprintf(state.Out[s.Index], "Repo-filename: %s\n", repo.Filename)
+				fmt.Fprintln(state.Out[s.Index])
+			}
+		} else {
+			format := "%35s %65s %10s\n"
+			fmt.Fprintf(state.Out[s.Index], format, "repo id", "repo name", "status")
+			for _, repo := range s.Resp.Repos {
+				fmt.Fprintf(state.Out[s.Index], format, repo.Id, repo.Name, getStatus(repo.Status))
+			}
 		}
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
 
 func getStatus(s pb.RepoStatus) string {

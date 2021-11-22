@@ -296,8 +296,8 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 		return nil, err
 	}
 
-	// This shouldn't return anything to stderr.
-	run, err := util.RunCommand(ctx, command[0], command[1:], util.FailOnStderr())
+	// This may return output to stderr if the lock is held and we wait. That's ok.
+	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, err
 	}

@@ -224,9 +224,11 @@ func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		return subcommands.ExitFailure
 	}
 
+	retCode := subcommands.ExitSuccess
 	for resp := range respChan {
 		if resp.Error != nil {
 			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			retCode = subcommands.ExitFailure
 			continue
 		}
 		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
@@ -239,7 +241,7 @@ func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			}
 		}
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
 
 type jstackCmd struct {
@@ -277,9 +279,11 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		return subcommands.ExitFailure
 	}
 
+	retCode := subcommands.ExitSuccess
 	for resp := range respChan {
 		if resp.Error != nil {
 			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			retCode = subcommands.ExitFailure
 			continue
 		}
 		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
@@ -306,7 +310,7 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			fmt.Fprintln(state.Out[resp.Index])
 		}
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
 
 func flagToType(val string) (pb.DumpType, error) {
@@ -400,19 +404,23 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
+	retCode := subcommands.ExitSuccess
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
+		// If the stream returns an error we're just done.
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
-			return subcommands.ExitFailure
+			retCode = subcommands.ExitFailure
+			break
 		}
 		if p.output == "" {
 			for _, r := range resp {
 				if r.Error != nil && r.Error != io.EOF {
 					fmt.Fprintf(os.Stderr, "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
+					retCode = subcommands.ExitFailure
 					continue
 				}
 				n, err := state.Out[r.Index].Write(r.Resp.Data)
@@ -423,5 +431,5 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			}
 		}
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
