@@ -58,7 +58,9 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHoo
 // the success or failure of policy.
 func (g *Authorizer) Eval(ctx context.Context, input *RpcAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
-	logger.V(1).Info("evaluating authz policy", "input", input)
+	if input != nil {
+		logger.V(1).Info("evaluating authz policy", "input", string(input.Message), input)
+	}
 	if input == nil {
 		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
 	}
