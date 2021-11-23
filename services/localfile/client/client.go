@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -71,18 +72,21 @@ func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, of
 		return err
 	}
 
+	var retErr error
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err
+			retErr = err
+			break
 		}
 		for _, r := range resp {
 			contents := r.Resp.Contents
-			if r.Error != nil {
+			if r.Error != nil && r.Error != io.EOF {
 				contents = []byte(fmt.Sprintf("Target %s (%d) returned error - %v", r.Target, r.Index, r.Error))
+				retErr = errors.New("error received for remote file. See output for details")
 			}
 			n, err := state.Out[r.Index].Write(contents)
 			if got, want := n, len(contents); got != want {
@@ -93,7 +97,7 @@ func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, of
 			}
 		}
 	}
-	return nil
+	return retErr
 }
 
 type statCmd struct{}
