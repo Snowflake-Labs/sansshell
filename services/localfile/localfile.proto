@@ -35,21 +35,30 @@ service LocalFile {
 
 // ReadActionRequest indicates the type of read we're performing.
 // Either a file read which then terminates or a tail based read that
-// continues forever.
+// continues forever (i.e. as tail -f on the command line would do).
 message ReadActionRequest {
   oneof request {
     ReadRequest file = 1;
-    ReadRequest tail = 2;
+    TailRequest tail = 2;
   }
 }
 
 // ReadRequest describes the filename to be read
 message ReadRequest {
   string filename = 1;
-  // If positive and non-zero skip N bytes into the file before returning data.
+  // If non-zero skip N bytes into the file before returning data.
+  // Negative implies based from end of file.
   int64 offset = 2;
   // If positive and non-zero return only this many total bytes.
   int64 length = 3;
+}
+
+// TailRequest describes the filename to be tailed.
+message TailRequest {
+  string filename = 1;
+  // If non-zero skip N bytes into the file before returning data.
+  // Negative implies based from end of file.
+  int64 offset = 2;
 }
 
 // ReadResponse contains the contents of the file
