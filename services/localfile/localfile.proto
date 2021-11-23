@@ -181,7 +181,7 @@ message ListRequest {
   string entry = 1;
 }
 
-// ListReply will begin with the directory followed by N entries
+// ListReply will begin with the entry followed by N entries (if a directory)
 // until that level of the tree is exhausted.
 message ListReply { StatReply entry = 1; }
 
