@@ -7,8 +7,8 @@ allow {
 }
 
 allow {
-	input.type = "LocalFile.ReadRequest"
-	input.message.filename = "/etc/hosts"
+	input.type = "LocalFile.ReadActionRequest"
+	input.message.request.file.filename = "/etc/hosts"
 }
 
 allow {

@@ -26,11 +26,11 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "LocalFile.ReadRequest"
+    input.type = "LocalFile.ReadActionRequest"
 		input.message.filename = "/etc/hosts"
 }
 allow {
-    input.type = "LocalFile.ReadRequest"
+    input.type = "LocalFile.ReadActionRequest"
 		input.message.filename = "/no-such-filename-for-sansshell-unittest"
 }
 `
