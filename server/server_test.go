@@ -27,11 +27,11 @@ default allow = false
 
 allow {
     input.type = "LocalFile.ReadActionRequest"
-		input.message.filename = "/etc/hosts"
+		input.message.file.filename = "/etc/hosts"
 }
 allow {
     input.type = "LocalFile.ReadActionRequest"
-		input.message.filename = "/no-such-filename-for-sansshell-unittest"
+		input.message.file.filename = "/no-such-filename-for-sansshell-unittest"
 }
 `
 )
