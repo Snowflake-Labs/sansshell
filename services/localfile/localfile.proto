@@ -174,23 +174,15 @@ message CopyRequest {
   bytes blob_data = 3;
 }
 
+// ListRequest will do an expansion on the entry given to list all things
+// located there. If entry is a file only that data will be returned.
 message ListRequest {
-  // The directory to list.
-  string directory = 1;
-  // Whether to recurse through the tree rooted at directory.
-  bool recurse = 2;
+  // The entry to list.
+  string entry = 1;
 }
 
-// ListReply will begin with a directory followed by N entries
-// until that level of the tree is exhausted. If recurse is set
-// a new set of directory + entry replies will be sent. This will
-// continue in breadth first form until the entire tree has been
-// returned.
-message ListReply {
-  oneof reply {
-    StatReply directory = 1;
-    StatReply entry = 2;
-  }
-}
+// ListReply will begin with the directory followed by N entries
+// until that level of the tree is exhausted.
+message ListReply { StatReply entry = 1; }
 
 message SetFileAttributesRequest { FileAttributes attrs = 1; }
