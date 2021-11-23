@@ -58,10 +58,14 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, offset int64, length int64) error {
 	c := pb.NewLocalFileClientProxy(state.Conn)
-	stream, err := c.ReadOneMany(ctx, &pb.ReadRequest{
-		Filename: filename,
-		Offset:   offset,
-		Length:   length,
+	stream, err := c.ReadOneMany(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{
+				Filename: filename,
+				Offset:   offset,
+				Length:   length,
+			},
+		},
 	})
 	if err != nil {
 		return err

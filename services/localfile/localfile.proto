@@ -10,9 +10,9 @@ package LocalFile;
 // The LocalFile service definition.
 service LocalFile {
   // Read reads a file from the disk and returns it contents.
-  rpc Read(ReadRequest) returns (stream ReadReply) {}
+  rpc Read(ReadActionRequest) returns (stream ReadReply) {}
 
-  // Stat returns metadata about a single filesytem path.
+  // Stat returns metadata about a filesytem path.
   rpc Stat(stream StatRequest) returns (stream StatReply) {}
 
   // Sum calculates a sum over the data in a single file.
@@ -25,9 +25,22 @@ service LocalFile {
   // file.
   rpc Copy(CopyRequest) returns (google.protobuf.Empty) {}
 
+  // List returns StatReply entries for the entities contained at a given path.
+  rpc List(ListRequest) returns (stream ListReply) {}
+
   // SetFileAttributes takes a given filename and sets the given attributes.
   rpc SetFileAttributes(SetFileAttributesRequest)
       returns (google.protobuf.Empty) {}
+}
+
+// ReadActionRequest indicates the type of read we're performing.
+// Either a file read which then terminates or a tail based read that
+// continues forever.
+message ReadActionRequest {
+  oneof request {
+    ReadRequest file = 1;
+    ReadRequest tail = 2;
+  }
 }
 
 // ReadRequest describes the filename to be read
@@ -64,6 +77,9 @@ message StatReply {
   uint32 uid = 5;
   // GID of owner
   uint32 gid = 6;
+  // Whether the immutable flag is set.
+  // This only applies to systems which support immutable file bits.
+  bool immutable = 7;
 }
 
 // SumType specifies a hashing function to use when calculating
@@ -110,6 +126,9 @@ message FileAttributes {
   // If not blank the group to set as the group of the file. If blank the
   // file must previously exist and overwrite above is set to true.
   string group = 4;
+  // If true will set the immutable bit on the file. False will clear it.
+  // This only applies to systems which support immutable file bits.
+  bool immutable = 5;
 }
 
 // FileWrite describes everything about a file to be written.
@@ -144,6 +163,25 @@ message CopyRequest {
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
   bytes blob_data = 3;
+}
+
+message ListRequest {
+  // The directory to list.
+  string directory = 1;
+  // Whether to recurse through the tree rooted at directory.
+  bool recurse = 2;
+}
+
+// ListReply will begin with a directory followed by N entries
+// until that level of the tree is exhausted. If recurse is set
+// a new set of directory + entry replies will be sent. This will
+// continue in breadth first form until the entire tree has been
+// returned.
+message ListReply {
+  oneof reply {
+    StatReply directory = 1;
+    StatReply entry = 2;
+  }
 }
 
 message SetFileAttributesRequest { FileAttributes attrs = 1; }

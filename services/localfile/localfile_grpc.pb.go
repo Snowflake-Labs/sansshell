@@ -20,8 +20,8 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type LocalFileClient interface {
 	// Read reads a file from the disk and returns it contents.
-	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error)
-	// Stat returns metadata about a single filesytem path.
+	Read(ctx context.Context, in *ReadActionRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error)
+	// Stat returns metadata about a filesytem path.
 	Stat(ctx context.Context, opts ...grpc.CallOption) (LocalFile_StatClient, error)
 	// Sum calculates a sum over the data in a single file.
 	Sum(ctx context.Context, opts ...grpc.CallOption) (LocalFile_SumClient, error)
@@ -30,6 +30,8 @@ type LocalFileClient interface {
 	// Copy retrieves a file from the given blob URL and writes it to a local
 	// file.
 	Copy(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// List returns StatReply entries for the entities contained at a given path.
+	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClient, error)
 	// SetFileAttributes takes a given filename and sets the given attributes.
 	SetFileAttributes(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
@@ -42,7 +44,7 @@ func NewLocalFileClient(cc grpc.ClientConnInterface) LocalFileClient {
 	return &localFileClient{cc}
 }
 
-func (c *localFileClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error) {
+func (c *localFileClient) Read(ctx context.Context, in *ReadActionRequest, opts ...grpc.CallOption) (LocalFile_ReadClient, error) {
 	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[0], "/LocalFile.LocalFile/Read", opts...)
 	if err != nil {
 		return nil, err
@@ -179,6 +181,38 @@ func (c *localFileClient) Copy(ctx context.Context, in *CopyRequest, opts ...grp
 	return out, nil
 }
 
+func (c *localFileClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClient, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[4], "/LocalFile.LocalFile/List", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localFileListClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type LocalFile_ListClient interface {
+	Recv() (*ListReply, error)
+	grpc.ClientStream
+}
+
+type localFileListClient struct {
+	grpc.ClientStream
+}
+
+func (x *localFileListClient) Recv() (*ListReply, error) {
+	m := new(ListReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *localFileClient) SetFileAttributes(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/SetFileAttributes", in, out, opts...)
@@ -193,8 +227,8 @@ func (c *localFileClient) SetFileAttributes(ctx context.Context, in *SetFileAttr
 // for forward compatibility
 type LocalFileServer interface {
 	// Read reads a file from the disk and returns it contents.
-	Read(*ReadRequest, LocalFile_ReadServer) error
-	// Stat returns metadata about a single filesytem path.
+	Read(*ReadActionRequest, LocalFile_ReadServer) error
+	// Stat returns metadata about a filesytem path.
 	Stat(LocalFile_StatServer) error
 	// Sum calculates a sum over the data in a single file.
 	Sum(LocalFile_SumServer) error
@@ -203,6 +237,8 @@ type LocalFileServer interface {
 	// Copy retrieves a file from the given blob URL and writes it to a local
 	// file.
 	Copy(context.Context, *CopyRequest) (*emptypb.Empty, error)
+	// List returns StatReply entries for the entities contained at a given path.
+	List(*ListRequest, LocalFile_ListServer) error
 	// SetFileAttributes takes a given filename and sets the given attributes.
 	SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error)
 }
@@ -211,7 +247,7 @@ type LocalFileServer interface {
 type UnimplementedLocalFileServer struct {
 }
 
-func (UnimplementedLocalFileServer) Read(*ReadRequest, LocalFile_ReadServer) error {
+func (UnimplementedLocalFileServer) Read(*ReadActionRequest, LocalFile_ReadServer) error {
 	return status.Errorf(codes.Unimplemented, "method Read not implemented")
 }
 func (UnimplementedLocalFileServer) Stat(LocalFile_StatServer) error {
@@ -225,6 +261,9 @@ func (UnimplementedLocalFileServer) Write(LocalFile_WriteServer) error {
 }
 func (UnimplementedLocalFileServer) Copy(context.Context, *CopyRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Copy not implemented")
+}
+func (UnimplementedLocalFileServer) List(*ListRequest, LocalFile_ListServer) error {
+	return status.Errorf(codes.Unimplemented, "method List not implemented")
 }
 func (UnimplementedLocalFileServer) SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetFileAttributes not implemented")
@@ -242,7 +281,7 @@ func RegisterLocalFileServer(s grpc.ServiceRegistrar, srv LocalFileServer) {
 }
 
 func _LocalFile_Read_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(ReadRequest)
+	m := new(ReadActionRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -358,6 +397,27 @@ func _LocalFile_Copy_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LocalFile_List_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LocalFileServer).List(m, &localFileListServer{stream})
+}
+
+type LocalFile_ListServer interface {
+	Send(*ListReply) error
+	grpc.ServerStream
+}
+
+type localFileListServer struct {
+	grpc.ServerStream
+}
+
+func (x *localFileListServer) Send(m *ListReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 func _LocalFile_SetFileAttributes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetFileAttributesRequest)
 	if err := dec(in); err != nil {
@@ -414,6 +474,11 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Write",
 			Handler:       _LocalFile_Write_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "List",
+			Handler:       _LocalFile_List_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "localfile.proto",

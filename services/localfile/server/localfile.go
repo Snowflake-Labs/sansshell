@@ -34,11 +34,16 @@ var (
 type server struct{}
 
 // Read returns the contents of the named file
-func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error {
+func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer) error {
 	logger := logr.FromContextOrDiscard(stream.Context())
 
-	file := req.Filename
-	logger.Info("read request", "filename", req.Filename)
+	r := req.GetFile()
+	if r == nil {
+		return status.Errorf(codes.Unimplemented, "Only File support is implemented")
+	}
+
+	file := r.Filename
+	logger.Info("read request", "filename", r.Filename)
 	if !filepath.IsAbs(file) {
 		return AbsolutePathError
 	}
@@ -54,7 +59,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 	}()
 
 	// Seek forward if requested
-	if s := req.GetOffset(); s != 0 {
+	if s := r.Offset; s != 0 {
 		whence := 0
 		// If negative we're tailing from the end so
 		// negate the sign and set whence.
@@ -66,7 +71,7 @@ func (s *server) Read(req *pb.ReadRequest, stream pb.LocalFile_ReadServer) error
 		}
 	}
 
-	max := req.GetLength()
+	max := r.Length
 	if max == 0 {
 		max = math.MaxInt64
 	}
@@ -197,6 +202,10 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) error {
 
 func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
+func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error {
+	return status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
