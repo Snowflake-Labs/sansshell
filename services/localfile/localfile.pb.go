@@ -971,7 +971,7 @@ func (x *ListRequest) GetEntry() string {
 	return ""
 }
 
-// ListReply will begin with the directory followed by N entries
+// ListReply will begin with the entry followed by N entries (if a directory)
 // until that level of the tree is exhausted.
 type ListReply struct {
 	state         protoimpl.MessageState
