@@ -54,10 +54,10 @@ func TestRead(t *testing.T) {
 	}
 	defer conn.Close()
 
-	tests := []struct {
+	for _, tc := range []struct {
 		Name      string
 		Filename  string
-		Err       string
+		WantErr   bool
 		Chunksize int
 		Offset    int64
 		Length    int64
@@ -65,27 +65,23 @@ func TestRead(t *testing.T) {
 		{
 			Name:      "/etc/hosts-normal",
 			Filename:  "/etc/hosts",
-			Err:       "",
 			Chunksize: 10,
 		},
 		{
 			Name:      "/etc/hosts-1-byte-chunk",
 			Filename:  "/etc/hosts",
-			Err:       "",
 			Chunksize: 1,
 		},
 		{
 			Name:      "/etc/hosts-with-offset-and-length",
 			Filename:  "/etc/hosts",
-			Err:       "",
 			Chunksize: 10,
 			Offset:    10,
 			Length:    15,
 		},
 		{
-			Name:      "/etc/hosts-tail",
+			Name:      "/etc/hosts-from-end",
 			Filename:  "/etc/hosts",
-			Err:       "",
 			Chunksize: 10,
 			Offset:    -20,
 			Length:    15,
@@ -93,12 +89,14 @@ func TestRead(t *testing.T) {
 		{
 			Name:     "bad-file",
 			Filename: "/no-such-filename-for-sansshell-unittest",
-			Err:      "no such file or directory",
+			WantErr:  true,
 		},
-	}
-
-	for _, tc := range tests {
-		// Future proof for t.Parallel()
+		{
+			Name:     "non-absolute file",
+			Filename: "/tmp/foo/../../etc/passwd",
+			WantErr:  true,
+		},
+	} {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			oldChunk := util.StreamingChunkSize
@@ -122,7 +120,7 @@ func TestRead(t *testing.T) {
 			// In general this can only fail here for connection issues which
 			// we're not expecting. Actual failes happen in Recv below.
 			if err != nil {
-				t.Fatalf("Read failed: %v", err)
+				t.Fatalf("%s: Read failed: %v", tc.Name, err)
 			}
 
 			buf := &bytes.Buffer{}
@@ -131,17 +129,16 @@ func TestRead(t *testing.T) {
 				if err == io.EOF {
 					break
 				}
-				if err != nil {
-					t.Logf("Got error: %v", err)
-					if tc.Err == "" || !strings.Contains(err.Error(), tc.Err) {
-						t.Errorf("unexpected error; want: %s, got: %s", tc.Err, err)
-					}
+				if got, want := err != nil, tc.WantErr; got != want {
+					t.Errorf("%s: error state inconsistent got %t and want %t err %v", tc.Name, got, want, err)
+				}
+				if tc.WantErr {
 					// If this was an expected error we're done.
 					return
 				}
 
 				t.Logf("Response: %+v", resp)
-				contents := resp.GetContents()
+				contents := resp.Contents
 				n, err := buf.Write(contents)
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
@@ -172,6 +169,71 @@ func TestRead(t *testing.T) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
 			}
 		})
+	}
+}
+
+func TestTail(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	if err != nil {
+		t.Fatalf("Failed to dial bufnet: %v", err)
+	}
+	defer conn.Close()
+
+	// Create a file with some initial data.
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	if err != nil {
+		t.Fatalf("Can't create tmpfile: %v", err)
+	}
+	data := "Some data\n"
+	f1.WriteString(data)
+	name := f1.Name()
+	if err := f1.Close(); err != nil {
+		t.Fatalf("Error closeing %s - %v", name, err)
+	}
+	client := pb.NewLocalFileClient(conn)
+	stream, err := client.Read(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_Tail{
+			Tail: &pb.TailRequest{
+				Filename: name,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Error from Read: %v", err)
+	}
+
+	buf := &bytes.Buffer{}
+	resp, err := stream.Recv()
+	if err != nil {
+		t.Fatalf("error reading from stream: %v", err)
+	}
+	// We don't care about errors as we compare the buf later.
+	buf.Write(resp.Contents)
+
+	f1, err = os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("can't open %s for adding data: %v", name, err)
+	}
+
+	n, err := f1.WriteString(data)
+	if n != len(data) || err != nil {
+		t.Fatalf("incorrect length or error. Wrote %d expected %d. Error - %v", n, len(data), err)
+	}
+	if err = f1.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	resp, err = stream.Recv()
+	if err != nil {
+		t.Fatalf("error reading from stream: %v", err)
+	}
+	buf.Write(resp.Contents)
+	data = data + data
+	if got, want := buf.String(), data; got != want {
+		t.Fatalf("didn't get matching data for second file read. Got %q and want %q", got, want)
 	}
 }
 
@@ -272,6 +334,8 @@ func TestStat(t *testing.T) {
 			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
+			err = stream.CloseSend()
+			fatalOnErr("CloseSend", err, t)
 		})
 	}
 }
@@ -345,6 +409,17 @@ func TestSum(t *testing.T) {
 			recvErrFunc: fatalOnErr,
 		},
 		{
+			name:        "invalid type",
+			req:         &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_SHA256 + 999},
+			reply:       nil,
+			sendErrFunc: fatalOnErr,
+			recvErrFunc: func(op string, err error, t *testing.T) {
+				if err == nil {
+					t.Fatalf("%s: err was nil, expected one for invalid SumType", op)
+				}
+			},
+		},
+		{
 			name: "sha256",
 			req:  &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_SHA256},
 			reply: &pb.SumReply{
@@ -405,6 +480,8 @@ func TestSum(t *testing.T) {
 			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
+			err = stream.CloseSend()
+			fatalOnErr("CloseSend", err, t)
 		})
 	}
 }

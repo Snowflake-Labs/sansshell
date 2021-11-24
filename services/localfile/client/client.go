@@ -19,6 +19,7 @@ import (
 
 func init() {
 	subcommands.Register(&readCmd{}, "file")
+	subcommands.Register(&tailCmd{}, "tail")
 	subcommands.Register(&statCmd{}, "file")
 	subcommands.Register(&sumCmd{}, "file")
 }
@@ -49,25 +50,27 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 
 	filename := f.Args()[0]
-	err := ReadFile(ctx, state, filename, p.offset, p.length)
+	req := &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{
+				Filename: filename,
+				Offset:   p.offset,
+				Length:   p.length,
+			},
+		},
+	}
+
+	err := ReadFile(ctx, state, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not read file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Could not read file %s: %v\n", filename, err)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
 }
 
-func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, offset int64, length int64) error {
+func ReadFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionRequest) error {
 	c := pb.NewLocalFileClientProxy(state.Conn)
-	stream, err := c.ReadOneMany(ctx, &pb.ReadActionRequest{
-		Request: &pb.ReadActionRequest_File{
-			File: &pb.ReadRequest{
-				Filename: filename,
-				Offset:   offset,
-				Length:   length,
-			},
-		},
-	})
+	stream, err := c.ReadOneMany(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -98,6 +101,48 @@ func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, of
 		}
 	}
 	return retErr
+}
+
+type tailCmd struct {
+	offset int64
+}
+
+func (*tailCmd) Name() string     { return "tail" }
+func (*tailCmd) Synopsis() string { return "Tail a file." }
+func (*tailCmd) Usage() string {
+	return `tail <path>:
+  Tail the remote file named by <path> and write it to the appropriate --output destination. This
+  will continue to block and read until cancelled (as tail -f would do locally).
+`
+}
+
+func (p *tailCmd) SetFlags(f *flag.FlagSet) {
+	f.Int64Var(&p.offset, "offset", 0, "If positive bytes to skip before reading. If negative apply from the end of the file")
+}
+
+func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintf(os.Stderr, "Please specify a filename to tail.\n")
+		return subcommands.ExitUsageError
+	}
+
+	filename := f.Args()[0]
+	req := &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_Tail{
+			Tail: &pb.TailRequest{
+				Filename: filename,
+				Offset:   p.offset,
+			},
+		},
+	}
+
+	err := ReadFile(ctx, state, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not tail file: %v\n", err)
+		return subcommands.ExitFailure
+	}
+	return subcommands.ExitSuccess
 }
 
 type statCmd struct{}

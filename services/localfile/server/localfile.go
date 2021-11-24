@@ -11,7 +11,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"syscall"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -19,6 +18,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute")
+	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 )
 
 // server is used to implement the gRPC server
@@ -38,14 +38,23 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	logger := logr.FromContextOrDiscard(stream.Context())
 
 	r := req.GetFile()
-	if r == nil {
-		return status.Errorf(codes.Unimplemented, "Only File support is implemented")
+	t := req.GetTail()
+
+	var file string
+	var offset, length int64
+	switch {
+	case r != nil:
+		file = r.Filename
+		offset = r.Offset
+		length = r.Length
+	case t != nil:
+		file = t.Filename
+		offset = t.Offset
 	}
 
-	file := r.Filename
-	logger.Info("read request", "filename", r.Filename)
-	if !filepath.IsAbs(file) {
-		return AbsolutePathError
+	logger.Info("read request", "filename", file)
+	if err := util.ValidPath(file); err != nil {
+		return err
 	}
 	f, err := os.Open(file)
 	if err != nil {
@@ -59,19 +68,19 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	}()
 
 	// Seek forward if requested
-	if s := r.Offset; s != 0 {
+	if offset != 0 {
 		whence := 0
 		// If negative we're tailing from the end so
 		// negate the sign and set whence.
-		if s < 0 {
+		if offset < 0 {
 			whence = 2
 		}
-		if _, err := f.Seek(s, whence); err != nil {
+		if _, err := f.Seek(offset, whence); err != nil {
 			return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
 		}
 	}
 
-	max := r.Length
+	max := length
 	if max == 0 {
 		max = math.MaxInt64
 	}
@@ -83,9 +92,28 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	for {
 		n, err := reader.Read(buf)
 
-		// If we got EOF we're done.
+		// If we got EOF we're done for normal reads and wait for tails.
 		if err == io.EOF {
-			break
+			if r != nil {
+				break
+			}
+			// TODO(jchacon): Derive this into a function supplied by arch specific files
+			//                so we can use epoll here (OS/X only has poll).
+			fds := []unix.PollFd{
+				{
+					Fd:     int32(f.Fd()),
+					Events: unix.POLLIN,
+				},
+			}
+			n, err := unix.Poll(fds, -1)
+			if err != nil {
+				return status.Errorf(codes.Internal, "error from poll - %v", err)
+			}
+			if n != 1 {
+				return status.Errorf(codes.Internal, "incorrect return from poll. Expected 1 and got %d", n)
+			}
+			// It's ready to read so loop back and do that.
+			continue
 		}
 
 		if err != nil {
@@ -98,9 +126,11 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 		}
 
-		// If we got back less than a full chunk we're done.
+		// If we got back less than a full chunk we're done for non-tail cases.
 		if n < util.StreamingChunkSize {
-			break
+			if r != nil {
+				break
+			}
 		}
 	}
 	return nil
@@ -118,7 +148,7 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 		}
 
 		logger.Info("stat", "filename", req.Filename)
-		if !filepath.IsAbs(req.Filename) {
+		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
 		stat, err := os.Stat(req.Filename)
@@ -153,7 +183,7 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
 		logger.Info("sum request", "file", req.Filename, "sumtype", req.SumType.String())
-		if !filepath.IsAbs(req.Filename) {
+		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
 		out := &pb.SumReply{
