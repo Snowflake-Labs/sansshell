@@ -10,8 +10,8 @@ function check_status {
 
 function shutdown {
   echo "Shutting down"
-  rm -rf /tmp/policy.$$
-  kill ${PROXY_PID}
+  disown %% %-
+  kill -KILL ${PROXY_PID}
   sudo killall sansshell-server
 }
 
@@ -46,7 +46,9 @@ function copy_logs {
     PURPOSE=$1
 
     mv ${LOGS}/1.${SUFFIX} ${LOGS}/1.${SUFFIX}-${PURPOSE}
-    mv ${LOGS}/2.${SUFFIX} ${LOGS}/2.${SUFFIX}-${PURPOSE}
+    if [ -f "${LOGS}/2.${SUFFIX}" ]; then
+      mv ${LOGS}/2.${SUFFIX} ${LOGS}/2.${SUFFIX}-${PURPOSE}
+    fi
 }
 
 # run_a_test takes 3 args:
@@ -110,14 +112,23 @@ function run_a_test {
     echo "${CMD} passed"
 }
 
+OS=$(uname -s)
+if [ "${OS}" != "Linux" ]; then
+  echo "Integration testing only works on linux"
+  exit 1
+fi
+
 trap shutdown EXIT
   
+LOGS=/tmp/test-logs-$$
+mkdir -p ${LOGS}
+
 # Make sure we're at the top level which is one below where this script lives
 cd $(dirname $PWD/$BASH_SOURCE)/..
 
 # Open up policy for testing
-echo "package sansshell.authz" > /tmp/policy.$$
-echo "default allow = true" >> /tmp/policy.$$
+echo "package sansshell.authz" > ${LOGS}/policy.$$
+echo "default allow = true" >> ${LOGS}/policy.$$
 
 # Build everything (this won't rebuild the binaries)
 go build -v ./...
@@ -135,21 +146,17 @@ check_status build
 go test -v ./...
 check_status test
 
-LOGS=/tmp/test-logs-$$
-
-mkdir -p ${LOGS}
-
 # Remove zziplib so we can reinstall it
 echo "Removing zziplib package so install can put it back"
 sudo yum remove -y zziplib
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./cmd/proxy-server/proxy-server --policy-file=/tmp/policy.$$ --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./cmd/proxy-server/proxy-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=/tmp/policy.$$ --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50042 >& ${LOGS}/server.log
 
 SANSSH_NOPROXY="./cmd/sanssh/sanssh --timeout=120s"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
@@ -177,7 +184,67 @@ echo "Servers healthy"
 run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 run_a_test false 2 run /usr/bin/echo Hello World
 run_a_test false 10 read /etc/hosts
-run_a_test false 1 stat /etc/hosts
+
+# Tail is harder since we have to run the client in the background and then kill it
+cp /etc/hosts ${LOGS}/hosts
+
+# Takes 1 arg:
+#
+# Pid of sanssh process
+function tail_execute {
+  CLIENT_PID=$1
+  shift
+  sleep 5
+  cat /etc/hosts >> ${LOGS}/hosts
+  sleep 5
+  disown %%
+  kill -KILL ${CLIENT_PID}
+}
+
+# Takes 1 arg:
+#
+# Suffix for copied log files
+function tail_check {
+  diff -q ${LOGS}/1.tail ${LOGS}/hosts
+  check_status "tail: output differs from source"
+  copy_logs tail $*
+}
+
+echo "tail checks"
+
+echo "tail proxy to 2 hosts"
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail tail ${LOGS}/hosts &
+tail_execute $!
+diff -q ${LOGS}/1.tail ${LOGS}/2.tail
+check_status "tail: output files differ"
+tail_check proxy-2-hosts
+
+echo "tail proxy to 1 hosts"
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail tail ${LOGS}/hosts &
+tail_execute $!
+tail_check proxy-1-host
+
+echo "tail with no proxy"
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail tail ${LOGS}/hosts &
+tail_execute $!
+tail_check no-proxy
+
+echo "tail passed"
+
+# Validate immutable with stat
+sudo chattr +i ${LOGS}/hosts
+
+run_a_test false 1 stat ${LOGS}/hosts
+sudo chattr -i ${LOGS}/hosts
+
+IMMUTABLE_COUNT=$(egrep Immutable..true ${LOGS}/1.stat* | wc -l)
+EXPECTED_IMMUTABLE=3
+if [ "${IMMUTABLE_COUNT}" != "${EXPECTED_IMMUTABLE}" ]; then
+  false
+fi
+check_status "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
+echo "stat immutable state validated"
+
 run_a_test false 1 sum /etc/hosts
 run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
 run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
@@ -194,6 +261,7 @@ for i in ${LOGS}/?.dump*; do
   file $i | egrep -q "LSB core file.*from 'bash'"
   check_status $i not a core file
 done
+
 
 # TODO(jchacon): Provide a java binary for tests
 echo 
