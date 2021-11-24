@@ -97,3 +97,31 @@ func TestTrimString(t *testing.T) {
 		t.Fatalf("TrimString didn't trim string. Got:\n%q\nWant:\n%q\n", got, want)
 	}
 }
+
+func TestValidPath(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		path    string
+		wantErr bool
+	}{
+		{
+			name: "valid path",
+			path: "/",
+		},
+		{
+			name:    "Non absolute path",
+			path:    "../../etc/passwd",
+			wantErr: true,
+		},
+		{
+			name:    "Non clean path",
+			path:    "/tmp/../tmp",
+			wantErr: true,
+		},
+	} {
+		err := ValidPath(test.path)
+		if got, want := err != nil, test.wantErr; got != want {
+			t.Errorf("%s: invalid error state. Err %v and got %t and want %t", test.name, err, got, want)
+		}
+	}
+}
