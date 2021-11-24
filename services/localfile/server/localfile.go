@@ -11,7 +11,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"syscall"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -23,7 +22,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -151,22 +149,11 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
-		stat, err := os.Stat(req.Filename)
+		resp, err := osStat(req.Filename)
 		if err != nil {
-			return status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+			return err
 		}
-		stat_t, ok := stat.Sys().(*syscall.Stat_t)
-		if !ok || stat_t == nil {
-			return status.Error(codes.Unimplemented, "stat not supported")
-		}
-		if err := stream.Send(&pb.StatReply{
-			Filename: req.Filename,
-			Size:     stat.Size(),
-			Mode:     uint32(stat.Mode()),
-			Modtime:  timestamppb.New(stat.ModTime()),
-			Uid:      stat_t.Uid,
-			Gid:      stat_t.Gid,
-		}); err != nil {
+		if err := stream.Send(resp); err != nil {
 			return status.Errorf(codes.Internal, "stat: send error %v", err)
 		}
 	}
