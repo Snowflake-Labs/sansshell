@@ -10,7 +10,7 @@ function check_status {
 
 function shutdown {
   echo "Shutting down"
-  disown %% %-
+  disown %%
   kill -KILL ${PROXY_PID}
   sudo killall sansshell-server
 }
