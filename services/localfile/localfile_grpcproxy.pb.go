@@ -19,11 +19,12 @@ import (
 // LocalFileClientProxy is the superset of LocalFileClient which additionally includes the OneMany proxy methods
 type LocalFileClientProxy interface {
 	LocalFileClient
-	ReadOneMany(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClientProxy, error)
+	ReadOneMany(ctx context.Context, in *ReadActionRequest, opts ...grpc.CallOption) (LocalFile_ReadClientProxy, error)
 	StatOneMany(ctx context.Context, opts ...grpc.CallOption) (LocalFile_StatClientProxy, error)
 	SumOneMany(ctx context.Context, opts ...grpc.CallOption) (LocalFile_SumClientProxy, error)
 	WriteOneMany(ctx context.Context, opts ...grpc.CallOption) (LocalFile_WriteClientProxy, error)
 	CopyOneMany(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (<-chan *CopyManyResponse, error)
+	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClientProxy, error)
 	SetFileAttributesOneMany(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (<-chan *SetFileAttributesManyResponse, error)
 }
 
@@ -100,7 +101,7 @@ func (x *localFileClientReadClientProxy) Recv() ([]*ReadManyResponse, error) {
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (LocalFile_ReadClientProxy, error) {
+func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadActionRequest, opts ...grpc.CallOption) (LocalFile_ReadClientProxy, error) {
 	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[0], "/LocalFile.LocalFile/Read", opts...)
 	if err != nil {
 		return nil, err
@@ -377,6 +378,83 @@ func (c *localFileClientProxy) CopyOneMany(ctx context.Context, in *CopyRequest,
 	}()
 
 	return ret, nil
+}
+
+type ListManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *ListReply
+	Error error
+}
+
+type LocalFile_ListClientProxy interface {
+	Recv() ([]*ListManyResponse, error)
+	grpc.ClientStream
+}
+
+type localFileClientListClientProxy struct {
+	cc *proxy.ProxyConn
+	grpc.ClientStream
+}
+
+func (x *localFileClientListClientProxy) Recv() ([]*ListManyResponse, error) {
+	var ret []*ListManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &ListReply{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &ListManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
+	m := []*proxy.ProxyRet{}
+	if err := x.ClientStream.RecvMsg(&m); err != nil {
+		return nil, err
+	}
+	for _, r := range m {
+		typedResp := &ListManyResponse{
+			Resp: &ListReply{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
+}
+
+// ListOneMany provides the same API as List but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *localFileClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClientProxy, error) {
+	stream, err := c.cc.NewStream(ctx, &LocalFile_ServiceDesc.Streams[4], "/LocalFile.LocalFile/List", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &localFileClientListClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }
 
 type SetFileAttributesManyResponse struct {

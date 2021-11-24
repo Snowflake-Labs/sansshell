@@ -26,12 +26,12 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "LocalFile.ReadRequest"
-		input.message.filename = "/etc/hosts"
+    input.type = "LocalFile.ReadActionRequest"
+		input.message.file.filename = "/etc/hosts"
 }
 allow {
-    input.type = "LocalFile.ReadRequest"
-		input.message.filename = "/no-such-filename-for-sansshell-unittest"
+    input.type = "LocalFile.ReadActionRequest"
+		input.message.file.filename = "/no-such-filename-for-sansshell-unittest"
 }
 `
 )
@@ -93,7 +93,13 @@ func TestRead(t *testing.T) {
 		want := want
 		t.Run(want.Filename, func(t *testing.T) {
 			client := lfpb.NewLocalFileClient(conn)
-			stream, err := client.Read(ctx, &lfpb.ReadRequest{Filename: want.Filename})
+			stream, err := client.Read(ctx, &lfpb.ReadActionRequest{
+				Request: &lfpb.ReadActionRequest_File{
+					File: &lfpb.ReadRequest{
+						Filename: want.Filename,
+					},
+				},
+			})
 			if err != nil {
 				// At this point it only returns if we can't connect. Actual errors
 				// happen below on the first stream Recv() call.

@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -58,27 +59,34 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, offset int64, length int64) error {
 	c := pb.NewLocalFileClientProxy(state.Conn)
-	stream, err := c.ReadOneMany(ctx, &pb.ReadRequest{
-		Filename: filename,
-		Offset:   offset,
-		Length:   length,
+	stream, err := c.ReadOneMany(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{
+				Filename: filename,
+				Offset:   offset,
+				Length:   length,
+			},
+		},
 	})
 	if err != nil {
 		return err
 	}
 
+	var retErr error
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return err
+			retErr = err
+			break
 		}
 		for _, r := range resp {
 			contents := r.Resp.Contents
-			if r.Error != nil {
+			if r.Error != nil && r.Error != io.EOF {
 				contents = []byte(fmt.Sprintf("Target %s (%d) returned error - %v", r.Target, r.Index, r.Error))
+				retErr = errors.New("error received for remote file. See output for details")
 			}
 			n, err := state.Out[r.Index].Write(contents)
 			if got, want := n, len(contents); got != want {
@@ -89,7 +97,7 @@ func ReadFile(ctx context.Context, state *util.ExecuteState, filename string, of
 			}
 		}
 	}
-	return nil
+	return retErr
 }
 
 type statCmd struct{}

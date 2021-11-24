@@ -10,9 +10,9 @@ package LocalFile;
 // The LocalFile service definition.
 service LocalFile {
   // Read reads a file from the disk and returns it contents.
-  rpc Read(ReadRequest) returns (stream ReadReply) {}
+  rpc Read(ReadActionRequest) returns (stream ReadReply) {}
 
-  // Stat returns metadata about a single filesytem path.
+  // Stat returns metadata about a filesytem path.
   rpc Stat(stream StatRequest) returns (stream StatReply) {}
 
   // Sum calculates a sum over the data in a single file.
@@ -25,18 +25,40 @@ service LocalFile {
   // file.
   rpc Copy(CopyRequest) returns (google.protobuf.Empty) {}
 
+  // List returns StatReply entries for the entities contained at a given path.
+  rpc List(ListRequest) returns (stream ListReply) {}
+
   // SetFileAttributes takes a given filename and sets the given attributes.
   rpc SetFileAttributes(SetFileAttributesRequest)
       returns (google.protobuf.Empty) {}
 }
 
+// ReadActionRequest indicates the type of read we're performing.
+// Either a file read which then terminates or a tail based read that
+// continues forever (i.e. as tail -f on the command line would do).
+message ReadActionRequest {
+  oneof request {
+    ReadRequest file = 1;
+    TailRequest tail = 2;
+  }
+}
+
 // ReadRequest describes the filename to be read
 message ReadRequest {
   string filename = 1;
-  // If positive and non-zero skip N bytes into the file before returning data.
+  // If non-zero skip N bytes into the file before returning data.
+  // Negative implies based from end of file.
   int64 offset = 2;
   // If positive and non-zero return only this many total bytes.
   int64 length = 3;
+}
+
+// TailRequest describes the filename to be tailed.
+message TailRequest {
+  string filename = 1;
+  // If non-zero skip N bytes into the file before returning data.
+  // Negative implies based from end of file.
+  int64 offset = 2;
 }
 
 // ReadResponse contains the contents of the file
@@ -64,6 +86,9 @@ message StatReply {
   uint32 uid = 5;
   // GID of owner
   uint32 gid = 6;
+  // Whether the immutable flag is set.
+  // This only applies to systems which support immutable file bits.
+  bool immutable = 7;
 }
 
 // SumType specifies a hashing function to use when calculating
@@ -110,6 +135,9 @@ message FileAttributes {
   // If not blank the group to set as the group of the file. If blank the
   // file must previously exist and overwrite above is set to true.
   string group = 4;
+  // If true will set the immutable bit on the file. False will clear it.
+  // This only applies to systems which support immutable file bits.
+  bool immutable = 5;
 }
 
 // FileWrite describes everything about a file to be written.
@@ -145,5 +173,16 @@ message CopyRequest {
   // to succeed (such as an auth token for a blob service).
   bytes blob_data = 3;
 }
+
+// ListRequest will do an expansion on the entry given to list all things
+// located there. If entry is a file only that data will be returned.
+message ListRequest {
+  // The entry to list.
+  string entry = 1;
+}
+
+// ListReply will begin with the entry followed by N entries (if a directory)
+// until that level of the tree is exhausted.
+message ListReply { StatReply entry = 1; }
 
 message SetFileAttributesRequest { FileAttributes attrs = 1; }

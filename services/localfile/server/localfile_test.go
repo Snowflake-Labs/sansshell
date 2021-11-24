@@ -110,10 +110,14 @@ func TestRead(t *testing.T) {
 
 			client := pb.NewLocalFileClient(conn)
 
-			stream, err := client.Read(ctx, &pb.ReadRequest{
-				Filename: tc.Filename,
-				Offset:   tc.Offset,
-				Length:   tc.Length,
+			stream, err := client.Read(ctx, &pb.ReadActionRequest{
+				Request: &pb.ReadActionRequest_File{
+					File: &pb.ReadRequest{
+						Filename: tc.Filename,
+						Offset:   tc.Offset,
+						Length:   tc.Length,
+					},
+				},
 			})
 			// In general this can only fail here for connection issues which
 			// we're not expecting. Actual failes happen in Recv below.
