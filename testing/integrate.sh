@@ -10,7 +10,6 @@ function check_status {
 
 function shutdown {
   echo "Shutting down"
-  disown %%
   kill -KILL ${PROXY_PID}
   sudo killall sansshell-server
 }
@@ -118,7 +117,7 @@ if [ "${OS}" != "Linux" ]; then
   exit 1
 fi
 
-trap shutdown EXIT
+trap shutdown EXIT INT TERM HUP 
   
 LOGS=/tmp/test-logs-$$
 mkdir -p ${LOGS}
@@ -154,6 +153,8 @@ echo
 echo "Starting servers. Logs in ${LOGS}"
 ./cmd/proxy-server/proxy-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
+# Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
+disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
 sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50042 >& ${LOGS}/server.log
