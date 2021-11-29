@@ -13,8 +13,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// The system immutable flag since while Stat_t imports Flags
-// correctly it doesn't bother to map them from sys/stat.h
+// SF_IMMUTABLE is the system immutable flag.
+// Since while Stat_t imports Flags correctly it doesn't bother
+// to map them from sys/stat.h
 const SF_IMMUTABLE = uint32(0x00020000)
 
 // osStat is the platform agnostic version which uses basic os.Stat.
@@ -33,7 +34,7 @@ func osStat(path string) (*pb.StatReply, error) {
 		Modtime:   timestamppb.New(stat.ModTime()),
 		Uid:       stat_t.Uid,
 		Gid:       stat_t.Gid,
-		Immutable: (stat_t.Flags & 0x00020000) != 0,
+		Immutable: (stat_t.Flags & SF_IMMUTABLE) != 0,
 	}
 	return resp, nil
 }
