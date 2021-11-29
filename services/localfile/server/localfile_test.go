@@ -368,11 +368,6 @@ func TestStat(t *testing.T) {
 			if tc.recvErrFunc != nil {
 				tc.recvErrFunc("stream.Recv", err, t)
 			}
-			// We can't really test this in a unit test since it usually
-			// requires being root to clear so just pass through.
-			if reply != nil {
-				tc.reply.Immutable = reply.Immutable
-			}
 			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
