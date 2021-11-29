@@ -92,11 +92,12 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 
 		// If we got EOF we're done for normal reads and wait for tails.
 		if err == io.EOF {
+			// If we're not tailing then we're done.
 			if r != nil {
 				break
 			}
-			// TODO(jchacon): Derive this into a function supplied by arch specific files
-			//                so we can use epoll here (OS/X only has poll).
+			// OS/X only has poll (no epoll) but since we're testing a single FD
+			// this is fine.
 			fds := []unix.PollFd{
 				{
 					Fd:     int32(f.Fd()),
