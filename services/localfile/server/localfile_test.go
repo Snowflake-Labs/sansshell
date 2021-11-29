@@ -292,12 +292,13 @@ func TestStat(t *testing.T) {
 			name: "directory",
 			req:  &pb.StatRequest{Filename: temp},
 			reply: &pb.StatReply{
-				Filename: temp,
-				Size:     dirStat.Size,
-				Mode:     dirStat.Mode,
-				Modtime:  dirStat.Modtime,
-				Uid:      uid,
-				Gid:      gid,
+				Filename:  temp,
+				Size:      dirStat.Size,
+				Mode:      dirStat.Mode,
+				Modtime:   dirStat.Modtime,
+				Uid:       uid,
+				Gid:       gid,
+				Immutable: dirStat.Immutable,
 			},
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: fatalOnErr,
@@ -306,12 +307,13 @@ func TestStat(t *testing.T) {
 			name: "known test file",
 			req:  &pb.StatRequest{Filename: f1.Name()},
 			reply: &pb.StatReply{
-				Filename: f1.Name(),
-				Size:     f1Stat.Size,
-				Mode:     f1Stat.Mode,
-				Modtime:  f1Stat.Modtime,
-				Uid:      uid,
-				Gid:      gid,
+				Filename:  f1.Name(),
+				Size:      f1Stat.Size,
+				Mode:      f1Stat.Mode,
+				Modtime:   f1Stat.Modtime,
+				Uid:       uid,
+				Gid:       gid,
+				Immutable: f1Stat.Immutable,
 			},
 			sendErrFunc: fatalOnErr,
 			recvErrFunc: fatalOnErr,
@@ -329,11 +331,6 @@ func TestStat(t *testing.T) {
 			reply, err := stream.Recv()
 			if tc.recvErrFunc != nil {
 				tc.recvErrFunc("stream.Recv", err, t)
-			}
-			// We can't really test this in a unit test since it usually
-			// requires being root to clear so just pass through.
-			if reply != nil {
-				tc.reply.Immutable = reply.Immutable
 			}
 			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
