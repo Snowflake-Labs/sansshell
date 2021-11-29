@@ -20,8 +20,8 @@ import (
 // the ioctl route has to be taken.
 const FS_IMMUTABLE_FL = int(0x00000010)
 
-// osStat is the platform agnostic version which uses basic os.Stat.
-// As a result immutable bits cannot be returned.
+// osStat is the linux specific version of stat. Depending on OS version
+// returning immutable bits happens in different ways.
 func osStat(path string) (*pb.StatReply, error) {
 	resp := &pb.StatReply{
 		Filename: path,
