@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/testing/protocmp"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -249,10 +248,10 @@ func TestStat(t *testing.T) {
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	fatalOnErr("os.CreateTemp", err, t)
-	f1Stat, err := f1.Stat()
+	f1Stat, err := osStat(f1.Name())
 	fatalOnErr("f1.Stat", err, t)
 
-	dirStat, err := os.Stat(temp)
+	dirStat, err := osStat(temp)
 	fatalOnErr("os.Stat(tempdir)", err, t)
 
 	ctx := context.Background()
@@ -294,9 +293,9 @@ func TestStat(t *testing.T) {
 			req:  &pb.StatRequest{Filename: temp},
 			reply: &pb.StatReply{
 				Filename: temp,
-				Size:     dirStat.Size(),
-				Mode:     uint32(dirStat.Mode()),
-				Modtime:  timestamppb.New(dirStat.ModTime()),
+				Size:     dirStat.Size,
+				Mode:     dirStat.Mode,
+				Modtime:  dirStat.Modtime,
 				Uid:      uid,
 				Gid:      gid,
 			},
@@ -308,9 +307,9 @@ func TestStat(t *testing.T) {
 			req:  &pb.StatRequest{Filename: f1.Name()},
 			reply: &pb.StatReply{
 				Filename: f1.Name(),
-				Size:     f1Stat.Size(),
-				Mode:     uint32(f1Stat.Mode()),
-				Modtime:  timestamppb.New(f1Stat.ModTime()),
+				Size:     f1Stat.Size,
+				Mode:     f1Stat.Mode,
+				Modtime:  f1Stat.Modtime,
 				Uid:      uid,
 				Gid:      gid,
 			},
