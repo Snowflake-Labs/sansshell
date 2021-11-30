@@ -48,6 +48,8 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	case t != nil:
 		file = t.Filename
 		offset = t.Offset
+	default:
+		return status.Error(codes.InvalidArgument, "must supply a ReadRequest or a TailRequest")
 	}
 
 	logger.Info("read request", "filename", file)

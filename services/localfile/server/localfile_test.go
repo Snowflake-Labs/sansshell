@@ -44,6 +44,28 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestEmptyRead(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewLocalFileClient(conn)
+	// We won't get an error here as we have to read from the stream.
+	stream, err := client.Read(ctx, &pb.ReadActionRequest{})
+	if err != nil {
+		t.Fatalf("Got unexpected error from Read: %v", err)
+	}
+	_, err = stream.Recv()
+	if err == io.EOF {
+		t.Fatal("Expected a real error, not EOF")
+	}
+	if err == nil {
+		t.Fatal("Expected an error from an empty read request (no Read or Tail) and not nothing")
+	}
+
+}
+
 func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
