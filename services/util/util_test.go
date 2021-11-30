@@ -125,3 +125,56 @@ func TestValidPath(t *testing.T) {
 		}
 	}
 }
+
+func TestStringSliceFlag(t *testing.T) {
+	var flag StringSliceFlag
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "foo,bar,baz"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	if len(*flag.Target) != 3 {
+		t.Fatalf("flag should have 3 elements. Instead is %q", *flag.Target)
+	}
+}
+
+func TestKeyValueSliceFlag(t *testing.T) {
+	var flag KeyValueSliceFlag
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "foo=bar,baz=bun"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	bad := "foo=bar=baz"
+	if err := flag.Set(bad); err == nil {
+		t.Fatal("didn't get error from bad flag set as we should")
+	}
+}
+
+func TestIntSliceFlag(t *testing.T) {
+	var flag IntSliceFlags
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "1,2,3"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	bad := "1,foo,2"
+	if err := flag.Set(bad); err == nil {
+		t.Fatal("didn't get error from bad flag set as we should")
+	}
+}

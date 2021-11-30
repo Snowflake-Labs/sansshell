@@ -35,35 +35,15 @@ var (
 	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 
 	// targets will be bound to --targets for sending a single request to N nodes.
-	targetsFlag stringSliceVar
-	targets     []string
+	targetsFlag util.StringSliceFlag
 
 	// outputs will be found to --outputs for directing output from a single request to N nodes.
-	outputsFlag stringSliceVar
-	outputs     []string
+	outputsFlag util.StringSliceFlag
 )
 
-type stringSliceVar struct {
-	target *[]string
-}
-
-func (s *stringSliceVar) Set(val string) error {
-	*s.target = strings.Split(val, ",")
-	return nil
-}
-
-func (s *stringSliceVar) String() string {
-	if s.target == nil {
-		return ""
-	}
-	return strings.Join(*s.target, ",")
-}
-
 func init() {
-	targetsFlag.target = &targets
-	targets = append(targets, defaultAddress)
-	outputsFlag.target = &outputs
-	outputs = append(outputs, defaultOutput)
+	targetsFlag.Set(defaultAddress)
+	outputsFlag.Set(defaultOutput)
 
 	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
 	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into. Use - to indicated stdout.
@@ -82,16 +62,16 @@ func main() {
 	flag.Parse()
 
 	// Bunch of flag sanity checking
-	if len(targets) == 0 {
+	if len(*targetsFlag.Target) == 0 {
 		fmt.Fprintln(os.Stderr, "Must set --targets")
 		os.Exit(1)
 	}
-	if len(targets) > 1 && *proxyAddr == "" {
+	if len(*targetsFlag.Target) > 1 && *proxyAddr == "" {
 		fmt.Fprintln(os.Stderr, "Can't set --targets to multiple entries without --proxy")
 		os.Exit(1)
 	}
 
-	if len(outputs) != len(targets) {
+	if len(*outputsFlag.Target) != len(*targetsFlag.Target) {
 		fmt.Fprintln(os.Stderr, "--outputs and --targets must contain the same number of entries")
 		os.Exit(1)
 	}
@@ -104,9 +84,9 @@ func main() {
 	}
 
 	// Set up a connection to the sansshell-server (possibly via proxy).
-	conn, err := proxy.Dial(*proxyAddr, targets, grpc.WithTransportCredentials(creds))
+	conn, err := proxy.Dial(*proxyAddr, *targetsFlag.Target, grpc.WithTransportCredentials(creds))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", targets, err)
+		fmt.Fprintf(os.Stderr, "Could not connect to %q: %v\n", *targetsFlag.Target, err)
 		os.Exit(1)
 	}
 	defer func() {
@@ -118,7 +98,7 @@ func main() {
 	state := &util.ExecuteState{
 		Conn: conn,
 	}
-	for _, out := range outputs {
+	for _, out := range *outputsFlag.Target {
 		if out == "-" {
 			state.Out = append(state.Out, os.Stdout)
 			continue
