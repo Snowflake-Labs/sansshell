@@ -232,6 +232,7 @@ func TestTail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error reading from stream: %v", err)
 	}
+
 	// We don't care about errors as we compare the buf later.
 	buf.Write(resp.Contents)
 
