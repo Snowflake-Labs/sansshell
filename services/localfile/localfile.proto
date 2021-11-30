@@ -88,6 +88,9 @@ message StatReply {
   uint32 gid = 6;
   // Whether the immutable flag is set.
   // This only applies to systems which support immutable file bits.
+  // For systems which support multiple types (OS/X) this refers
+  // only to system level immutability and not user. i.e. even root
+  // is unable to modify these files.
   bool immutable = 7;
 }
 

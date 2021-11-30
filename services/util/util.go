@@ -115,3 +115,14 @@ func TrimString(s string) string {
 	}
 	return s
 }
+
+// ValidPath ensures the path passed in is both absolute and clean.
+func ValidPath(path string) error {
+	if !filepath.IsAbs(path) {
+		return status.Errorf(codes.InvalidArgument, "%s must be an absolute path", path)
+	}
+	if path != filepath.Clean(path) {
+		return status.Errorf(codes.InvalidArgument, "%s must be a clean path", path)
+	}
+	return nil
+}

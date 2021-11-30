@@ -11,8 +11,7 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
-	"syscall"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -23,12 +22,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
-	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute")
+	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 )
+
+// READ_TIMEOUT_SEC is how long tail should wait on a given poll call before returning.
+const READ_TIMEOUT_SEC = 10
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -38,14 +39,25 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	logger := logr.FromContextOrDiscard(stream.Context())
 
 	r := req.GetFile()
-	if r == nil {
-		return status.Errorf(codes.Unimplemented, "Only File support is implemented")
+	t := req.GetTail()
+
+	var file string
+	var offset, length int64
+	switch {
+	case r != nil:
+		file = r.Filename
+		offset = r.Offset
+		length = r.Length
+	case t != nil:
+		file = t.Filename
+		offset = t.Offset
+	default:
+		return status.Error(codes.InvalidArgument, "must supply a ReadRequest or a TailRequest")
 	}
 
-	file := r.Filename
-	logger.Info("read request", "filename", r.Filename)
-	if !filepath.IsAbs(file) {
-		return AbsolutePathError
+	logger.Info("read request", "filename", file)
+	if err := util.ValidPath(file); err != nil {
+		return err
 	}
 	f, err := os.Open(file)
 	if err != nil {
@@ -59,19 +71,19 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	}()
 
 	// Seek forward if requested
-	if s := r.Offset; s != 0 {
+	if offset != 0 {
 		whence := 0
 		// If negative we're tailing from the end so
 		// negate the sign and set whence.
-		if s < 0 {
+		if offset < 0 {
 			whence = 2
 		}
-		if _, err := f.Seek(s, whence); err != nil {
+		if _, err := f.Seek(offset, whence); err != nil {
 			return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
 		}
 	}
 
-	max := r.Length
+	max := length
 	if max == 0 {
 		max = math.MaxInt64
 	}
@@ -82,10 +94,25 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 
 	for {
 		n, err := reader.Read(buf)
-
-		// If we got EOF we're done.
+		// If we got EOF we're done for normal reads and wait for tails.
 		if err == io.EOF {
-			break
+			// If we're not tailing then we're done.
+			if r != nil {
+				break
+			}
+
+			// We sleep for READ_TIMEOUT_SEC between calls as there's no good
+			// way to poll on a file. Once it reaches EOF it's always readable
+			// (you just get EOF). We have to poll like this so we can check
+			// the context state and return if it's canclled.
+			// TODO(jchacon): Replace with something like inotify for systems
+			// that support it. https://github.com/fsnotify/fsnotify
+			if stream.Context().Err() != nil {
+				return stream.Context().Err()
+			}
+			time.Sleep(READ_TIMEOUT_SEC * time.Second)
+			// Time to try again.
+			continue
 		}
 
 		if err != nil {
@@ -98,9 +125,11 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 		}
 
-		// If we got back less than a full chunk we're done.
+		// If we got back less than a full chunk we're done for non-tail cases.
 		if n < util.StreamingChunkSize {
-			break
+			if r != nil {
+				break
+			}
 		}
 	}
 	return nil
@@ -118,25 +147,14 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 		}
 
 		logger.Info("stat", "filename", req.Filename)
-		if !filepath.IsAbs(req.Filename) {
+		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
-		stat, err := os.Stat(req.Filename)
+		resp, err := osStat(req.Filename)
 		if err != nil {
-			return status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+			return err
 		}
-		stat_t, ok := stat.Sys().(*syscall.Stat_t)
-		if !ok || stat_t == nil {
-			return status.Error(codes.Unimplemented, "stat not supported")
-		}
-		if err := stream.Send(&pb.StatReply{
-			Filename: req.Filename,
-			Size:     stat.Size(),
-			Mode:     uint32(stat.Mode()),
-			Modtime:  timestamppb.New(stat.ModTime()),
-			Uid:      stat_t.Uid,
-			Gid:      stat_t.Gid,
-		}); err != nil {
+		if err := stream.Send(resp); err != nil {
 			return status.Errorf(codes.Internal, "stat: send error %v", err)
 		}
 	}
@@ -153,7 +171,7 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
 		logger.Info("sum request", "file", req.Filename, "sumtype", req.SumType.String())
-		if !filepath.IsAbs(req.Filename) {
+		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
 		out := &pb.SumReply{

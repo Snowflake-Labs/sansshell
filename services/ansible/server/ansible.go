@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -33,11 +32,8 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	if req.Playbook == "" {
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
 	}
-	if !filepath.IsAbs(req.Playbook) {
-		return nil, status.Errorf(codes.InvalidArgument, "playbook %s must be an absolute path", req.Playbook)
-	}
-	if req.Playbook != filepath.Clean(req.Playbook) {
-		return nil, status.Errorf(codes.InvalidArgument, "playbook %s must be a clean path", req.Playbook)
+	if err := util.ValidPath(req.Playbook); err != nil {
+		return nil, err
 	}
 
 	// Make sure it's a valid file and nothing something which might be malicious like

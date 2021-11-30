@@ -406,6 +406,9 @@ type StatReply struct {
 	Gid uint32 `protobuf:"varint,6,opt,name=gid,proto3" json:"gid,omitempty"`
 	// Whether the immutable flag is set.
 	// This only applies to systems which support immutable file bits.
+	// For systems which support multiple types (OS/X) this refers
+	// only to system level immutability and not user. i.e. even root
+	// is unable to modify these files.
 	Immutable bool `protobuf:"varint,7,opt,name=immutable,proto3" json:"immutable,omitempty"`
 }
 
@@ -971,7 +974,7 @@ func (x *ListRequest) GetEntry() string {
 	return ""
 }
 
-// ListReply will begin with the directory followed by N entries
+// ListReply will begin with the entry followed by N entries (if a directory)
 // until that level of the tree is exhausted.
 type ListReply struct {
 	state         protoimpl.MessageState
