@@ -5,7 +5,7 @@ package server
 //       options are passed, output/return values come back across, etc.
 //
 //       If you want a local integration test use testdata/test.yml with a built client/server to prove the real
-//       binary works as well.
+//       binary works as well. i.e. what testing/integrate.sh does.
 import (
 	"context"
 	"log"
@@ -75,7 +75,7 @@ func TestRun(t *testing.T) {
 
 	path := filepath.Join(wd, "testdata", "test.yml")
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name              string
 		bin               string
 		path              string
@@ -167,32 +167,35 @@ func TestRun(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		*ansiblePlaybookBin = test.bin
-		cmdArgsTransform = func(input []string) []string {
-			return test.args
-		}
-		resp, err := client.Run(ctx, &pb.RunRequest{
-			Playbook: test.path,
-			User:     test.user,
-			Vars:     test.vars,
-		})
-		t.Logf("%s: resp: %+v", test.name, resp)
-		t.Logf("%s: err: %v", test.name, err)
-		if test.wantErr {
-			if got, want := err != nil, test.wantErr; got != want {
-				t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", test.name, resp)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			*ansiblePlaybookBin = tc.bin
+			cmdArgsTransform = func(input []string) []string {
+				return tc.args
 			}
-			continue
-		}
-		if test.returnCodeNonZero && resp.ReturnCode == 0 {
-			t.Fatalf("%s: Invalid return codes. Wanted non-zero and got zero", test.name)
-		}
-		if got, want := resp.Stdout, test.stdout; got != want {
-			t.Fatalf("%s: Stdout doesn't match. Want %q Got %q", test.name, want, got)
-		}
-		if got, want := resp.Stderr, test.stderr; got != want {
-			t.Fatalf("%s: Stderr doesn't match. Want %q Got %q", test.name, want, got)
-		}
+			resp, err := client.Run(ctx, &pb.RunRequest{
+				Playbook: tc.path,
+				User:     tc.user,
+				Vars:     tc.vars,
+			})
+			t.Logf("%s: resp: %+v", tc.name, resp)
+			t.Logf("%s: err: %v", tc.name, err)
+			if tc.wantErr {
+				if got, want := err != nil, tc.wantErr; got != want {
+					t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", tc.name, resp)
+				}
+				return
+			}
+			if tc.returnCodeNonZero && resp.ReturnCode == 0 {
+				t.Fatalf("%s: Invalid return codes. Wanted non-zero and got zero", tc.name)
+			}
+			if got, want := resp.Stdout, tc.stdout; got != want {
+				t.Fatalf("%s: Stdout doesn't match. Want %q Got %q", tc.name, want, got)
+			}
+			if got, want := resp.Stderr, tc.stderr; got != want {
+				t.Fatalf("%s: Stderr doesn't match. Want %q Got %q", tc.name, want, got)
+			}
+		})
 	}
 
 	// Table driven test of various arg combos.
@@ -204,7 +207,7 @@ func TestRun(t *testing.T) {
 		"--connection=local",
 	}
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		wantArgs []string
 		req      *pb.RunRequest
@@ -261,22 +264,25 @@ func TestRun(t *testing.T) {
 			},
 		},
 	} {
-		// Things every request does the same.
-		test.req.Playbook = path
-		test.wantArgs = append(test.wantArgs, path)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// Things every request does the same.
+			tc.req.Playbook = path
+			tc.wantArgs = append(tc.wantArgs, path)
 
-		var savedArgs []string
-		diff := ""
-		cmdArgsTransform = func(input []string) []string {
-			savedArgs = input
-			diff = cmp.Diff(input, test.wantArgs)
-			return []string{"/dev/null"}
-		}
-		resp, err := client.Run(ctx, test.req)
-		testutil.FatalOnErr("unexpected error", err, t)
-		if diff != "" {
-			t.Fatalf("Different args for %s\nDiff:\n%s\nGot:\n%q\nWant:\n%q", test.name, diff, savedArgs, test.wantArgs)
-		}
-		t.Log(resp)
+			var savedArgs []string
+			diff := ""
+			cmdArgsTransform = func(input []string) []string {
+				savedArgs = input
+				diff = cmp.Diff(input, tc.wantArgs)
+				return []string{"/dev/null"}
+			}
+			resp, err := client.Run(ctx, tc.req)
+			testutil.FatalOnErr("unexpected error", err, t)
+			if diff != "" {
+				t.Fatalf("Different args for %s\nDiff:\n%s\nGot:\n%q\nWant:\n%q", tc.name, diff, savedArgs, tc.wantArgs)
+			}
+			t.Log(resp)
+		})
 	}
 }

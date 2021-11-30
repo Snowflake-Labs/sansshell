@@ -9,7 +9,7 @@ import (
 )
 
 func TestRunCommand(t *testing.T) {
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name              string
 		bin               string
 		args              []string
@@ -61,29 +61,32 @@ func TestRunCommand(t *testing.T) {
 			returnCodeNonZero: true,
 		},
 	} {
-		var opts []Option
-		if test.stderrIsError {
-			opts = append(opts, FailOnStderr())
-		}
-
-		run, err := RunCommand(context.Background(), test.bin, test.args, opts...)
-		t.Logf("%s: response: %+v", test.name, run)
-		t.Logf("%s: error: %v", test.name, err)
-		if test.wantErr {
-			if err == nil {
-				t.Fatalf("%s: Didn't get error when expected", test.name)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []Option
+			if tc.stderrIsError {
+				opts = append(opts, FailOnStderr())
 			}
-			continue
-		}
-		if got, want := run.Stdout.String(), test.stdout; got != want {
-			t.Fatalf("%s: Stdout differs. Want %q Got %q", test.name, want, got)
-		}
-		if got, want := run.Stderr.String(), test.stderr; got != want {
-			t.Fatalf("%s: Stderr differs. Want %q Got %q", test.name, want, got)
-		}
-		if test.returnCodeNonZero && run.ExitCode == 0 {
-			t.Fatalf("%s: Asked for non-zero return code and got 0", test.name)
-		}
+
+			run, err := RunCommand(context.Background(), tc.bin, tc.args, opts...)
+			t.Logf("%s: response: %+v", tc.name, run)
+			t.Logf("%s: error: %v", tc.name, err)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("%s: Didn't get error when expected", tc.name)
+				}
+				return
+			}
+			if got, want := run.Stdout.String(), tc.stdout; got != want {
+				t.Fatalf("%s: Stdout differs. Want %q Got %q", tc.name, want, got)
+			}
+			if got, want := run.Stderr.String(), tc.stderr; got != want {
+				t.Fatalf("%s: Stderr differs. Want %q Got %q", tc.name, want, got)
+			}
+			if tc.returnCodeNonZero && run.ExitCode == 0 {
+				t.Fatalf("%s: Asked for non-zero return code and got 0", tc.name)
+			}
+		})
 	}
 }
 

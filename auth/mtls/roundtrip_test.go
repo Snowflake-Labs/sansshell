@@ -102,47 +102,47 @@ func TestHealthCheck(t *testing.T) {
 	tu.FatalOnErr("Failed to load root CA", err, t)
 	creds, err := LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
 	tu.FatalOnErr("Failed to load client cert", err, t)
-	ts := []struct {
-		Name   string
-		Policy string
-		Err    string
+	for _, tc := range []struct {
+		name   string
+		policy string
+		err    string
 	}{
 		{
-			Name:   "allowed request",
-			Policy: allowPolicy,
-			Err:    "",
+			name:   "allowed request",
+			policy: allowPolicy,
+			err:    "",
 		},
 		{
-			Name:   "denied request",
-			Policy: denyPolicy,
-			Err:    "OPA policy does not permit this request",
+			name:   "denied request",
+			policy: denyPolicy,
+			err:    "OPA policy does not permit this request",
 		},
 		{
-			Name:   "allowed peer by subject serial",
-			Policy: allowPeerSerialPolicy,
-			Err:    "",
+			name:   "allowed peer by subject serial",
+			policy: allowPeerSerialPolicy,
+			err:    "",
 		},
 		{
-			Name:   "denied peer by subject serial",
-			Policy: denyPeerSerialPolicy,
-			Err:    "OPA policy does not permit this request",
+			name:   "denied peer by subject serial",
+			policy: denyPeerSerialPolicy,
+			err:    "OPA policy does not permit this request",
 		},
-	}
-	for _, tc := range ts {
-		t.Run(tc.Name, func(t *testing.T) {
-			l, s := serverWithPolicy(t, tc.Policy, CAPool)
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			l, s := serverWithPolicy(t, tc.policy, CAPool)
 			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
 			tu.FatalOnErr("Failed to dial bufnet", err, t)
 			t.Cleanup(func() { conn.Close() })
 			client := hcpb.NewHealthCheckClient(conn)
 			resp, err := client.Ok(ctx, &emptypb.Empty{})
 			if err != nil {
-				if tc.Err == "" {
+				if tc.err == "" {
 					t.Errorf("Read failed: %v", err)
 					return
 				}
-				if !strings.Contains(err.Error(), tc.Err) {
-					t.Errorf("unexpected error; tc: %s, got: %s", tc.Err, err)
+				if !strings.Contains(err.Error(), tc.err) {
+					t.Errorf("unexpected error; tc: %s, got: %s", tc.err, err)
 				}
 				return
 			}

@@ -300,7 +300,7 @@ func TestPstack(t *testing.T) {
 
 	goodPstackOptions := pstackOptions
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		command  string
 		options  []string
@@ -386,36 +386,36 @@ func TestPstack(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			*pstackBin = test.command
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			*pstackBin = tc.command
 
 			pstackOptions = goodPstackOptions
-			testInput = test.input
+			testInput = tc.input
 
-			if len(test.options) > 0 {
+			if len(tc.options) > 0 {
 				pstackOptions = func(req *pb.GetStacksRequest) []string {
-					return test.options
+					return tc.options
 				}
 			}
 
 			testdata := &pb.GetStacksReply{}
 			// In general we don't need this if we expect errors.
-			if test.validate != "" {
-				input, err := os.ReadFile(test.validate)
-				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", test.validate), err, t)
+			if tc.validate != "" {
+				input, err := os.ReadFile(tc.validate)
+				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", tc.validate), err, t)
 				err = prototext.Unmarshal(input, testdata)
 				testutil.FatalOnErr("can't unmarshal test data", err, t)
 			}
 
-			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: test.pid})
-			if got, want := err != nil, test.wantErr; got != want {
-				t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
+			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: tc.pid})
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
 			}
 
-			if !test.wantErr {
+			if !tc.wantErr {
 				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", test.name, resp, testdata, diff)
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", tc.name, resp, testdata, diff)
 				}
 			}
 		})
@@ -451,7 +451,7 @@ func TestJstack(t *testing.T) {
 
 	goodJstackOptions := jstackOptions
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		command  string
 		input    string
@@ -514,29 +514,29 @@ func TestJstack(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			*jstackBin = test.command
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			*jstackBin = tc.command
 
 			jstackOptions = goodJstackOptions
-			testInput = test.input
+			testInput = tc.input
 
 			testdata := &pb.GetJavaStacksReply{}
-			if test.validate != "" {
-				input, err := os.ReadFile(test.validate)
-				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", test.validate), err, t)
+			if tc.validate != "" {
+				input, err := os.ReadFile(tc.validate)
+				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", tc.validate), err, t)
 				err = prototext.Unmarshal(input, testdata)
 				testutil.FatalOnErr("can't unmarshal test data", err, t)
 			}
 
-			resp, err := client.GetJavaStacks(ctx, &pb.GetJavaStacksRequest{Pid: test.pid})
-			if got, want := err != nil, test.wantErr; got != want {
-				t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
+			resp, err := client.GetJavaStacks(ctx, &pb.GetJavaStacksRequest{Pid: tc.pid})
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
 			}
 
-			if !test.wantErr {
+			if !tc.wantErr {
 				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", test.name, resp, testdata, diff)
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", tc.name, resp, testdata, diff)
 				}
 			}
 		})
@@ -602,7 +602,7 @@ func TestMemoryDump(t *testing.T) {
 	testutil.FatalOnErr("can't create temp dir", err, t)
 	t.Cleanup(func() { os.RemoveAll(testdir) })
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		command  string
 		input    string
@@ -769,28 +769,29 @@ func TestMemoryDump(t *testing.T) {
 			wantErr:  true,
 		},
 	} {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			*gcoreBin = test.command
-			gcoreOptionsAndLocation = test.options
-			*jmapBin = test.command
-			jmapOptionsAndLocation = test.options
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			*gcoreBin = tc.command
+			gcoreOptionsAndLocation = tc.options
+			*jmapBin = tc.command
+			jmapOptionsAndLocation = tc.options
 
 			// Need a tmp dir and a copy of the test input since the options
 			// caller is expecting to cleanup the directory when it's done.
 			dir, err := os.MkdirTemp("", "cores")
 			testutil.FatalOnErr("can't make tmpdir", err, t)
+
 			file := filepath.Join(dir, "core")
 			var testdata []byte
-			if !test.noOutput {
-				testdata, err = os.ReadFile(test.input)
+			if !tc.noOutput {
+				testdata, err = os.ReadFile(tc.input)
 				testutil.FatalOnErr("can't read test input", err, t)
 				err = os.WriteFile(file, testdata, 0666)
 				testutil.FatalOnErr("can't copy test data", err, t)
 			}
 			testInput = file
 
-			stream, err := client.GetMemoryDump(ctx, test.req)
+			stream, err := client.GetMemoryDump(ctx, tc.req)
 			testutil.FatalOnErr("setting up stream", err, t)
 
 			var data []byte
@@ -800,15 +801,15 @@ func TestMemoryDump(t *testing.T) {
 					break
 				}
 				if err != nil {
-					t.Logf("%s - err: %v", test.name, err)
+					t.Logf("%s - err: %v", tc.name, err)
 				}
 
-				if got, want := err != nil, test.wantErr; got != want {
-					t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
+				if got, want := err != nil, tc.wantErr; got != want {
+					t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
 				}
 
 				// If we got here and expected an error the response is nil so just break.
-				if test.wantErr {
+				if tc.wantErr {
 					break
 				}
 				data = append(data, resp.Data...)
@@ -816,21 +817,21 @@ func TestMemoryDump(t *testing.T) {
 
 			// If we're not expecting an error and using a URL it didn't go to data so we need
 			// to load that up for comparison.
-			if !test.wantErr && test.req.GetUrl() != nil {
+			if !tc.wantErr && tc.req.GetUrl() != nil {
 				// Need to query the bucket to see what we got.
-				bucket, err := blob.OpenBucket(ctx, test.req.GetUrl().Url)
-				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s", test.req.GetUrl().Url), err, t)
-				file := fmt.Sprintf("bufconn-core.%d", test.req.Pid)
+				bucket, err := blob.OpenBucket(ctx, tc.req.GetUrl().Url)
+				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s", tc.req.GetUrl().Url), err, t)
+				file := fmt.Sprintf("bufconn-core.%d", tc.req.Pid)
 				rdr, err := bucket.NewReader(context.Background(), file, nil)
-				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s key %s", test.req.GetUrl().Url, file), err, t)
+				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s key %s", tc.req.GetUrl().Url, file), err, t)
 				data, err = io.ReadAll(rdr)
 				testutil.FatalOnErr(fmt.Sprintf("can't read all bytes from mem://%s", file), err, t)
 				t.Cleanup(func() { bucket.Close() })
 			}
 
-			if !test.wantErr {
+			if !tc.wantErr {
 				if !bytes.Equal(testdata, data) {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", test.name, data, testdata)
+					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v", tc.name, data, testdata)
 				}
 			}
 		})
