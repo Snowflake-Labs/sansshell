@@ -102,7 +102,7 @@ func TestTrimString(t *testing.T) {
 }
 
 func TestValidPath(t *testing.T) {
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name    string
 		path    string
 		wantErr bool
@@ -122,10 +122,13 @@ func TestValidPath(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		err := ValidPath(test.path)
-		if got, want := err != nil, test.wantErr; got != want {
-			t.Errorf("%s: invalid error state. Err %v and got %t and want %t", test.name, err, got, want)
-		}
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidPath(tc.path)
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Errorf("%s: invalid error state. Err %v and got %t and want %t", tc.name, err, got, want)
+			}
+		})
 	}
 }
 
