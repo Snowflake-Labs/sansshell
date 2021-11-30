@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -o nounset
 
+# check_status takes 2 args:
+#
+# A code to compare against
+# Any text to output on failure (all remaining args).
 function check_status {
-  if [ $? != 0 ]; then
+  STATUS=$1
+  shift
+
+  if [ $STATUS != 0 ]; then
     echo "FAIL $*"
     exit 1
   fi
@@ -18,7 +25,7 @@ function shutdown {
 # 
 # Minimum number of lines log must contain
 # The log suffix
-# Text to display on error (all remaining args)
+# Text to display on error (all remaining args).
 function check_logs {
   # The minimum number of lines a log file needs to have.
   # Not going to check exact content. If they are within
@@ -36,7 +43,7 @@ function check_logs {
       exit 1
     }
   }"
-  check_status logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
+  check_status $? logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
 }
 
 function copy_logs {
@@ -53,7 +60,7 @@ function copy_logs {
 # run_a_test takes 3 args:
 #
 # A boolean (i.e. true or false string) indicating one run for 2 hosts will error. 
-#  This can happen for ptrace related commands since 2 cannot act on the same process at once.
+# This can happen for ptrace related commands since 2 cannot act on the same process at once.
 # Minimum number of lines log must contain
 # The command to pass to the sanssh CLI. NOTE: This is also used as the logfile suffix.
 # Args to pass to sanssh after the command (all remaining args)
@@ -70,9 +77,10 @@ function run_a_test {
 
     CHECK="${CMD} proxy to 2 hosts"    
     echo ${CHECK}
-    ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD},${LOGS}/2.${CMD} ${CMD} ${ARGS} 
+    ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD},${LOGS}/2.${CMD} ${CMD} ${ARGS}
+    STATUS=$? 
     if [ "${ONE_WILL_ERROR}" = "false" ]; then
-      check_status ${CHECK}
+      check_status ${STATUS} ${CHECK}
     else
       # If one of these is expected to error then one log is larger than the other.
       # Take the larger file and copy it so log checking will pass.
@@ -93,7 +101,7 @@ function run_a_test {
     CHECK="${CMD} proxy to 1 host"
     echo ${CHECK}
     ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS} 
-    check_status ${CHECK}
+    check_status $? ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -102,7 +110,7 @@ function run_a_test {
     CHECK="${CMD} with no proxy"
     echo ${CHECK}
     ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS}
-    check_status ${CHECK}
+    check_status $? ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -126,8 +134,8 @@ mkdir -p ${LOGS}
 cd $(dirname $PWD/$BASH_SOURCE)/..
 
 # Open up policy for testing
-echo "package sansshell.authz" > ${LOGS}/policy.$$
-echo "default allow = true" >> ${LOGS}/policy.$$
+echo "package sansshell.authz" > ${LOGS}/policy
+echo "default allow = true" >> ${LOGS}/policy
 
 # Build everything (this won't rebuild the binaries)
 go build -v ./...
@@ -139,11 +147,11 @@ cd ../sansshell-server
 go build -v 
 cd ../..
 
-check_status build
+check_status $? build
 
 # Test everything
 go test -v ./...
-check_status test
+check_status $? test
 
 # Remove zziplib so we can reinstall it
 echo "Removing zziplib package so install can put it back"
@@ -151,13 +159,13 @@ sudo yum remove -y zziplib
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./cmd/proxy-server/proxy-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./cmd/proxy-server/proxy-server --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy.$$ --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
 
 SANSSH_NOPROXY="./cmd/sanssh/sanssh --timeout=120s"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
@@ -207,7 +215,7 @@ function tail_execute {
 # Suffix for copied log files
 function tail_check {
   diff -q ${LOGS}/1.tail ${LOGS}/hosts
-  check_status "tail: output differs from source"
+  check_status $? "tail: output differs from source"
   copy_logs tail $*
 }
 
@@ -217,7 +225,7 @@ echo "tail proxy to 2 hosts"
 ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail tail ${LOGS}/hosts &
 tail_execute $!
 diff -q ${LOGS}/1.tail ${LOGS}/2.tail
-check_status "tail: output files differ"
+check_status $? "tail: output files differ"
 tail_check proxy-2-hosts
 
 echo "tail proxy to 1 hosts"
@@ -243,10 +251,64 @@ EXPECTED_IMMUTABLE=3
 if [ "${IMMUTABLE_COUNT}" != "${EXPECTED_IMMUTABLE}" ]; then
   false
 fi
-check_status "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
+check_status $? "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
 echo "stat immutable state validated"
 
 run_a_test false 1 sum /etc/hosts
+
+# Record original state before we change it all with chown/etc
+touch ${LOGS}/test-file
+STATE=$(stat ${LOGS}/test-file | egrep Uid)
+ORIG_MODE=$(echo ${STATE} | cut -c 10-13)
+ORIG_UID=$(echo ${STATE} | cut -c 34- | awk -F/ '{print $1}')
+ORIG_GID=$(echo ${STATE} | cut -c 55- | awk -F/ '{print $1}')
+ORIG_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
+
+EXPECTED_NEW_UID=$(($ORIG_UID + 1))
+EXPECTED_NEW_GID=$(($ORIG_GID + 1))
+EXPECTED_NEW_IMMUTABLE="i"
+
+# Determine the new mode but since it's in octal need help
+# adding this in the shell as we want to pass it in octal
+# to the chmod below.
+EXPECTED_NEW_MODE=0$(printf "8\ni\n8\no\n${ORIG_MODE}\n1\n+\np\n" | dc)
+
+run_a_test false 0 chown --uid=$EXPECTED_NEW_UID ${LOGS}/test-file
+run_a_test false 0 chgrp --gid=$EXPECTED_NEW_GID ${LOGS}/test-file
+run_a_test false 0 chmod --mode=${EXPECTED_NEW_MODE} ${LOGS}/test-file
+run_a_test false 0 immutable --state=true ${LOGS}/test-file
+NEW_STATE=$(stat ${LOGS}/test-file | egrep Uid)
+NEW_MODE=$(echo ${NEW_STATE} | cut -c 10-13)
+NEW_UID=$(echo ${NEW_STATE} | cut -c 34- | awk -F/ '{print $1}')
+NEW_GID=$(echo ${NEW_STATE} | cut -c 55- | awk -F/ '{print $1}')
+NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
+
+if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
+  check_status 1 "modes not as expected. Started with $ORIG_MODE and now have $NEW_MODE but expected $EXPECTED_NEW_MODE"
+fi
+# These aren't quoted as parsed ones may have leading spaces
+if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
+  check_status 1 "uid not as expected. Started with $ORIG_UID and now have $NEW_UID but expected $EXPECTED_NEW_UID"
+fi
+if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
+  check_status 1 "gid not as expected. Started with $ORIG_GID and now have $NEW_GID but expected $EXPECTED_NEW_GID"
+fi
+if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
+  check_status 1 "imutable not as expected. Started with $ORIG_IMMUTABLE and now have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+fi
+
+# Now validage we can clear immutable too
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- immutable --state=false ${LOGS}/test-file
+check_status $? "setting immutable to false"
+ORIG_IMMUTABLE=$NEW_IMMUTABLE
+EXPECTED_NEW_IMMUTABLE="-"
+NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
+if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
+  check_status 1 "imutable not as expected. Started with $ORIG_IMMUTABLE and now have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+fi
+
+echo "Uid, etc checks passed"
+
 run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
 run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
 run_a_test false 50 list
@@ -260,7 +322,7 @@ run_a_test true 20 dump --pid=$$ --dump-type=GCORE
 # Cores get their own additional checks.
 for i in ${LOGS}/?.dump*; do
   file $i | egrep -q "LSB core file.*from 'bash'"
-  check_status $i not a core file
+  check_status $? $i not a core file
 done
 
 

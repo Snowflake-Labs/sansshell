@@ -16,6 +16,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"golang.org/x/sys/unix"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -26,10 +27,18 @@ import (
 
 var (
 	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
+
+	// For testing since otherwise tests have to run as root for these.
+	chown             = unix.Chown
+	changeImmutableOS = changeImmutable
 )
 
 // READ_TIMEOUT_SEC is how long tail should wait on a given poll call before returning.
 const READ_TIMEOUT_SEC = 10
+
+// This encompasses the permission plus the setuid/gid/sticky bits one
+// can set on a file/directory.
+const modeMask = uint32(07777)
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -227,7 +236,66 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 }
 
 func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	if req.Attrs == nil {
+		return nil, status.Error(codes.InvalidArgument, "attrs must be filled in")
+	}
+	p := req.Attrs.Filename
+	if p == "" {
+		return nil, status.Error(codes.InvalidArgument, "filename must be filled in")
+	}
+	if err := util.ValidPath(p); err != nil {
+		return nil, err
+	}
+
+	uid, gid := int(-1), int(-1)
+	setMode, setImmutable, immutable := false, false, false
+	mode := uint32(0)
+
+	for _, attr := range req.Attrs.Attributes {
+		switch a := attr.Value.(type) {
+		case *pb.FileAttribute_Uid:
+			if uid != -1 {
+				return nil, status.Error(codes.InvalidArgument, "cannot set uid more than once")
+			}
+			uid = int(a.Uid)
+		case *pb.FileAttribute_Gid:
+			if gid != -1 {
+				return nil, status.Error(codes.InvalidArgument, "cannot set gid more than once")
+			}
+			gid = int(a.Gid)
+		case *pb.FileAttribute_Mode:
+			if setMode {
+				return nil, status.Error(codes.InvalidArgument, "cannot set mode more than once")
+			}
+			mode = a.Mode
+			setMode = true
+		case *pb.FileAttribute_Immutable:
+			if setImmutable {
+				return nil, status.Error(codes.InvalidArgument, "cannot set immutable more than once")
+			}
+			immutable = a.Immutable
+			setImmutable = true
+		}
+	}
+
+	if uid != -1 || gid != -1 {
+		if err := chown(p, uid, gid); err != nil {
+			return nil, status.Errorf(codes.Internal, "error from chown: %v", err)
+		}
+	}
+
+	if setMode {
+		if err := unix.Chmod(p, mode&modeMask); err != nil {
+			return nil, status.Errorf(codes.Internal, "error from chmod: %v", err)
+		}
+	}
+
+	if setImmutable {
+		if err := changeImmutableOS(p, immutable); err != nil {
+			return nil, err
+		}
+	}
+	return &emptypb.Empty{}, nil
 }
 
 // Register is called to expose this handler to the gRPC server

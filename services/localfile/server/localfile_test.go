@@ -23,11 +23,17 @@ import (
 var (
 	bufSize = 1024 * 1024
 	lis     *bufconn.Listener
-	conn    *grpc.ClientConn
 )
 
 func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
+}
+
+func fatalOnErr(op string, e error, t *testing.T) {
+	t.Helper()
+	if e != nil {
+		t.Fatalf("%s: err was %v, want nil", op, e)
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -68,82 +74,77 @@ func TestEmptyRead(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	for _, tc := range []struct {
-		Name      string
-		Filename  string
-		WantErr   bool
-		Chunksize int
-		Offset    int64
-		Length    int64
+		name      string
+		filename  string
+		wantErr   bool
+		chunksize int
+		offset    int64
+		length    int64
 	}{
 		{
-			Name:      "/etc/hosts-normal",
-			Filename:  "/etc/hosts",
-			Chunksize: 10,
+			name:      "/etc/hosts-normal",
+			filename:  "/etc/hosts",
+			chunksize: 10,
 		},
 		{
-			Name:      "/etc/hosts-1-byte-chunk",
-			Filename:  "/etc/hosts",
-			Chunksize: 1,
+			name:      "/etc/hosts-1-byte-chunk",
+			filename:  "/etc/hosts",
+			chunksize: 1,
 		},
 		{
-			Name:      "/etc/hosts-with-offset-and-length",
-			Filename:  "/etc/hosts",
-			Chunksize: 10,
-			Offset:    10,
-			Length:    15,
+			name:      "/etc/hosts-with-offset-and-length",
+			filename:  "/etc/hosts",
+			chunksize: 10,
+			offset:    10,
+			length:    15,
 		},
 		{
-			Name:      "/etc/hosts-from-end",
-			Filename:  "/etc/hosts",
-			Chunksize: 10,
-			Offset:    -20,
-			Length:    15,
+			name:      "/etc/hosts-from-end",
+			filename:  "/etc/hosts",
+			chunksize: 10,
+			offset:    -20,
+			length:    15,
 		},
 		{
-			Name:     "bad-file",
-			Filename: "/no-such-filename-for-sansshell-unittest",
-			WantErr:  true,
+			name:     "bad-file",
+			filename: "/no-such-filename-for-sansshell-unittest",
+			wantErr:  true,
 		},
 		{
-			Name:     "non-absolute file",
-			Filename: "/tmp/foo/../../etc/passwd",
-			WantErr:  true,
+			name:     "non-absolute file",
+			filename: "/tmp/foo/../../etc/passwd",
+			wantErr:  true,
 		},
 	} {
 		tc := tc
-		t.Run(tc.Name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			oldChunk := util.StreamingChunkSize
 			defer func() {
 				util.StreamingChunkSize = oldChunk
 			}()
 
-			util.StreamingChunkSize = tc.Chunksize
+			util.StreamingChunkSize = tc.chunksize
 
 			client := pb.NewLocalFileClient(conn)
 
 			stream, err := client.Read(ctx, &pb.ReadActionRequest{
 				Request: &pb.ReadActionRequest_File{
 					File: &pb.ReadRequest{
-						Filename: tc.Filename,
-						Offset:   tc.Offset,
-						Length:   tc.Length,
+						Filename: tc.filename,
+						Offset:   tc.offset,
+						Length:   tc.length,
 					},
 				},
 			})
 			// In general this can only fail here for connection issues which
-			// we're not expecting. Actual failes happen in Recv below.
-			if err != nil {
-				t.Fatalf("%s: Read failed: %v", tc.Name, err)
-			}
+			// we're not expecting. Actual fails happen in Recv below.
+			fatalOnErr("Read failed", err, t)
 
 			buf := &bytes.Buffer{}
 			for {
@@ -151,10 +152,10 @@ func TestRead(t *testing.T) {
 				if err == io.EOF {
 					break
 				}
-				if got, want := err != nil, tc.WantErr; got != want {
-					t.Errorf("%s: error state inconsistent got %t and want %t err %v", tc.Name, got, want, err)
+				if got, want := err != nil, tc.wantErr; got != want {
+					t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
 				}
-				if tc.WantErr {
+				if tc.wantErr {
 					// If this was an expected error we're done.
 					return
 				}
@@ -165,25 +166,21 @@ func TestRead(t *testing.T) {
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
 				}
-				if err != nil {
-					t.Fatalf("Can't write into buffer: %v", err)
-				}
+				fatalOnErr("can't write into buffer", err, t)
 			}
-			contents, err := os.ReadFile(tc.Filename)
-			if err != nil {
-				t.Fatalf("reading test data: %s", err)
-			}
-			if tc.Offset != 0 || tc.Length != 0 {
+			contents, err := os.ReadFile(tc.filename)
+			fatalOnErr("reading test data", err, t)
+			if tc.offset != 0 || tc.length != 0 {
 				start := 0
-				if tc.Offset > 0 {
-					start = int(tc.Offset)
+				if tc.offset > 0 {
+					start = int(tc.offset)
 				}
-				if tc.Offset < 0 {
-					start = len(contents) + int(tc.Offset)
+				if tc.offset < 0 {
+					start = len(contents) + int(tc.offset)
 				}
 				length := 0
-				if tc.Length != 0 {
-					length = int(tc.Length)
+				if tc.length != 0 {
+					length = int(tc.length)
 				}
 				contents = contents[start : start+length]
 			}
@@ -195,26 +192,20 @@ func TestRead(t *testing.T) {
 }
 
 func TestTail(t *testing.T) {
-	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	// Create a file with some initial data.
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
-	if err != nil {
-		t.Fatalf("Can't create tmpfile: %v", err)
-	}
+	fatalOnErr("can't create tmpfile", err, t)
 	data := "Some data\n"
 	f1.WriteString(data)
 	name := f1.Name()
-	if err := f1.Close(); err != nil {
-		t.Fatalf("Error closeing %s - %v", name, err)
-	}
+	err = f1.Close()
+	fatalOnErr("closing file", err, t)
 	client := pb.NewLocalFileClient(conn)
 	stream, err := client.Read(ctx, &pb.ReadActionRequest{
 		Request: &pb.ReadActionRequest_Tail{
@@ -223,36 +214,27 @@ func TestTail(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Error from Read: %v", err)
-	}
+	fatalOnErr("error from read", err, t)
 
 	buf := &bytes.Buffer{}
 	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("error reading from stream: %v", err)
-	}
+	fatalOnErr("error reading from stream", err, t)
 
 	// We don't care about errors as we compare the buf later.
 	buf.Write(resp.Contents)
 
 	f1, err = os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatalf("can't open %s for adding data: %v", name, err)
-	}
+	fatalOnErr("can't open for adding data", err, t)
 
 	n, err := f1.WriteString(data)
 	if n != len(data) || err != nil {
 		t.Fatalf("incorrect length or error. Wrote %d expected %d. Error - %v", n, len(data), err)
 	}
-	if err = f1.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+	err = f1.Close()
+	fatalOnErr("close", err, t)
 
 	resp, err = stream.Recv()
-	if err != nil {
-		t.Fatalf("error reading from stream: %v", err)
-	}
+	fatalOnErr("error reading from stream", err, t)
 	buf.Write(resp.Contents)
 	data = data + data
 	if got, want := buf.String(), data; got != want {
@@ -273,14 +255,12 @@ func TestTail(t *testing.T) {
 	}
 }
 
-func fatalOnErr(op string, e error, t *testing.T) {
-	t.Helper()
-	if e != nil {
-		t.Fatalf("%s: err was %v, want nil", op, e)
-	}
-}
-
 func TestStat(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
@@ -290,11 +270,6 @@ func TestStat(t *testing.T) {
 
 	dirStat, err := osStat(temp)
 	fatalOnErr("os.Stat(tempdir)", err, t)
-
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
-	t.Cleanup(func() { conn.Close() })
 
 	for _, tc := range []struct {
 		name        string
@@ -520,6 +495,336 @@ func TestSum(t *testing.T) {
 			}
 			err = stream.CloseSend()
 			fatalOnErr("CloseSend", err, t)
+		})
+	}
+}
+
+func TestSetFileAttributes(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	uid, gid := os.Getuid(), os.Getgid()
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	fatalOnErr("os.CreateTemp", err, t)
+	f1Stat, err := osStat(f1.Name())
+	fatalOnErr("f1.Stat", err, t)
+
+	setPath := ""
+	setUid, setGid := 0, 0
+	setImmutable, chownError, immutableError := false, false, false
+
+	// Setup a mock chown so we can tell it's getting called
+	// as expected. Plus we can force error cases then.
+	savedChown := chown
+	chown = func(path string, uid int, gid int) error {
+		setPath = path
+		setUid = uid
+		setGid = gid
+		if chownError {
+			return errors.New("chown error")
+		}
+		return nil
+	}
+	savedChangeImmutableOS := changeImmutable
+	callImmutableOS := false
+	changeImmutableOS = func(path string, immutable bool) error {
+		setPath = path
+		setImmutable = immutable
+		if immutableError {
+			return errors.New("immutable error")
+		}
+		if callImmutableOS {
+			return savedChangeImmutableOS(path, immutable)
+		}
+		return nil
+	}
+
+	t.Cleanup(func() {
+		chown = savedChown
+		changeImmutableOS = savedChangeImmutableOS
+	})
+
+	for _, tc := range []struct {
+		name              string
+		input             *pb.SetFileAttributesRequest
+		wantErr           bool
+		chownError        bool
+		immutableError    bool
+		setUid            bool
+		expectedUid       int
+		setGid            bool
+		expectedGid       int
+		setMode           bool
+		expectedMode      uint32
+		setImmutable      bool
+		expectedImmutable bool
+		callImmutableOS   bool
+	}{
+		{
+			name:    "empty request",
+			input:   &pb.SetFileAttributesRequest{},
+			wantErr: true,
+		},
+		{
+			name: "no path",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "non absolute path",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: "etc/passwd",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "non clean path",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: "/tmp/foo/../../etc/passwd",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "multiple uid",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: 1,
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: 2,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "multiple gid",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: 1,
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: 2,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "multiple mode",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 1,
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 2,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "multiple immutable",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Immutable{
+								Immutable: true,
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Immutable{},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "chown error",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid + 1),
+							},
+						},
+					},
+				},
+			},
+			chownError: true,
+			wantErr:    true,
+		},
+		{
+			name: "immutable error",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Immutable{},
+						},
+					},
+				},
+			},
+			immutableError: true,
+			wantErr:        true,
+		},
+		{
+			name: "Expected path, uid, gid, mode, immutable",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid + 1),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid + 1),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: f1Stat.Mode + 1,
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Immutable{
+								Immutable: true,
+							},
+						},
+					},
+				},
+			},
+			setUid:            true,
+			expectedUid:       uid + 1,
+			setGid:            true,
+			expectedGid:       gid + 1,
+			setMode:           true,
+			expectedMode:      f1Stat.Mode + 1,
+			setImmutable:      true,
+			expectedImmutable: true,
+		},
+		{
+			name: "Call OS immutable function",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Immutable{
+								Immutable: true,
+							},
+						},
+					},
+				},
+			},
+			wantErr:         true,
+			callImmutableOS: true,
+		},
+		{
+			name: "Mode clips to 12 bits",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 01000777,
+							},
+						},
+					},
+				},
+			},
+			setMode:      true,
+			expectedMode: f1Stat.Mode | 0777,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+			chownError = tc.chownError
+			immutableError = tc.immutableError
+			callImmutableOS = tc.callImmutableOS
+
+			_, err := client.SetFileAttributes(ctx, tc.input)
+			t.Log(err)
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
+			}
+
+			// Expected an error so we're done.
+			if tc.wantErr {
+				return
+			}
+
+			if got, want := setPath, tc.input.Attrs.Filename; got != want {
+				t.Fatalf("%s: didn't use correct path. Got %s and want %s", tc.name, got, want)
+			}
+			if tc.setUid {
+				if got, want := setUid, tc.expectedUid; got != want {
+					t.Fatalf("%s: didn't use correct uid. Got %d and want %d", tc.name, got, want)
+				}
+			}
+			if tc.setGid {
+				if got, want := setGid, tc.expectedGid; got != want {
+					t.Fatalf("%s: didn't use correct gid. Got %d and want %d", tc.name, got, want)
+				}
+			}
+
+			if tc.setMode {
+				s, err := osStat(f1.Name())
+				fatalOnErr("stat tmp file", err, t)
+				if got, want := s.Mode, tc.expectedMode; got != want {
+					t.Fatalf("%s: didn't use correct mode. Got %O and want %O", tc.name, got, want)
+				}
+			}
+
+			if tc.setImmutable {
+				if got, want := setImmutable, tc.expectedImmutable; got != want {
+					t.Fatalf("%s: didn't use correct immutable setting. Got %t and want %t", tc.name, got, want)
+				}
+			}
 		})
 	}
 }

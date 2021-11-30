@@ -19,9 +19,13 @@ import (
 
 func init() {
 	subcommands.Register(&readCmd{}, "file")
-	subcommands.Register(&tailCmd{}, "tail")
+	subcommands.Register(&tailCmd{}, "file")
 	subcommands.Register(&statCmd{}, "file")
 	subcommands.Register(&sumCmd{}, "file")
+	subcommands.Register(&chownCmd{}, "file")
+	subcommands.Register(&chgrpCmd{}, "file")
+	subcommands.Register(&chmodCmd{}, "file")
+	subcommands.Register(&immutableCmd{}, "file")
 }
 
 type readCmd struct {
@@ -45,7 +49,7 @@ func (p *readCmd) SetFlags(f *flag.FlagSet) {
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Please specify a filename to read.\n")
+		fmt.Fprintln(os.Stderr, "Please specify a filename to read.")
 		return subcommands.ExitUsageError
 	}
 
@@ -123,7 +127,7 @@ func (p *tailCmd) SetFlags(f *flag.FlagSet) {
 func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Please specify a filename to tail.\n")
+		fmt.Fprintln(os.Stderr, "Please specify a filename to tail.")
 		return subcommands.ExitUsageError
 	}
 
@@ -147,21 +151,21 @@ func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 type statCmd struct{}
 
-func (s *statCmd) Name() string     { return "stat" }
-func (s *statCmd) Synopsis() string { return "Stat file(s) to stdout." }
-func (s *statCmd) Usage() string {
+func (*statCmd) Name() string     { return "stat" }
+func (*statCmd) Synopsis() string { return "Stat file(s) to stdout." }
+func (*statCmd) Usage() string {
 	return `stat <path> [<path>...]:
   Stat one or more remote fles and print the result to stdout.
   `
 }
 
-func (s *statCmd) SetFlags(f *flag.FlagSet) {}
+func (*statCmd) SetFlags(f *flag.FlagSet) {}
 
 func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 
 	if f.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "please specify at least one path to stat\n")
+		fmt.Fprintln(os.Stderr, "please specify at least one path to stat")
 		return subcommands.ExitUsageError
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
@@ -252,9 +256,9 @@ type sumCmd struct {
 	sumType string
 }
 
-func (s *sumCmd) Name() string     { return "sum" }
-func (s *sumCmd) Synopsis() string { return "Calculate file sums" }
-func (s *sumCmd) Usage() string {
+func (*sumCmd) Name() string     { return "sum" }
+func (*sumCmd) Synopsis() string { return "Calculate file sums" }
+func (*sumCmd) Usage() string {
 	return `sum [--sumtype type ] <path> [<path>...]
   Calculate sums for one or more remotes paths and print the result (as a hexidecimal string) to stdout.
   `
@@ -281,7 +285,7 @@ func (s *sumCmd) SetFlags(f *flag.FlagSet) {
 func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "please specify a filename to sum\n")
+		fmt.Fprintln(os.Stderr, "please specify a filename to sum")
 		return subcommands.ExitUsageError
 	}
 	sumType, err := flagToType(s.sumType)
@@ -346,5 +350,229 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 	}
 
+	return retCode
+}
+
+type chownCmd struct {
+	uid int
+}
+
+func (*chownCmd) Name() string     { return "chown" }
+func (*chownCmd) Synopsis() string { return "Change ownership on file/directory" }
+func (*chownCmd) Usage() string {
+	return `chown --uid=X <path>:
+  Change ownership on a file/directory.
+  `
+}
+
+func (c *chownCmd) SetFlags(f *flag.FlagSet) {
+	f.IntVar(&c.uid, "uid", -1, "Sets the file/directory to be owned by this uid")
+}
+
+func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a filename to chown")
+		return subcommands.ExitUsageError
+	}
+	if c.uid < 0 {
+		fmt.Fprintln(os.Stderr, "--uid must be set to a positive number")
+		return subcommands.ExitFailure
+	}
+
+	req := &pb.SetFileAttributesRequest{
+		Attrs: &pb.FileAttributes{
+			Filename: f.Args()[0],
+			Attributes: []*pb.FileAttribute{
+				{
+					Value: &pb.FileAttribute_Uid{
+						Uid: uint32(c.uid),
+					},
+				},
+			},
+		},
+	}
+
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.SetFileAttributesOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chown client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "chown client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type chgrpCmd struct {
+	gid int
+}
+
+func (*chgrpCmd) Name() string     { return "chgrp" }
+func (*chgrpCmd) Synopsis() string { return "Change group membership on a file/directory" }
+func (*chgrpCmd) Usage() string {
+	return `chgrp --gid=X <path>:
+  Change group membership on a file/directory.
+  `
+}
+
+func (c *chgrpCmd) SetFlags(f *flag.FlagSet) {
+	f.IntVar(&c.gid, "gid", -1, "Sets the file/directory group membership specified by this gid")
+
+}
+
+func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a filename to chgrp")
+		return subcommands.ExitUsageError
+	}
+	if c.gid < 0 {
+		fmt.Fprintln(os.Stderr, "--gid must be set to a positive number")
+		return subcommands.ExitFailure
+	}
+
+	req := &pb.SetFileAttributesRequest{
+		Attrs: &pb.FileAttributes{
+			Filename: f.Args()[0],
+			Attributes: []*pb.FileAttribute{
+				{
+					Value: &pb.FileAttribute_Gid{
+						Gid: uint32(c.gid),
+					},
+				},
+			},
+		},
+	}
+
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.SetFileAttributesOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chgrp client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "chgrp client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type chmodCmd struct {
+	mode uint64
+}
+
+func (*chmodCmd) Name() string     { return "chmod" }
+func (*chmodCmd) Synopsis() string { return "Change mode on a file/directory" }
+func (*chmodCmd) Usage() string {
+	return `chmod --mode=X <path>:
+  Change the modes on a file/directory.
+  `
+}
+
+func (c *chmodCmd) SetFlags(f *flag.FlagSet) {
+	f.Uint64Var(&c.mode, "mode", 0, "Sets the file/directory to this mode")
+}
+
+func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a filename to chmod")
+		return subcommands.ExitUsageError
+	}
+	if c.mode == 0 {
+		fmt.Fprintln(os.Stderr, "--mode must be set to a non-zero value")
+		return subcommands.ExitFailure
+	}
+
+	req := &pb.SetFileAttributesRequest{
+		Attrs: &pb.FileAttributes{
+			Filename: f.Args()[0],
+			Attributes: []*pb.FileAttribute{
+				{
+					Value: &pb.FileAttribute_Mode{
+						Mode: uint32(c.mode),
+					},
+				},
+			},
+		},
+	}
+
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.SetFileAttributesOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chmod client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "chmod client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type immutableCmd struct {
+	immutable bool
+}
+
+func (*immutableCmd) Name() string     { return "immutable" }
+func (*immutableCmd) Synopsis() string { return "Set or clear the immutable bit on a file/directory." }
+func (*immutableCmd) Usage() string {
+	return `immutable --state=X <path>:
+  Set or clears the immutable bit on a file/directory.
+  `
+}
+
+func (i *immutableCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&i.immutable, "state", false, "Sets or clears the immutable bit on a file/directory")
+}
+
+func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a filename to chmod")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.SetFileAttributesRequest{
+		Attrs: &pb.FileAttributes{
+			Filename: f.Args()[0],
+			Attributes: []*pb.FileAttribute{
+				{
+					Value: &pb.FileAttribute_Immutable{
+						Immutable: i.immutable,
+					},
+				},
+			},
+		},
+	}
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.SetFileAttributesOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "immutable client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
 	return retCode
 }
