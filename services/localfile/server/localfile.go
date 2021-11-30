@@ -11,13 +11,13 @@ import (
 	"io"
 	"math"
 	"os"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,6 +27,9 @@ import (
 var (
 	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 )
+
+// READ_TIMEOUT_SEC is how long tail should wait on a given poll call before returning.
+const READ_TIMEOUT_SEC = 10
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -91,29 +94,24 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 
 	for {
 		n, err := reader.Read(buf)
-
 		// If we got EOF we're done for normal reads and wait for tails.
 		if err == io.EOF {
 			// If we're not tailing then we're done.
 			if r != nil {
 				break
 			}
-			// OS/X only has poll (no epoll) but since we're testing a single FD
-			// this is fine.
-			fds := []unix.PollFd{
-				{
-					Fd:     int32(f.Fd()),
-					Events: unix.POLLIN,
-				},
+
+			// We sleep for READ_TIMEOUT_SEC between calls as there's no good
+			// way to poll on a file. Once it reaches EOF it's always readable
+			// (you just get EOF). We have to poll like this so we can check
+			// the context state and return if it's canclled.
+			// TODO(jchacon): Replace with something like inotify for systems
+			// that support it. https://github.com/fsnotify/fsnotify
+			if stream.Context().Err() != nil {
+				return stream.Context().Err()
 			}
-			n, err := unix.Poll(fds, -1)
-			if err != nil {
-				return status.Errorf(codes.Internal, "error from poll - %v", err)
-			}
-			if n != 1 {
-				return status.Errorf(codes.Internal, "incorrect return from poll. Expected 1 and got %d", n)
-			}
-			// It's ready to read so loop back and do that.
+			time.Sleep(READ_TIMEOUT_SEC * time.Second)
+			// Time to try again.
 			continue
 		}
 

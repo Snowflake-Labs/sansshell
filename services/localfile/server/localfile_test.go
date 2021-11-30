@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -195,7 +196,7 @@ func TestRead(t *testing.T) {
 
 func TestTail(t *testing.T) {
 	var err error
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
@@ -231,6 +232,7 @@ func TestTail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error reading from stream: %v", err)
 	}
+
 	// We don't care about errors as we compare the buf later.
 	buf.Write(resp.Contents)
 
@@ -255,6 +257,19 @@ func TestTail(t *testing.T) {
 	data = data + data
 	if got, want := buf.String(), data; got != want {
 		t.Fatalf("didn't get matching data for second file read. Got %q and want %q", got, want)
+	}
+
+	// Now cancel our context.
+	cancel()
+
+	// Pause n+1s to make sure the server goes through a poll loop.
+	time.Sleep(time.Second * (READ_TIMEOUT_SEC + 1))
+
+	// This should cause Recv() to fail
+	resp, err = stream.Recv()
+	t.Log(err)
+	if err == nil {
+		t.Fatalf("Didn't get error from recv. Got resp: %+v", resp)
 	}
 }
 
