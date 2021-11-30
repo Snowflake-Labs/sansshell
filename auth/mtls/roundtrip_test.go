@@ -11,6 +11,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/Snowflake-Labs/sansshell/server"
 	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
@@ -25,7 +26,7 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "HealthCheck.Empty"
+    input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
     input.peer.net.network = "bufconn"
 }
@@ -37,7 +38,7 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "HealthCheck.Empty"
+    input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
     input.peer.net.network = "something else"
 }
@@ -48,7 +49,7 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "HealthCheck.Empty"
+    input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
 		input.peer.cert.subject.SerialNumber = "255288720161934708870254561641453151839"
 }
@@ -59,7 +60,7 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "HealthCheck.Empty"
+    input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
 		input.peer.cert.subject.SerialNumber = "12345"
 }
@@ -134,7 +135,7 @@ func TestHealthCheck(t *testing.T) {
 			tu.FatalOnErr("Failed to dial bufnet", err, t)
 			t.Cleanup(func() { conn.Close() })
 			client := hcpb.NewHealthCheckClient(conn)
-			resp, err := client.Ok(ctx, &hcpb.Empty{})
+			resp, err := client.Ok(ctx, &emptypb.Empty{})
 			if err != nil {
 				if tc.Err == "" {
 					t.Errorf("Read failed: %v", err)

@@ -2,13 +2,12 @@ syntax = "proto3";
 
 option go_package = "github.com/Snowflake-Labs/sansshell/services/healthcheck";
 
+import "google/protobuf/empty.proto";
+
 package HealthCheck;
 
 // The HealthCheck service definition.
 service HealthCheck {
   // Ok merely signals if the endpoint is reachable.
-  rpc Ok (Empty) returns (Empty) {}
+  rpc Ok(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
-
-// Empty is used as both the request and response message
-message Empty {}
