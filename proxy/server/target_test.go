@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	_ "github.com/Snowflake-Labs/sansshell/proxy/testdata"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 // A TargetDialer than returns an error for all Dials
@@ -101,9 +103,8 @@ func TestStreamSetAddErrors(t *testing.T) {
 			Nonce:      tc.nonce,
 			MethodName: tc.method,
 		}
-		if err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/); err != nil {
-			t.Fatalf("StartStream(%+v), err was %v, want nil", req, err)
-		}
+		err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/)
+		testutil.FatalOnErr(fmt.Sprintf("StartStream(+%v)", req), err, t)
 		var msg *pb.ProxyReply
 		select {
 		case msg = <-replyChan:

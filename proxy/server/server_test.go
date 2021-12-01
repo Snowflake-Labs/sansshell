@@ -21,6 +21,7 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	td "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
+	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 // echoTestDataServer is a TestDataServiceServer for testing
@@ -79,9 +80,7 @@ func (e *echoTestDataServer) TestBidiStream(stream td.TestService_TestBidiStream
 func newRpcAuthorizer(ctx context.Context, t *testing.T, policy string) *rpcauth.Authorizer {
 	t.Helper()
 	auth, err := rpcauth.NewWithPolicy(ctx, policy)
-	if err != nil {
-		t.Fatalf("rpcauth.NewWithPolicy(%s) err was %v, want nil", policy, err)
-	}
+	tu.FatalOnErr(fmt.Sprintf("rpcauth.NewWithPolicy(%s)", policy), err, t)
 	return auth
 }
 
@@ -174,13 +173,9 @@ func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[stri
 	})
 	bufMap := map[string]*bufconn.Listener{"proxy": lis}
 	conn, err := grpc.DialContext(ctx, "proxy", withBufDialer(bufMap), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("DialContext(proxy), err was %v, want nil", err)
-	}
+	tu.FatalOnErr("DialContext(proxy)", err, t)
 	stream, err := pb.NewProxyClient(conn).Proxy(ctx)
-	if err != nil {
-		t.Fatalf("proxy.Proxy(), err was %v, want nil", err)
-	}
+	tu.FatalOnErr("proxy.Proxy()", err, t)
 	return stream
 }
 
@@ -257,9 +252,8 @@ func TestProxyServerCancel(t *testing.T) {
 			},
 		},
 	}
-	if err := proxyStream.Send(cancelReq); err != nil {
-		t.Fatalf("ClientCancel(foo, bar) err was %v, want nil", err)
-	}
+	err := proxyStream.Send(cancelReq)
+	tu.FatalOnErr("ClientCancel(foo, bar)", err, t)
 
 	// we should receive two server close messages with status
 	// cancelled
@@ -318,9 +312,8 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 
 	req := testutil.PackStreamData(t, &td.TestRequest{Input: "Foo"}, fooId, barId)
 
-	if err := proxyStream.Send(req); err != nil {
-		t.Fatalf("Send(%v) err was %v, want nil", req, err)
-	}
+	err := proxyStream.Send(req)
+	tu.FatalOnErr(fmt.Sprintf("Send(%v)", req), err, t)
 
 	// We send once request, but we'll get 4 replies:
 	// one each of streamdata and server close for each
@@ -398,9 +391,8 @@ func TestProxyServerClientStream(t *testing.T) {
 	req := testutil.PackStreamData(t, &td.TestRequest{Input: "Foo"}, streamId)
 
 	for i := 0; i < 3; i++ {
-		if err := proxyStream.Send(req); err != nil {
-			t.Fatalf("%d : proxyStream.Send(%v), err was %v, want nil", i, req, err)
-		}
+		err := proxyStream.Send(req)
+		tu.FatalOnErr(fmt.Sprintf("%d: proxyStream.Send(%v)", i, req), err, t)
 	}
 
 	// Send a half-close, and exchange it for the reply
@@ -480,9 +472,8 @@ func TestProxyServerProxyClientClose(t *testing.T) {
 	testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestBidiStream")
 
 	// sending a ClientClose to the ProxyStream will also ClientClose the streams.
-	if err := proxyStream.CloseSend(); err != nil {
-		t.Fatalf("CloseSend(); err was %v, want nil", err)
-	}
+	err := proxyStream.CloseSend()
+	tu.FatalOnErr("CloseSend()", err, t)
 
 	// This should trigger the close of the target stream, with no error
 	reply := testutil.Exchange(t, proxyStream, nil)
@@ -606,9 +597,7 @@ allow {
 
 	packReply := func(t *testing.T, reply *td.TestResponse) *pb.ProxyReply {
 		packed, err := anypb.New(reply)
-		if err != nil {
-			t.Fatalf("anypby.New(%v) err was %v, want nil", reply, err)
-		}
+		tu.FatalOnErr(fmt.Sprintf("anypb.New(%v)", reply), err, t)
 		return &pb.ProxyReply{
 			Reply: &pb.ProxyReply_StreamData{
 				StreamData: &pb.StreamData{

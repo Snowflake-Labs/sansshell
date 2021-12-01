@@ -50,10 +50,8 @@ func TestRun(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
@@ -65,17 +63,15 @@ func TestRun(t *testing.T) {
 		// it'll be replaced to look for specific args.
 		return []string{"/dev/null"}
 	}
-	defer func() {
+	t.Cleanup(func() {
 		*ansiblePlaybookBin = savedAnsiblePlaybookBin
 		cmdArgsTransform = savedCmdArgsTransform
-	}()
+	})
 
 	client := pb.NewPlaybookClient(conn)
 
 	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Can't get current working directory: %s", err)
-	}
+	testutil.FatalOnErr("can't get current working directory", err, t)
 
 	path := filepath.Join(wd, "testdata", "test.yml")
 
@@ -277,9 +273,7 @@ func TestRun(t *testing.T) {
 			return []string{"/dev/null"}
 		}
 		resp, err := client.Run(ctx, test.req)
-		if err != nil {
-			t.Fatalf("Unexpected error checking %s: %v", test.name, err)
-		}
+		testutil.FatalOnErr("unexpected error", err, t)
 		if diff != "" {
 			t.Fatalf("Different args for %s\nDiff:\n%s\nGot:\n%q\nWant:\n%q", test.name, diff, savedArgs, test.wantArgs)
 		}

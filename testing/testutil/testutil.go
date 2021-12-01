@@ -14,3 +14,12 @@ func ResolvePath(t *testing.T, path string) string {
 	}
 	return binPath
 }
+
+// FataOnErr is a testing helper function to test and abort on an error.
+// Reduces 3 lines to 1 for common error checking.
+func FatalOnErr(op string, e error, t *testing.T) {
+	t.Helper()
+	if e != nil {
+		t.Fatalf("%s: err was %v, want nil", op, e)
+	}
+}

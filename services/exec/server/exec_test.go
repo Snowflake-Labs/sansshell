@@ -42,10 +42,8 @@ func TestExec(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewExecClient(conn)
 

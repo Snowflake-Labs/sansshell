@@ -17,6 +17,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 const (
@@ -66,10 +67,8 @@ func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	tu.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	ts := []struct {
 		Filename string
@@ -127,15 +126,11 @@ func TestRead(t *testing.T) {
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
 				}
-				if err != nil {
-					t.Fatalf("Can't write into buffer: %v", err)
-				}
+				tu.FatalOnErr("Can't write into buffer", err, t)
 			}
 
 			contents, err := os.ReadFile(want.Filename)
-			if err != nil {
-				t.Fatalf("reading test data: %s", err)
-			}
+			tu.FatalOnErr("reading test data", err, t)
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
 			}
