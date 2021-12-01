@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
-	"github.com/Snowflake-Labs/sansshell/testutil"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 // Exchange is a test helper for the common pattern of trading messages with
