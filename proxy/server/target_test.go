@@ -23,17 +23,6 @@ func (e dialErrTargetDialer) DialContext(ctx context.Context, target string) (gr
 	return nil, status.Error(codes.Code(e), "")
 }
 
-/* // A grpc.ClientConnInterface that returns errors for all methods
-type errClientConn codes.Code
-
-func (e errClientConn) Invoke(context.Context, string, interface{}, interface{}, ...grpc.CallOption) error {
-	return status.Error(codes.Code(e), "")
-}
-
-func (e errClientConn) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.CallOption) error {
-	return status.Error(codes.Code(e), "")
-}
-*/
 func TestEmptyStreamSet(t *testing.T) {
 	ctx := context.Background()
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
