@@ -197,7 +197,7 @@ function tail_execute {
   shift
   sleep 5
   cat /etc/hosts >> ${LOGS}/hosts
-  sleep 5
+  sleep 15
   disown %%
   kill -KILL ${CLIENT_PID}
 }
