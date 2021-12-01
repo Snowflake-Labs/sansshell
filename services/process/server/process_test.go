@@ -62,18 +62,14 @@ func TestListNative(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewProcessClient(conn)
 
 	// Ask for all processes
 	resp, err := client.List(ctx, &pb.ListRequest{})
-	if err != nil {
-		t.Fatalf("Unexpected error for basic list: %v", err)
-	}
+	testutil.FatalOnErr("unexpected error for basic list", err, t)
 
 	if len(resp.ProcessEntries) == 0 {
 		t.Errorf("Returned ps list is empty?")
@@ -84,10 +80,7 @@ func TestListNative(t *testing.T) {
 	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{pid},
 	})
-
-	if err != nil {
-		t.Fatalf("Unexpected error for basic list: %v", err)
-	}
+	testutil.FatalOnErr("unexpected error for basic list", err, t)
 
 	if len(resp.ProcessEntries) != 1 {
 		t.Fatalf("Asked for a single entry and got back something else? %+v", resp)
@@ -107,10 +100,8 @@ func TestList(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
@@ -122,20 +113,17 @@ func TestList(t *testing.T) {
 			testdataPs,
 		}
 	}
-	defer func() {
+	t.Cleanup(func() {
 		*psBin = savedPsBin
 		psOptions = savedFunc
-	}()
+	})
 
 	input, err := os.ReadFile(testdataPsTextProto)
-	if err != nil {
-		t.Fatalf("Can't open testdata %s: %v", testdataPsTextProto, err)
-	}
+	testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", testdataPsTextProto), err, t)
 
 	testdata := &pb.ListReply{}
-	if err := prototext.Unmarshal(input, testdata); err != nil {
-		t.Fatalf("Can't unmarshall test data %v", err)
-	}
+	err = prototext.Unmarshal(input, testdata)
+	testutil.FatalOnErr("can't unmarshal test data", err, t)
 
 	// Some sorting functions for protocmp below.
 
@@ -153,9 +141,7 @@ func TestList(t *testing.T) {
 
 	// Test 1: Ask for all processes
 	resp, err := client.List(ctx, &pb.ListRequest{})
-	if err != nil {
-		t.Fatalf("Unexpected error for basic list: %v", err)
-	}
+	testutil.FatalOnErr("unexpected error for basic list", err, t)
 
 	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries, sortCodes); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
@@ -166,9 +152,7 @@ func TestList(t *testing.T) {
 	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{testPid},
 	})
-	if err != nil {
-		t.Fatalf("Unexpected error for single pid input: %v", err)
-	}
+	testutil.FatalOnErr("unexpected error for single pid input", err, t)
 
 	// Asked for 1, that should be all we get back.
 	got := &pb.ListReply{}
@@ -250,10 +234,8 @@ func TestPstackNative(t *testing.T) {
 
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewProcessClient(conn)
 
@@ -261,9 +243,7 @@ func TestPstackNative(t *testing.T) {
 	resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{
 		Pid: int64(os.Getppid()),
 	})
-	if err != nil {
-		t.Fatalf("Can't get native pstack: %v", err)
-	}
+	testutil.FatalOnErr("can't get native pstack", err, t)
 
 	// We're a go program. We have multiple threads.
 	if len(resp.Stacks) <= 1 {
@@ -296,10 +276,8 @@ func TestPstack(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
@@ -313,10 +291,10 @@ func TestPstack(t *testing.T) {
 		}
 		return []string{testInput}
 	}
-	defer func() {
+	t.Cleanup(func() {
 		*pstackBin = savedPstackBin
 		pstackOptions = savedFunc
-	}()
+	})
 
 	client := pb.NewProcessClient(conn)
 
@@ -425,21 +403,14 @@ func TestPstack(t *testing.T) {
 			// In general we don't need this if we expect errors.
 			if test.validate != "" {
 				input, err := os.ReadFile(test.validate)
-				if err != nil {
-					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
-				}
-
-				if err := prototext.Unmarshal(input, testdata); err != nil {
-					t.Fatalf("%s: Can't unmarshall test data %v", test.name, err)
-				}
+				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", test.validate), err, t)
+				err = prototext.Unmarshal(input, testdata)
+				testutil.FatalOnErr("can't unmarshal test data", err, t)
 			}
 
 			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: test.pid})
-			if err != nil && !test.wantErr {
-				t.Fatalf("%s: unexpected error: %v", test.name, err)
-			}
-			if err == nil && test.wantErr {
-				t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+			if got, want := err != nil, test.wantErr; got != want {
+				t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
 			}
 
 			if !test.wantErr {
@@ -455,10 +426,8 @@ func TestJstack(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewProcessClient(conn)
 
@@ -475,10 +444,10 @@ func TestJstack(t *testing.T) {
 			testInput,
 		}
 	}
-	defer func() {
+	t.Cleanup(func() {
 		*jstackBin = savedJstackBin
 		jstackOptions = savedFunc
-	}()
+	})
 
 	goodJstackOptions := jstackOptions
 
@@ -555,22 +524,14 @@ func TestJstack(t *testing.T) {
 			testdata := &pb.GetJavaStacksReply{}
 			if test.validate != "" {
 				input, err := os.ReadFile(test.validate)
-				if err != nil {
-					t.Fatalf("%s: Can't open testdata %s: %v", test.name, test.validate, err)
-				}
-
-				if err := prototext.Unmarshal(input, testdata); err != nil {
-					t.Fatalf("%s: Can't unmarshall test data %v", test.name, err)
-				}
-
+				testutil.FatalOnErr(fmt.Sprintf("can't open testdata %s", test.validate), err, t)
+				err = prototext.Unmarshal(input, testdata)
+				testutil.FatalOnErr("can't unmarshal test data", err, t)
 			}
 
 			resp, err := client.GetJavaStacks(ctx, &pb.GetJavaStacksRequest{Pid: test.pid})
-			if err != nil && !test.wantErr {
-				t.Fatalf("%s: unexpected error: %v", test.name, err)
-			}
-			if err == nil && test.wantErr {
-				t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+			if got, want := err != nil, test.wantErr; got != want {
+				t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
 			}
 
 			if !test.wantErr {
@@ -586,10 +547,8 @@ func TestMemoryDump(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewProcessClient(conn)
 
@@ -604,9 +563,7 @@ func TestMemoryDump(t *testing.T) {
 	var testInput string
 	gcoreOptionsAndLocation = func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
 		opts, file, err := savedGcoreFunc(req)
-		if err != nil {
-			t.Fatalf("error from gcoreOptionsAndLocation for req %+v : %v", req, err)
-		}
+		testutil.FatalOnErr(fmt.Sprintf("error from gcoreOptionsAndLocation for req %+v", req), err, t)
 		if len(opts) == 0 {
 			t.Fatalf("didn't get any options back from gcoreOptionsAndLocation for req: %+v", req)
 		}
@@ -618,9 +575,7 @@ func TestMemoryDump(t *testing.T) {
 	}
 	jmapOptionsAndLocation = func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
 		opts, file, err := savedJmapFunc(req)
-		if err != nil {
-			t.Fatalf("error from jmapOptionsAndLocation for req %+v : %v", req, err)
-		}
+		testutil.FatalOnErr(fmt.Sprintf("error from jmapOptionsAndLocation for req %+v", req), err, t)
 		if len(opts) == 0 {
 			t.Fatalf("didn't get any options back from jmapOptionsAndLocation for req: %+v", req)
 		}
@@ -630,12 +585,12 @@ func TestMemoryDump(t *testing.T) {
 			testInput,
 		}, testInput, nil
 	}
-	defer func() {
+	t.Cleanup(func() {
 		*gcoreBin = savedGcoreBin
 		*jmapBin = savedJmapBin
 		gcoreOptionsAndLocation = savedGcoreFunc
 		jmapOptionsAndLocation = savedJmapFunc
-	}()
+	})
 
 	goodGcoreOptions := gcoreOptionsAndLocation
 	goodJmapOptions := jmapOptionsAndLocation
@@ -644,10 +599,8 @@ func TestMemoryDump(t *testing.T) {
 	}
 
 	testdir, err := os.MkdirTemp("", "tests")
-	if err != nil {
-		t.Fatalf("Can't create temp dir: %v", err)
-	}
-	defer os.RemoveAll(testdir) // clean up
+	testutil.FatalOnErr("can't create temp dir", err, t)
+	t.Cleanup(func() { os.RemoveAll(testdir) })
 
 	for _, test := range []struct {
 		name     string
@@ -826,27 +779,19 @@ func TestMemoryDump(t *testing.T) {
 			// Need a tmp dir and a copy of the test input since the options
 			// caller is expecting to cleanup the directory when it's done.
 			dir, err := os.MkdirTemp("", "cores")
-			if err != nil {
-				t.Fatalf("%s: Can't make tmpdir: %v", test.name, err)
-			}
+			testutil.FatalOnErr("can't make tmpdir", err, t)
 			file := filepath.Join(dir, "core")
 			var testdata []byte
 			if !test.noOutput {
 				testdata, err = os.ReadFile(test.input)
-				if err != nil {
-					t.Fatalf("%s: can't read test input: %v", test.name, err)
-				}
+				testutil.FatalOnErr("can't read test input", err, t)
 				err = os.WriteFile(file, testdata, 0666)
-				if err != nil {
-					t.Fatalf("%s: can't copy test data: %v", test.name, err)
-				}
+				testutil.FatalOnErr("can't copy test data", err, t)
 			}
 			testInput = file
 
 			stream, err := client.GetMemoryDump(ctx, test.req)
-			if err != nil {
-				t.Fatalf("%s: error setting up stream: %v", test.name, err)
-			}
+			testutil.FatalOnErr("setting up stream", err, t)
 
 			var data []byte
 			for {
@@ -858,11 +803,8 @@ func TestMemoryDump(t *testing.T) {
 					t.Logf("%s - err: %v", test.name, err)
 				}
 
-				if err != nil && !test.wantErr {
-					t.Fatalf("%s: unexpected error: %v", test.name, err)
-				}
-				if err == nil && test.wantErr {
-					t.Fatalf("%s: didn't get expected error. Response: %+v", test.name, resp)
+				if got, want := err != nil, test.wantErr; got != want {
+					t.Fatalf("%s: unexpected error state. got %t want %t err %v", test.name, got, want, err)
 				}
 
 				// If we got here and expected an error the response is nil so just break.
@@ -877,19 +819,13 @@ func TestMemoryDump(t *testing.T) {
 			if !test.wantErr && test.req.GetUrl() != nil {
 				// Need to query the bucket to see what we got.
 				bucket, err := blob.OpenBucket(ctx, test.req.GetUrl().Url)
-				if err != nil {
-					t.Fatalf("can't open %s bucket - %v", test.req.GetUrl().Url, err)
-				}
+				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s", test.req.GetUrl().Url), err, t)
 				file := fmt.Sprintf("bufconn-core.%d", test.req.Pid)
 				rdr, err := bucket.NewReader(context.Background(), file, nil)
-				if err != nil {
-					t.Fatalf("can't open bucket %s key %s - %v", test.req.GetUrl().Url, file, err)
-				}
+				testutil.FatalOnErr(fmt.Sprintf("can't open bucket %s key %s", test.req.GetUrl().Url, file), err, t)
 				data, err = io.ReadAll(rdr)
-				if err != nil {
-					t.Fatalf("can't read all bytes from mem://%s - %v", file, err)
-				}
-				defer bucket.Close()
+				testutil.FatalOnErr(fmt.Sprintf("can't read all bytes from mem://%s", file), err, t)
+				t.Cleanup(func() { bucket.Close() })
 			}
 
 			if !test.wantErr {

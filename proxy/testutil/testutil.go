@@ -3,6 +3,7 @@
 package testutil
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/testutil"
 )
 
 // Exchange is a test helper for the common pattern of trading messages with
@@ -24,9 +26,7 @@ func Exchange(t *testing.T, stream pb.Proxy_ProxyClient, req *pb.ProxyRequest) *
 		}
 	}
 	reply, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("ProxyClient.Recv(), err was %v, want nil", err)
-	}
+	testutil.FatalOnErr("ProxyClient.Recv()", err, t)
 	return reply
 }
 
@@ -76,9 +76,7 @@ func MustStartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method s
 func PackStreamData(t *testing.T, req proto.Message, streamIds ...uint64) *pb.ProxyRequest {
 	t.Helper()
 	packed, err := anypb.New(req)
-	if err != nil {
-		t.Fatalf("anypb.New(%+v) err was %v, want nil", req, err)
-	}
+	testutil.FatalOnErr(fmt.Sprintf("anypb.New(%+v)", req), err, t)
 	return &pb.ProxyRequest{
 		Request: &pb.ProxyRequest_StreamData{
 			StreamData: &pb.StreamData{
@@ -96,8 +94,6 @@ func UnpackStreamData(t *testing.T, reply *pb.ProxyReply) ([]uint64, proto.Messa
 		t.Fatalf("UnpackStreamData() reply was of type %T, want StreamData", reply.Reply)
 	}
 	data, err := sd.Payload.UnmarshalNew()
-	if err != nil {
-		t.Fatalf("anypb.UnmarshalNew(%v), err was %v, want nil", sd, err)
-	}
+	testutil.FatalOnErr(fmt.Sprintf("anypb.UnmarshalNew(%v)", sd), err, t)
 	return sd.StreamIds, data
 }

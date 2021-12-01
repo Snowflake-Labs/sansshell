@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/open-policy-agent/opa/ast"
 )
 
@@ -76,9 +77,7 @@ allow {
 `
 	ctx := context.Background()
 	policy, err := NewAuthzPolicy(ctx, policyString)
-	if err != nil {
-		t.Fatalf("NewAuthzPolicy, err was %v, want nil", err)
-	}
+	tu.FatalOnErr("NewAuthzPolicy", err, t)
 
 	expectNoError := func(t *testing.T, err error) {
 		if err != nil {

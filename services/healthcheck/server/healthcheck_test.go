@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -41,13 +42,10 @@ func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewHealthCheckClient(conn)
-	if _, err := client.Ok(ctx, &pb.Empty{}); err != nil {
-		t.Fatalf("HealthCheck failed: %v", err)
-	}
+	_, err = client.Ok(ctx, &pb.Empty{})
+	testutil.FatalOnErr("HealthCheck failed", err, t)
 }

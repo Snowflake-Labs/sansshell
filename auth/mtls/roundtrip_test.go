@@ -15,6 +15,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/server"
 	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
+	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 const (
@@ -78,14 +79,10 @@ func bufDialer(lis *bufconn.Listener) func(context.Context, string) (net.Conn, e
 func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) (*bufconn.Listener, *grpc.Server) {
 	t.Helper()
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
-	if err != nil {
-		t.Fatalf("Failed to load client cert: %v", err)
-	}
+	tu.FatalOnErr("Failed to load client cert", err, t)
 	lis := bufconn.Listen(bufSize)
 	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard())
-	if err != nil {
-		t.Fatalf("Could not build server: %s", err)
-	}
+	tu.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
 	go func() {
 		listening <- struct{}{}
@@ -101,13 +98,9 @@ func TestHealthCheck(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	CAPool, err := LoadRootOfTrust("testdata/root.pem")
-	if err != nil {
-		t.Fatalf("Failed to load root CA: %v", err)
-	}
+	tu.FatalOnErr("Failed to load root CA", err, t)
 	creds, err := LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
-	if err != nil {
-		t.Fatalf("Failed to load client cert: %v", err)
-	}
+	tu.FatalOnErr("Failed to load client cert", err, t)
 	ts := []struct {
 		Name   string
 		Policy string
@@ -138,10 +131,8 @@ func TestHealthCheck(t *testing.T) {
 		t.Run(tc.Name, func(t *testing.T) {
 			l, s := serverWithPolicy(t, tc.Policy, CAPool)
 			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
-			if err != nil {
-				t.Fatalf("Failed to dial bufnet: %v", err)
-			}
-			defer conn.Close()
+			tu.FatalOnErr("Failed to dial bufnet", err, t)
+			t.Cleanup(func() { conn.Close() })
 			client := hcpb.NewHealthCheckClient(conn)
 			resp, err := client.Ok(ctx, &hcpb.Empty{})
 			if err != nil {

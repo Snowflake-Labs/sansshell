@@ -47,10 +47,8 @@ func TestInstall(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewPackagesClient(conn)
 
@@ -66,9 +64,7 @@ func TestInstall(t *testing.T) {
 		cmdLine = strings.Join(out, " ")
 		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
-	defer func() {
-		generateInstall = savedGenerateInstall
-	}()
+	t.Cleanup(func() { generateInstall = savedGenerateInstall })
 
 	// Test 0: Bunch of permutations for invalid input.
 	for _, test := range []struct {
@@ -143,9 +139,7 @@ func TestInstall(t *testing.T) {
 	wantCmdLine := fmt.Sprintf("%s install-nevra -y --enablerepo=somerepo package-1.2.3", *yumBin)
 
 	resp, err := client.Install(ctx, req)
-	if err != nil {
-		t.Fatalf("unexpected error from a clean install request: %v", err)
-	}
+	testutil.FatalOnErr("clean install request", err, t)
 	if got, want := resp.DebugOutput, testdataInput; got != want {
 		t.Fatalf("Output from clean install differs. Got:\n%q\nWant:\n%q", got, want)
 	}
@@ -186,10 +180,8 @@ func TestUpdate(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewPackagesClient(conn)
 
@@ -215,10 +207,10 @@ func TestUpdate(t *testing.T) {
 		cmdLine = strings.Join(out, " ")
 		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
-	defer func() {
+	t.Cleanup(func() {
 		generateValidate = savedGenerateValidate
 		generateUpdate = savedGenerateUpdate
-	}()
+	})
 
 	// Test 0: Bunch of permutations for invalid input.
 	for _, test := range []struct {
@@ -325,9 +317,7 @@ func TestUpdate(t *testing.T) {
 	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo package-0:1-4.5.6", *yumBin)
 
 	resp, err := client.Update(ctx, req)
-	if err != nil {
-		t.Fatalf("unexpected error from a clean update request: %v", err)
-	}
+	testutil.FatalOnErr("clean update request", err, t)
 	if got, want := resp.DebugOutput, testdataInput; got != want {
 		t.Fatalf("Output from clean update differs. Got:\n%q\nWant:\n%q", got, want)
 	}
@@ -369,10 +359,8 @@ func TestListInstalled(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewPackagesClient(conn)
 
@@ -392,19 +380,16 @@ func TestListInstalled(t *testing.T) {
 		cmdLine = strings.Join(out, " ")
 		return []string{testutil.ResolvePath(t, "cat"), testdataInput}, nil
 	}
-	defer func() {
+	t.Cleanup(func() {
 		generateListInstalled = savedGenerateListInstalled
-	}()
+	})
 
 	input, err := os.ReadFile(testdataGolden)
-	if err != nil {
-		t.Fatalf("Can't read testdata golden  from %s: %v", testdataGolden, err)
-	}
+	testutil.FatalOnErr(fmt.Sprintf("can't read testdata golden from %s", testdataGolden), err, t)
 
 	testdata := &pb.ListInstalledReply{}
-	if err := prototext.Unmarshal(input, testdata); err != nil {
-		t.Fatalf("Can't unmarshall test data %v", err)
-	}
+	err = prototext.Unmarshal(input, testdata)
+	testutil.FatalOnErr("Can't unmarshall test data", err, t)
 
 	// Be able to sort the overall entries in a response
 	sortEntries := protocmp.SortRepeated(func(i *pb.PackageInfo, j *pb.PackageInfo) bool {
@@ -426,9 +411,7 @@ func TestListInstalled(t *testing.T) {
 	wantCmdLine := fmt.Sprintf("%s list installed", *yumBin)
 
 	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
-	if err != nil {
-		t.Fatalf("got error for a basic package list request: %v", err)
-	}
+	testutil.FatalOnErr("basic package list request", err, t)
 
 	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
@@ -442,9 +425,7 @@ func TestListInstalled(t *testing.T) {
 	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{
 		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
 	})
-	if err != nil {
-		t.Fatalf("got error for a basic package list request: %v", err)
-	}
+	testutil.FatalOnErr("basic package list request", err, t)
 
 	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
@@ -493,10 +474,8 @@ func TestRepoList(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	if err != nil {
-		t.Fatalf("Failed to dial bufnet: %v", err)
-	}
-	defer conn.Close()
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewPackagesClient(conn)
 
@@ -515,19 +494,14 @@ func TestRepoList(t *testing.T) {
 		cmdLine = strings.Join(out, " ")
 		return []string{testutil.ResolvePath(t, "cat"), testdataInput}, nil
 	}
-	defer func() {
-		generateRepoList = savedGenerateRepoList
-	}()
+	t.Cleanup(func() { generateRepoList = savedGenerateRepoList })
 
 	input, err := os.ReadFile(testdataGolden)
-	if err != nil {
-		t.Fatalf("Can't read testdata golde from %s: %v", testdataGolden, err)
-	}
+	testutil.FatalOnErr(fmt.Sprintf("Can't read testdata golden %s", testdataGolden), err, t)
 
 	testdata := &pb.RepoListReply{}
-	if err := prototext.Unmarshal(input, testdata); err != nil {
-		t.Fatalf("Can't unmarshall test data %v", err)
-	}
+	err = prototext.Unmarshal(input, testdata)
+	testutil.FatalOnErr("can't unmarshal test data", err, t)
 
 	// Be able to sort the overall entries in a response
 	sortEntries := protocmp.SortRepeated(func(i *pb.Repo, j *pb.Repo) bool {
@@ -549,9 +523,7 @@ func TestRepoList(t *testing.T) {
 	wantCmdLine := fmt.Sprintf("%s repoinfo all", *yumBin)
 
 	resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
-	if err != nil {
-		t.Fatalf("got error for a basic repo list request: %v", err)
-	}
+	testutil.FatalOnErr("basic repo list request", err, t)
 
 	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
@@ -564,9 +536,7 @@ func TestRepoList(t *testing.T) {
 	resp, err = client.RepoList(ctx, &pb.RepoListRequest{
 		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
 	})
-	if err != nil {
-		t.Fatalf("got error for a basic repo list request: %v", err)
-	}
+	testutil.FatalOnErr("basic repo list request", err, t)
 
 	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
 		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestAuthzHook(t *testing.T) {
@@ -34,9 +35,7 @@ allow {
 
 `
 	policy, err := opa.NewAuthzPolicy(ctx, policyString)
-	if err != nil {
-		t.Fatalf("NewAuthzPolicy(%v), err was %v, want nil", policyString, err)
-	}
+	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
 	wantStatusCode := func(c codes.Code) func(*testing.T, error) {
 		return func(t *testing.T, err error) {
