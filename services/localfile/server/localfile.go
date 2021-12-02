@@ -254,7 +254,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	}
 
 	// If it's directory we'll open it and go over it's entries.
-	if resp.Mode&uint32(fs.ModeDir) == uint32(fs.ModeDir) {
+	if fs.FileMode(resp.Mode).IsDir() {
 		entries, err := os.ReadDir(req.Entry)
 		if err != nil {
 			return status.Errorf(codes.Internal, "readdir: %v", err)
