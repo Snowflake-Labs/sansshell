@@ -243,7 +243,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	}
 
 	// We always send back the entry first.
-	logger.Info("stat", "filename", req.Entry)
+	logger.Info("ls", "filename", req.Entry)
 	resp, err := osStat(req.Entry)
 	if err != nil {
 		return err
@@ -264,6 +264,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 			if err != nil {
 				return err
 			}
+			logger.Info("ls", "filename", resp.Filename)
 			if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
 				return status.Errorf(codes.Internal, "list: send error %v", err)
 			}
