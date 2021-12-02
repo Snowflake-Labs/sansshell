@@ -245,7 +245,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	// We always send back the entry first.
 	logger.Info("ls", "filename", req.Entry)
 	resp, err := osStat(req.Entry)
-	log.Printf("resp: %+v err: %v", resp)
+	log.Printf("resp: %+v err: %v", resp, err)
 	if err != nil {
 		return err
 	}
