@@ -245,6 +245,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	// We always send back the entry first.
 	logger.Info("ls", "filename", req.Entry)
 	resp, err := osStat(req.Entry)
+	log.Printf("resp: %+v err: %v", resp)
 	if err != nil {
 		return err
 	}
@@ -261,6 +262,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 		// Only do one level so iterate these and we're done.
 		for _, e := range entries {
 			resp, err := osStat(filepath.Join(req.Entry, e.Name()))
+			log.Printf("resp: %+v err %v", resp, err)
 			if err != nil {
 				return err
 			}
