@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 
@@ -26,6 +27,7 @@ func init() {
 	subcommands.Register(&chgrpCmd{}, "file")
 	subcommands.Register(&chmodCmd{}, "file")
 	subcommands.Register(&immutableCmd{}, "file")
+	subcommands.Register(&lsCmd{}, "file")
 }
 
 type readCmd struct {
@@ -572,6 +574,75 @@ func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 		if r.Error != nil {
 			fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type lsCmd struct {
+	long bool
+}
+
+func (*lsCmd) Name() string     { return "ls" }
+func (*lsCmd) Synopsis() string { return "List a file or directory" }
+func (*lsCmd) Usage() string {
+	return `ls [--long] <path>:
+  List the path given printing out each entry (N if it's a directory). Use --long to get ls -l style output.
+  The entry listed will always be printed first even it it's a directory (unlike ls).
+  NOTE: Only expands one level of a directory.
+`
+}
+
+func (p *lsCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&p.long, "long", false, "If true prints out as ls -l would have done")
+}
+
+func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Please specify a filename to read.")
+		return subcommands.ExitUsageError
+	}
+
+	filename := f.Args()[0]
+	req := &pb.ListRequest{
+		Entry: filename,
+	}
+
+	c := pb.NewLocalFileClientProxy(state.Conn)
+	stream, err := c.ListOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error from ListOneMany: %v", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error from ListOneMany.Recv() %v", err)
+			retCode = subcommands.ExitFailure
+			break
+		}
+		for _, r := range resp {
+			if r.Error != nil {
+				if r.Error != io.EOF {
+					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					retCode = subcommands.ExitFailure
+				}
+				continue
+			}
+			// Easy case. Just emit entries
+			if !p.long {
+				fmt.Fprintf(state.Out[r.Index], "%s\n", r.Resp.Entry.Filename)
+				continue
+			}
+			t := fs.FileMode(r.Resp.Entry.Mode).String()
+			mod := r.Resp.Entry.Modtime.AsTime().Format(time.UnixDate)
+			fmt.Fprintf(state.Out[r.Index], "%-11s  - %8d %8d %16d %s %s\n", t, r.Resp.Entry.Uid, r.Resp.Entry.Gid, r.Resp.Entry.Size, mod, r.Resp.Entry.Filename)
 		}
 	}
 	return retCode

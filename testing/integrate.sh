@@ -307,7 +307,23 @@ if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
   check_status 1 "imutable not as expected. Started with $ORIG_IMMUTABLE and now have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 
-echo "Uid, etc checks passed"
+echo "uid, etc checks passed"
+
+mkdir ${LOGS}/test
+touch ${LOGS}/test/file
+echo "${LOGS}/test" > ${LOGS}/ls.expected
+echo "${LOGS}/test/file" >> ${LOGS}/ls.expected
+
+run_a_test false 2 ls ${LOGS}/test
+diff -u -q ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected
+check_status $? diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
+
+run_a_test false 2 ls --long ${LOGS}/test
+# Too painful to validate this content so we'll just check some basics
+head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e '^drwx'
+check_status $? long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e '^-rw-'
+check_status $? long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
 
 run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
 run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
