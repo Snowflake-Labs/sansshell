@@ -23,17 +23,6 @@ func (e dialErrTargetDialer) DialContext(ctx context.Context, target string) (gr
 	return nil, status.Error(codes.Code(e), "")
 }
 
-// A grpc.ClientConnInterface that returns errors for all methods
-type errClientConn codes.Code
-
-func (e errClientConn) Invoke(context.Context, string, interface{}, interface{}, ...grpc.CallOption) error {
-	return status.Error(codes.Code(e), "")
-}
-
-func (e errClientConn) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.CallOption) error {
-	return status.Error(codes.Code(e), "")
-}
-
 func TestEmptyStreamSet(t *testing.T) {
 	ctx := context.Background()
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
@@ -46,7 +35,7 @@ func TestEmptyStreamSet(t *testing.T) {
 		case <-finishedWait:
 			return
 		case <-time.After(time.Second * 5):
-			t.Fatal("TargetStreamSet.Wait() blocked on empty set, want no block")
+			panic("TargetStreamSet.Wait() blocked on empty set, want no block")
 		}
 	}()
 	ss.Wait()
@@ -98,29 +87,32 @@ func TestStreamSetAddErrors(t *testing.T) {
 			errCode: codes.InvalidArgument,
 		},
 	} {
-		req := &pb.StartStream{
-			Target:     "nosuchhost:000",
-			Nonce:      tc.nonce,
-			MethodName: tc.method,
-		}
-		err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/)
-		testutil.FatalOnErr(fmt.Sprintf("StartStream(+%v)", req), err, t)
-		var msg *pb.ProxyReply
-		select {
-		case msg = <-replyChan:
-			// success
-		case <-time.After(time.Second * 1):
-			t.Fatalf("%s: TargetStreamSet.Add() reply not sent after 1 second", tc.name)
-		}
-		ssr := msg.GetStartStreamReply()
-		if ssr == nil {
-			t.Fatalf("%s: TargetStreamSet.Add() got unexpected reply type %T, want StartStreamReply", tc.name, msg.Reply)
-		}
-		if ssr.Nonce != tc.nonce {
-			t.Errorf("%s: TargetStreamSet.Add() nonce was %v, want %v", tc.name, ssr.Nonce, tc.nonce)
-		}
-		if ec := ssr.GetErrorStatus().GetCode(); ec != int32(tc.errCode) {
-			t.Errorf("%s : TargetStreamSet.Add(), err code was %v, want %v", tc.name, ec, tc.errCode)
-		}
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := &pb.StartStream{
+				Target:     "nosuchhost:000",
+				Nonce:      tc.nonce,
+				MethodName: tc.method,
+			}
+			err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/)
+			testutil.FatalOnErr(fmt.Sprintf("StartStream(+%v)", req), err, t)
+			var msg *pb.ProxyReply
+			select {
+			case msg = <-replyChan:
+				// success
+			case <-time.After(time.Second * 1):
+				t.Fatalf("%s: TargetStreamSet.Add() reply not sent after 1 second", tc.name)
+			}
+			ssr := msg.GetStartStreamReply()
+			if ssr == nil {
+				t.Fatalf("%s: TargetStreamSet.Add() got unexpected reply type %T, want StartStreamReply", tc.name, msg.Reply)
+			}
+			if ssr.Nonce != tc.nonce {
+				t.Errorf("%s: TargetStreamSet.Add() nonce was %v, want %v", tc.name, ssr.Nonce, tc.nonce)
+			}
+			if ec := ssr.GetErrorStatus().GetCode(); ec != int32(tc.errCode) {
+				t.Errorf("%s : TargetStreamSet.Add(), err code was %v, want %v", tc.name, ec, tc.errCode)
+			}
+		})
 	}
 }

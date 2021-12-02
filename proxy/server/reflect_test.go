@@ -59,27 +59,30 @@ func TestLoadServiceMap(t *testing.T) {
 			serverStreams: true,
 		},
 	} {
-		m, ok := serviceMap[tc.method]
-		if !ok {
-			t.Fatalf("method '%s' was was not found in service map, expected present", tc.method)
-		}
-		if tc.method != m.FullName() {
-			t.Errorf("%s fullname was %s, want %s", tc.method, m.FullName(), tc.method)
-		}
-		if tc.clientStreams != m.ClientStreams() {
-			t.Errorf("%s client streaming was %v, want %v", tc.method, m.ClientStreams(), tc.clientStreams)
-		}
-		if tc.serverStreams != m.ServerStreams() {
-			t.Errorf("%s server streaming was %v, want %v", tc.method, m.ServerStreams(), tc.serverStreams)
-		}
-		req := m.NewRequest()
-		if !proto.Equal(tc.input, req) {
-			t.Errorf("%s request message was %v, want %v", tc.method, req, tc.input)
-		}
-		rep := m.NewReply()
-		if !proto.Equal(tc.output, rep) {
-			t.Errorf("%s reply message was %v, want %$v", tc.method, rep, tc.output)
-		}
+		tc := tc
+		t.Run(tc.method, func(t *testing.T) {
+			m, ok := serviceMap[tc.method]
+			if !ok {
+				t.Fatalf("method '%s' was was not found in service map, expected present", tc.method)
+			}
+			if tc.method != m.FullName() {
+				t.Errorf("%s fullname was %s, want %s", tc.method, m.FullName(), tc.method)
+			}
+			if tc.clientStreams != m.ClientStreams() {
+				t.Errorf("%s client streaming was %v, want %v", tc.method, m.ClientStreams(), tc.clientStreams)
+			}
+			if tc.serverStreams != m.ServerStreams() {
+				t.Errorf("%s server streaming was %v, want %v", tc.method, m.ServerStreams(), tc.serverStreams)
+			}
+			req := m.NewRequest()
+			if !proto.Equal(tc.input, req) {
+				t.Errorf("%s request message was %v, want %v", tc.method, req, tc.input)
+			}
+			rep := m.NewReply()
+			if !proto.Equal(tc.output, rep) {
+				t.Errorf("%s reply message was %v, want %$v", tc.method, rep, tc.output)
+			}
+		})
 	}
 }
 

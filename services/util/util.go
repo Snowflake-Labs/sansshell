@@ -3,9 +3,12 @@ package util
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/go-logr/logr"
@@ -123,6 +126,101 @@ func ValidPath(path string) error {
 	}
 	if path != filepath.Clean(path) {
 		return status.Errorf(codes.InvalidArgument, "%s must be a clean path", path)
+	}
+	return nil
+}
+
+type StringSliceFlag struct {
+	Target *[]string
+}
+
+func (s *StringSliceFlag) Set(val string) error {
+	if s.Target == nil {
+		s.Target = new([]string)
+	}
+	*s.Target = strings.Split(val, ",")
+	return nil
+}
+
+func (s *StringSliceFlag) String() string {
+	if s.Target == nil {
+		return ""
+	}
+	return strings.Join(*s.Target, ",")
+}
+
+// KeyValue is used below with KeyValueSliceFlag to construct foo=bar,baz=foo type of flags.
+type KeyValue struct {
+	Key   string
+	Value string
+}
+
+// A type for a custom flag for a list of strings in a comma separated list.
+type KeyValueSliceFlag []*KeyValue
+
+// String implements as needed for flag.Value
+func (i *KeyValueSliceFlag) String() string {
+	var out bytes.Buffer
+
+	for _, v := range *i {
+		out.WriteString(fmt.Sprintf("%s=%s,", v.Key, v.Value))
+	}
+	o := out.String()
+	// Trim last , off the end
+	if len(o) > 0 {
+		o = o[0 : len(o)-1]
+	}
+	return o
+}
+
+// Set implements parsing for strings list flags as needed
+// for flag.Value
+func (i *KeyValueSliceFlag) Set(val string) error {
+	// Setting will reset anything previous, not append.
+	*i = nil
+	for _, kv := range strings.Split(val, ",") {
+		item := strings.Split(kv, "=")
+		if len(item) != 2 {
+			return fmt.Errorf("bad key=value: %s", kv)
+		}
+		*i = append(*i, &KeyValue{
+			Key:   item[0],
+			Value: item[1],
+		})
+	}
+
+	return nil
+}
+
+// A type for a custom flag for a list of ints in a comma separated list.
+type IntSliceFlags []int64
+
+// String implements as needed for flag.Value
+func (i *IntSliceFlags) String() string {
+	var out bytes.Buffer
+
+	for _, t := range *i {
+		out.WriteString(fmt.Sprintf("%d,", t))
+	}
+	o := out.String()
+	// Trim last , off the end
+	if len(o) > 0 {
+		o = o[0 : len(o)-1]
+	}
+	return o
+}
+
+// Set implements parsing for int list flags as needed
+// for flag.Value
+func (i *IntSliceFlags) Set(val string) error {
+	// Setting will reset anything previous, not append.
+	*i = nil
+	for _, t := range strings.Split(val, ",") {
+		x, err := strconv.ParseInt(t, 0, 64)
+		if err != nil {
+			return fmt.Errorf("can't parse integer in list: %s", val)
+		}
+		*i = append(*i, x)
 	}
 	return nil
 }

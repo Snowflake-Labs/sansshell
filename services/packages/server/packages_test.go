@@ -67,7 +67,7 @@ func TestInstall(t *testing.T) {
 	t.Cleanup(func() { generateInstall = savedGenerateInstall })
 
 	// Test 0: Bunch of permutations for invalid input.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name string
 		req  *pb.InstallRequest
 	}{
@@ -120,11 +120,14 @@ func TestInstall(t *testing.T) {
 			},
 		},
 	} {
-		resp, err := client.Install(ctx, test.req)
-		if err == nil {
-			t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", test.name, resp)
-		}
-		t.Logf("%s: %v", test.name, err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Install(ctx, tc.req)
+			if err == nil {
+				t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", tc.name, resp)
+			}
+			t.Logf("%s: %v", tc.name, err)
+		})
 	}
 
 	req := &pb.InstallRequest{
@@ -149,7 +152,7 @@ func TestInstall(t *testing.T) {
 	t.Logf("clean install response: %+v", resp)
 
 	// Test 2: Permutations on bad commands/output.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		generate func(*pb.InstallRequest) ([]string, error)
 	}{
@@ -166,13 +169,15 @@ func TestInstall(t *testing.T) {
 			},
 		},
 	} {
-		generateInstall = test.generate
-		resp, err := client.Install(ctx, req)
-		if err == nil {
-			t.Fatalf("didn't get expected error for %s Got %+v", test.name, resp)
-		}
-		t.Log(err)
-
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			generateInstall = tc.generate
+			resp, err := client.Install(ctx, req)
+			if err == nil {
+				t.Fatalf("didn't get expected error for %s Got %+v", tc.name, resp)
+			}
+			t.Log(err)
+		})
 	}
 }
 
@@ -213,7 +218,7 @@ func TestUpdate(t *testing.T) {
 	})
 
 	// Test 0: Bunch of permutations for invalid input.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name string
 		req  *pb.UpdateRequest
 	}{
@@ -296,11 +301,14 @@ func TestUpdate(t *testing.T) {
 			},
 		},
 	} {
-		resp, err := client.Update(ctx, test.req)
-		if err == nil {
-			t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", test.name, resp)
-		}
-		t.Logf("%s: %v", test.name, err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Update(ctx, tc.req)
+			if err == nil {
+				t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", tc.name, resp)
+			}
+			t.Logf("%s: %v", tc.name, err)
+		})
 	}
 
 	req := &pb.UpdateRequest{
@@ -330,7 +338,7 @@ func TestUpdate(t *testing.T) {
 	t.Logf("clean install response: %+v", resp)
 
 	// Test 2: Permutations on bad commands/output.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		generate func(*pb.UpdateRequest) ([]string, error)
 	}{
@@ -347,12 +355,16 @@ func TestUpdate(t *testing.T) {
 			},
 		},
 	} {
-		generateUpdate = test.generate
-		resp, err := client.Update(ctx, req)
-		if err == nil {
-			t.Fatalf("didn't get expected error for %s Got %+v", test.name, resp)
-		}
-		t.Log(err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+
+			generateUpdate = tc.generate
+			resp, err := client.Update(ctx, req)
+			if err == nil {
+				t.Fatalf("didn't get expected error for %s Got %+v", tc.name, resp)
+			}
+			t.Log(err)
+		})
 	}
 }
 func TestListInstalled(t *testing.T) {
@@ -444,7 +456,7 @@ func TestListInstalled(t *testing.T) {
 	t.Log(err)
 
 	// Test 4: Permutations of bad commands/exit codes, stderr output.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		generate func(pb.PackageSystem) ([]string, error)
 	}{
@@ -461,12 +473,15 @@ func TestListInstalled(t *testing.T) {
 			},
 		},
 	} {
-		generateListInstalled = test.generate
-		resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
-		if err == nil {
-			t.Fatalf("didn't get an error as expected for %s. Instead got %+v", test.name, resp)
-		}
-		t.Log(err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			generateListInstalled = tc.generate
+			resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
+			if err == nil {
+				t.Fatalf("didn't get an error as expected for %s. Instead got %+v", tc.name, resp)
+			}
+			t.Log(err)
+		})
 	}
 }
 
@@ -543,7 +558,7 @@ func TestRepoList(t *testing.T) {
 	}
 
 	// Test 3: Permutations of bad commands/exit codes, stderr output.
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name     string
 		generate func(pb.PackageSystem) ([]string, error)
 	}{
@@ -560,11 +575,14 @@ func TestRepoList(t *testing.T) {
 			},
 		},
 	} {
-		generateRepoList = test.generate
-		resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
-		if err == nil {
-			t.Fatalf("didn't get an error as expected for %s. Instead got %+v", test.name, resp)
-		}
-		t.Log(err)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			generateRepoList = tc.generate
+			resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
+			if err == nil {
+				t.Fatalf("didn't get an error as expected for %s. Instead got %+v", tc.name, resp)
+			}
+			t.Log(err)
+		})
 	}
 }

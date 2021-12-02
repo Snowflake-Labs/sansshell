@@ -161,6 +161,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		// Wait for running streams to exit.
 		streamSet.Wait()
 
+		cancel()
 		return err
 	})
 

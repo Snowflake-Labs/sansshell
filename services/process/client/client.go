@@ -1,15 +1,12 @@
 package client
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/google/subcommands"
@@ -17,40 +14,6 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
-
-// A type for a custom flag for a list of ints in a comma separated list.
-type intList []int64
-
-// String implements as needed for flag.Value
-func (i *intList) String() string {
-	var out bytes.Buffer
-
-	for _, t := range *i {
-		out.WriteString(fmt.Sprintf("%d,", t))
-	}
-	o := out.String()
-	// Trim last , off the end
-	if len(o) > 0 {
-		o = o[0 : len(o)-1]
-	}
-	return o
-}
-
-// Set implements parsing for int list flags as needed
-// for flag.Value
-func (i *intList) Set(val string) error {
-	if len(*i) > 0 {
-		return errors.New("intlist flag already set")
-	}
-	for _, t := range strings.Split(val, ",") {
-		x, err := strconv.ParseInt(t, 0, 64)
-		if err != nil {
-			return fmt.Errorf("can't parse integer in list: %s", val)
-		}
-		*i = append(*i, x)
-	}
-	return nil
-}
 
 func init() {
 	subcommands.Register(&psCmd{}, "process")
@@ -64,7 +27,7 @@ func outputEntryHeader(out io.Writer, target string, index int) {
 }
 
 type psCmd struct {
-	pids intList
+	pids util.IntSliceFlags
 }
 
 func (*psCmd) Name() string     { return "ps" }

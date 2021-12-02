@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/subcommands"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -35,7 +36,7 @@ func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	resp, err := c.OkOneMany(ctx, &pb.Empty{})
+	resp, err := c.OkOneMany(ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not healthcheck server: %v\n", err)
 		return subcommands.ExitFailure

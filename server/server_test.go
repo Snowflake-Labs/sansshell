@@ -70,39 +70,37 @@ func TestRead(t *testing.T) {
 	tu.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	ts := []struct {
-		Filename string
-		Err      string
+	for _, tc := range []struct {
+		filename string
+		err      string
 	}{
 		{
-			Filename: "/etc/hosts",
-			Err:      "",
+			filename: "/etc/hosts",
+			err:      "",
 		},
 		{
-			Filename: "/no-such-filename-for-sansshell-unittest",
-			Err:      "no such file or directory",
+			filename: "/no-such-filename-for-sansshell-unittest",
+			err:      "no such file or directory",
 		},
 		{
-			Filename: "/permission-denied-filename-for-sansshell-unittest",
-			Err:      "PermissionDenied",
+			filename: "/permission-denied-filename-for-sansshell-unittest",
+			err:      "PermissionDenied",
 		},
-	}
-	for _, want := range ts {
-		// Future proof for t.Parallel()
-		want := want
-		t.Run(want.Filename, func(t *testing.T) {
+	} {
+		tc := tc
+		t.Run(tc.filename, func(t *testing.T) {
 			client := lfpb.NewLocalFileClient(conn)
 			stream, err := client.Read(ctx, &lfpb.ReadActionRequest{
 				Request: &lfpb.ReadActionRequest_File{
 					File: &lfpb.ReadRequest{
-						Filename: want.Filename,
+						Filename: tc.filename,
 					},
 				},
 			})
 			if err != nil {
 				// At this point it only returns if we can't connect. Actual errors
 				// happen below on the first stream Recv() call.
-				if want.Err == "" {
+				if tc.err == "" {
 					t.Fatalf("Start of Read failed: %v", err)
 				}
 			}
@@ -114,8 +112,8 @@ func TestRead(t *testing.T) {
 				}
 				if err != nil {
 					t.Logf("Got error: %v", err)
-					if want.Err == "" || !strings.Contains(err.Error(), want.Err) {
-						t.Errorf("unexpected error; want: %s, got: %s", want.Err, err)
+					if tc.err == "" || !strings.Contains(err.Error(), tc.err) {
+						t.Errorf("unexpected error; want: %s, got: %s", tc.err, err)
 					}
 					// If this was an expected error we're done.
 					return
@@ -129,7 +127,7 @@ func TestRead(t *testing.T) {
 				tu.FatalOnErr("Can't write into buffer", err, t)
 			}
 
-			contents, err := os.ReadFile(want.Filename)
+			contents, err := os.ReadFile(tc.filename)
 			tu.FatalOnErr("reading test data", err, t)
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)

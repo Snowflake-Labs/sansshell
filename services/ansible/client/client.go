@@ -1,13 +1,10 @@
 package client
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/google/subcommands"
 
@@ -15,51 +12,13 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
-// A type for a custom flag for a list of strings in a comma separated list.
-type stringList []*pb.Var
-
-// String implements as needed for flag.Value
-func (i *stringList) String() string {
-	var out bytes.Buffer
-
-	for _, v := range *i {
-		out.WriteString(fmt.Sprintf("%s=%s,", v.Key, v.Value))
-	}
-	o := out.String()
-	// Trim last , off the end
-	if len(o) > 0 {
-		o = o[0 : len(o)-1]
-	}
-	return o
-}
-
-// Set implements parsing for strings list flags as needed
-// for flag.Value
-func (i *stringList) Set(val string) error {
-	if len(*i) > 0 {
-		return errors.New("stringlist flag already set")
-	}
-	for _, kv := range strings.Split(val, ",") {
-		item := strings.Split(kv, "=")
-		if len(item) != 2 {
-			return fmt.Errorf("bad key=value: %s", kv)
-		}
-		*i = append(*i, &pb.Var{
-			Key:   item[0],
-			Value: item[1],
-		})
-	}
-
-	return nil
-}
-
 func init() {
 	subcommands.Register(&ansibleCmd{}, "ansible")
 }
 
 type ansibleCmd struct {
 	playbook string
-	vars     stringList
+	vars     util.KeyValueSliceFlag
 	user     string
 	check    bool
 	diff     bool
@@ -95,11 +54,16 @@ func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	req := &pb.RunRequest{
 		Playbook: a.playbook,
-		Vars:     a.vars,
 		User:     a.user,
 		Check:    a.check,
 		Diff:     a.diff,
 		Verbose:  a.verbose,
+	}
+	for _, kv := range a.vars {
+		req.Vars = append(req.Vars, &pb.Var{
+			Key:   kv.Key,
+			Value: kv.Value,
+		})
 	}
 
 	resp, err := c.RunOneMany(ctx, req)

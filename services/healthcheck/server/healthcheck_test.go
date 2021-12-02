@@ -11,6 +11,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -46,6 +47,6 @@ func TestRead(t *testing.T) {
 	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewHealthCheckClient(conn)
-	_, err = client.Ok(ctx, &pb.Empty{})
+	_, err = client.Ok(ctx, &emptypb.Empty{})
 	testutil.FatalOnErr("HealthCheck failed", err, t)
 }

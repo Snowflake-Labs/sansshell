@@ -47,7 +47,7 @@ func TestExec(t *testing.T) {
 
 	client := pb.NewExecClient(conn)
 
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name              string
 		bin               string
 		args              []string
@@ -77,23 +77,26 @@ func TestExec(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		resp, err := client.Run(ctx, &pb.ExecRequest{
-			Command: test.bin,
-			Args:    test.args,
-		})
-		t.Logf("%s: resp: %+v", test.name, resp)
-		t.Logf("%s: err: %v", test.name, err)
-		if test.wantErr {
-			if got, want := err != nil, test.wantErr; got != want {
-				t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", test.name, resp)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Run(ctx, &pb.ExecRequest{
+				Command: tc.bin,
+				Args:    tc.args,
+			})
+			t.Logf("%s: resp: %+v", tc.name, resp)
+			t.Logf("%s: err: %v", tc.name, err)
+			if tc.wantErr {
+				if got, want := err != nil, tc.wantErr; got != want {
+					t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", tc.name, resp)
+				}
+				return
 			}
-			continue
-		}
-		if got, want := resp.Stdout, test.stdout; string(got) != want {
-			t.Fatalf("%s: stdout doesn't match. Want %q Got %q", test.name, want, got)
-		}
-		if got, want := resp.RetCode != 0, test.returnCodeNonZero; got != want {
-			t.Fatalf("%s: Invalid return codes. Non-zero state doesn't match. Want %t Got %t ReturnCode %d", test.name, want, got, resp.RetCode)
-		}
+			if got, want := resp.Stdout, tc.stdout; string(got) != want {
+				t.Fatalf("%s: stdout doesn't match. Want %q Got %q", tc.name, want, got)
+			}
+			if got, want := resp.RetCode != 0, tc.returnCodeNonZero; got != want {
+				t.Fatalf("%s: Invalid return codes. Non-zero state doesn't match. Want %t Got %t ReturnCode %d", tc.name, want, got, resp.RetCode)
+			}
+		})
 	}
 }

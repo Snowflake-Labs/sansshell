@@ -9,7 +9,7 @@ import (
 )
 
 func TestRunCommand(t *testing.T) {
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name              string
 		bin               string
 		args              []string
@@ -61,29 +61,32 @@ func TestRunCommand(t *testing.T) {
 			returnCodeNonZero: true,
 		},
 	} {
-		var opts []Option
-		if test.stderrIsError {
-			opts = append(opts, FailOnStderr())
-		}
-
-		run, err := RunCommand(context.Background(), test.bin, test.args, opts...)
-		t.Logf("%s: response: %+v", test.name, run)
-		t.Logf("%s: error: %v", test.name, err)
-		if test.wantErr {
-			if err == nil {
-				t.Fatalf("%s: Didn't get error when expected", test.name)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []Option
+			if tc.stderrIsError {
+				opts = append(opts, FailOnStderr())
 			}
-			continue
-		}
-		if got, want := run.Stdout.String(), test.stdout; got != want {
-			t.Fatalf("%s: Stdout differs. Want %q Got %q", test.name, want, got)
-		}
-		if got, want := run.Stderr.String(), test.stderr; got != want {
-			t.Fatalf("%s: Stderr differs. Want %q Got %q", test.name, want, got)
-		}
-		if test.returnCodeNonZero && run.ExitCode == 0 {
-			t.Fatalf("%s: Asked for non-zero return code and got 0", test.name)
-		}
+
+			run, err := RunCommand(context.Background(), tc.bin, tc.args, opts...)
+			t.Logf("%s: response: %+v", tc.name, run)
+			t.Logf("%s: error: %v", tc.name, err)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("%s: Didn't get error when expected", tc.name)
+				}
+				return
+			}
+			if got, want := run.Stdout.String(), tc.stdout; got != want {
+				t.Fatalf("%s: Stdout differs. Want %q Got %q", tc.name, want, got)
+			}
+			if got, want := run.Stderr.String(), tc.stderr; got != want {
+				t.Fatalf("%s: Stderr differs. Want %q Got %q", tc.name, want, got)
+			}
+			if tc.returnCodeNonZero && run.ExitCode == 0 {
+				t.Fatalf("%s: Asked for non-zero return code and got 0", tc.name)
+			}
+		})
 	}
 }
 
@@ -99,7 +102,7 @@ func TestTrimString(t *testing.T) {
 }
 
 func TestValidPath(t *testing.T) {
-	for _, test := range []struct {
+	for _, tc := range []struct {
 		name    string
 		path    string
 		wantErr bool
@@ -119,9 +122,65 @@ func TestValidPath(t *testing.T) {
 			wantErr: true,
 		},
 	} {
-		err := ValidPath(test.path)
-		if got, want := err != nil, test.wantErr; got != want {
-			t.Errorf("%s: invalid error state. Err %v and got %t and want %t", test.name, err, got, want)
-		}
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidPath(tc.path)
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Errorf("%s: invalid error state. Err %v and got %t and want %t", tc.name, err, got, want)
+			}
+		})
+	}
+}
+
+func TestStringSliceFlag(t *testing.T) {
+	var flag StringSliceFlag
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "foo,bar,baz"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	if len(*flag.Target) != 3 {
+		t.Fatalf("flag should have 3 elements. Instead is %q", *flag.Target)
+	}
+}
+
+func TestKeyValueSliceFlag(t *testing.T) {
+	var flag KeyValueSliceFlag
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "foo=bar,baz=bun"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	bad := "foo=bar=baz"
+	if err := flag.Set(bad); err == nil {
+		t.Fatal("didn't get error from bad flag set as we should")
+	}
+}
+
+func TestIntSliceFlag(t *testing.T) {
+	var flag IntSliceFlags
+	if got, want := flag.String(), ""; got != want {
+		t.Fatalf("Expected no string from empty flag and got %s", got)
+	}
+	test := "1,2,3"
+	if err := flag.Set(test); err != nil {
+		t.Fatalf("error from flag.Set: %v", err)
+	}
+	if got, want := flag.String(), test; got != want {
+		t.Fatalf("flag didn't set to correct value. got %s and want %s", got, want)
+	}
+	bad := "1,foo,2"
+	if err := flag.Set(bad); err == nil {
+		t.Fatal("didn't get error from bad flag set as we should")
 	}
 }

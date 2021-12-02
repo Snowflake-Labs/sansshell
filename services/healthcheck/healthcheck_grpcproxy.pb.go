@@ -9,6 +9,7 @@ import (
 	context "context"
 	proxy "github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	grpc "google.golang.org/grpc"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 import (
@@ -18,7 +19,7 @@ import (
 // HealthCheckClientProxy is the superset of HealthCheckClient which additionally includes the OneMany proxy methods
 type HealthCheckClientProxy interface {
 	HealthCheckClient
-	OkOneMany(ctx context.Context, in *Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error)
+	OkOneMany(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -36,7 +37,7 @@ type OkManyResponse struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
 	Index int
-	Resp  *Empty
+	Resp  *emptypb.Empty
 	Error error
 }
 
@@ -44,7 +45,7 @@ type OkManyResponse struct {
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error) {
+func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error) {
 	conn := c.cc.(*proxy.ProxyConn)
 	ret := make(chan *OkManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
@@ -53,7 +54,7 @@ func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *Empty, opts 
 			out := &OkManyResponse{
 				Target: conn.Targets[0],
 				Index:  0,
-				Resp:   &Empty{},
+				Resp:   &emptypb.Empty{},
 			}
 			err := conn.Invoke(ctx, "/HealthCheck.HealthCheck/Ok", in, out.Resp, opts...)
 			if err != nil {
@@ -73,7 +74,7 @@ func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *Empty, opts 
 	go func() {
 		for {
 			typedResp := &OkManyResponse{
-				Resp: &Empty{},
+				Resp: &emptypb.Empty{},
 			}
 
 			resp, ok := <-manyRet
