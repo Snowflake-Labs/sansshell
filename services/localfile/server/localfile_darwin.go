@@ -72,3 +72,75 @@ func changeImmutable(path string, immutable bool) error {
 	}
 	return unix.Chflags(path, int(flags))
 }
+
+type kqueueFile struct {
+	path   string
+	fileFD uintptr
+	kqFD   int
+}
+
+// dataPrep should be called before entering a loop watching a file.
+// It returns an opaque object to pass to dataReady() and a function
+// which should be run on exit (i.e. defer it).
+func dataPrep(f *os.File) (interface{}, func(), error) {
+	// Set to some defaults we can't accidentally break things if
+	// close was called on these fd's before initialized.
+	kq := &kqueueFile{
+		path:   f.Name(),
+		fileFD: f.Fd(),
+		kqFD:   -1,
+	}
+	var err error
+	// Initialize kqueue and setup for cleaning it up later.
+	kq.kqFD, err = unix.Kqueue()
+	if err != nil {
+		return nil, nil, status.Errorf(codes.Internal, "can't allocate kqueue: %v", err)
+	}
+	closer := func() {
+		unix.Close(kq.kqFD)
+	}
+	return kq, closer, nil
+}
+
+// dataReady is the OS specific version to indicate the given
+// file has more data. With Darwin we use kqueue to watch the file
+// Assuming the file was already at EOF.
+func dataReady(kq interface{}, stream pb.LocalFile_ReadServer) error {
+	kqf, ok := kq.(*kqueueFile)
+	if !ok {
+		return status.Errorf(codes.Internal, "invalid type passed. Expected *kqueueFD and got %T", kq)
+	}
+	changes := make([]unix.Kevent_t, 1)
+	events := make([]unix.Kevent_t, 1)
+
+	for {
+		if stream.Context().Err() != nil {
+			return stream.Context().Err()
+		}
+		unix.SetKevent(&changes[0], int(kqf.fileFD), unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_CLEAR|unix.EV_ENABLE)
+		changes[0].Fflags = unix.NOTE_WRITE
+		ret, err := unix.Kevent(kqf.kqFD, changes, nil, nil)
+		if ret == -1 {
+			return status.Errorf(codes.Internal, "can't register kqueue: %v", err)
+		}
+
+		// Wait 10s in between requests so we can check the stream context too.
+		ts := &unix.Timespec{
+			Sec: 10,
+		}
+		n, err := unix.Kevent(kqf.kqFD, nil, events, ts)
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't get kqueue events: %v", err)
+		}
+		// Something happened
+		if n == 1 {
+			// Generally this indicates an error.
+			if events[0].Filter != unix.EVFILT_VNODE {
+				return status.Errorf(codes.Internal, "got incorrect kevent back: %+v", events[0])
+			}
+			break
+		}
+		// Nothing (timed out) so just loop
+	}
+	return nil
+}

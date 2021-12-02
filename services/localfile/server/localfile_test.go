@@ -197,6 +197,10 @@ func TestTail(t *testing.T) {
 	fatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
+	savedTimeout := READ_TIMEOUT_SEC
+	READ_TIMEOUT_SEC = 1
+	t.Cleanup(func() { READ_TIMEOUT_SEC = savedTimeout })
+
 	// Create a file with some initial data.
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
@@ -244,8 +248,9 @@ func TestTail(t *testing.T) {
 	// Now cancel our context.
 	cancel()
 
-	// Pause n+1s to make sure the server goes through a poll loop.
-	time.Sleep(time.Second * (READ_TIMEOUT_SEC + 1))
+	// Pause n+1s to make sure the server goes through a poll loop if we're
+	// not on an OS that can immediately return.
+	time.Sleep(time.Second * time.Duration(READ_TIMEOUT_SEC+1))
 
 	// This should cause Recv() to fail
 	resp, err = stream.Recv()

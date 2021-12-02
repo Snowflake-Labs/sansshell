@@ -9,9 +9,9 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
+	"log"
 	"math"
 	"os"
-	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -31,10 +31,11 @@ var (
 	// For testing since otherwise tests have to run as root for these.
 	chown             = unix.Chown
 	changeImmutableOS = changeImmutable
-)
 
-// READ_TIMEOUT_SEC is how long tail should wait on a given poll call before returning.
-const READ_TIMEOUT_SEC = 10
+	// READ_TIMEOUT_SEC is how long tail should wait on a given poll call
+	// before checking context.Err() and possibly looping.
+	READ_TIMEOUT_SEC = 10
+)
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
 // can set on a file/directory.
@@ -101,6 +102,13 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 
 	reader := io.LimitReader(f, max)
 
+	td, closer, err := dataPrep(f)
+	log.Printf("td: %+v err %v", td, err)
+	if err != nil {
+		return err
+	}
+	defer closer()
+
 	for {
 		n, err := reader.Read(buf)
 		// If we got EOF we're done for normal reads and wait for tails.
@@ -109,18 +117,9 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 			if r != nil {
 				break
 			}
-
-			// We sleep for READ_TIMEOUT_SEC between calls as there's no good
-			// way to poll on a file. Once it reaches EOF it's always readable
-			// (you just get EOF). We have to poll like this so we can check
-			// the context state and return if it's canclled.
-			// TODO(jchacon): Replace with something like inotify for systems
-			// that support it. https://github.com/fsnotify/fsnotify
-			if stream.Context().Err() != nil {
-				return stream.Context().Err()
+			if err := dataReady(td, stream); err != nil {
+				return err
 			}
-			time.Sleep(READ_TIMEOUT_SEC * time.Second)
-			// Time to try again.
 			continue
 		}
 

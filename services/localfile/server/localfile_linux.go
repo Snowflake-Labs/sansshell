@@ -71,6 +71,7 @@ func osStat(path string) (*pb.StatReply, error) {
 	return resp, nil
 }
 
+<<<<<<< HEAD
 func getFlags(path string) (int, error) {
 	f1, err := os.Open(path)
 	if err != nil {
@@ -107,4 +108,101 @@ func changeImmutable(path string, immutable bool) error {
 	}
 	defer func() { f1.Close() }()
 	return unix.IoctlSetPointerInt(int(f1.Fd()), unix.FS_IOC_SETFLAGS, attrs)
+=======
+type inotify struct {
+	iFD     int
+	watchFD int
+	epoll   int
+	file    string
+	event   *unix.EpollEvent
+}
+
+// dataPrep should be called before entering a loop watching a file.
+// It returns an opaque object to pass to dataReady() and a function
+// which should be run on exit (i.e. defer it).
+func dataPrep(f *os.File) (interface{}, func(), error) {
+	// Set to some defaults we can't accidentally break things if
+	// close was called on these fd's before initialized.
+	in := &inotify{
+		iFD:     -1,
+		watchFD: -1,
+		epoll:   -1,
+		file:    f.Name(),
+	}
+	closer := func() {
+		unix.Close(in.iFD)
+		unix.Close(in.epoll)
+	}
+
+	// Setup inotify and set a watch on our path.
+	var err error
+	in.iFD, err = unix.InotifyInit1(0)
+	if err != nil {
+		return nil, nil, status.Errorf(codes.Internal, "can't allocate inotify fd: %v", err)
+	}
+
+	// NOTE: This is *not* a file descriptor but an internal descriptor for inotify to
+	//       use when pushing data through iFD above. Do not close() on it.
+	in.watchFD, err = unix.InotifyAddWatch(in.iFD, in.file, unix.IN_MODIFY)
+	if err != nil {
+		closer()
+		return nil, nil, status.Errorf(codes.Internal, "can't setup inotify watch: %v", err)
+	}
+
+	// Initialize epoll and set it to watch for the inotify FD to return events
+	// This is only needed once, not per read.
+	in.epoll, err = unix.EpollCreate(1)
+	if err != nil {
+		closer()
+		return nil, nil, status.Errorf(codes.Internal, "can't create epoll: %v", err)
+	}
+	in.event = &unix.EpollEvent{
+		Events: unix.EPOLLIN,
+		Fd:     int32(in.iFD),
+	}
+	if err := unix.EpollCtl(in.epoll, unix.EPOLL_CTL_ADD, in.iFD, in.event); err != nil {
+		closer()
+		return nil, nil, status.Errorf(codes.Internal, "epollctl failed: %v", err)
+	}
+	return in, closer, nil
+}
+
+// dataReady is the OS specific version to indicate the given
+// file has more data. With Linux we use inotify to watch the file and
+// assuming the file was already at EOF.
+func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
+	inotify, ok := fd.(*inotify)
+	if !ok {
+		return status.Errorf(codes.Internal, "invalid type passed. Expected *inotify and got %T", fd)
+	}
+
+	events := make([]unix.EpollEvent, 1)
+
+	// Loop until we either get new data or the context gets cancalled.
+	for {
+		if stream.Context().Err() != nil {
+			return stream.Context().Err()
+		}
+
+		// Wait 10s between runs to check the context.
+		n, err := unix.EpollWait(inotify.epoll, events, 10*1000)
+		if err != nil {
+			// If we got EINTR we can just loop again.
+			if err == unix.EINTR {
+				continue
+			}
+			return status.Errorf(codes.Internal, "epoll error: %v", err)
+		}
+		if n == 1 {
+			if events[0].Fd != int32(inotify.iFD) {
+				return status.Errorf(codes.Internal, "epoll event for wrong FD? got %+v", events[0])
+			}
+			// In theory we should read the event from the inotify FD and interpret it but we're only
+			// monitoring one thing and there's no errors that report in-band (just via errno).
+			break
+		}
+		// Nothing (timed out) so just loop
+	}
+	return nil
+>>>>>>> Implement tail for darwin/linux in terms of kqueue/inotify.
 }
