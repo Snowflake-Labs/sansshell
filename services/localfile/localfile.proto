@@ -124,23 +124,24 @@ message SumReply {
   string sum = 3;
 }
 
-// FileAttributes describes a file by it's name and expected user/group and
-// permissions.
+// FileAttributes describes a file/directory and
+// an attributed of it. It's used together with
+// repeated fields and a path to describe an entire entity.
+message FileAttribute {
+  oneof value {
+    uint32 uid = 1;
+    uint32 gid = 2;
+    // Only the lower 12 bits are used per unix conventions.
+    uint32 mode = 3;
+    bool immutable = 4;
+  }
+}
+
+// FileAttributes describes everything about a given file/directory.
 message FileAttributes {
-  // Must be a fully qualified and clean path name (i.e. absolute and no ../
-  // style).
   string filename = 1;
-  // Permissions for the written file in unix style (lower 12 bits only).
-  uint32 permissions = 2;
-  // If not blank the user to set as the owner of the file. If blank the
-  // file must previously exist and overwrite above is set to true.
-  string user = 3;
-  // If not blank the group to set as the group of the file. If blank the
-  // file must previously exist and overwrite above is set to true.
-  string group = 4;
-  // If true will set the immutable bit on the file. False will clear it.
-  // This only applies to systems which support immutable file bits.
-  bool immutable = 5;
+  // A given attributes (uid, gid, etc) can only be set once.
+  repeated FileAttribute attributes = 2;
 }
 
 // FileWrite describes everything about a file to be written.
@@ -188,4 +189,8 @@ message ListRequest {
 // until that level of the tree is exhausted.
 message ListReply { StatReply entry = 1; }
 
+// SetFileAttributesRequest processes attrs and attempts to set the
+// path given to those attributes. As this is N steps (owner, group,
+// permissions, etc) it is not transactional and can leave an entity in a
+// partial state if errors occur.
 message SetFileAttributesRequest { FileAttributes attrs = 1; }

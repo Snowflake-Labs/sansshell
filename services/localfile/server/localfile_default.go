@@ -36,3 +36,9 @@ func osStat(path string) (*pb.StatReply, error) {
 	}
 	return resp, nil
 }
+
+// changeImmutable is the default implementation for changing
+// immutable bits (which is unsupported).
+func changeImmutable(path string, immutable bool) error {
+	return status.Error(codes.Unimplemented, "immutable not supported")
+}

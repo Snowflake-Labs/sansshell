@@ -15,10 +15,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// While x/sys/unix exposes a lot this particular flag isn't
-// mapped. It's the one to match below for immutable state if
-// the ioctl route has to be taken.
-const FS_IMMUTABLE_FL = int(0x00000010)
+const (
+	// While x/sys/unix exposes a lot this particular flag isn't
+	// mapped. It's the one to match below for immutable state if
+	// the ioctl route has to be taken.
+	FS_IMMUTABLE_FL = int(0x00000010)
+
+	// The mask of flags that are user modifiable. The ioctl can return
+	// more when querying but setting should mask with this first.
+	FS_FL_USER_MODIFIABLE = int(0x000380FF)
+)
 
 // osStat is the linux specific version of stat. Depending on OS version
 // returning immutable bits happens in different ways.
@@ -41,14 +47,11 @@ func osStat(path string) (*pb.StatReply, error) {
 		// Linux supports stat so we can blindly convert.
 		stat_t := stat.Sys().(*syscall.Stat_t)
 
-		f1, err := os.Open(path)
+		attrs, err := getFlags(path)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "stat: can't open %s - %v", path, err)
+			return nil, err
 		}
-		attrs, err := unix.IoctlGetInt(int(f1.Fd()), unix.FS_IOC_GETFLAGS)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "stat: can't get attributes for %s - %v", path, err)
-		}
+
 		resp.Size = stat.Size()
 		resp.Mode = uint32(stat.Mode())
 		resp.Modtime = timestamppb.New(stat.ModTime())
@@ -66,4 +69,42 @@ func osStat(path string) (*pb.StatReply, error) {
 	resp.Gid = stat.Gid
 	resp.Immutable = (stat.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
 	return resp, nil
+}
+
+func getFlags(path string) (int, error) {
+	f1, err := os.Open(path)
+	if err != nil {
+		return 0, status.Errorf(codes.Internal, "stat: can't open %s - %v", path, err)
+	}
+	defer func() { f1.Close() }()
+
+	attrs, err := unix.IoctlGetInt(int(f1.Fd()), unix.FS_IOC_GETFLAGS)
+	if err != nil {
+		return 0, status.Errorf(codes.Internal, "stat: can't get attributes for %s - %v", path, err)
+	}
+	return attrs, nil
+}
+
+// changeImmutable is the Linux specific implementation for changing
+// the immutable bit.
+func changeImmutable(path string, immutable bool) error {
+	attrs, err := getFlags(path)
+	if err != nil {
+		return err
+	}
+	// Need to make off to only the ones we can set.
+	attrs &= FS_FL_USER_MODIFIABLE
+
+	// Clear immutable and then possibly set it.
+	attrs &= ^FS_IMMUTABLE_FL
+	if immutable {
+		attrs |= FS_IMMUTABLE_FL
+	}
+
+	f1, err := os.Open(path)
+	if err != nil {
+		return status.Errorf(codes.Internal, "stat: can't open %s - %v", path, err)
+	}
+	defer func() { f1.Close() }()
+	return unix.IoctlSetPointerInt(int(f1.Fd()), unix.FS_IOC_SETFLAGS, attrs)
 }
