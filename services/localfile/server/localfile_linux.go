@@ -71,7 +71,6 @@ func osStat(path string) (*pb.StatReply, error) {
 	return resp, nil
 }
 
-<<<<<<< HEAD
 func getFlags(path string) (int, error) {
 	f1, err := os.Open(path)
 	if err != nil {
@@ -108,7 +107,8 @@ func changeImmutable(path string, immutable bool) error {
 	}
 	defer func() { f1.Close() }()
 	return unix.IoctlSetPointerInt(int(f1.Fd()), unix.FS_IOC_SETFLAGS, attrs)
-=======
+}
+
 type inotify struct {
 	iFD     int
 	watchFD int
@@ -204,5 +204,4 @@ func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
 		// Nothing (timed out) so just loop
 	}
 	return nil
->>>>>>> Implement tail for darwin/linux in terms of kqueue/inotify.
 }
