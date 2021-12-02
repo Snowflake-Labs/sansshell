@@ -904,7 +904,8 @@ func TestList(t *testing.T) {
 				}
 				out = append(out, resp.Entry)
 			}
-			if diff := cmp.Diff(out, tc.expected, protocmp.Transform()); diff != "" {
+			if diff := cmp.Diff(tc.expected, out, protocmp.Transform()); diff != "" {
+				t.Logf("%+v", out)
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
 		})
