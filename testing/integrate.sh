@@ -203,9 +203,9 @@ cp /etc/hosts ${LOGS}/hosts
 function tail_execute {
   CLIENT_PID=$1
   shift
-  sleep 5
+  sleep 1
   cat /etc/hosts >> ${LOGS}/hosts
-  sleep 15
+  sleep 1
   disown %%
   kill -KILL ${CLIENT_PID}
 }
