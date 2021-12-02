@@ -38,7 +38,7 @@ const READ_TIMEOUT_SEC = 10
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
 // can set on a file/directory.
-const modeMask = uint32(07777)
+const modeMask = uint32(os.ModePerm | os.ModeSticky | os.ModeSetuid | os.ModeSetgid)
 
 // server is used to implement the gRPC server
 type server struct{}
