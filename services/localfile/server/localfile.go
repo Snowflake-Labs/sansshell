@@ -251,7 +251,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 		return status.Errorf(codes.Internal, "list: send error %v", err)
 	}
 
-	// If it's directory we'll open it and go over it's entries.
+	// If it's directory we'll open it and go over its entries.
 	if fs.FileMode(resp.Mode).IsDir() {
 		entries, err := os.ReadDir(req.Entry)
 		if err != nil {
@@ -259,11 +259,12 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 		}
 		// Only do one level so iterate these and we're done.
 		for _, e := range entries {
-			resp, err := osStat(filepath.Join(req.Entry, e.Name()))
+			name := filepath.Join(req.Entry, e.Name())
+			logger.Info("ls", "filename", name)
+			resp, err := osStat(name)
 			if err != nil {
 				return err
 			}
-			logger.Info("ls", "filename", resp.Filename)
 			if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
 				return status.Errorf(codes.Internal, "list: send error %v", err)
 			}
