@@ -580,21 +580,23 @@ func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 }
 
 type lsCmd struct {
-	long bool
+	long      bool
+	directory bool
 }
 
 func (*lsCmd) Name() string     { return "ls" }
 func (*lsCmd) Synopsis() string { return "List a file or directory" }
 func (*lsCmd) Usage() string {
-	return `ls [--long] <path>:
+	return `ls [--long] [--directory] <path>:
   List the path given printing out each entry (N if it's a directory). Use --long to get ls -l style output.
-  The entry listed will always be printed first even it it's a directory (unlike ls).
+  If the entry is a directory it will be suppressed from the output unless --directory is set (ls -d style).
   NOTE: Only expands one level of a directory.
 `
 }
 
 func (p *lsCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.long, "long", false, "If true prints out as ls -l would have done")
+	f.BoolVar(&p.directory, "directory", false, "If true prints out the entry if it was a directory and nothing else (as ls -d)")
 }
 
 func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -617,6 +619,12 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			return subcommands.ExitFailure
 		}
 
+		type seen struct {
+			seen bool
+			skip bool
+		}
+		// Track the responses per target (need to do special work on the first one)
+		entries := make(map[int]*seen)
 		for {
 			resp, err := stream.Recv()
 			if err == io.EOF {
@@ -627,6 +635,7 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				retCode = subcommands.ExitFailure
 				break
 			}
+
 			for _, r := range resp {
 				if r.Error != nil {
 					if r.Error != io.EOF {
@@ -635,6 +644,27 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 					}
 					continue
 				}
+
+				// First entry is special. It may be a directory if that's what we asked to List on.
+				if entries[r.Index] == nil {
+					entries[r.Index] = &seen{
+						seen: true,
+					}
+					if fs.FileMode(r.Resp.Entry.Mode).IsDir() {
+						// If -d is set we print just this and then skip anymore for this target.
+						// Otherwise we skip this entry and keep going.
+						if p.directory {
+							entries[r.Index].skip = true
+						} else {
+							continue
+						}
+					}
+				} else {
+					if entries[r.Index].skip {
+						continue
+					}
+				}
+
 				// Easy case. Just emit entries
 				if !p.long {
 					fmt.Fprintf(state.Out[r.Index], "%s\n", r.Resp.Entry.Filename)
