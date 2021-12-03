@@ -4,6 +4,7 @@
 package server
 
 import (
+	"log"
 	"os"
 	"syscall"
 
@@ -58,10 +59,12 @@ func osStat(path string) (*pb.StatReply, error) {
 		// as a system call. Here we call os.Stat + ioctl to get immutable state.
 		attrs, err := getFlags(path)
 		if err != nil {
-			return nil, err
+			// If we can't get attributes just mark it as immutable=false
+			log.Printf("error getting flags: %v", err)
+			resp.Immutable = false
+		} else {
+			resp.Immutable = (attrs & FS_IMMUTABLE_FL) != 0
 		}
-
-		resp.Immutable = (attrs & FS_IMMUTABLE_FL) != 0
 	} else {
 		resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
 	}
