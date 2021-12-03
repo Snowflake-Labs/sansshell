@@ -604,45 +604,46 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitUsageError
 	}
 
-	filename := f.Args()[0]
-	req := &pb.ListRequest{
-		Entry: filename,
-	}
-
-	c := pb.NewLocalFileClientProxy(state.Conn)
-	stream, err := c.ListOneMany(ctx, req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error from ListOneMany: %v", err)
-		return subcommands.ExitFailure
-	}
-
 	retCode := subcommands.ExitSuccess
-	for {
-		resp, err := stream.Recv()
-		if err == io.EOF {
-			break
+	for _, filename := range f.Args() {
+		req := &pb.ListRequest{
+			Entry: filename,
 		}
+
+		c := pb.NewLocalFileClientProxy(state.Conn)
+		stream, err := c.ListOneMany(ctx, req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error from ListOneMany.Recv() %v", err)
-			retCode = subcommands.ExitFailure
-			break
+			fmt.Fprintf(os.Stderr, "Error from ListOneMany for %s: %v\n", filename, err)
+			return subcommands.ExitFailure
 		}
-		for _, r := range resp {
-			if r.Error != nil {
-				if r.Error != io.EOF {
-					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
-					retCode = subcommands.ExitFailure
+
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+				retCode = subcommands.ExitFailure
+				break
+			}
+			for _, r := range resp {
+				if r.Error != nil {
+					if r.Error != io.EOF {
+						fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+						retCode = subcommands.ExitFailure
+					}
+					continue
 				}
-				continue
+				// Easy case. Just emit entries
+				if !p.long {
+					fmt.Fprintf(state.Out[r.Index], "%s\n", r.Resp.Entry.Filename)
+					continue
+				}
+				t := fs.FileMode(r.Resp.Entry.Mode).String()
+				mod := r.Resp.Entry.Modtime.AsTime().Format(time.UnixDate)
+				fmt.Fprintf(state.Out[r.Index], "%-11s  - %8d %8d %16d %s %s\n", t, r.Resp.Entry.Uid, r.Resp.Entry.Gid, r.Resp.Entry.Size, mod, r.Resp.Entry.Filename)
 			}
-			// Easy case. Just emit entries
-			if !p.long {
-				fmt.Fprintf(state.Out[r.Index], "%s\n", r.Resp.Entry.Filename)
-				continue
-			}
-			t := fs.FileMode(r.Resp.Entry.Mode).String()
-			mod := r.Resp.Entry.Modtime.AsTime().Format(time.UnixDate)
-			fmt.Fprintf(state.Out[r.Index], "%-11s  - %8d %8d %16d %s %s\n", t, r.Resp.Entry.Uid, r.Resp.Entry.Gid, r.Resp.Entry.Size, mod, r.Resp.Entry.Filename)
 		}
 	}
 	return retCode
