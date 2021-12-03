@@ -4,6 +4,8 @@
 package server
 
 import (
+	"io/fs"
+	"log"
 	"os"
 	"syscall"
 	"time"
@@ -62,6 +64,7 @@ func osStat(path string) (*pb.StatReply, error) {
 	}
 
 	// Statx case:
+	log.Printf("stat: %+v %O %X %t", stat, stat.Mode, stat.Mode, fs.FileMode(stat.Mode).IsDir())
 	resp.Size = int64(stat.Size)
 	resp.Mode = uint32(stat.Mode)
 	resp.Modtime = timestamppb.New(time.Unix(stat.Mtime.Sec, int64(stat.Mtime.Nsec)))
