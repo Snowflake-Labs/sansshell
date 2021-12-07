@@ -42,3 +42,27 @@ func osStat(path string) (*pb.StatReply, error) {
 func changeImmutable(path string, immutable bool) error {
 	return status.Error(codes.Unimplemented, "immutable not supported")
 }
+
+// dataPrep should be called before entering a loop watching a file.
+// It returns an opaque object to pass to dataReady() and a function
+// which should be run on exit (i.e. defer it).
+func dataPrep(f *os.File) (interface{}, func(), error) {
+	return nil, func() {}, nil
+}
+
+// dataReady is the OS specific version to indicate the given
+// file has more data. In the generic case we simply sleep, check the
+// stream and then return no matter what (assuming the file was already
+// at EOF).
+func dataReady(_ interface{}, stream pb.LocalFile_ReadServer) error {
+	// We sleep for READ_TIMEOUT_SEC between calls as there's no good
+	// way to poll on a file. Once it reaches EOF it's always readable
+	// (you just get EOF). We have to poll like this so we can check
+	// the context state and return if it's canclled.
+	if stream.Context().Err() != nil {
+		return stream.Context().Err()
+	}
+	time.Sleep(READ_TIMEOUT_SEC * time.Second)
+	// Time to try again.
+	return nil
+}
