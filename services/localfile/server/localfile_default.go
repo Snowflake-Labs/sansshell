@@ -37,12 +37,12 @@ func osStat(path string) (*pb.StatReply, error) {
 	return resp, nil
 }
 
-<<<<<<< HEAD
 // changeImmutable is the default implementation for changing
 // immutable bits (which is unsupported).
 func changeImmutable(path string, immutable bool) error {
 	return status.Error(codes.Unimplemented, "immutable not supported")
-=======
+}
+
 // dataPrep should be called before entering a loop watching a file.
 // It returns an opaque object to pass to dataReady() and a function
 // which should be run on exit (i.e. defer it).
@@ -65,5 +65,4 @@ func dataReady(_ interface{}, stream pb.LocalFile_ReadServer) error {
 	time.Sleep(READ_TIMEOUT_SEC * time.Second)
 	// Time to try again.
 	return nil
->>>>>>> Implement tail for darwin/linux in terms of kqueue/inotify.
 }
