@@ -223,8 +223,104 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 	}
 }
 
-func (s *server) Write(stream pb.LocalFile_WriteServer) error {
-	return status.Error(codes.Unimplemented, "not implemented")
+func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
+	logger := logr.FromContextOrDiscard(stream.Context())
+
+	var f *os.File
+	var d *pb.FileWrite
+	cleanup := func() {
+		if retErr != nil {
+			if f != nil {
+				// Close and then remove the tmpfile since some error happened.
+				f.Close()
+				os.Remove(f.Name())
+			}
+		}
+	}
+	defer cleanup()
+
+	first := false
+	var immutable *immutableState
+	var filename string
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Internal, "write: recv error %v", err)
+		}
+
+		switch {
+		case req.GetDescription() != nil:
+			if first {
+				return status.Errorf(codes.InvalidArgument, "can't send multiple description blocks")
+			}
+			first = true
+			d = req.GetDescription()
+			a := d.GetAttrs()
+			if a == nil {
+				return status.Errorf(codes.InvalidArgument, "must send attrs")
+			}
+
+			// Validate path. We'll go ahead and write the data to a tmpfile and
+			// do the overwrite check when we rename below.
+			filename = a.Filename
+			if err := util.ValidPath(filename); err != nil {
+				return err
+			}
+
+			logger.Info("write file", filename)
+			f, err = os.CreateTemp(filepath.Dir(filename), filepath.Base(filename))
+			if err != nil {
+				return status.Errorf(codes.Internal, "can't create tmp file: %v", err)
+			}
+
+			// Set owner/gid/perms now since we have an open FD to the file and we don't want
+			// to accidentally leave this in another otherwise default state.
+			// Except we don't trigger immutable now or we won't be able to write to it.
+			immutable, err = validateAndSetAttrs(f.Name(), a.Attributes, false)
+			if err != nil {
+				return err
+			}
+		case req.GetContents() != nil:
+			if !first {
+				return status.Errorf(codes.InvalidArgument, "can't send content before description block")
+			}
+			n, err := f.Write(req.GetContents())
+			if err != nil {
+				return status.Errorf(codes.Internal, "write error: %v", err)
+			}
+			if got, want := n, len(req.GetContents()); got != want {
+				return status.Errorf(codes.Internal, "short write. expected %d but only wrote %d", got, want)
+			}
+		default:
+			return status.Error(codes.InvalidArgument, "Must supply either a Description or Contents")
+		}
+	}
+
+	if err := f.Close(); err != nil {
+		return status.Errorf(codes.Internal, "error closing %s - %v", f.Name(), err)
+	}
+
+	// Do one final check (though racy) to see if the file exists.
+	_, err := os.Stat(filename)
+	if err == nil && !d.Overwrite {
+		return status.Errorf(codes.Internal, "file %s exists and overwrite set to false", filename)
+	}
+
+	// Rename tmp file to real destination.
+	if err := os.Rename(f.Name(), filename); err != nil {
+		return status.Errorf(codes.Internal, "error renaming %s -> %s - %v", f.Name(), filename, err)
+	}
+
+	// Now set immutable if requested.
+	if immutable.setImmutable && immutable.immutable {
+		if err := changeImmutableOS(filename, immutable.immutable); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (*emptypb.Empty, error) {
@@ -272,24 +368,17 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	return nil
 }
 
-func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
-	logger := logr.FromContextOrDiscard(ctx)
-	if req.Attrs == nil {
-		return nil, status.Error(codes.InvalidArgument, "attrs must be filled in")
-	}
-	p := req.Attrs.Filename
-	if p == "" {
-		return nil, status.Error(codes.InvalidArgument, "filename must be filled in")
-	}
-	if err := util.ValidPath(p); err != nil {
-		return nil, err
-	}
+type immutableState struct {
+	setImmutable bool
+	immutable    bool
+}
 
+func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable bool) (*immutableState, error) {
 	uid, gid := int(-1), int(-1)
 	setMode, setImmutable, immutable := false, false, false
 	mode := uint32(0)
 
-	for _, attr := range req.Attrs.Attributes {
+	for _, attr := range attrs {
 		switch a := attr.Value.(type) {
 		case *pb.FileAttribute_Uid:
 			if uid != -1 {
@@ -317,24 +406,43 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 	}
 
 	if uid != -1 || gid != -1 {
-		logger.Info("chown", p, uid, gid)
-		if err := chown(p, uid, gid); err != nil {
+		if err := chown(filename, uid, gid); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chown: %v", err)
 		}
 	}
 
 	if setMode {
-		logger.Info("chmod", p, mode)
-		if err := unix.Chmod(p, mode&modeMask); err != nil {
+		if err := unix.Chmod(filename, mode&modeMask); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chmod: %v", err)
 		}
 	}
 
-	if setImmutable {
-		logger.Info("immutable", p, immutable)
-		if err := changeImmutableOS(p, immutable); err != nil {
+	if doImmutable && setImmutable {
+		if err := changeImmutableOS(filename, immutable); err != nil {
 			return nil, err
 		}
+	}
+	return &immutableState{
+		setImmutable: setImmutable,
+		immutable:    immutable,
+	}, nil
+}
+
+func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
+	if req.Attrs == nil {
+		return nil, status.Error(codes.InvalidArgument, "attrs must be filled in")
+	}
+	p := req.Attrs.Filename
+	if p == "" {
+		return nil, status.Error(codes.InvalidArgument, "filename must be filled in")
+	}
+	if err := util.ValidPath(p); err != nil {
+		return nil, err
+	}
+
+	// Don't care about immutable state as we set it if it came across.
+	if _, err := validateAndSetAttrs(p, req.Attrs.Attributes, true); err != nil {
+		return nil, err
 	}
 	return &emptypb.Empty{}, nil
 }

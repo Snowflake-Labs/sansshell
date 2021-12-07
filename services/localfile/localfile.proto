@@ -146,6 +146,8 @@ message FileAttributes {
 
 // FileWrite describes everything about a file to be written.
 message FileWrite {
+  // For a newly written file uid/gid/mode are required attributes
+  // while immutable is optional.
   FileAttributes attrs = 1;
   // If true allow to truncate and overwrite an existing file. Otherwise
   // the file must not exist. This is still subject to races as all incoming
