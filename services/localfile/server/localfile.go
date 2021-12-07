@@ -368,9 +368,10 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	return nil
 }
 
+// immutableState tracks the parsed state of immutable from the slice of FileAttribute.
 type immutableState struct {
-	setImmutable bool
-	immutable    bool
+	setImmutable bool // Whether immutable was set (so we should change state).
+	immutable    bool // The immutable value (only applies if setImmutable is true).
 }
 
 func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable bool) (*immutableState, error) {
