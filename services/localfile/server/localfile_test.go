@@ -197,9 +197,7 @@ func TestTail(t *testing.T) {
 	fatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	savedTimeout := READ_TIMEOUT
 	READ_TIMEOUT = 1 * time.Second
-	t.Cleanup(func() { READ_TIMEOUT = savedTimeout })
 
 	// Create a file with some initial data.
 	temp := t.TempDir()
