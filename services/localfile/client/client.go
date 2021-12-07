@@ -606,13 +606,14 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitUsageError
 	}
 
+	c := pb.NewLocalFileClientProxy(state.Conn)
+
 	retCode := subcommands.ExitSuccess
 	for _, filename := range f.Args() {
 		req := &pb.ListRequest{
 			Entry: filename,
 		}
 
-		c := pb.NewLocalFileClientProxy(state.Conn)
 		stream, err := c.ListOneMany(ctx, req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error from ListOneMany for %s: %v\n", filename, err)
