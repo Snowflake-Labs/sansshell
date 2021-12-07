@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -17,6 +18,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
+	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -1344,6 +1346,202 @@ func TestWrite(t *testing.T) {
 				if got, want := setImmutable, true; got != want {
 					t.Fatalf("%s: didn't set immutable state as expected. got %t and want %t", tc.name, got, want)
 				}
+			}
+		})
+	}
+}
+
+func TestCopy(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	// Setup source bucket/file and contents
+	contents := "contents"
+	temp := t.TempDir()
+	uid, gid := os.Getuid(), os.Getgid()
+	f1, err := os.CreateTemp(temp, "file")
+	testutil.FatalOnErr("CreateTemp", err, t)
+	if n, err := f1.WriteString(contents); n != len(contents) || err != nil {
+		t.Fatalf("WriteString failed. Wrote %d, expected %d err - %v", n, len(contents), err)
+	}
+	err = f1.Close()
+	testutil.FatalOnErr("Close", err, t)
+
+	for _, tc := range []struct {
+		name      string
+		req       *pb.CopyRequest
+		wantErr   bool
+		filename  string
+		validate  string
+		touchFile bool
+	}{
+		{
+			name:    "Blank request",
+			req:     &pb.CopyRequest{},
+			wantErr: true,
+		},
+		{
+			name: "No bucket",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "No key",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{},
+				Bucket:      fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+			},
+			wantErr: true,
+		},
+		{
+			name: "No attrs",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{},
+				Bucket:      fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+				Key:         filepath.Base(f1.Name()),
+			},
+			wantErr: true,
+		},
+		{
+			// Don't need to test all attributes combinations as TestWrite did this.
+			name: "Bad path",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{
+					Attrs: &pb.FileAttributes{
+						Filename: "/tmp/foo/../../etc/passwd",
+					},
+				},
+				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+				Key:    filepath.Base(f1.Name()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Bad bucket",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{
+					Attrs: &pb.FileAttributes{
+						Filename: filepath.Join(temp, "/file"),
+					},
+				},
+				Bucket: "fil://not-a-path",
+				Key:    filepath.Base(f1.Name()),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Bad key",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{
+					Attrs: &pb.FileAttributes{
+						Filename: filepath.Join(temp, "/file"),
+					},
+				},
+				Bucket: "file://not-a-path",
+				Key:    filepath.Base(f1.Name()),
+			},
+			wantErr: true,
+		},
+		{
+			// Same here. We don't need to test all finalization permutations as TestWrite did that.
+			name: "Fail due to overwrite = false",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{
+					Attrs: &pb.FileAttributes{
+						Filename: filepath.Join(temp, "/file"),
+						Attributes: []*pb.FileAttribute{
+							{
+								Value: &pb.FileAttribute_Uid{
+									Uid: uint32(uid),
+								},
+							},
+							{
+								Value: &pb.FileAttribute_Gid{
+									Gid: uint32(gid),
+								},
+							},
+							{
+								Value: &pb.FileAttribute_Mode{
+									Mode: 0777,
+								},
+							},
+						},
+					},
+				},
+				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+				Key:    filepath.Base(f1.Name()),
+			},
+			filename:  filepath.Join(temp, "/file"),
+			wantErr:   true,
+			touchFile: true,
+		},
+
+		{
+			name: "Copy a file",
+			req: &pb.CopyRequest{
+				Destination: &pb.FileWrite{
+					Attrs: &pb.FileAttributes{
+						Filename: filepath.Join(temp, "/file"),
+						Attributes: []*pb.FileAttribute{
+							{
+								Value: &pb.FileAttribute_Uid{
+									Uid: uint32(uid),
+								},
+							},
+							{
+								Value: &pb.FileAttribute_Gid{
+									Gid: uint32(gid),
+								},
+							},
+							{
+								Value: &pb.FileAttribute_Mode{
+									Mode: 0777,
+								},
+							},
+						},
+					},
+				},
+				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+				Key:    filepath.Base(f1.Name()),
+			},
+			validate: contents,
+			filename: filepath.Join(temp, "file"),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if tc.filename != "" {
+					os.Remove(tc.filename)
+				}
+			}()
+
+			if tc.touchFile {
+				f, err := os.Create(tc.filename)
+				testutil.FatalOnErr("Create()", err, t)
+				err = f.Close()
+				testutil.FatalOnErr("Close()", err, t)
+			}
+
+			client := pb.NewLocalFileClient(conn)
+			_, err := client.Copy(context.Background(), tc.req)
+			t.Log(err)
+			if got, want := err != nil, tc.wantErr; got != want {
+				t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
+			}
+			if tc.wantErr {
+				return
+			}
+
+			c, err := os.ReadFile(tc.filename)
+			testutil.FatalOnErr("ReadFile()", err, t)
+
+			if got, want := c, []byte(tc.validate); !bytes.Equal(got, want) {
+				t.Fatalf("%s: contents not equal.\nGot : %s\nWant: %s", tc.name, got, want)
 			}
 		})
 	}

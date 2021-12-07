@@ -172,12 +172,14 @@ message WriteRequest {
 // file from.
 message CopyRequest {
   FileWrite destination = 1;
-  // The source URL to copy from. See implementations for details on schemes
+  // The source bucket to copy from. See implementations for details on schemes
   // but will at a minimum support file://<path> for local copies.
-  string source_url = 2;
+  string bucket = 2;
+  // The key to reference inside of the source_bucket.
+  string key = 3;
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
-  bytes blob_data = 3;
+  bytes blob_data = 4;
 }
 
 // ListRequest will do an expansion on the entry given to list all things
