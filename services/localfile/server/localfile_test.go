@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -27,13 +28,6 @@ var (
 
 func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
-}
-
-func fatalOnErr(op string, e error, t *testing.T) {
-	t.Helper()
-	if e != nil {
-		t.Fatalf("%s: err was %v, want nil", op, e)
-	}
 }
 
 func TestMain(m *testing.M) {
@@ -54,15 +48,13 @@ func TestMain(m *testing.M) {
 func TestEmptyRead(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	client := pb.NewLocalFileClient(conn)
 	// We won't get an error here as we have to read from the stream.
 	stream, err := client.Read(ctx, &pb.ReadActionRequest{})
-	if err != nil {
-		t.Fatalf("Got unexpected error from Read: %v", err)
-	}
+	testutil.FatalOnErr("Read", err, t)
 	_, err = stream.Recv()
 	if err == io.EOF {
 		t.Fatal("Expected a real error, not EOF")
@@ -76,7 +68,7 @@ func TestEmptyRead(t *testing.T) {
 func TestRead(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	for _, tc := range []struct {
@@ -125,9 +117,9 @@ func TestRead(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			oldChunk := util.StreamingChunkSize
-			defer func() {
+			t.Cleanup(func() {
 				util.StreamingChunkSize = oldChunk
-			}()
+			})
 
 			util.StreamingChunkSize = tc.chunksize
 
@@ -144,7 +136,7 @@ func TestRead(t *testing.T) {
 			})
 			// In general this can only fail here for connection issues which
 			// we're not expecting. Actual fails happen in Recv below.
-			fatalOnErr("Read failed", err, t)
+			testutil.FatalOnErr("Read failed", err, t)
 
 			buf := &bytes.Buffer{}
 			for {
@@ -166,10 +158,10 @@ func TestRead(t *testing.T) {
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
 				}
-				fatalOnErr("can't write into buffer", err, t)
+				testutil.FatalOnErr("can't write into buffer", err, t)
 			}
 			contents, err := os.ReadFile(tc.filename)
-			fatalOnErr("reading test data", err, t)
+			testutil.FatalOnErr("reading test data", err, t)
 			if tc.offset != 0 || tc.length != 0 {
 				start := 0
 				if tc.offset > 0 {
@@ -194,7 +186,7 @@ func TestRead(t *testing.T) {
 func TestTail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	READ_TIMEOUT = 1 * time.Second
@@ -202,12 +194,12 @@ func TestTail(t *testing.T) {
 	// Create a file with some initial data.
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
-	fatalOnErr("can't create tmpfile", err, t)
+	testutil.FatalOnErr("can't create tmpfile", err, t)
 	data := "Some data\n"
 	f1.WriteString(data)
 	name := f1.Name()
 	err = f1.Close()
-	fatalOnErr("closing file", err, t)
+	testutil.FatalOnErr("closing file", err, t)
 	client := pb.NewLocalFileClient(conn)
 	stream, err := client.Read(ctx, &pb.ReadActionRequest{
 		Request: &pb.ReadActionRequest_Tail{
@@ -216,27 +208,27 @@ func TestTail(t *testing.T) {
 			},
 		},
 	})
-	fatalOnErr("error from read", err, t)
+	testutil.FatalOnErr("error from read", err, t)
 
 	buf := &bytes.Buffer{}
 	resp, err := stream.Recv()
-	fatalOnErr("error reading from stream", err, t)
+	testutil.FatalOnErr("error reading from stream", err, t)
 
 	// We don't care about errors as we compare the buf later.
 	buf.Write(resp.Contents)
 
 	f1, err = os.OpenFile(name, os.O_APPEND|os.O_WRONLY, 0644)
-	fatalOnErr("can't open for adding data", err, t)
+	testutil.FatalOnErr("can't open for adding data", err, t)
 
 	n, err := f1.WriteString(data)
 	if n != len(data) || err != nil {
 		t.Fatalf("incorrect length or error. Wrote %d expected %d. Error - %v", n, len(data), err)
 	}
 	err = f1.Close()
-	fatalOnErr("close", err, t)
+	testutil.FatalOnErr("close", err, t)
 
 	resp, err = stream.Recv()
-	fatalOnErr("error reading from stream", err, t)
+	testutil.FatalOnErr("error reading from stream", err, t)
 	buf.Write(resp.Contents)
 	data = data + data
 	if got, want := buf.String(), data; got != want {
@@ -261,18 +253,18 @@ func TestTail(t *testing.T) {
 func TestStat(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
-	fatalOnErr("os.CreateTemp", err, t)
+	testutil.FatalOnErr("os.CreateTemp", err, t)
 	f1Stat, err := osStat(f1.Name())
-	fatalOnErr("f1.Stat", err, t)
+	testutil.FatalOnErr("f1.Stat", err, t)
 
 	dirStat, err := osStat(temp)
-	fatalOnErr("os.Stat(tempdir)", err, t)
+	testutil.FatalOnErr("os.Stat(tempdir)", err, t)
 
 	for _, tc := range []struct {
 		name        string
@@ -285,7 +277,7 @@ func TestStat(t *testing.T) {
 			name:        "nonexistent file",
 			req:         &pb.StatRequest{Filename: "/no/such/file"},
 			reply:       nil,
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if err == nil {
 					t.Fatalf("%s: err was nil, expecting not found", op)
@@ -296,7 +288,7 @@ func TestStat(t *testing.T) {
 			name:        "non-absolute path",
 			req:         &pb.StatRequest{Filename: "../../relative-path/not-valid"},
 			reply:       nil,
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if !errors.Is(err, AbsolutePathError) {
 					t.Fatalf("%s: err was %v, want AbsolutePathError", op, err)
@@ -315,8 +307,8 @@ func TestStat(t *testing.T) {
 				Gid:       gid,
 				Immutable: dirStat.Immutable,
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 		{
 			name: "known test file",
@@ -330,15 +322,15 @@ func TestStat(t *testing.T) {
 				Gid:       gid,
 				Immutable: f1Stat.Immutable,
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
 			stream, err := client.Stat(ctx)
-			fatalOnErr("client.Stat", err, t)
+			testutil.FatalOnErr("client.Stat", err, t)
 			err = stream.Send(tc.req)
 			if tc.sendErrFunc != nil {
 				tc.sendErrFunc("stream.Send", err, t)
@@ -351,7 +343,7 @@ func TestStat(t *testing.T) {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
 			err = stream.CloseSend()
-			fatalOnErr("CloseSend", err, t)
+			testutil.FatalOnErr("CloseSend", err, t)
 		})
 	}
 }
@@ -359,20 +351,20 @@ func TestStat(t *testing.T) {
 func TestSum(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	temp := t.TempDir()
 	tempfile, err := os.CreateTemp(temp, "testfile.*")
 	t.Cleanup(func() { tempfile.Close() })
-	fatalOnErr("os.CreateTemp", err, t)
+	testutil.FatalOnErr("os.CreateTemp", err, t)
 
 	in, err := os.Open("./testdata/sum.data")
-	fatalOnErr("os.Open", err, t)
+	testutil.FatalOnErr("os.Open", err, t)
 	t.Cleanup(func() { in.Close() })
 
 	_, err = io.Copy(tempfile, in)
-	fatalOnErr("io.Copy", err, t)
+	testutil.FatalOnErr("io.Copy", err, t)
 
 	for _, tc := range []struct {
 		name        string
@@ -385,7 +377,7 @@ func TestSum(t *testing.T) {
 			name:        "nonexistent file",
 			req:         &pb.SumRequest{Filename: "/no/such/file"},
 			reply:       nil,
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if err == nil {
 					t.Fatalf("%s: err was nil, expecting not found", op)
@@ -396,7 +388,7 @@ func TestSum(t *testing.T) {
 			name:        "non-absolute path",
 			req:         &pb.SumRequest{Filename: "../../relative-path/not-valid"},
 			reply:       nil,
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if !errors.Is(err, AbsolutePathError) {
 					t.Fatalf("%s: err was %v, want AbsolutePathError", op, err)
@@ -406,7 +398,7 @@ func TestSum(t *testing.T) {
 		{
 			name:        "directory",
 			req:         &pb.SumRequest{Filename: temp, SumType: pb.SumType_SUM_TYPE_SHA256},
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if err == nil || !strings.Contains(err.Error(), "directory") {
 					t.Fatalf("%s : err was %v, want err containing 'directory'", op, err)
@@ -421,14 +413,14 @@ func TestSum(t *testing.T) {
 				SumType:  pb.SumType_SUM_TYPE_SHA256,
 				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 		{
 			name:        "invalid type",
 			req:         &pb.SumRequest{Filename: tempfile.Name(), SumType: pb.SumType_SUM_TYPE_SHA256 + 999},
 			reply:       nil,
-			sendErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
 				if err == nil {
 					t.Fatalf("%s: err was nil, expected one for invalid SumType", op)
@@ -443,8 +435,8 @@ func TestSum(t *testing.T) {
 				SumType:  pb.SumType_SUM_TYPE_SHA256,
 				Sum:      "3115e68dae98b7c1093fbcb4173483c4af25fd7167169be1b50d9798f4e9229f",
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 		{
 			name: "sha512_256",
@@ -454,8 +446,8 @@ func TestSum(t *testing.T) {
 				SumType:  pb.SumType_SUM_TYPE_SHA512_256,
 				Sum:      "f28247cd3fb739c77014b33f3aff1e48e7dc3674c46c10498dc8d25f4b3405a1",
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 		{
 			name: "md5",
@@ -465,8 +457,8 @@ func TestSum(t *testing.T) {
 				SumType:  pb.SumType_SUM_TYPE_MD5,
 				Sum:      "485032cb71937bed2d371731498d20d3",
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 		{
 			name: "crc32_ieee",
@@ -476,15 +468,15 @@ func TestSum(t *testing.T) {
 				SumType:  pb.SumType_SUM_TYPE_CRC32IEEE,
 				Sum:      "01df4a25",
 			},
-			sendErrFunc: fatalOnErr,
-			recvErrFunc: fatalOnErr,
+			sendErrFunc: testutil.FatalOnErr,
+			recvErrFunc: testutil.FatalOnErr,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
 			stream, err := client.Sum(ctx)
-			fatalOnErr("client.Sum", err, t)
+			testutil.FatalOnErr("client.Sum", err, t)
 			err = stream.Send(tc.req)
 			if tc.sendErrFunc != nil {
 				tc.sendErrFunc("stream.Send", err, t)
@@ -497,7 +489,7 @@ func TestSum(t *testing.T) {
 				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
 			}
 			err = stream.CloseSend()
-			fatalOnErr("CloseSend", err, t)
+			testutil.FatalOnErr("CloseSend", err, t)
 		})
 	}
 }
@@ -505,15 +497,15 @@ func TestSum(t *testing.T) {
 func TestSetFileAttributes(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	fatalOnErr("grpc.DialContext(bufnet)", err, t)
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	uid, gid := os.Getuid(), os.Getgid()
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
-	fatalOnErr("os.CreateTemp", err, t)
+	testutil.FatalOnErr("os.CreateTemp", err, t)
 	f1Stat, err := osStat(f1.Name())
-	fatalOnErr("f1.Stat", err, t)
+	testutil.FatalOnErr("f1.Stat", err, t)
 
 	setPath := ""
 	setUid, setGid := 0, 0
@@ -817,7 +809,7 @@ func TestSetFileAttributes(t *testing.T) {
 
 			if tc.setMode {
 				s, err := osStat(f1.Name())
-				fatalOnErr("stat tmp file", err, t)
+				testutil.FatalOnErr("stat tmp file", err, t)
 				if got, want := s.Mode, tc.expectedMode; got != want {
 					t.Fatalf("%s: didn't use correct mode. Got %O and want %O", tc.name, got, want)
 				}
