@@ -105,7 +105,6 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	reader := io.LimitReader(f, max)
 
 	td, closer, err := dataPrep(f)
-	log.Printf("td: %+v err %v", td, err)
 	if err != nil {
 		return err
 	}
