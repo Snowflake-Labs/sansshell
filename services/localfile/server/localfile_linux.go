@@ -184,8 +184,8 @@ func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
 			return stream.Context().Err()
 		}
 
-		// Wait 10s between runs to check the context.
-		n, err := unix.EpollWait(inotify.epoll, events, 10*1000)
+		// Wait READ_TIMEOUT between runs to check the context.
+		n, err := unix.EpollWait(inotify.epoll, events, int(READ_TIMEOUT.Milliseconds()))
 		if err != nil {
 			// If we got EINTR we can just loop again.
 			if err == unix.EINTR {

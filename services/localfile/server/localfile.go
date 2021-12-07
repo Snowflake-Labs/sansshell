@@ -12,6 +12,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -32,9 +33,9 @@ var (
 	chown             = unix.Chown
 	changeImmutableOS = changeImmutable
 
-	// READ_TIMEOUT_SEC is how long tail should wait on a given poll call
+	// READ_TIMEOUT is how long tail should wait on a given poll call
 	// before checking context.Err() and possibly looping.
-	READ_TIMEOUT_SEC = 10
+	READ_TIMEOUT = 10 * time.Second
 )
 
 // This encompasses the permission plus the setuid/gid/sticky bits one

@@ -126,7 +126,7 @@ func dataReady(kq interface{}, stream pb.LocalFile_ReadServer) error {
 
 		// Wait 10s in between requests so we can check the stream context too.
 		ts := &unix.Timespec{
-			Sec: 10,
+			Sec: int64(READ_TIMEOUT.Seconds()),
 		}
 		n, err := unix.Kevent(kqf.kqFD, nil, events, ts)
 		if err != nil {
