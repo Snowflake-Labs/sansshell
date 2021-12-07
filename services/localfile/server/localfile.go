@@ -9,9 +9,10 @@ import (
 	"hash"
 	"hash/crc32"
 	"io"
-	"log"
+	"io/fs"
 	"math"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -40,7 +41,7 @@ var (
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
 // can set on a file/directory.
-const modeMask = uint32(os.ModePerm | os.ModeSticky | os.ModeSetuid | os.ModeSetgid)
+const modeMask = uint32(fs.ModePerm | fs.ModeSticky | fs.ModeSetuid | fs.ModeSetgid)
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -104,7 +105,6 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	reader := io.LimitReader(f, max)
 
 	td, closer, err := dataPrep(f)
-	log.Printf("td: %+v err %v", td, err)
 	if err != nil {
 		return err
 	}
@@ -232,10 +232,48 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (*emptypb.Empty,
 }
 
 func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error {
-	return status.Error(codes.Unimplemented, "not implemented")
+	logger := logr.FromContextOrDiscard(server.Context())
+	if req.Entry == "" {
+		return status.Errorf(codes.InvalidArgument, "filename must be filled in")
+	}
+	if err := util.ValidPath(req.Entry); err != nil {
+		return err
+	}
+
+	// We always send back the entry first.
+	logger.Info("ls", "filename", req.Entry)
+	resp, err := osStat(req.Entry)
+	if err != nil {
+		return err
+	}
+	if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
+		return status.Errorf(codes.Internal, "list: send error %v", err)
+	}
+
+	// If it's directory we'll open it and go over its entries.
+	if fs.FileMode(resp.Mode).IsDir() {
+		entries, err := os.ReadDir(req.Entry)
+		if err != nil {
+			return status.Errorf(codes.Internal, "readdir: %v", err)
+		}
+		// Only do one level so iterate these and we're done.
+		for _, e := range entries {
+			name := filepath.Join(req.Entry, e.Name())
+			logger.Info("ls", "filename", name)
+			resp, err := osStat(name)
+			if err != nil {
+				return err
+			}
+			if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
+				return status.Errorf(codes.Internal, "list: send error %v", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	if req.Attrs == nil {
 		return nil, status.Error(codes.InvalidArgument, "attrs must be filled in")
 	}
@@ -279,18 +317,21 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 	}
 
 	if uid != -1 || gid != -1 {
+		logger.Info("chown", p, uid, gid)
 		if err := chown(p, uid, gid); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chown: %v", err)
 		}
 	}
 
 	if setMode {
+		logger.Info("chmod", p, mode)
 		if err := unix.Chmod(p, mode&modeMask); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chmod: %v", err)
 		}
 	}
 
 	if setImmutable {
+		logger.Info("immutable", p, immutable)
 		if err := changeImmutableOS(p, immutable); err != nil {
 			return nil, err
 		}

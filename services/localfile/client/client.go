@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 
@@ -26,6 +27,7 @@ func init() {
 	subcommands.Register(&chgrpCmd{}, "file")
 	subcommands.Register(&chmodCmd{}, "file")
 	subcommands.Register(&immutableCmd{}, "file")
+	subcommands.Register(&lsCmd{}, "file")
 }
 
 type readCmd struct {
@@ -572,6 +574,107 @@ func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 		if r.Error != nil {
 			fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type lsCmd struct {
+	long      bool
+	directory bool
+}
+
+func (*lsCmd) Name() string     { return "ls" }
+func (*lsCmd) Synopsis() string { return "List a file or directory" }
+func (*lsCmd) Usage() string {
+	return `ls [--long] [--directory] <path>:
+  List the path given printing out each entry (N if it's a directory). Use --long to get ls -l style output.
+  If the entry is a directory it will be suppressed from the output unless --directory is set (ls -d style).
+  NOTE: Only expands one level of a directory.
+`
+}
+
+func (p *lsCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&p.long, "long", false, "If true prints out as ls -l would have done")
+	f.BoolVar(&p.directory, "directory", false, "If true prints out the entry if it was a directory and nothing else (as ls -d)")
+}
+
+func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Please specify a filename to read.")
+		return subcommands.ExitUsageError
+	}
+
+	c := pb.NewLocalFileClientProxy(state.Conn)
+
+	retCode := subcommands.ExitSuccess
+	for _, filename := range f.Args() {
+		req := &pb.ListRequest{
+			Entry: filename,
+		}
+
+		stream, err := c.ListOneMany(ctx, req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error from ListOneMany for %s: %v\n", filename, err)
+			return subcommands.ExitFailure
+		}
+
+		type seen struct {
+			seen bool
+			skip bool
+		}
+		// Track the responses per target (need to do special work on the first one)
+		entries := make(map[int]*seen)
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+				retCode = subcommands.ExitFailure
+				break
+			}
+
+			for _, r := range resp {
+				if r.Error != nil {
+					if r.Error != io.EOF {
+						fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+						retCode = subcommands.ExitFailure
+					}
+					continue
+				}
+
+				// First entry is special. It may be a directory if that's what we asked to List on.
+				if entries[r.Index] == nil {
+					entries[r.Index] = &seen{
+						seen: true,
+					}
+					if fs.FileMode(r.Resp.Entry.Mode).IsDir() {
+						// If -d is set we print just this and then skip anymore for this target.
+						// Otherwise we skip this entry and keep going.
+						if p.directory {
+							entries[r.Index].skip = true
+						} else {
+							continue
+						}
+					}
+				} else {
+					if entries[r.Index].skip {
+						continue
+					}
+				}
+
+				// Easy case. Just emit entries
+				if !p.long {
+					fmt.Fprintf(state.Out[r.Index], "%s\n", r.Resp.Entry.Filename)
+					continue
+				}
+				t := fs.FileMode(r.Resp.Entry.Mode).String()
+				mod := r.Resp.Entry.Modtime.AsTime().Format(time.UnixDate)
+				fmt.Fprintf(state.Out[r.Index], "%-11s  - %8d %8d %16d %s %s\n", t, r.Resp.Entry.Uid, r.Resp.Entry.Gid, r.Resp.Entry.Size, mod, r.Resp.Entry.Filename)
+			}
 		}
 	}
 	return retCode

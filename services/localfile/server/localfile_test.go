@@ -823,3 +823,91 @@ func TestSetFileAttributes(t *testing.T) {
 		})
 	}
 }
+
+func TestList(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+
+	dirStat, err := osStat(temp)
+	testutil.FatalOnErr("osStat", err, t)
+	f1Stat, err := osStat(f1.Name())
+	testutil.FatalOnErr("osStat", err, t)
+
+	for _, tc := range []struct {
+		name     string
+		req      *pb.ListRequest
+		wantErr  bool
+		expected []*pb.StatReply
+	}{
+		{
+			name:    "Blank filename",
+			req:     &pb.ListRequest{},
+			wantErr: true,
+		},
+		{
+			name: "Non absolute path",
+			req: &pb.ListRequest{
+				Entry: "/tmp/foo/../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "file ls",
+			req: &pb.ListRequest{
+				Entry: f1.Name(),
+			},
+			expected: []*pb.StatReply{
+				f1Stat,
+			},
+		},
+		{
+			name: "directory ls",
+			req: &pb.ListRequest{
+				Entry: temp,
+			},
+			expected: []*pb.StatReply{
+				dirStat,
+				f1Stat,
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+
+			// This end shouldn't error, when we receive from the stream is where we'll get those.
+			stream, err := client.List(ctx, tc.req)
+			testutil.FatalOnErr("List", err, t)
+
+			if tc.wantErr {
+				return
+			}
+
+			var out []*pb.StatReply
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				t.Log(err)
+				if got, want := err != nil, tc.wantErr; got != want {
+					t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
+				}
+				if tc.wantErr {
+					return
+				}
+				out = append(out, resp.Entry)
+			}
+			if diff := cmp.Diff(tc.expected, out, protocmp.Transform()); diff != "" {
+				t.Logf("%+v", out)
+				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
+			}
+		})
+	}
+}
