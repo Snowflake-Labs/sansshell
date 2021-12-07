@@ -716,6 +716,7 @@ type FileAttribute_Gid struct {
 }
 
 type FileAttribute_Mode struct {
+	// Only the lower 12 bits are used per unix conventions.
 	Mode uint32 `protobuf:"varint,3,opt,name=mode,proto3,oneof"`
 }
 
@@ -737,7 +738,8 @@ type FileAttributes struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Filename   string           `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	Filename string `protobuf:"bytes,1,opt,name=filename,proto3" json:"filename,omitempty"`
+	// A given attributes (uid, gid, etc) can only be set once.
 	Attributes []*FileAttribute `protobuf:"bytes,2,rep,name=attributes,proto3" json:"attributes,omitempty"`
 }
 
@@ -793,6 +795,8 @@ type FileWrite struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// For a newly written file uid/gid/mode are required attributes
+	// while immutable is optional.
 	Attrs *FileAttributes `protobuf:"bytes,1,opt,name=attrs,proto3" json:"attrs,omitempty"`
 	// If true allow to truncate and overwrite an existing file. Otherwise
 	// the file must not exist. This is still subject to races as all incoming
@@ -1100,6 +1104,10 @@ func (x *ListReply) GetEntry() *StatReply {
 	return nil
 }
 
+// SetFileAttributesRequest processes attrs and attempts to set the
+// path given to those attributes. As this is N steps (owner, group,
+// permissions, etc) it is not transactional and can leave an entity in a
+// partial state if errors occur.
 type SetFileAttributesRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
