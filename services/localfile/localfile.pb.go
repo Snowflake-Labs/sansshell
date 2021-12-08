@@ -947,7 +947,7 @@ type CopyRequest struct {
 	// The source bucket to copy from. See implementations for details on schemes
 	// but will at a minimum support file://<path> for local copies.
 	Bucket string `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	// The key to reference inside of the source_bucket.
+	// The key to reference inside of the bucket.
 	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
 	// Any additional data the URL destination may need in order
 	// to succeed (such as an auth token for a blob service).

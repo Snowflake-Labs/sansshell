@@ -175,7 +175,7 @@ message CopyRequest {
   // The source bucket to copy from. See implementations for details on schemes
   // but will at a minimum support file://<path> for local copies.
   string bucket = 2;
-  // The key to reference inside of the source_bucket.
+  // The key to reference inside of the bucket.
   string key = 3;
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
