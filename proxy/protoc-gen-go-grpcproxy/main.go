@@ -118,7 +118,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("Send(*", g.QualifiedGoIdent(method.Input.GoIdent), ") error")
 				}
 				if clientOnly {
-					g.P("CloseAndRecv() (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error)")
+					g.P("CloseAndRecv() ([]*", method.GoName, "ManyResponse, error)")
 				}
 				if method.Desc.IsStreamingServer() {
 					g.P("Recv() ([]*", method.GoName, "ManyResponse, error)")
@@ -143,25 +143,24 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				if clientOnly {
 					// If it's client and not bidi need CloseAndRecv() which cleans up the stream after
 					// sending the initial request.
-					g.P(funcPrelude, "CloseAndRecv() (*", g.QualifiedGoIdent(method.Output.GoIdent), ", error) {")
+					g.P(funcPrelude, "CloseAndRecv() ([]*", method.GoName, "ManyResponse, error) {")
 					g.P("if err := x.ClientStream.CloseSend(); err != nil {")
 					g.P("return nil, err")
 					g.P("}")
-					g.P("m := new(", g.QualifiedGoIdent(method.Output.GoIdent), ")")
-					g.P("if err := x.ClientStream.RecvMsg(m); err != nil {")
-					g.P("return nil, err")
-					g.P("}")
-					g.P("return m, nil")
-					g.P("}")
-					g.P()
+					// The rest is the same as Recv() below which we'll fill in there.
 				}
-				if method.Desc.IsStreamingServer() {
+				if method.Desc.IsStreamingServer() || clientOnly {
 					// Server streaming (or bidi) needs Recv. This is a bit more complicated than
 					// grpc base impl because we have to convert a slice of *ProxyRet back into
 					// the proper typed slice the caller expects. We also need to handle the case where
 					// we're invoked with no proxy as that code uses a standard grpc.ClientStream which
 					// expects different behaviors for the RecvMsg call.
-					g.P(funcPrelude, "Recv() ([]*", method.GoName, "ManyResponse, error) {")
+
+					// We only emit the function signature for the server case. For clientOnly we need
+					// the body since Recv handling is the same there.
+					if method.Desc.IsStreamingServer() {
+						g.P(funcPrelude, "Recv() ([]*", method.GoName, "ManyResponse, error) {")
+					}
 					g.P("var ret []*", method.GoName, "ManyResponse")
 					g.P("// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream")
 					g.P("// and not our proxy based one. This means we need to receive a typed response and")
