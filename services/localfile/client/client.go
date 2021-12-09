@@ -28,6 +28,7 @@ func init() {
 	subcommands.Register(&chmodCmd{}, "file")
 	subcommands.Register(&immutableCmd{}, "file")
 	subcommands.Register(&lsCmd{}, "file")
+	subcommands.Register(&cpCmd{}, "file")
 }
 
 type readCmd struct {
@@ -677,5 +678,184 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			}
 		}
 	}
+	return retCode
+}
+
+type cpCmd struct {
+	bucket    string
+	overwrite bool
+	uid       int
+	gid       int
+	mode      int
+	immutable bool
+}
+
+func (*cpCmd) Name() string     { return "cp" }
+func (*cpCmd) Synopsis() string { return "Copy a file onto a remote machine." }
+func (*cpCmd) Usage() string {
+	return `cp [--bucket=XXX] [--overwrite] --uid=X --gid=X --mode=X [--immutable] <source> <remote destination>
+  Copy the source file (which can be local or a URL such as s3://bucket/source) to the target(s)
+  placing it into the remote destination.
+`
+}
+
+func (p *cpCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&p.bucket, "bucket", "", "If set to a valid prefix will copy from this bucket with the key being the source provided")
+	f.BoolVar(&p.overwrite, "overwrite", false, "If true will overwrite the remote file. Otherwise the file pre-existing is an error.")
+	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
+	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
+	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.BoolVar(&p.immutable, "immutable", false, "If true sets the remote file to immutable after being written.")
+}
+
+var validOutputPrefixes = []string{
+	"s3://",
+	"azblob://",
+	"gs://",
+}
+
+func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "Please specify a source to copy and destination filename to write the contents into.")
+		return subcommands.ExitUsageError
+	}
+	if p.uid == -1 || p.gid == -1 || p.mode == -1 {
+		fmt.Fprintln(os.Stderr, "Must set --uid, --gid and --mode")
+		return subcommands.ExitUsageError
+	}
+
+	c := pb.NewLocalFileClientProxy(state.Conn)
+	source := f.Args()[0]
+	dest := f.Args()[1]
+
+	valid := false
+	if p.bucket != "" {
+		for _, p := range validOutputPrefixes {
+			if strings.HasPrefix(source, p) {
+				valid = true
+				break
+			}
+		}
+	}
+
+	if !valid {
+		fmt.Fprintf(os.Stderr, "Invalid bucket %s. Valid ones accepted are:\n\n", p.bucket)
+		for _, p := range validOutputPrefixes {
+			fmt.Fprintf(os.Stderr, "%s\n", p)
+		}
+		return subcommands.ExitUsageError
+	}
+
+	descr := &pb.FileWrite{
+		Attrs: &pb.FileAttributes{
+			Filename: dest,
+			Attributes: []*pb.FileAttribute{
+				{
+					Value: &pb.FileAttribute_Uid{
+						Uid: uint32(p.uid),
+					},
+				},
+				{
+					Value: &pb.FileAttribute_Gid{
+						Gid: uint32(p.gid),
+					},
+				},
+				{
+					Value: &pb.FileAttribute_Mode{
+						Mode: uint32(p.mode),
+					},
+				},
+				{
+					Value: &pb.FileAttribute_Immutable{
+						Immutable: p.immutable,
+					},
+				},
+			},
+		},
+		Overwrite: p.overwrite,
+	}
+
+	// Copy case (simpler)
+	if p.bucket != "" {
+		req := &pb.CopyRequest{
+			Destination: descr,
+			Bucket:      p.bucket,
+			Key:         source,
+		}
+
+		respChan, err := c.CopyOneMany(ctx, req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error from CopyOneMany: %v\n", err)
+			return subcommands.ExitFailure
+		}
+		retCode := subcommands.ExitSuccess
+		for r := range respChan {
+			if r.Error != nil {
+				fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
+				retCode = subcommands.ExitFailure
+			}
+		}
+		return retCode
+	}
+
+	// Write case (have to send over the local file).
+	f1, err := os.Open(source)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't open %s - %v\n", source, err)
+		return subcommands.ExitFailure
+	}
+	defer f1.Close()
+
+	stream, err := c.WriteOneMany(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error from WriteOneMany: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	// Send over the description and then we'll loop sending contents.
+	req := &pb.WriteRequest{
+		Request: &pb.WriteRequest_Description{
+			Description: descr,
+		},
+	}
+	if err := stream.Send(req); err != nil {
+		fmt.Fprintf(os.Stderr, "Error sending on stream - %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	buf := make([]byte, util.StreamingChunkSize)
+	for {
+		n, err := f1.Read(buf)
+		if err == io.EOF {
+			break
+		}
+
+		req := &pb.WriteRequest{
+			Request: &pb.WriteRequest_Contents{
+				// Only send up to n as the last read is often a short read.
+				Contents: buf[:n],
+			},
+		}
+		if err := stream.Send(req); err != nil {
+			fmt.Fprintf(os.Stderr, "Error sending on stream - %v\n", err)
+			return subcommands.ExitFailure
+		}
+	}
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error closing stream - %v\n", err)
+	}
+
+	retCode := subcommands.ExitSuccess
+
+	// There are no responses to process but we do need to check for errors.
+	for _, r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+
 	return retCode
 }
