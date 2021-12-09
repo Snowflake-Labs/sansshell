@@ -222,23 +222,40 @@ func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() ([]*TestCl
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
-	if err := x.ClientStream.RecvMsg(&m); err != nil {
-		return nil, err
+	eof := make(map[int]bool)
+	for i := range x.cc.Targets {
+		eof[i] = false
 	}
-	for _, r := range m {
-		typedResp := &TestClientStreamManyResponse{
-			Resp: &TestResponse{},
-		}
-		typedResp.Target = r.Target
-		typedResp.Index = r.Index
-		typedResp.Error = r.Error
-		if r.Error == nil {
-			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
-				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+	for {
+		// Need to allow all client channels to return state before we return since
+		// no more Recv's will ever be called.
+		done := true
+		for _, v := range eof {
+			if !v {
+				done = false
 			}
 		}
-		ret = append(ret, typedResp)
+		if done {
+			break
+		}
+		m := []*proxy.ProxyRet{}
+		if err := x.ClientStream.RecvMsg(&m); err != nil {
+			return nil, err
+		}
+		for _, r := range m {
+			typedResp := &TestClientStreamManyResponse{
+				Resp: &TestResponse{},
+			}
+			typedResp.Target = r.Target
+			typedResp.Index = r.Index
+			typedResp.Error = r.Error
+			if r.Error == nil {
+				if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+				}
+			}
+			ret = append(ret, typedResp)
+		}
 	}
 	return ret, nil
 }
