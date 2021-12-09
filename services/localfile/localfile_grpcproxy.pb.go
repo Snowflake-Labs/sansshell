@@ -278,7 +278,7 @@ type WriteManyResponse struct {
 
 type LocalFile_WriteClientProxy interface {
 	Send(*WriteRequest) error
-	CloseAndRecv() (*emptypb.Empty, error)
+	CloseAndRecv() ([]*WriteManyResponse, error)
 	grpc.ClientStream
 }
 
@@ -291,15 +291,47 @@ func (x *localFileClientWriteClientProxy) Send(m *WriteRequest) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *localFileClientWriteClientProxy) CloseAndRecv() (*emptypb.Empty, error) {
+func (x *localFileClientWriteClientProxy) CloseAndRecv() ([]*WriteManyResponse, error) {
 	if err := x.ClientStream.CloseSend(); err != nil {
 		return nil, err
 	}
-	m := new(emptypb.Empty)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
+	var ret []*WriteManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &emptypb.Empty{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &WriteManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
+	}
+
+	m := []*proxy.ProxyRet{}
+	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
-	return m, nil
+	for _, r := range m {
+		typedResp := &WriteManyResponse{
+			Resp: &emptypb.Empty{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
 }
 
 // WriteOneMany provides the same API as Write but sends the same request to N destinations at once.
