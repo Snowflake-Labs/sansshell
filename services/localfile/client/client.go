@@ -731,8 +731,8 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 	if p.bucket != "" {
 		valid := false
-		for _, p := range validOutputPrefixes {
-			if strings.HasPrefix(source, p) {
+		for _, pre := range validOutputPrefixes {
+			if strings.HasPrefix(p.bucket, pre) {
 				valid = true
 				break
 			}
@@ -842,8 +842,9 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 	resp, err := stream.CloseAndRecv()
-	if err != nil {
+	if err != nil && err != io.EOF {
 		fmt.Fprintf(os.Stderr, "Error closing stream - %v\n", err)
+		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
