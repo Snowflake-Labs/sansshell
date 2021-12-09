@@ -179,6 +179,26 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("return ret, nil")
 					g.P("}")
 					g.P()
+					// Need a section where we add a loop around RecvMsg since we have to N of these on a CloseSent
+					// to ensure we pull all states off.
+					if clientOnly {
+						g.P("eof := make(map[int]bool)")
+						g.P("for i := range x.cc.Targets {")
+						g.P("eof[i] = false")
+						g.P("}")
+						g.P("for {")
+						g.P("// Need to allow all client channels to return state before we return since")
+						g.P("// no more Recv's will ever be called.")
+						g.P("done := true")
+						g.P("for _, v := range eof {")
+						g.P("if !v {")
+						g.P("done = false")
+						g.P("}")
+						g.P("}")
+						g.P("if done {")
+						g.P("break")
+						g.P("}")
+					}
 					g.P("m := []*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyRet")), "{}")
 					g.P("if err := x.ClientStream.RecvMsg(&m); err != nil {")
 					g.P("return nil, err")
@@ -197,6 +217,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("}")
 					g.P("ret = append(ret, typedResp)")
 					g.P("}")
+					if clientOnly {
+						g.P("}")
+					}
 					g.P("return ret, nil")
 					g.P("}")
 					g.P()
