@@ -729,22 +729,21 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	source := f.Args()[0]
 	dest := f.Args()[1]
 
-	valid := false
 	if p.bucket != "" {
+		valid := false
 		for _, p := range validOutputPrefixes {
 			if strings.HasPrefix(source, p) {
 				valid = true
 				break
 			}
 		}
-	}
-
-	if !valid {
-		fmt.Fprintf(os.Stderr, "Invalid bucket %s. Valid ones accepted are:\n\n", p.bucket)
-		for _, p := range validOutputPrefixes {
-			fmt.Fprintf(os.Stderr, "%s\n", p)
+		if !valid {
+			fmt.Fprintf(os.Stderr, "Invalid bucket %s. Valid ones accepted are:\n\n", p.bucket)
+			for _, p := range validOutputPrefixes {
+				fmt.Fprintf(os.Stderr, "%s\n", p)
+			}
+			return subcommands.ExitUsageError
 		}
-		return subcommands.ExitUsageError
 	}
 
 	descr := &pb.FileWrite{
@@ -851,7 +850,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 	// There are no responses to process but we do need to check for errors.
 	for _, r := range resp {
-		if r.Error != nil {
+		if r.Error != nil && r.Error != io.EOF {
 			fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 		}
