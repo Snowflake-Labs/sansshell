@@ -8,8 +8,10 @@ var (
 	testdataPsTextProto = "./testdata/linux_testdata.ps.textproto"
 	testdataPs          = "./testdata/linux.ps"
 	badFilesPs          = []string{
-		"./testdata/linux_bad0.ps",
-		"./testdata/linux_bad1.ps",
+		"./testdata/linux_bad0.ps", // empty file
+		"./testdata/linux_bad1.ps", // bad pid
+		"./testdata/linux_bad2.ps", // bad field count
+		"./testdata/linux_bad3.ps", // bad nice value
 	}
 
 	testdataPstackNoThreads              = "./testdata/linux_pstack_no_threads.txt"
