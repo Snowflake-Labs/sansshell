@@ -181,13 +181,15 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, status.Errorf(codes.Internal, "new_version %q not in nevra format (n-e:v-r.a)", req.NewVersion)
 	}
 
-	// First need to validate the old version is what we expect.
-	command, err := generateValidate(req)
-	if err != nil {
-		return nil, err
+	// We can generate both commands since errors duplicate here.
+	validateCommand, valErr := generateValidate(req)
+	updateCommand, upErr := generateUpdate(req)
+	if valErr != nil || upErr != nil {
+		return nil, fmt.Errorf("%v %v", valErr, upErr)
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:])
+	// First need to validate the old version is what we expect.
+	run, err := util.RunCommand(ctx, validateCommand[0], validateCommand[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -196,17 +198,12 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	}
 
 	// A 0 return means we're ok to proceed.
-	command, err = generateUpdate(req)
-	if err != nil {
-		return nil, err
-	}
-
-	run, err = util.RunCommand(ctx, command[0], command[1:])
+	run, err = util.RunCommand(ctx, updateCommand[0], updateCommand[1:])
 	if err != nil {
 		return nil, err
 	}
 	if err := run.Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v", updateCommand, err)
 	}
 
 	// This may return stderr output about repos but unless return code was non-zero we don't care.
