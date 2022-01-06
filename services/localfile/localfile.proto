@@ -146,6 +146,8 @@ message FileAttributes {
 
 // FileWrite describes everything about a file to be written.
 message FileWrite {
+  // For a newly written file uid/gid/mode are required attributes
+  // while immutable is optional.
   FileAttributes attrs = 1;
   // If true allow to truncate and overwrite an existing file. Otherwise
   // the file must not exist. This is still subject to races as all incoming
@@ -170,12 +172,14 @@ message WriteRequest {
 // file from.
 message CopyRequest {
   FileWrite destination = 1;
-  // The source URL to copy from. See implementations for details on schemes
+  // The source bucket to copy from. See implementations for details on schemes
   // but will at a minimum support file://<path> for local copies.
-  string source_url = 2;
+  string bucket = 2;
+  // The key to reference inside of the bucket.
+  string key = 3;
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
-  bytes blob_data = 3;
+  bytes blob_data = 4;
 }
 
 // ListRequest will do an expansion on the entry given to list all things

@@ -379,13 +379,18 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			retCode = subcommands.ExitFailure
 			break
 		}
-		if p.output == "" {
-			for _, r := range resp {
-				if r.Error != nil && r.Error != io.EOF {
-					fmt.Fprintf(os.Stderr, "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
-					retCode = subcommands.ExitFailure
-					continue
+		// Even if we're not writing output we have to process all responses to check for errors.
+		for _, r := range resp {
+			if r.Error != nil && r.Error != io.EOF {
+				dest := state.Out[r.Index]
+				if p.output == "" {
+					dest = os.Stderr
 				}
+				fmt.Fprintf(dest, "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
+				retCode = subcommands.ExitFailure
+				continue
+			}
+			if p.output == "" {
 				n, err := state.Out[r.Index].Write(r.Resp.Data)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(r.Resp.Data), err)

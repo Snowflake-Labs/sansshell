@@ -187,7 +187,7 @@ type TestClientStreamManyResponse struct {
 
 type TestService_TestClientStreamClientProxy interface {
 	Send(*TestRequest) error
-	CloseAndRecv() (*TestResponse, error)
+	CloseAndRecv() ([]*TestClientStreamManyResponse, error)
 	grpc.ClientStream
 }
 
@@ -200,15 +200,64 @@ func (x *testServiceClientTestClientStreamClientProxy) Send(m *TestRequest) erro
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() (*TestResponse, error) {
+func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() ([]*TestClientStreamManyResponse, error) {
 	if err := x.ClientStream.CloseSend(); err != nil {
 		return nil, err
 	}
-	m := new(TestResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
+	var ret []*TestClientStreamManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		m := &TestResponse{}
+		if err := x.ClientStream.RecvMsg(m); err != nil {
+			return nil, err
+		}
+		ret = append(ret, &TestClientStreamManyResponse{
+			Resp:   m,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		return ret, nil
 	}
-	return m, nil
+
+	eof := make(map[int]bool)
+	for i := range x.cc.Targets {
+		eof[i] = false
+	}
+	for {
+		// Need to allow all client channels to return state before we return since
+		// no more Recv's will ever be called.
+		done := true
+		for _, v := range eof {
+			if !v {
+				done = false
+			}
+		}
+		if done {
+			break
+		}
+		m := []*proxy.ProxyRet{}
+		if err := x.ClientStream.RecvMsg(&m); err != nil {
+			return nil, err
+		}
+		for _, r := range m {
+			typedResp := &TestClientStreamManyResponse{
+				Resp: &TestResponse{},
+			}
+			typedResp.Target = r.Target
+			typedResp.Index = r.Index
+			typedResp.Error = r.Error
+			if r.Error == nil {
+				if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+				}
+			}
+			ret = append(ret, typedResp)
+		}
+	}
+	return ret, nil
 }
 
 // TestClientStreamOneMany provides the same API as TestClientStream but sends the same request to N destinations at once.

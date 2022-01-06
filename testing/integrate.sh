@@ -11,6 +11,7 @@ function check_status {
 
   if [ $STATUS != 0 ]; then
     echo "FAIL $*"
+    echo "Logs in ${LOGS}"
     exit 1
   fi
 }
@@ -18,6 +19,7 @@ function check_status {
 function shutdown {
   echo "Shutting down"
   kill -KILL ${PROXY_PID}
+  aws s3 rm s3://${USER}-dev/hosts
   sudo killall sansshell-server
 }
 
@@ -119,6 +121,58 @@ function run_a_test {
     echo "${CMD} passed"
 }
 
+# Takes 1 arg:
+#
+# Pid of sanssh process
+function tail_execute {
+  CLIENT_PID=$1
+  shift
+  sleep 2
+  cat /etc/hosts >> ${LOGS}/hosts
+  sleep 2
+  disown %%
+  kill -KILL ${CLIENT_PID}
+}
+
+# Takes 1 arg:
+#
+# Suffix for copied log files
+function tail_check {
+  diff -q ${LOGS}/1.tail ${LOGS}/hosts
+  check_status $? "tail: output differs from source"
+  copy_logs tail $*
+}
+
+# Takes 1 arg:
+#
+# File to check
+#
+# Assumes EXPECTED_* are already set.
+function check_perms_mode {
+  FILE=$1
+  shift
+
+  NEW_STATE=$(stat ${FILE} | egrep Uid)
+  NEW_MODE=$(echo ${NEW_STATE} | cut -c 10-13)
+  NEW_UID=$(echo ${NEW_STATE} | cut -c 34- | awk -F/ '{print $1}')
+  NEW_GID=$(echo ${NEW_STATE} | cut -c 55- | awk -F/ '{print $1}')
+  NEW_IMMUTABLE=$(lsattr ${FILE} | cut -c5)
+
+  if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
+    check_status 1 "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
+  fi
+  # These aren't quoted as parsed ones may have leading spaces
+  if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
+    check_status 1 "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
+  fi
+  if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
+    check_status 1 "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
+  fi
+  if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
+    check_status 1 "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  fi
+}
+
 OS=$(uname -s)
 if [ "${OS}" != "Linux" ]; then
   echo "Integration testing only works on linux"
@@ -165,7 +219,23 @@ PROXY_PID=$!
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./cmd/sansshell-server/sansshell-server --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+
+# Make sure remote cloud works.
+# TODO(jchacon): Plumb a test account in via a flag instead of assuming this works.
+
+# Check if the bucket exists and is in the right region. If it doesn't exist we'll
+# make it but otherwise abort.
+aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
+RC=$?
+if [ "$RC" = 0 ]; then
+  if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
+    check_status 1 Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+  fi
+else
+  aws s3 mb s3://${USER}-dev --region us-west-2
+  check_status $? Making s3 bucket
+fi
 
 SANSSH_NOPROXY="./cmd/sanssh/sanssh --timeout=120s"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
@@ -196,28 +266,6 @@ run_a_test false 10 read /etc/hosts
 
 # Tail is harder since we have to run the client in the background and then kill it
 cp /etc/hosts ${LOGS}/hosts
-
-# Takes 1 arg:
-#
-# Pid of sanssh process
-function tail_execute {
-  CLIENT_PID=$1
-  shift
-  sleep 2
-  cat /etc/hosts >> ${LOGS}/hosts
-  sleep 2
-  disown %%
-  kill -KILL ${CLIENT_PID}
-}
-
-# Takes 1 arg:
-#
-# Suffix for copied log files
-function tail_check {
-  diff -q ${LOGS}/1.tail ${LOGS}/hosts
-  check_status $? "tail: output differs from source"
-  copy_logs tail $*
-}
 
 echo "tail checks"
 
@@ -273,41 +321,50 @@ EXPECTED_NEW_IMMUTABLE="i"
 # to the chmod below.
 EXPECTED_NEW_MODE=0$(printf "8\ni\n8\no\n${ORIG_MODE}\n1\n+\np\n" | dc)
 
-run_a_test false 0 chown --uid=$EXPECTED_NEW_UID ${LOGS}/test-file
-run_a_test false 0 chgrp --gid=$EXPECTED_NEW_GID ${LOGS}/test-file
+run_a_test false 0 chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
+run_a_test false 0 chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
 run_a_test false 0 chmod --mode=${EXPECTED_NEW_MODE} ${LOGS}/test-file
 run_a_test false 0 immutable --state=true ${LOGS}/test-file
-NEW_STATE=$(stat ${LOGS}/test-file | egrep Uid)
-NEW_MODE=$(echo ${NEW_STATE} | cut -c 10-13)
-NEW_UID=$(echo ${NEW_STATE} | cut -c 34- | awk -F/ '{print $1}')
-NEW_GID=$(echo ${NEW_STATE} | cut -c 55- | awk -F/ '{print $1}')
-NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
 
-if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
-  check_status 1 "modes not as expected. Started with $ORIG_MODE and now have $NEW_MODE but expected $EXPECTED_NEW_MODE"
-fi
-# These aren't quoted as parsed ones may have leading spaces
-if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
-  check_status 1 "uid not as expected. Started with $ORIG_UID and now have $NEW_UID but expected $EXPECTED_NEW_UID"
-fi
-if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
-  check_status 1 "gid not as expected. Started with $ORIG_GID and now have $NEW_GID but expected $EXPECTED_NEW_GID"
-fi
-if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "imutable not as expected. Started with $ORIG_IMMUTABLE and now have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
-fi
+check_perms_mode ${LOGS}/test-file
 
-# Now validage we can clear immutable too
+# Now validate we can clear immutable too
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- immutable --state=false ${LOGS}/test-file
 check_status $? "setting immutable to false"
-ORIG_IMMUTABLE=$NEW_IMMUTABLE
 EXPECTED_NEW_IMMUTABLE="-"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
 if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "imutable not as expected. Started with $ORIG_IMMUTABLE and now have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 
 echo "uid, etc checks passed"
+
+run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
+echo cp text with bucket syntax
+aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
+run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
+aws s3 rm s3://${USER}-dev/hosts
+
+# Trying without --overwrite to validate
+echo "This should emit an error message about overwrite"
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+if [ $? == 0 ]; then
+  check_status 1 Expected failure for no --overwrite from cp for existing file.
+fi
+
+# Make sure we can set immutable
+echo "cp test immutable/overwrite"
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-overwrite-immutable cp --overwrite --immutable --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+check_status $? cp run with --overwrite and --immutable
+EXPECTED_NEW_IMMUTABLE="i"
+NEW_IMMUTABLE=$(lsattr ${LOGS}/cp-hosts | cut -c5)
+if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
+  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+fi
+# Cleanup the file so we aren't leaving immutable files laying around
+sudo chattr -i ${LOGS}/cp-hosts
 
 mkdir ${LOGS}/test
 touch ${LOGS}/test/file
@@ -349,7 +406,21 @@ for i in ${LOGS}/?.dump*; do
   check_status $? $i not a core file
 done
 
+echo "Dumping core to s3 bucket"
+${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
+check_status $? Remote dump to s3
+echo Dumping bucket
+aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
+cat ${LOGS}/s3-ls
+egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
+check_status $? cant find core in bucket
+CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
+aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
+file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
+check_status $? ${LOGS}/${CORE} is not a core file
 
-# TODO(jchacon): Provide a java binary for tests
+aws s3 rm s3://${USER}-dev/${CORE}
+
+# TO{DO(j}chacon): Provide a java binary for test{s
 echo 
-echo "All tests pass"
+echo "All tests pass. Logs in ${LOGS}"

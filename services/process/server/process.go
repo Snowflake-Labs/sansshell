@@ -419,6 +419,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 			return status.Errorf(codes.Internal, "didn't write correct bytes to URL %s. Expected %d and wrote %d", req.GetUrl().Url, want, got)
 		}
 		// URL so we're done.
+		if err := dest.Close(); err != nil {
+			return status.Errorf(codes.Internal, "bucket Close - %v", err)
+		}
 		return nil
 	}
 
