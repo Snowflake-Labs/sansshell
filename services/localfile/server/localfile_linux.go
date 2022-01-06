@@ -51,6 +51,7 @@ func osStat(path string) (*pb.StatReply, error) {
 
 	statx := &unix.Statx_t{}
 	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
+	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
 	if err != nil {
 		if err.(syscall.Errno) != syscall.ENOSYS {
 			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
@@ -65,8 +66,6 @@ func osStat(path string) (*pb.StatReply, error) {
 		} else {
 			resp.Immutable = (attrs & FS_IMMUTABLE_FL) != 0
 		}
-	} else {
-		resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
 	}
 	return resp, nil
 }
