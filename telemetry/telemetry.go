@@ -38,6 +38,7 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 		stream, err := streamer(logCtx, desc, cc, method, opts...)
 		if err != nil {
 			l.Error(err, "create stream")
+			return nil, err
 		}
 		return &loggedClientStream{
 			ClientStream: stream,
