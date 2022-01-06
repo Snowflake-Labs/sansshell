@@ -170,5 +170,4 @@ func TestStreamClient(t *testing.T) {
 	if _, err := logr.FromContext(stream.Context()); err != nil {
 		t.Fatal("returned stream doesn't contain a logging context")
 	}
-
 }
