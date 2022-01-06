@@ -290,9 +290,32 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
 	}
 	defer cleanup()
 
-	first := false
 	var immutable *immutableState
 	var filename string
+
+	// We must get a description. If this isn't one we bail now.
+	req, err := stream.Recv()
+	// Don't check for EOF here as getting one now is a real error (we haven't gotten any packets)
+	if err != nil {
+		return status.Errorf(codes.Internal, "write: recv error %v", err)
+	}
+
+	d = req.GetDescription()
+	if d == nil {
+		return status.Errorf(codes.InvalidArgument, "must send a description block first")
+
+	}
+	a := d.GetAttrs()
+	if a == nil {
+		return status.Errorf(codes.InvalidArgument, "must send attrs in description")
+	}
+	filename = a.Filename
+	logger.Info("write file", filename)
+	f, immutable, err = setupOutput(a)
+	if err != nil {
+		return err
+	}
+
 	for {
 		req, err := stream.Recv()
 		if err == io.EOF {
@@ -304,25 +327,8 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
 
 		switch {
 		case req.GetDescription() != nil:
-			if first {
-				return status.Errorf(codes.InvalidArgument, "can't send multiple description blocks")
-			}
-			first = true
-			d = req.GetDescription()
-			a := d.GetAttrs()
-			if a == nil {
-				return status.Errorf(codes.InvalidArgument, "must send attrs")
-			}
-			filename = a.Filename
-			logger.Info("write file", filename)
-			f, immutable, err = setupOutput(a)
-			if err != nil {
-				return err
-			}
+			return status.Errorf(codes.InvalidArgument, "can't send multiple description blocks")
 		case req.GetContents() != nil:
-			if !first {
-				return status.Errorf(codes.InvalidArgument, "can't send content before description block")
-			}
 			n, err := f.Write(req.GetContents())
 			if err != nil {
 				return status.Errorf(codes.Internal, "write error: %v", err)

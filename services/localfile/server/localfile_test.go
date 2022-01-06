@@ -963,6 +963,39 @@ func TestWrite(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "Description and then blank",
+			reqs: []*pb.WriteRequest{
+				{
+					Request: &pb.WriteRequest_Description{
+						Description: &pb.FileWrite{
+							Attrs: &pb.FileAttributes{
+								Filename: filepath.Join(temp, "/file"),
+								Attributes: []*pb.FileAttribute{
+									{
+										Value: &pb.FileAttribute_Uid{
+											Uid: uint32(uid),
+										},
+									},
+									{
+										Value: &pb.FileAttribute_Gid{
+											Gid: uint32(gid),
+										},
+									},
+									{
+										Value: &pb.FileAttribute_Mode{
+											Mode: 0777,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{},
+			},
+			wantErr: true,
+		},
+		{
 			name: "Bad path",
 			reqs: []*pb.WriteRequest{
 				{
