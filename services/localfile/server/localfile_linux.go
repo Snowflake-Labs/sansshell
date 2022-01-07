@@ -51,7 +51,7 @@ func osStat(path string) (*pb.StatReply, error) {
 
 	statx := &unix.Statx_t{}
 	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
-	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
+	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0 // Can just assign now. If there was an error it gets fixed below.
 	if err != nil {
 		if err.(syscall.Errno) != syscall.ENOSYS {
 			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
