@@ -79,3 +79,64 @@ process_entries : <
   number_of_threads : 1
   command : "[ksoftirqd/0]"
 >
+process_entries : <
+  pid : 7
+  ppid : 2
+  thread_id : 5
+  wchan : "foo"
+  started_time : "Oct01"
+  elapsed_time : "00:00:00"
+  nice : -20
+  scheduling_class : SCHEDULING_CLASS_DEADLINE
+  flags : 1
+  state : PROCESS_STATE_STOPPED_DEBUGGER
+  ignored_signals : 18446744073709551615
+  number_of_threads : 4
+  command : "foo"
+>
+process_entries : <
+  pid : 8
+  ppid : 2
+  thread_id : 6
+  wchan : "foo2"
+  started_time : "Oct01"
+  elapsed_time : "00:00:00"
+  nice : -20
+  scheduling_class : SCHEDULING_CLASS_NOT_REPORTED
+  flags : 1
+  state : PROCESS_STATE_ZOMBIE
+  ignored_signals : 18446744073709551615
+  number_of_threads : 4
+  command : "foo2"
+>
+process_entries : <
+  pid : 9
+  ppid : 2
+  thread_id : 6
+  wchan : "foo3"
+  started_time : "Oct01"
+  elapsed_time : "00:00:00"
+  nice : -20
+  scheduling_class : SCHEDULING_CLASS_UNKNOWN
+  flags : 1
+  state : PROCESS_STATE_ZOMBIE
+  ignored_signals : 18446744073709551615
+  number_of_threads : 4
+  command : "foo3"
+>
+process_entries : <
+  pid : 10
+  ppid : 2
+  thread_id : 6
+  wchan : "foo4"
+  started_time : "Oct01"
+  elapsed_time : "00:00:00"
+  nice : -20
+  scheduling_class : SCHEDULING_CLASS_UNKNOWN
+  flags : 1
+  state : PROCESS_STATE_ZOMBIE
+  state_code : PROCESS_STATE_CODE_UNKNOWN
+  ignored_signals : 18446744073709551615
+  number_of_threads : 4
+  command : "foo4"
+>

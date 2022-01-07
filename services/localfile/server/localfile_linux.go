@@ -51,6 +51,7 @@ func osStat(path string) (*pb.StatReply, error) {
 
 	statx := &unix.Statx_t{}
 	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
+	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0 // Can just assign now. If there was an error it gets fixed below.
 	if err != nil {
 		if err.(syscall.Errno) != syscall.ENOSYS {
 			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
@@ -65,8 +66,6 @@ func osStat(path string) (*pb.StatReply, error) {
 		} else {
 			resp.Immutable = (attrs & FS_IMMUTABLE_FL) != 0
 		}
-	} else {
-		resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0
 	}
 	return resp, nil
 }
@@ -120,7 +119,7 @@ type inotify struct {
 // dataPrep should be called before entering a loop watching a file.
 // It returns an opaque object to pass to dataReady() and a function
 // which should be run on exit (i.e. defer it).
-func dataPrep(f *os.File) (interface{}, func(), error) {
+func dataPrep(f *os.File) (obj interface{}, closer func(), retErr error) {
 	// Set to some defaults we can't accidentally break things if
 	// close was called on these fd's before initialized.
 	in := &inotify{
@@ -129,10 +128,17 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 		epoll:   -1,
 		file:    f.Name(),
 	}
-	closer := func() {
+	closer = func() {
 		unix.Close(in.iFD)
 		unix.Close(in.epoll)
 	}
+	// Setup so we can exit and cleanup easier.
+	c := func() {
+		if retErr != nil {
+			closer()
+		}
+	}
+	defer c()
 
 	// Setup inotify and set a watch on our path.
 	var err error
@@ -145,7 +151,6 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 	//       use when pushing data through iFD above. Do not close() on it.
 	in.watchFD, err = unix.InotifyAddWatch(in.iFD, in.file, unix.IN_MODIFY)
 	if err != nil {
-		closer()
 		return nil, nil, status.Errorf(codes.Internal, "can't setup inotify watch: %v", err)
 	}
 
@@ -153,7 +158,6 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 	// This is only needed once, not per read.
 	in.epoll, err = unix.EpollCreate(1)
 	if err != nil {
-		closer()
 		return nil, nil, status.Errorf(codes.Internal, "can't create epoll: %v", err)
 	}
 	in.event = &unix.EpollEvent{
@@ -161,7 +165,6 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 		Fd:     int32(in.iFD),
 	}
 	if err := unix.EpollCtl(in.epoll, unix.EPOLL_CTL_ADD, in.iFD, in.event); err != nil {
-		closer()
 		return nil, nil, status.Errorf(codes.Internal, "epollctl failed: %v", err)
 	}
 	return in, closer, nil

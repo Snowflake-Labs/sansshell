@@ -163,6 +163,12 @@ func TestInstall(t *testing.T) {
 			},
 		},
 		{
+			name: "bad path",
+			generate: func(*pb.InstallRequest) ([]string, error) {
+				return []string{"non-existant-binary"}, nil
+			},
+		},
+		{
 			name: "bad exit code",
 			generate: func(*pb.InstallRequest) ([]string, error) {
 				return []string{testutil.ResolvePath(t, "false")}, nil
@@ -170,6 +176,7 @@ func TestInstall(t *testing.T) {
 		},
 	} {
 		tc := tc
+		saveGenerate := generateInstall
 		t.Run(tc.name, func(t *testing.T) {
 			generateInstall = tc.generate
 			resp, err := client.Install(ctx, req)
@@ -178,6 +185,7 @@ func TestInstall(t *testing.T) {
 			}
 			t.Log(err)
 		})
+		generateInstall = saveGenerate
 	}
 }
 
@@ -203,6 +211,16 @@ func TestUpdate(t *testing.T) {
 		validateCmdLine = strings.Join(out, " ")
 		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
+	badValidate := func(u *pb.UpdateRequest) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		out, err := savedGenerateValidate(u)
+		if err != nil {
+			return nil, err
+		}
+		validateCmdLine = strings.Join(out, " ")
+		return []string{testutil.ResolvePath(t, "false")}, nil
+	}
+
 	generateUpdate = func(u *pb.UpdateRequest) ([]string, error) {
 		// Capture what was generated so we can validate it.
 		out, err := savedGenerateUpdate(u)
@@ -227,7 +245,25 @@ func TestUpdate(t *testing.T) {
 			req: &pb.UpdateRequest{
 				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
 				Name:          "package",
+				OldVersion:    "0:1-1.2.3",
+				NewVersion:    "0:1-4.5.6",
+			},
+		},
+		{
+			name: "bad old version - nevra",
+			req: &pb.UpdateRequest{
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				Name:          "package",
 				OldVersion:    "1.2.3",
+				NewVersion:    "0:1-4.5.6",
+			},
+		},
+		{
+			name: "bad new version - nevra",
+			req: &pb.UpdateRequest{
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				Name:          "package",
+				OldVersion:    "0:1-1.2.3",
 				NewVersion:    "4.5.6",
 			},
 		},
@@ -337,15 +373,38 @@ func TestUpdate(t *testing.T) {
 	}
 	t.Logf("clean install response: %+v", resp)
 
-	// Test 2: Permutations on bad commands/output.
+	// Test 2: Validation fails:
+	save := generateValidate
+	generateValidate = badValidate
+	_, err = client.Update(ctx, req)
+	if err == nil {
+		t.Fatal("validate should have returned non-zero and failed update")
+	}
+	t.Log(err)
+	generateValidate = save
+
+	// Test 3: Permutations on bad commands/output.
 	for _, tc := range []struct {
 		name     string
 		generate func(*pb.UpdateRequest) ([]string, error)
+		validate func(*pb.UpdateRequest) ([]string, error)
 	}{
 		{
 			name: "bad command",
 			generate: func(*pb.UpdateRequest) ([]string, error) {
 				return []string{"/non-existant-binary"}, nil
+			},
+		},
+		{
+			name: "bad path - validate",
+			validate: func(*pb.UpdateRequest) ([]string, error) {
+				return []string{"bad path"}, nil
+			},
+		},
+		{
+			name: "bad path - update",
+			generate: func(*pb.UpdateRequest) ([]string, error) {
+				return []string{"bad path"}, nil
 			},
 		},
 		{
@@ -356,15 +415,23 @@ func TestUpdate(t *testing.T) {
 		},
 	} {
 		tc := tc
+		saveGenerate := generateUpdate
+		saveValidate := generateValidate
 		t.Run(tc.name, func(t *testing.T) {
-
-			generateUpdate = tc.generate
+			if tc.generate != nil {
+				generateUpdate = tc.generate
+			}
+			if tc.validate != nil {
+				generateValidate = tc.validate
+			}
 			resp, err := client.Update(ctx, req)
 			if err == nil {
 				t.Fatalf("didn't get expected error for %s Got %+v", tc.name, resp)
 			}
 			t.Log(err)
 		})
+		generateUpdate = saveGenerate
+		generateValidate = saveValidate
 	}
 }
 func TestListInstalled(t *testing.T) {
@@ -379,6 +446,8 @@ func TestListInstalled(t *testing.T) {
 	// Setup for feeding in test data for further tests.
 	testdataInput := "./testdata/yum-installed.out"
 	testdataInputBad := "./testdata/yum-installed-bad.out"
+	testdataInputBad2 := "./testdata/yum-installed-bad2.out"
+	testdataInputBad3 := "./testdata/yum-installed-bad3.out"
 	testdataGolden := "./testdata/yum-installed.textproto"
 
 	savedGenerateListInstalled := generateListInstalled
@@ -444,16 +513,18 @@ func TestListInstalled(t *testing.T) {
 	}
 
 	// Test 3: Now try with bad input. Should error out.
-	generateListInstalled = func(pb.PackageSystem) ([]string, error) {
-		return []string{testutil.ResolvePath(t, "cat"), testdataInputBad}, nil
+	for _, b := range []string{testdataInputBad, testdataInputBad2, testdataInputBad3} {
+		generateListInstalled = func(pb.PackageSystem) ([]string, error) {
+			return []string{testutil.ResolvePath(t, "cat"), b}, nil
+		}
+		resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{
+			PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
+		})
+		if err == nil {
+			t.Fatalf("expected error for bad input %s. Instead got %+v", b, resp)
+		}
+		t.Log(err)
 	}
-	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
-	})
-	if err == nil {
-		t.Fatalf("expected error for bad input. Instead got %+v", resp)
-	}
-	t.Log(err)
 
 	// Test 4: Permutations of bad commands/exit codes, stderr output.
 	for _, tc := range []struct {
@@ -467,6 +538,12 @@ func TestListInstalled(t *testing.T) {
 			},
 		},
 		{
+			name: "bad path",
+			generate: func(pb.PackageSystem) ([]string, error) {
+				return []string{"non-existant-binary"}, nil
+			},
+		},
+		{
 			name: "non-zero exit",
 			generate: func(pb.PackageSystem) ([]string, error) {
 				return []string{testutil.ResolvePath(t, "false")}, nil
@@ -474,6 +551,7 @@ func TestListInstalled(t *testing.T) {
 		},
 	} {
 		tc := tc
+		saveGenerate := generateListInstalled
 		t.Run(tc.name, func(t *testing.T) {
 			generateListInstalled = tc.generate
 			resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
@@ -482,6 +560,7 @@ func TestListInstalled(t *testing.T) {
 			}
 			t.Log(err)
 		})
+		generateListInstalled = saveGenerate
 	}
 }
 
@@ -569,6 +648,12 @@ func TestRepoList(t *testing.T) {
 			},
 		},
 		{
+			name: "bad path",
+			generate: func(pb.PackageSystem) ([]string, error) {
+				return []string{"non-existant-binary"}, nil
+			},
+		},
+		{
 			name: "non-zero exit",
 			generate: func(pb.PackageSystem) ([]string, error) {
 				return []string{testutil.ResolvePath(t, "false")}, nil
@@ -576,6 +661,7 @@ func TestRepoList(t *testing.T) {
 		},
 	} {
 		tc := tc
+		saveGenerate := generateRepoList
 		t.Run(tc.name, func(t *testing.T) {
 			generateRepoList = tc.generate
 			resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
@@ -584,5 +670,6 @@ func TestRepoList(t *testing.T) {
 			}
 			t.Log(err)
 		})
+		generateRepoList = saveGenerate
 	}
 }

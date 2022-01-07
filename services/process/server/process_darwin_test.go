@@ -8,8 +8,11 @@ var (
 	testdataPsTextProto = "./testdata/darwin_testdata.ps.textproto"
 	testdataPs          = "./testdata/darwin.ps"
 	badFilesPs          = []string{
-		"./testdata/darwin_bad0.ps",
-		"./testdata/darwin_bad1.ps",
+		"./testdata/darwin_bad0.ps", // empty file
+		"./testdata/darwin_bad1.ps", // bad pid entry
+		"./testdata/darwin_bad2.ps", // No entries (multiple blank lines)
+		"./testdata/darwin_bad3.ps", // Bad cpu value
+		"./testdata/darwin_bad4.ps", // Bad mem value
 	}
 
 	// Technically Darwin has no support but for precanned things we can use the linux test data.
