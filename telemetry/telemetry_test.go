@@ -13,7 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -39,31 +39,11 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// Need a null clientStream for testing.
-type clientStream struct{}
-
-func (*clientStream) Header() (metadata.MD, error) {
-	return nil, errors.New("unimplemented")
-}
-
-func (*clientStream) Trailer() metadata.MD {
-	return nil
-}
-
-func (*clientStream) CloseSend() error {
-	return errors.New("unimplemented")
-}
-
-func (*clientStream) Context() context.Context {
-	return context.Background()
-}
-
-func (*clientStream) SendMsg(interface{}) error {
-	return errors.New("unimplemented")
-}
-
-func (*clientStream) RecvMsg(interface{}) error {
-	return errors.New("unimplemented")
+func testLogging(t *testing.T, args, want string) {
+	t.Helper()
+	if !strings.Contains(args, want) {
+		t.Fatalf("didn't get expected logging args. got %q want %q within it", args, want)
+	}
 }
 
 func TestUnaryClient(t *testing.T) {
@@ -93,10 +73,7 @@ func TestUnaryClient(t *testing.T) {
 			t.Fatalf("didn't get expected method. got %s want %s", got, want)
 		}
 		// The logging should have happened by now
-		want := "new client request"
-		if !strings.Contains(args, want) {
-			t.Fatalf("didn't get expected logging args. got %q want %q within it", args, want)
-		}
+		testLogging(t, args, "new client request")
 		// Return an error
 		return errors.New(wantError)
 	}
@@ -125,7 +102,7 @@ func TestStreamClient(t *testing.T) {
 
 	intercept := StreamClientLogInterceptor(logger)
 
-	wantMethod := "foo"
+	wantMethod := "sendError"
 	wantError := "error"
 	// Testing is a little weird. This will be called below when we call intercept. Then additional state
 	// gets set on the error return we test below that.
@@ -138,15 +115,12 @@ func TestStreamClient(t *testing.T) {
 			t.Fatalf("didn't get expected method. got %s want %s", got, want)
 		}
 		// The logging should have happened by now
-		want := "new client stream"
-		if !strings.Contains(args, want) {
-			t.Fatalf("didn't get expected logging args. got %q want %q within it", args, want)
-		}
+		testLogging(t, args, "new client stream")
 		// Return an error
-		if method == "foo" {
+		if method == "sendError" {
 			return nil, errors.New(wantError)
 		}
-		return &clientStream{}, nil
+		return &testutil.FakeClientStream{}, nil
 	}
 	stream, err := intercept(context.Background(), nil, conn, wantMethod, streamer)
 	t.Log(err)
@@ -170,4 +144,122 @@ func TestStreamClient(t *testing.T) {
 	if _, err := logr.FromContext(stream.Context()); err != nil {
 		t.Fatal("returned stream doesn't contain a logging context")
 	}
+
+	if err := stream.SendMsg(nil); err == nil {
+		t.Fatal("didn't get error from SendMsg on fake client stream")
+	}
+
+	// The error logging should have happened by now.
+	testLogging(t, args, "SendMsg")
+
+	if err := stream.RecvMsg(nil); err == nil {
+		t.Fatal("didn't get error from RecvMsg on fake client stream")
+	}
+	// The error logging should have happened by now.
+	testLogging(t, args, "RecvMsg")
+
+	if err := stream.CloseSend(); err == nil {
+		t.Fatal("didn't get error from CloseSend on fake client stream")
+	}
+	// The error logging should have happened by now.
+	testLogging(t, args, "CloseSend")
+}
+
+func TestUnaryServer(t *testing.T) {
+	var args string
+	fn := func(p, a string) {
+		args = a
+	}
+	logger := funcr.New(fn, funcr.Options{})
+
+	intercept := UnaryServerLogInterceptor(logger)
+
+	wantMethod := "foo"
+	wantError := "error"
+	// Testing is a little weird. This will be called below when we call intercept. Then additional state
+	// gets set on the error return we test below that.
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		// Validate this is a proper logger context.
+		if _, err := logr.FromContext(ctx); err != nil {
+			t.Fatal("didn't get passed a logging context")
+		}
+
+		// The logging should have happened by now
+		testLogging(t, args, wantMethod)
+		testLogging(t, args, "new request")
+		// Return an error
+		return nil, errors.New(wantError)
+	}
+
+	info := &grpc.UnaryServerInfo{
+		FullMethod: wantMethod,
+	}
+	ctx := peer.NewContext(context.Background(), &peer.Peer{})
+	_, err := intercept(ctx, nil, info, handler)
+	t.Log(err)
+	if err == nil {
+		t.Fatal("didn't get expected error from intercept")
+	}
+	if got, want := err.Error(), wantError; got != want {
+		t.Fatalf("didn't get expected error. got %v want %v", got, want)
+	}
+}
+
+func TestStreamServer(t *testing.T) {
+	var args string
+	fn := func(p, a string) {
+		args = a
+	}
+	logger := funcr.New(fn, funcr.Options{})
+
+	intercept := StreamServerLogInterceptor(logger)
+
+	wantMethod := "foo"
+	wantError := "error"
+	// Testing is a little weird. This will be called below when we call intercept. Then additional state
+	// gets set on the error return we test below that.
+	handler := func(srv interface{}, stream grpc.ServerStream) error {
+		// Validate this is a proper logger context.
+		if _, err := logr.FromContext(stream.Context()); err != nil {
+			t.Fatal("didn't get passed a logging context")
+		}
+
+		// The logging should have happened by now
+		testLogging(t, args, wantMethod)
+		testLogging(t, args, "new stream")
+
+		if err := stream.SendMsg(nil); err == nil {
+			t.Fatal("didn't get error from SendMsg on fake client stream")
+		}
+
+		// The error logging should have happened by now.
+		testLogging(t, args, "SendMsg")
+
+		if err := stream.RecvMsg(nil); err == nil {
+			t.Fatal("didn't get error from RecvMsg on fake client stream")
+		}
+		// The error logging should have happened by now.
+		testLogging(t, args, "RecvMsg")
+
+		// Return an error
+		return errors.New(wantError)
+	}
+
+	info := &grpc.StreamServerInfo{
+		FullMethod: wantMethod,
+	}
+	ctx := peer.NewContext(context.Background(), &peer.Peer{})
+	ss := &testutil.FakeServerStream{
+		Ctx: ctx,
+	}
+
+	err := intercept(nil, ss, info, handler)
+	t.Log(err)
+	if err == nil {
+		t.Fatal("didn't get expected error from intercept")
+	}
+	if got, want := err.Error(), wantError; got != want {
+		t.Fatalf("didn't get expected error. got %v want %v", got, want)
+	}
+
 }
