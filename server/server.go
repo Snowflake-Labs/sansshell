@@ -14,6 +14,9 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 )
 
+// Provide as a var so tests can cancel the server.
+var srv *grpc.Server
+
 // Serve wraps up BuildServer in a succinct API for callers
 func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger) error {
 	lis, err := net.Listen("tcp", hostport)
@@ -21,12 +24,12 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string, l
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	s, err := BuildServer(c, policy, lis.Addr(), logger)
+	srv, err = BuildServer(c, policy, lis.Addr(), logger)
 	if err != nil {
 		return err
 	}
 
-	return s.Serve(lis)
+	return srv.Serve(lis)
 }
 
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor,

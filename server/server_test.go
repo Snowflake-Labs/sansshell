@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -61,6 +62,40 @@ func TestMain(m *testing.M) {
 	defer s.GracefulStop()
 
 	os.Exit(m.Run())
+}
+
+func TestBuildServer(t *testing.T) {
+	// Make sure a bad policy fails
+	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard())
+	t.Log(err)
+	if err == nil {
+		t.Fatal("Didn't get error for empty policy")
+	}
+}
+
+func TestServe(t *testing.T) {
+	// This test should be instant so just wait 5s and blow up
+	// any running server (which should be the last one).
+	go func() {
+		time.Sleep(5 * time.Second)
+		if srv != nil {
+			srv.Stop()
+		}
+	}()
+
+	err := Serve("-", nil, policy, logr.Discard())
+	if err == nil {
+		t.Fatal("Didn't get error for bad hostport")
+	}
+	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
+	if err == nil {
+		t.Fatal("Didn't get error for empty policy")
+	}
+
+	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
+	if err != nil {
+		t.Fatalf("Got an unexpected error from Serve: %v", err)
+	}
 }
 
 func TestRead(t *testing.T) {
