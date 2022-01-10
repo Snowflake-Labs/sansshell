@@ -68,5 +68,7 @@ func init() {
 	flag.StringVar(&serverKeyFile, "server-key", serverKeyFile, "Path to the server's TLS key")
 	flag.StringVar(&rootCAFile, "root-ca", rootCAFile, "The root of trust for remote identities, PEM format")
 
-	mtls.Register(loaderName, flagLoader{})
+	if err := mtls.Register(loaderName, flagLoader{}); err != nil {
+		panic(err)
+	}
 }
