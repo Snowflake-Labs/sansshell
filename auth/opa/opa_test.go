@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/open-policy-agent/opa/ast"
 )
 
@@ -16,9 +16,7 @@ func TestNewAuthzPolicy(t *testing.T) {
 		}
 	}
 	expectNoError := func(t *testing.T, err error) {
-		if err != nil {
-			t.Errorf("%s got error %v, want nil", t.Name(), err)
-		}
+		testutil.FatalOnErr(t.Name(), err, t)
 	}
 	for _, tc := range []struct {
 		name    string
@@ -98,12 +96,10 @@ allow {
 `
 	ctx := context.Background()
 	policy, err := NewAuthzPolicy(ctx, policyString)
-	tu.FatalOnErr("NewAuthzPolicy", err, t)
+	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
 	expectNoError := func(t *testing.T, err error) {
-		if err != nil {
-			t.Errorf("%s got error %v, want nil", t.Name(), err)
-		}
+		testutil.FatalOnErr(t.Name(), err, t)
 	}
 
 	for _, tc := range []struct {

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -117,18 +116,15 @@ func TestLoadClientTLS(t *testing.T) {
 	// Make sure this errors if we pass bad data like reversing things.
 	_, err = LoadClientTLS("testdata/leaf.key", "testdata/leaf.pem", CAPool)
 	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get an error for bad TLS client data")
-	}
+	testutil.FatalOnNoErr("bad TLS client data", err, t)
 }
 
 func TestLoadRootOfTrust(t *testing.T) {
 	_, err := LoadRootOfTrust("testdata/root.pem")
 	testutil.FatalOnErr("Failed to load root CA", err, t)
 
-	if _, err := LoadRootOfTrust("no-file"); err == nil {
-		t.Fatal("didn't get error for bad root CA")
-	}
+	_, err = LoadRootOfTrust("no-file")
+	testutil.FatalOnNoErr("bad CA root", err, t)
 }
 
 type simpleLoader struct {
@@ -198,13 +194,9 @@ func TestLoadClientServerCredentials(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := LoadServerCredentials(context.Background(), tc.loader)
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("server: didn't get expected error state. got %t want %t err %v", got, want, err)
-			}
+			testutil.WantErr("server", err, tc.wantErr, t)
 			_, err = LoadClientCredentials(context.Background(), tc.loader)
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("client: didn't get expected error state. got %t want %t err %v", got, want, err)
-			}
+			testutil.WantErr("client", err, tc.wantErr, t)
 		})
 	}
 }
@@ -281,12 +273,9 @@ func TestRegister(t *testing.T) {
 	testutil.FatalOnErr("Register()", err, t)
 	err = Register("bar", noopLoader{name: "bar"})
 	testutil.FatalOnErr("Register()", err, t)
-	if err := Register("foo", noopLoader{name: "foo"}); err == nil {
-		t.Error("Didn't get error for duplicate entry")
-	}
-	if diff := cmp.Diff([]string{"bar", "foo"}, Loaders()); diff != "" {
-		t.Errorf("Loaders() mismatch (-want, +got):\n%s", diff)
-	}
+	err = Register("foo", noopLoader{name: "foo"})
+	testutil.FatalOnNoErr("duplicate entry", err, t)
+	testutil.DiffErr("Loaders()", []string{"bar", "foo"}, Loaders(), t)
 	for _, name := range []string{"foo", "bar"} {
 		l, err := Loader(name)
 		testutil.FatalOnErr("Loader()", err, t)

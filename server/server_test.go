@@ -18,7 +18,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
-	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 const (
@@ -68,9 +68,7 @@ func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
 	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard())
 	t.Log(err)
-	if err == nil {
-		t.Fatal("Didn't get error for empty policy")
-	}
+	testutil.FatalOnNoErr("empty policy", err, t)
 }
 
 func TestServe(t *testing.T) {
@@ -84,25 +82,19 @@ func TestServe(t *testing.T) {
 	}()
 
 	err := Serve("-", nil, policy, logr.Discard())
-	if err == nil {
-		t.Fatal("Didn't get error for bad hostport")
-	}
+	testutil.FatalOnNoErr("bad hostport", err, t)
 	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
-	if err == nil {
-		t.Fatal("Didn't get error for empty policy")
-	}
+	testutil.FatalOnNoErr("empty policy", err, t)
 
 	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
-	if err != nil {
-		t.Fatalf("Got an unexpected error from Serve: %v", err)
-	}
+	testutil.FatalOnErr("Serve 127.0.0.1:0", err, t)
 }
 
 func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	tu.FatalOnErr("Failed to dial bufnet", err, t)
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	for _, tc := range []struct {
@@ -159,11 +151,11 @@ func TestRead(t *testing.T) {
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
 				}
-				tu.FatalOnErr("Can't write into buffer", err, t)
+				testutil.FatalOnErr("Can't write into buffer", err, t)
 			}
 
 			contents, err := os.ReadFile(tc.filename)
-			tu.FatalOnErr("reading test data", err, t)
+			testutil.FatalOnErr("reading test data", err, t)
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
 			}

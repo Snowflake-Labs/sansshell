@@ -11,7 +11,6 @@ import (
 
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
-	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
@@ -123,9 +122,7 @@ func TestInstall(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Install(ctx, tc.req)
-			if err == nil {
-				t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Logf("%s: %v", tc.name, err)
 		})
 	}
@@ -180,9 +177,7 @@ func TestInstall(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			generateInstall = tc.generate
 			resp, err := client.Install(ctx, req)
-			if err == nil {
-				t.Fatalf("didn't get expected error for %s Got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Log(err)
 		})
 		generateInstall = saveGenerate
@@ -340,9 +335,7 @@ func TestUpdate(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Update(ctx, tc.req)
-			if err == nil {
-				t.Fatalf("didn't get an error as expected for a %s. Instead got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Logf("%s: %v", tc.name, err)
 		})
 	}
@@ -377,9 +370,7 @@ func TestUpdate(t *testing.T) {
 	save := generateValidate
 	generateValidate = badValidate
 	_, err = client.Update(ctx, req)
-	if err == nil {
-		t.Fatal("validate should have returned non-zero and failed update")
-	}
+	testutil.FatalOnNoErr("validate should fail", err, t)
 	t.Log(err)
 	generateValidate = save
 
@@ -425,9 +416,7 @@ func TestUpdate(t *testing.T) {
 				generateValidate = tc.validate
 			}
 			resp, err := client.Update(ctx, req)
-			if err == nil {
-				t.Fatalf("didn't get expected error for %s Got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Log(err)
 		})
 		generateUpdate = saveGenerate
@@ -494,9 +483,7 @@ func TestListInstalled(t *testing.T) {
 	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
 	testutil.FatalOnErr("basic package list request", err, t)
 
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
-	}
+	testutil.DiffErr("basic package list request", resp, testdata, t, sortEntries)
 
 	if got, want := cmdLine, wantCmdLine; got != want {
 		t.Fatalf("command lines differ. Got %q Want %q", got, want)
@@ -508,9 +495,7 @@ func TestListInstalled(t *testing.T) {
 	})
 	testutil.FatalOnErr("basic package list request", err, t)
 
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
-	}
+	testutil.DiffErr("basic package list request yum", resp, testdata, t, sortEntries)
 
 	// Test 3: Now try with bad input. Should error out.
 	for _, b := range []string{testdataInputBad, testdataInputBad2, testdataInputBad3} {
@@ -520,9 +505,7 @@ func TestListInstalled(t *testing.T) {
 		resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{
 			PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
 		})
-		if err == nil {
-			t.Fatalf("expected error for bad input %s. Instead got %+v", b, resp)
-		}
+		testutil.FatalOnNoErr(fmt.Sprintf("bad input - resp %v", resp), err, t)
 		t.Log(err)
 	}
 
@@ -555,9 +538,7 @@ func TestListInstalled(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			generateListInstalled = tc.generate
 			resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
-			if err == nil {
-				t.Fatalf("didn't get an error as expected for %s. Instead got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Log(err)
 		})
 		generateListInstalled = saveGenerate
@@ -606,9 +587,7 @@ func TestRepoList(t *testing.T) {
 	resp, err := client.RepoList(ctx, &pb.RepoListRequest{
 		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
 	})
-	if err == nil {
-		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("bad package enum - resp %v", resp), err, t)
 	t.Log(err)
 
 	// Test 1: No options. Should pick yum w/o error and give back our list.
@@ -619,9 +598,7 @@ func TestRepoList(t *testing.T) {
 	resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
 	testutil.FatalOnErr("basic repo list request", err, t)
 
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
-	}
+	testutil.DiffErr("no options repo list", resp, testdata, t, sortEntries)
 
 	if got, want := cmdLine, wantCmdLine; got != want {
 		t.Fatalf("command lines differ. Got %q Want %q", got, want)
@@ -632,9 +609,7 @@ func TestRepoList(t *testing.T) {
 	})
 	testutil.FatalOnErr("basic repo list request", err, t)
 
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries); diff != "" {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
-	}
+	testutil.DiffErr("repo list yum", resp, testdata, t, sortEntries)
 
 	// Test 3: Permutations of bad commands/exit codes, stderr output.
 	for _, tc := range []struct {
@@ -665,9 +640,7 @@ func TestRepoList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			generateRepoList = tc.generate
 			resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
-			if err == nil {
-				t.Fatalf("didn't get an error as expected for %s. Instead got %+v", tc.name, resp)
-			}
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			t.Log(err)
 		})
 		generateRepoList = saveGenerate
