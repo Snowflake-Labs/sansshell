@@ -3,18 +3,45 @@ syntax="proto3";
 package Service;
 option go_package = "github.com/Snowflake-Labs/sansshell/services/service";
 
+service Service {
+  // List returns a list of services with attendent status.
+  rpc List(ListRequest) returns (ListReply) {}
+  // Status requests the status of a single service.
+  rpc Status(StatusRequest) returns (StatusReply) {}
+  // Action alters the status of a single service.
+  rpc Action(ActionRequest) returns (ActionReply) {}
+}
+
 // A SystemType specifies the service management system
 // on which to operate.
+// The 'unknown' value, if specified in a request, will
+// map to an appropriate implementation-defined default
+// for the system running SansShell.
 enum SystemType {
   SYSTEM_TYPE_UKNOWN = 0;
   SYSTEM_TYPE_SYSTEMD = 1;
 };
 
 // The operational status of the service.
-enum ServiceStatus {
+enum Status {
   STATUS_UNKNOWN = 0;
   STATUS_RUNNING = 1;
   STATUS_STOPPED = 2;
+}
+
+// An action taken to modify the operational status of a
+// service.
+enum Action {
+  ACTION_UNKNOWN = 0;
+  ACTION_START = 1;
+  ACTION_STOP = 2;
+  ACTION_RESTART = 3;
+}
+
+// ServiceStatus pairs a service with it's current status.
+message ServiceStatus {
+  string service_name = 1;
+  Status status = 2;
 }
 
 // A request to list all configured services for a single
@@ -27,11 +54,7 @@ message ListRequest {
 // status.
 message ListReply {
   SystemType system_type = 1;
-  message ServiceEntry {
-    string service_name = 1;
-    ServiceStatus status = 2;
-  }
-  repeated ServiceEntry services = 2;
+  repeated ServiceStatus services = 2;
 }
 
 // A request to list the status of a single service.
@@ -44,20 +67,13 @@ message StatusRequest {
 // a single service.
 message StatusReply {
   SystemType system_type = 1;
-  string service_name = 2;
-  ServiceStatus status = 3;
+  ServiceStatus service_status = 2;
 }
 
 // A request to alter the state of a single service.
 message ActionRequest {
   SystemType system_type = 1;
   string service_name = 2;
-  enum Action {
-    ACTION_UNKNOWN = 0;
-    ACTION_START = 1;
-    ACTION_STOP = 2;
-    ACTION_RESTART = 3;
-  };
   Action action = 3;
 }
 
@@ -66,13 +82,4 @@ message ActionReply {
   SystemType system_type = 1;
   string service_name = 2;
   string debug_output = 3;
-}
-
-service Service {
-  // List returns a list of services with attendent status.
-  rpc List(ListRequest) returns (ListReply) {}
-  // Status requests the status of a single service.
-  rpc Status(StatusRequest) returns (StatusReply) {}
-  // Action alters the status of a single service.
-  rpc Action(ActionRequest) returns (ActionReply) {}
 }

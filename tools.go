@@ -19,7 +19,10 @@ import (
 // targets makes it possible to regenerate all services
 // by executing `go generate` against this file.
 
+//go:generate go generate ./services/ansible
 //go:generate go generate ./services/exec
 //go:generate go generate ./services/healthcheck
 //go:generate go generate ./services/localfile
 //go:generate go generate ./services/packages
+//go:generate go generate ./services/process
+//go:generate go generate ./services/service
