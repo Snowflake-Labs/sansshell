@@ -23,16 +23,33 @@ func TestNewAuthzPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		policy  string
+		query   string
 		errFunc func(*testing.T, error)
 	}{
 		{
 			name:    "good minimal policy",
-			policy:  `package sansshell.authz`,
+			policy:  "package sansshell.authz",
 			errFunc: expectNoError,
 		},
 		{
+			name:    "good minimal policy with alternate query",
+			policy:  "package sansshell.authz",
+			query:   "data.sansshell.authz.deny",
+			errFunc: expectNoError,
+		},
+		{
+			name:   "good policy, bad query",
+			policy: "package sansshell.authz",
+			query:  "d.sansshell.authz.allow",
+			errFunc: func(t *testing.T, err error) {
+				if err == nil || !strings.Contains(err.Error(), "PrepareForEval") {
+					t.Errorf("%s got error %v, want PrepareForEval", t.Name(), err)
+				}
+			},
+		},
+		{
 			name:    "invalid policy",
-			policy:  `foo := bar`,
+			policy:  "foo := bar",
 			errFunc: expectParseError,
 		},
 		{
@@ -42,7 +59,7 @@ func TestNewAuthzPolicy(t *testing.T) {
 		},
 		{
 			name:   "non-sansshell package",
-			policy: `package another.name`,
+			policy: "package another.name",
 			errFunc: func(t *testing.T, err error) {
 				if err == nil || !strings.Contains(err.Error(), "invalid package") {
 					t.Errorf("%s got error %v, want error with 'invalid package'", t.Name(), err)
@@ -52,7 +69,11 @@ func TestNewAuthzPolicy(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewAuthzPolicy(context.Background(), tc.policy)
+			var opts []Option
+			if tc.query != "" {
+				opts = append(opts, WithAllowQuery(tc.query))
+			}
+			_, err := NewAuthzPolicy(context.Background(), tc.policy, opts...)
 			tc.errFunc(t, err)
 		})
 	}
