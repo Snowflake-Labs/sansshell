@@ -241,7 +241,7 @@ func TestTail(t *testing.T) {
 	// This should cause Recv() to fail
 	resp, err = stream.Recv()
 	t.Log(err)
-	testutil.FatalOnNoErr("recv with cancelled context", err, t)
+	testutil.FatalOnNoErr(fmt.Sprintf("recv with cancelled context - resp %v", resp), err, t)
 }
 
 func TestStat(t *testing.T) {
