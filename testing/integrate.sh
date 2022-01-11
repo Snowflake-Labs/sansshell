@@ -210,6 +210,70 @@ echo "Running tests (with tsan)"
 echo
 go test -count=1 -race -timeout 30s  -v ./... 
 check_status $? test
+egrep ^ok.*coverage:.*of.statements\|'no test files' ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
+
+# There are a bunch of directories where having no tests is fine.
+# They are either binaries, top level package directories or
+# testing code.
+for i in \
+  github.com/Snowflake-Labs/sansshell/auth/mtls/flags \
+  github.com/Snowflake-Labs/sansshell/cmd \
+  github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
+  github.com/Snowflake-Labs/sansshell/cmd/sanssh \
+  github.com/Snowflake-Labs/sansshell/cmd/sansshell-server \
+  github.com/Snowflake-Labs/sansshell/proxy \
+  github.com/Snowflake-Labs/sansshell/proxy/protoc-gen-go-grpcproxy \
+  github.com/Snowflake-Labs/sansshell/proxy/testutil \
+  github.com/Snowflake-Labs/sansshell/services \
+  github.com/Snowflake-Labs/sansshell/services/ansible \
+  github.com/Snowflake-Labs/sansshell/services/ansible/client \
+  github.com/Snowflake-Labs/sansshell/services/exec \
+  github.com/Snowflake-Labs/sansshell/services/exec/client \
+  github.com/Snowflake-Labs/sansshell/services/healthcheck \
+  github.com/Snowflake-Labs/sansshell/services/healthcheck/client \
+  github.com/Snowflake-Labs/sansshell/services/localfile \
+  github.com/Snowflake-Labs/sansshell/services/localfile/client \
+  github.com/Snowflake-Labs/sansshell/services/packages \
+  github.com/Snowflake-Labs/sansshell/services/packages/client \
+  github.com/Snowflake-Labs/sansshell/services/process \
+  github.com/Snowflake-Labs/sansshell/services/process/client \
+  github.com/Snowflake-Labs/sansshell/testing/testutil; do
+  
+  egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log > ${LOGS}/cover-filtered2.log
+  cp ${LOGS}/cover-filtered2.log ${LOGS}/cover-filtered.log
+done
+
+# Abort if either required packaged have no tests or coverage is below 85%
+# for any package.
+abort_tests=""
+egrep 'no test files' ${LOGS}/cover-filtered.log
+if [ $? == 0 ]; then
+  abort_tests="Packages with no tests"
+fi
+echo
+
+bad=false
+oIFS=${IFS}
+IFS="
+"
+for i in $(egrep % ${LOGS}/cover-filtered.log); do
+  percent=$(echo $i | sed -e "s,.*\(coverage:.*\),\1," | awk '{print $2}' | sed -e 's:\%::')
+  # Have to use bc as expr can't handle floats...
+  if [ $(printf "$percent < 85.0\n" | bc) == "1" ]; then
+    echo "Coverage not high enough"
+    echo $i
+    echo
+    bad=true
+  fi
+done
+IFS=${oIFS}
+
+if [ "$bad" == "true" ]; then
+  abort_tests="${abort_tests}  Packages with coverage too low"
+fi
+if [ -n "${abort_tests}" ]; then
+  check_status 1 "${abort_tests}"
+fi
 
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
