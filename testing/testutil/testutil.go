@@ -30,6 +30,15 @@ func FatalOnErr(op string, e error, t *testing.T) {
 	}
 }
 
+// FataOnNoErr is a testing helper function to test and abort when we get no error.
+// Reduces 3 lines to 1 for common error checking.
+func FatalOnNoErr(op string, e error, t *testing.T) {
+	t.Helper()
+	if e == nil {
+		t.Fatalf("%s: err was nil", op)
+	}
+}
+
 // WantErr is a testing helper for comparing boolean expected error state.
 // Reduces 3 lines to 1 for common error checking.
 func WantErr(err error, want bool, t *testing.T) {
