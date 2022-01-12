@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -389,16 +390,29 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "can't open bucket %s - %v", req.Bucket, err)
 	}
+
+	// Something else may error so append onto it.
+	defer func() {
+		if err := b.Close(); err != nil {
+			retErr = fmt.Errorf("%v %v", retErr, err)
+		}
+	}()
+
 	reader, err := b.NewReader(ctx, req.Key, nil)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "can't open key %s in bucket %s - %v", req.Key, req.Bucket, err)
 	}
+
+	// Something else may error so append onto it.
+	defer func() {
+		if err := reader.Close(); err != nil {
+			retErr = fmt.Errorf("%v %v", retErr, err)
+		}
+	}()
+
 	written, err := io.Copy(f, reader)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "can't copy from bucket %s/%s Only wrote %d bytes - %v", req.Bucket, req.Key, written, err)
-	}
-	if err := b.Close(); err != nil {
-		return nil, status.Errorf(codes.Internal, "error closing bucket %s - %v", req.Bucket, err)
 	}
 
 	// Finalize to the final destination and possibly set immutable.
