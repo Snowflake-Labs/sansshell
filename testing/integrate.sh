@@ -215,7 +215,9 @@ egrep ^ok.*coverage:.*of.statements\|'no test files' ${LOGS}/cover.log > ${LOGS}
 # There are a bunch of directories where having no tests is fine.
 # They are either binaries, top level package directories or
 # testing code.
+# TODO(jchacon): Write these tests for proxy/proxy !
 for i in \
+  github.com/Snowflake-Labs/sansshell/proxy/proxy \
   github.com/Snowflake-Labs/sansshell/auth/mtls/flags \
   github.com/Snowflake-Labs/sansshell/cmd \
   github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
