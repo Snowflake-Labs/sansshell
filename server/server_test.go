@@ -76,8 +76,8 @@ func TestServe(t *testing.T) {
 	// any running server (which should be the last one).
 	go func() {
 		time.Sleep(5 * time.Second)
-		if srv != nil {
-			srv.Stop()
+		if getSrv() != nil {
+			getSrv().Stop()
 		}
 	}()
 

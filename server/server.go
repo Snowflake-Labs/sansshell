@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -14,8 +15,11 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 )
 
-// Provide as a var so tests can cancel the server.
-var srv *grpc.Server
+var (
+	// Provide as a var so tests can cancel the server.
+	srv *grpc.Server
+	mu  sync.Mutex
+)
 
 // Serve wraps up BuildServer in a succinct API for callers
 func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger) error {
@@ -24,12 +28,21 @@ func Serve(hostport string, c credentials.TransportCredentials, policy string, l
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
+	mu.Lock()
 	srv, err = BuildServer(c, policy, lis.Addr(), logger)
+	mu.Unlock()
 	if err != nil {
 		return err
 	}
 
 	return srv.Serve(lis)
+}
+
+// Test helper to get at srv
+func getSrv() *grpc.Server {
+	mu.Lock()
+	defer mu.Unlock()
+	return srv
 }
 
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor,
