@@ -215,7 +215,9 @@ egrep ^ok.*coverage:.*of.statements\|'no test files' ${LOGS}/cover.log > ${LOGS}
 # There are a bunch of directories where having no tests is fine.
 # They are either binaries, top level package directories or
 # testing code.
+# TODO(jchacon): Write these tests for proxy/proxy !
 for i in \
+  github.com/Snowflake-Labs/sansshell/proxy/proxy \
   github.com/Snowflake-Labs/sansshell/auth/mtls/flags \
   github.com/Snowflake-Labs/sansshell/cmd \
   github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
@@ -409,7 +411,7 @@ echo "uid, etc checks passed"
 
 run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
-echo cp text with bucket syntax
+echo cp test with bucket syntax
 aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
 run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
