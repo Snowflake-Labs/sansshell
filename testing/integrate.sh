@@ -210,6 +210,12 @@ echo "Running tests (with tsan)"
 echo
 go test -count=1 -race -timeout 30s  -v ./... 
 check_status $? test
+
+echo "Checking coverage - logs in ${LOGS}/cover.log"
+echo
+go test -timeout 30s -v -coverprofile=/tmp/go-code-cover 2>&1 | tee ${LOGS}/cover.log
+check_status $? coverage
+
 egrep ^ok.*coverage:.*of.statements\|'no test files' ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
 
 # There are a bunch of directories where having no tests is fine.
