@@ -14,6 +14,3 @@ jobs:
       - name: go tests
         run: |
           go test -v -count=1 -race -timeout 30m ./...
-      - name: integration tests
-        run: |
-          ./testing/integrate.sh
