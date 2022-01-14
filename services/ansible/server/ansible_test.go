@@ -181,9 +181,7 @@ func TestRun(t *testing.T) {
 			t.Logf("%s: resp: %+v", tc.name, resp)
 			t.Logf("%s: err: %v", tc.name, err)
 			if tc.wantErr {
-				if got, want := err != nil, tc.wantErr; got != want {
-					t.Fatalf("%s: Unexpected error state. Wanted error and got %+v response", tc.name, resp)
-				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
 				return
 			}
 			if tc.returnCodeNonZero && resp.ReturnCode == 0 {

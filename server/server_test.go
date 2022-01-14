@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -17,7 +18,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
-	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 const (
@@ -63,11 +64,37 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestBuildServer(t *testing.T) {
+	// Make sure a bad policy fails
+	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard())
+	t.Log(err)
+	testutil.FatalOnNoErr("empty policy", err, t)
+}
+
+func TestServe(t *testing.T) {
+	// This test should be instant so just wait 5s and blow up
+	// any running server (which should be the last one).
+	go func() {
+		time.Sleep(5 * time.Second)
+		if getSrv() != nil {
+			getSrv().Stop()
+		}
+	}()
+
+	err := Serve("-", nil, policy, logr.Discard())
+	testutil.FatalOnNoErr("bad hostport", err, t)
+	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
+	testutil.FatalOnNoErr("empty policy", err, t)
+
+	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
+	testutil.FatalOnErr("Serve 127.0.0.1:0", err, t)
+}
+
 func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
-	tu.FatalOnErr("Failed to dial bufnet", err, t)
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
 	for _, tc := range []struct {
@@ -124,11 +151,11 @@ func TestRead(t *testing.T) {
 				if got, want := n, len(contents); got != want {
 					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
 				}
-				tu.FatalOnErr("Can't write into buffer", err, t)
+				testutil.FatalOnErr("Can't write into buffer", err, t)
 			}
 
 			contents, err := os.ReadFile(tc.filename)
-			tu.FatalOnErr("reading test data", err, t)
+			testutil.FatalOnErr("reading test data", err, t)
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
 			}

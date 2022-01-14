@@ -21,9 +21,8 @@ import (
 func Exchange(t *testing.T, stream pb.Proxy_ProxyClient, req *pb.ProxyRequest) *pb.ProxyReply {
 	t.Helper()
 	if req != nil {
-		if err := stream.Send(req); err != nil {
-			t.Fatalf("ProxyClient.Send(%v), err was %v, want nil", req, err)
-		}
+		err := stream.Send(req)
+		testutil.FatalOnErr(fmt.Sprintf("ProxyClient.Send(%v)", req), err, t)
 	}
 	reply, err := stream.Recv()
 	testutil.FatalOnErr("ProxyClient.Recv()", err, t)

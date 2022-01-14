@@ -6,7 +6,9 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 // ResolvePath takes a binary name and attempts to resolve it for testing or fatal out.
@@ -25,6 +27,38 @@ func FatalOnErr(op string, e error, t *testing.T) {
 	t.Helper()
 	if e != nil {
 		t.Fatalf("%s: err was %v, want nil", op, e)
+	}
+}
+
+// FataOnNoErr is a testing helper function to test and abort when we get no error.
+// Reduces 3 lines to 1 for common error checking.
+func FatalOnNoErr(op string, e error, t *testing.T) {
+	t.Helper()
+	if e == nil {
+		t.Fatalf("%s: err was nil", op)
+	}
+}
+
+// WantErr is a testing helper for comparing boolean expected error state.
+// Reduces 3 lines to 1 for common error checking.
+func WantErr(op string, err error, want bool, t *testing.T) {
+	t.Helper()
+	if got := err != nil; got != want {
+		t.Fatalf("%s: unexpected error state. got %t want %t err %v", op, got, want, err)
+	}
+}
+
+// DiffErr compares 2 messages (including optional transforms) and throws
+// a testing Fatal on diff. This assumes they are usually proto messages so will
+// automatically include protocmp.Transform() for the caller. It's harmless for the
+// non-proto case.
+// Reduces 3 lines to 1 for common error checking.
+func DiffErr(op string, resp interface{}, compare interface{}, t *testing.T, opts ...cmp.Option) {
+	t.Helper()
+	diffOpts := []cmp.Option{protocmp.Transform()}
+	diffOpts = append(diffOpts, opts...)
+	if diff := cmp.Diff(resp, compare, diffOpts...); diff != "" {
+		t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", op, resp, compare, diff)
 	}
 }
 
