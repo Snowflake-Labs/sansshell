@@ -13,6 +13,7 @@ import (
 
 import (
 	"fmt"
+	"io"
 )
 
 // TestServiceClientProxy is the superset of TestServiceClient which additionally includes the OneMany proxy methods
@@ -114,7 +115,8 @@ type TestService_TestServerStreamClientProxy interface {
 }
 
 type testServiceClientTestServerStreamClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -125,15 +127,23 @@ func (x *testServiceClientTestServerStreamClientProxy) Recv() ([]*TestServerStre
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &TestResponse{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &TestResponse{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &TestServerStreamManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -167,7 +177,7 @@ func (c *testServiceClientProxy) TestServerStreamOneMany(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestServerStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &testServiceClientTestServerStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -192,7 +202,8 @@ type TestService_TestClientStreamClientProxy interface {
 }
 
 type testServiceClientTestClientStreamClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -210,15 +221,23 @@ func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() ([]*TestCl
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &TestResponse{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &TestResponse{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &TestClientStreamManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -269,7 +288,7 @@ func (c *testServiceClientProxy) TestClientStreamOneMany(ctx context.Context, op
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestClientStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &testServiceClientTestClientStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	return x, nil
 }
 
@@ -288,7 +307,8 @@ type TestService_TestBidiStreamClientProxy interface {
 }
 
 type testServiceClientTestBidiStreamClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -303,15 +323,23 @@ func (x *testServiceClientTestBidiStreamClientProxy) Recv() ([]*TestBidiStreamMa
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &TestResponse{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &TestResponse{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &TestBidiStreamManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -345,6 +373,6 @@ func (c *testServiceClientProxy) TestBidiStreamOneMany(ctx context.Context, opts
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestBidiStreamClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &testServiceClientTestBidiStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	return x, nil
 }
