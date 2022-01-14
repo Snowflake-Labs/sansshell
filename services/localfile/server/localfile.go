@@ -394,7 +394,7 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	// Something else may error so append onto it.
 	defer func() {
 		if err := b.Close(); err != nil {
-			retErr = fmt.Errorf("%v %v", retErr, err)
+			retErr = fmt.Errorf("%w %v", retErr, err)
 		}
 	}()
 
@@ -406,7 +406,7 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	// Something else may error so append onto it.
 	defer func() {
 		if err := reader.Close(); err != nil {
-			retErr = fmt.Errorf("%v %v", retErr, err)
+			retErr = fmt.Errorf("%w %v", retErr, err)
 		}
 	}()
 
