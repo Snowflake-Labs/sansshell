@@ -3,14 +3,23 @@
 package testutil
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"math/rand"
+	"net"
+	"strings"
 	"testing"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
+	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
@@ -95,4 +104,150 @@ func UnpackStreamData(t *testing.T, reply *pb.ProxyReply) ([]uint64, proto.Messa
 	data, err := sd.Payload.UnmarshalNew()
 	testutil.FatalOnErr(fmt.Sprintf("anypb.UnmarshalNew(%v)", sd), err, t)
 	return sd.StreamIds, data
+}
+
+// EchoTestDataServer is a TestDataServiceServer for testing
+type EchoTestDataServer struct {
+	serverName string
+}
+
+func (e *EchoTestDataServer) TestUnary(ctx context.Context, req *tdpb.TestRequest) (*tdpb.TestResponse, error) {
+	if req.Input == "error" {
+		return nil, errors.New("error")
+	}
+	return &tdpb.TestResponse{
+		Output: fmt.Sprintf("%s %s", e.serverName, req.Input),
+	}, nil
+}
+
+func (e *EchoTestDataServer) TestServerStream(req *tdpb.TestRequest, stream tdpb.TestService_TestServerStreamServer) error {
+	if req.Input == "error" {
+		return errors.New("error")
+	}
+	for i := 0; i < 5; i++ {
+		stream.Send(&tdpb.TestResponse{
+			Output: fmt.Sprintf("%s %d %s", e.serverName, i, req.Input),
+		})
+	}
+	return nil
+}
+
+func (e *EchoTestDataServer) TestClientStream(stream tdpb.TestService_TestClientStreamServer) error {
+	var inputs []string
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			for _, i := range inputs {
+				if i == "error" {
+					return errors.New("error")
+				}
+			}
+			return stream.SendAndClose(&tdpb.TestResponse{
+				Output: fmt.Sprintf("%s %s", e.serverName, strings.Join(inputs, ",")),
+			})
+		}
+		if err != nil {
+			return err
+		}
+		inputs = append(inputs, req.Input)
+	}
+}
+
+func (e *EchoTestDataServer) TestBidiStream(stream tdpb.TestService_TestBidiStreamServer) error {
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if req.Input == "error" {
+			return errors.New("error")
+		}
+		if err := stream.Send(&tdpb.TestResponse{
+			Output: fmt.Sprintf("%s %s", e.serverName, req.Input),
+		}); err != nil {
+			return nil
+		}
+	}
+}
+
+func NewRpcAuthorizer(ctx context.Context, t *testing.T, policy string) *rpcauth.Authorizer {
+	t.Helper()
+	auth, err := rpcauth.NewWithPolicy(ctx, policy)
+	testutil.FatalOnErr(fmt.Sprintf("rpcauth.NewWithPolicy(%s)", policy), err, t)
+	return auth
+}
+
+func NewAllowAllRpcAuthorizer(ctx context.Context, t *testing.T) *rpcauth.Authorizer {
+	policy := `
+package sansshell.authz
+default allow = true
+`
+	return NewRpcAuthorizer(ctx, t, policy)
+}
+
+func WithBufDialer(m map[string]*bufconn.Listener) grpc.DialOption {
+	return grpc.WithContextDialer(func(ctx context.Context, target string) (net.Conn, error) {
+		l := m[target]
+		if l == nil {
+			return nil, fmt.Errorf("no conn for target %s", target)
+		}
+		c, err := l.Dial()
+		if err != nil {
+			return nil, err
+		}
+		return &targetConn{Conn: c, target: target}, nil
+	})
+}
+
+//
+const BufSize = 1024 * 1024
+
+// targetAddr is a net.Addr that returns a target as it's address.
+type targetAddr string
+
+func (t targetAddr) String() string {
+	return string(t)
+}
+func (t targetAddr) Network() string {
+	return "bufconn"
+}
+
+// targetConn is a net.Conn that returns a targetAddr for its
+// remote address
+type targetConn struct {
+	net.Conn
+	target string
+}
+
+func (t *targetConn) RemoteAddr() net.Addr {
+	return targetAddr(t.target)
+}
+
+func StartTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
+	t.Helper()
+	lis := bufconn.Listen(BufSize)
+	echoServer := &EchoTestDataServer{serverName: serverName}
+	rpcServer := grpc.NewServer()
+	tdpb.RegisterTestServiceServer(rpcServer, echoServer)
+	go func() {
+		// Don't care about errors here as they might come on shutdown and we
+		// can't log through t at that point anyways.
+		rpcServer.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		rpcServer.Stop()
+	})
+	return lis
+}
+
+func StartTestDataServers(t *testing.T, serverNames ...string) map[string]*bufconn.Listener {
+	t.Helper()
+	out := map[string]*bufconn.Listener{}
+	for _, name := range serverNames {
+		out[name] = StartTestDataServer(t, name)
+	}
+	return out
 }
