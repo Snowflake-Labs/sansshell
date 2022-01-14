@@ -50,7 +50,8 @@ func WantErr(op string, err error, want bool, t *testing.T) {
 
 // DiffErr compares 2 messages (including optional transforms) and throws
 // a testing Fatal on diff. This assumes they are usually proto messages so will
-// automatically include protocmp.Transform() for the caller.
+// automatically include protocmp.Transform() for the caller. It's harmless for the
+// non-proto case.
 // Reduces 3 lines to 1 for common error checking.
 func DiffErr(op string, resp interface{}, compare interface{}, t *testing.T, opts ...cmp.Option) {
 	t.Helper()
