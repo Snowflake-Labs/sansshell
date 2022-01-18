@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"testing"
 
+	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
@@ -130,6 +132,7 @@ func TestUnary(t *testing.T) {
 
 			if !tc.wantErrOneMany {
 				for r := range resp {
+					t.Logf("%+v", r)
 					tu.FatalOnErr(fmt.Sprintf("target %s", r.Target), r.Error, t)
 				}
 			}
@@ -138,9 +141,10 @@ func TestUnary(t *testing.T) {
 			t.Log(err)
 			tu.WantErr(tc.name, err, tc.wantErr, t)
 
-			_, err = ts.TestUnaryOneMany(context.Background(), &tdpb.TestRequest{Input: "error"})
+			resp, err = ts.TestUnaryOneMany(context.Background(), &tdpb.TestRequest{Input: "error"})
 			tu.FatalOnErr("TestUnaryOneMany error", err, t)
 			for r := range resp {
+				t.Logf("%+v", r)
 				tu.FatalOnNoErr(fmt.Sprintf("target %s", r.Target), r.Error, t)
 			}
 
@@ -229,11 +233,15 @@ func TestStreaming(t *testing.T) {
 				t.Fatal("Context() returned nil")
 			}
 
-			// Send one normal and one error. We should get back 4 replies, # targets errors in that.
+			// Send one normal and one error. We should get back N replies, # targets errors in that.
 			err = stream.Send(&tdpb.TestRequest{Input: "input"})
 			tu.FatalOnErr("Send", err, t)
 			err = stream.Send(&tdpb.TestRequest{Input: "error"})
 			tu.FatalOnErr("Send error", err, t)
+
+			// Shouldn't fail.
+			err = stream.CloseSend()
+			tu.FatalOnErr("CloseSend", err, t)
 
 			errors := 0
 
@@ -258,15 +266,50 @@ func TestStreaming(t *testing.T) {
 				t.Fatalf("Invalid error count, got %d want %d", got, want)
 			}
 
-			// Shouldn't fail.
-			err = stream.CloseSend()
-			tu.FatalOnErr("CloseSend", err, t)
-
 			// Should give an error now
 			err = stream.Send(&tdpb.TestRequest{Input: "input"})
 			tu.FatalOnNoErr("Send on closed", err, t)
 			conn.Close()
 		})
 	}
+
+}
+
+type fakeProxy struct {
+	action string
+}
+
+func (f *fakeProxy) Proxy(stream proxypb.Proxy_ProxyServer) error {
+	return nil
+}
+
+func TestWithFakeServerForErrors(t *testing.T) {
+	// Setup our fake server.
+	ctx := context.Background()
+	lis := bufconn.Listen(testutil.BufSize)
+	authz := testutil.NewAllowAllRpcAuthorizer(ctx, t)
+	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
+	fp := &fakeProxy{}
+	proxypb.RegisterProxyServer(grpcServer, fp)
+	go func() {
+		// Don't care about errors here as they might come on shutdown and we
+		// can't log through t at that point anyways.
+		grpcServer.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		grpcServer.Stop()
+	})
+
+	bd := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	// This should fail since we don't set credentials
+	_, err := proxy.DialContext(ctx, "b", []string{"foo:123", "bar:123"})
+	tu.FatalOnNoErr("DialContext", err, t)
+
+	// This should give us a valid conn for tests.
+	_, err = proxy.DialContext(ctx, "bufnet", []string{"foo:123", "bar:123"}, grpc.WithContextDialer(bd), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	tu.FatalOnErr("Dial", err, t)
 
 }
