@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
@@ -24,7 +25,7 @@ import (
 
 func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz *rpcauth.Authorizer) pb.Proxy_ProxyClient {
 	t.Helper()
-	targetDialer := NewDialer(testutil.WithBufDialer(targets), grpc.WithInsecure())
+	targetDialer := NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	lis := bufconn.Listen(testutil.BufSize)
 	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
 	proxyServer := New(targetDialer, authz)
@@ -38,7 +39,7 @@ func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[stri
 		grpcServer.Stop()
 	})
 	bufMap := map[string]*bufconn.Listener{"proxy": lis}
-	conn, err := grpc.DialContext(ctx, "proxy", testutil.WithBufDialer(bufMap), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "proxy", testutil.WithBufDialer(bufMap), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	tu.FatalOnErr("DialContext(proxy)", err, t)
 	stream, err := pb.NewProxyClient(conn).Proxy(ctx)
 	tu.FatalOnErr("proxy.Proxy()", err, t)

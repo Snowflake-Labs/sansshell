@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -49,7 +50,7 @@ func testLogging(t *testing.T, args, want string) {
 func TestUnaryClient(t *testing.T) {
 	// We need the basics of a connection to satisfy a real ClientConn below.
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 
 	var args string
@@ -89,7 +90,7 @@ func TestUnaryClient(t *testing.T) {
 func TestStreamClient(t *testing.T) {
 	// We need the basics of a connection to satisfy a real ClientConn below.
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 
 	var args string

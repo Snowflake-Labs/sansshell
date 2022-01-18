@@ -18,6 +18,7 @@ import (
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -60,7 +61,7 @@ func TestListNative(t *testing.T) {
 
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -98,7 +99,7 @@ func TestList(t *testing.T) {
 
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -217,7 +218,7 @@ func TestPstackNative(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -259,7 +260,7 @@ func TestPstack(t *testing.T) {
 
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -405,7 +406,7 @@ func TestPstack(t *testing.T) {
 func TestJstack(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -521,7 +522,7 @@ func TestJstack(t *testing.T) {
 func TestMemoryDump(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
