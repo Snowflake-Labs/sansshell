@@ -21,7 +21,10 @@ function shutdown {
   if [ -n "${PROXY_PID}" ]; then
     kill -KILL ${PROXY_PID}
   fi
-  aws s3 rm s3://${USER}-dev/hosts
+  # Skip if on github
+  if [ -z "${ON_GITHUB}" ]; then
+    aws s3 rm s3://${USER}-dev/hosts
+  fi
   sudo killall sansshell-server
 }
 
@@ -176,6 +179,11 @@ function check_perms_mode {
 }
 
 PROXY_PID=""
+ON_GITHUB=""
+
+if [ -n "${GITHUB_ACTION}" ]; then
+  ON_GITHUB="true"
+fi
 
 OS=$(uname -s)
 if [ "${OS}" != "Linux" ]; then
@@ -294,11 +302,12 @@ if [ -n "${abort_tests}" ]; then
   check_status 1 "${abort_tests}"
 fi
 
-env
-
-# Remove zziplib so we can reinstall it
-echo "Removing zziplib package so install can put it back"
-sudo yum remove -y zziplib
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  # Remove zziplib so we can reinstall it
+  echo "Removing zziplib package so install can put it back"
+  sudo yum remove -y zziplib
+fi
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
@@ -310,20 +319,23 @@ disown %%
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
 sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
 
-# Make sure remote cloud works.
-# TODO(jchacon): Plumb a test account in via a flag instead of assuming this works.
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  # Make sure remote cloud works.
+  # TODO(jchacon): Plumb a test account in via a flag instead of assuming this works.
 
-# Check if the bucket exists and is in the right region. If it doesn't exist we'll
-# make it but otherwise abort.
-aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
-RC=$?
-if [ "$RC" = 0 ]; then
-  if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
-    check_status 1 Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+  # Check if the bucket exists and is in the right region. If it doesn't exist we'll
+  # make it but otherwise abort.
+  aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
+  RC=$?
+  if [ "$RC" = 0 ]; then
+    if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
+      check_status 1 Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+    fi
+  else
+    aws s3 mb s3://${USER}-dev --region us-west-2
+    check_status $? Making s3 bucket
   fi
-else
-  aws s3 mb s3://${USER}-dev --region us-west-2
-  check_status $? Making s3 bucket
 fi
 
 SANSSH_NOPROXY="./bin/sanssh --timeout=120s"
@@ -349,7 +361,10 @@ if [ "${HEALTHY}" != "true" ]; then
 fi
 echo "Servers healthy"
 
-run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+fi
 run_a_test false 2 run /usr/bin/echo Hello World
 run_a_test false 10 read /etc/hosts
 
@@ -430,11 +445,14 @@ echo "uid, etc checks passed"
 
 run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
-echo cp test with bucket syntax
-aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
-run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
-check_perms_mode ${LOGS}/cp-hosts
-aws s3 rm s3://${USER}-dev/hosts
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  echo cp test with bucket syntax
+  aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
+  run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
+  check_perms_mode ${LOGS}/cp-hosts
+  aws s3 rm s3://${USER}-dev/hosts
+fi
 
 # Trying without --overwrite to validate
 echo "This should emit an error message about overwrite"
@@ -479,10 +497,14 @@ check_status $? long list dir wrong. 1st line should start with drwx - See ${LOG
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
 check_status $? long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
-run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
-run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
-run_a_test false 50 list
-run_a_test false 50 repolist --verbose
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
+  run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
+  run_a_test false 50 list
+  run_a_test false 50 repolist --verbose
+fi
+
 run_a_test false 50 ps
 run_a_test true 20 pstack --pid=$$
 
@@ -495,20 +517,23 @@ for i in ${LOGS}/?.dump*; do
   check_status $? $i not a core file
 done
 
-echo "Dumping core to s3 bucket"
-${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
-check_status $? Remote dump to s3
-echo Dumping bucket
-aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
-cat ${LOGS}/s3-ls
-egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
-check_status $? cant find core in bucket
-CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
-aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
-file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
-check_status $? ${LOGS}/${CORE} is not a core file
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  echo "Dumping core to s3 bucket"
+  ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
+  check_status $? Remote dump to s3
+  echo Dumping bucket
+  aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
+  cat ${LOGS}/s3-ls
+  egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
+  check_status $? cant find core in bucket
+  CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
+  aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
+  file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
+  check_status $? ${LOGS}/${CORE} is not a core file
 
-aws s3 rm s3://${USER}-dev/${CORE}
+  aws s3 rm s3://${USER}-dev/${CORE}
+fi
 
 # TO{DO(j}chacon): Provide a java binary for test{s
 echo 
