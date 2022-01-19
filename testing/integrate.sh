@@ -373,12 +373,8 @@ if [ "${HEALTHY}" != "true" ]; then
 fi
 echo "Servers healthy"
 
-# Skip if on github
-if [ -z "${ON_GITHUB}" ]; then
-  run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
-else 
-  echo "Skipping ansible test on Github"
-fi
+run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+
 run_a_test false 2 run /usr/bin/echo Hello World
 run_a_test false 10 read /etc/hosts
 
@@ -518,7 +514,7 @@ check_status $? long list dir wrong. 1st line should start with drwx - See ${LOG
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
 check_status $? long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
-# Skip if on github
+# Skip if on github (we assume yum, no apt support yet)
 if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
   run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
@@ -530,19 +526,19 @@ fi
 
 run_a_test false 50 ps
 
+run_a_test true 20 pstack --pid=$$
+
+echo
+echo "Expect an error about ptrace failing when we do 2 hosts"
+run_a_test true 20 dump --pid=$$ --dump-type=GCORE
+# Cores get their own additional checks.
+for i in ${LOGS}/?.dump*; do
+  file $i | egrep -q "LSB core file.*from 'bash'"
+  check_status $? $i not a core file
+done
+
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
-  run_a_test true 20 pstack --pid=$$
-
-  echo
-  echo "Expect an error about ptrace failing when we do 2 hosts"
-  run_a_test true 20 dump --pid=$$ --dump-type=GCORE
-  # Cores get their own additional checks.
-  for i in ${LOGS}/?.dump*; do
-    file $i | egrep -q "LSB core file.*from 'bash'"
-    check_status $? $i not a core file
-  done
-
   echo "Dumping core to s3 bucket"
   ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
   check_status $? Remote dump to s3
@@ -558,7 +554,7 @@ if [ -z "${ON_GITHUB}" ]; then
 
   aws s3 rm s3://${USER}-dev/${CORE}
 else
-  echo "Skipping pstack and dump tests on Github"
+  echo "Skipping s3 dump tests on Github"
 fi
 
 
