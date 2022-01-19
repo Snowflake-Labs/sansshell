@@ -475,7 +475,10 @@ fi
 # Trying without --overwrite to validate
 echo "This should emit an error message about overwrite"
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
-if [ $? == 0 ]; then
+EC=$?
+printf "\nlog:\n\n"
+cat ${LOGS}/1.cp-no-overwrite
+if [ ${EC} == 0 ]; then
   check_status 1 Expected failure for no --overwrite from cp for existing file.
 fi
 
