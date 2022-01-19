@@ -181,7 +181,7 @@ function check_perms_mode {
 PROXY_PID=""
 ON_GITHUB=""
 
-if [ -n "${GITHUB_ACTION}" ]; then
+if [ -n "${GITHUB_ACTION:+""}" ]; then
   ON_GITHUB="true"
 fi
 
@@ -307,6 +307,8 @@ if [ -z "${ON_GITHUB}" ]; then
   # Remove zziplib so we can reinstall it
   echo "Removing zziplib package so install can put it back"
   sudo yum remove -y zziplib
+else 
+  echo "Skipping package setup on Github"
 fi
 
 echo
@@ -336,6 +338,8 @@ if [ -z "${ON_GITHUB}" ]; then
     aws s3 mb s3://${USER}-dev --region us-west-2
     check_status $? Making s3 bucket
   fi
+else 
+  echo "Skipping remote cloud setup on Github"
 fi
 
 SANSSH_NOPROXY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
@@ -368,6 +372,8 @@ echo "Servers healthy"
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+else 
+  echo "Skipping ansible test on Github"
 fi
 run_a_test false 2 run /usr/bin/echo Hello World
 run_a_test false 10 read /etc/hosts
@@ -427,7 +433,9 @@ EXPECTED_NEW_IMMUTABLE="i"
 # Determine the new mode but since it's in octal need help
 # adding this in the shell as we want to pass it in octal
 # to the chmod below.
-EXPECTED_NEW_MODE=0$(printf "8\ni\n8\no\n${ORIG_MODE}\n1\n+\np\n" | dc)
+CUR=$(printf "%d\n" ${ORIG_MODE})
+NEW=$(expr ${CUR} + 1)
+EXPECTED_NEW_MODE=$(printf "0%o" ${NEW})
 
 run_a_test false 0 chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
 run_a_test false 0 chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
@@ -456,6 +464,8 @@ if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
   check_perms_mode ${LOGS}/cp-hosts
   aws s3 rm s3://${USER}-dev/hosts
+else 
+  echo "Skipping cp with s3 on Github"
 fi
 
 # Trying without --overwrite to validate
@@ -507,6 +517,8 @@ if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
   run_a_test false 50 list
   run_a_test false 50 repolist --verbose
+else 
+  echo "Skipping package tests on Github"
 fi
 
 run_a_test false 50 ps
@@ -537,6 +549,8 @@ if [ -z "${ON_GITHUB}" ]; then
   check_status $? ${LOGS}/${CORE} is not a core file
 
   aws s3 rm s3://${USER}-dev/${CORE}
+else 
+  echo "Skipping core checks to s3 on Github"
 fi
 
 # TO{DO(j}chacon): Provide a java binary for test{s
