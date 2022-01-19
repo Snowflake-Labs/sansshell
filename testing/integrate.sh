@@ -50,7 +50,13 @@ function check_logs {
       exit 1
     }
   }"
-  check_status $? logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
+  if [ $? != 0 ]; then
+    printf "\nlog 1 ${LOGS}/1.${SUFFIX} :\n\n"
+    cat ${LOGS}/1.${SUFFIX} 
+    printf "\nlog 2 ${LOGS}/2.${SUFFIX} :\n\n"
+    cat ${LOGS}/2.${SUFFIX} 
+    check_status 1 logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
+  fi
 }
 
 function copy_logs {
