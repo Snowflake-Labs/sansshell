@@ -11,6 +11,8 @@ jobs:
       - uses: actions/setup-go@331ce1d993939866bb63c32c6cbbfd48fa76fc57
         with:
           go-version: '^1.17'
-      - name: go tests
-        run: |
-          bash testing/integration.sh
+      - name: integration tests
+        run: ./integration.sh
+        shell: bash
+        working-directory: testing
+      
