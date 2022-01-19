@@ -14,8 +14,9 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install gdb
           sudo apt-get install ansible
+          sudo apt-get install gdb
+          sudo apt-get install python3
       - name: integration tests
         run: ./testing/integrate.sh
         shell: bash
