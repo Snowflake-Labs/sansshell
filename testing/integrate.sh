@@ -311,7 +311,7 @@ fi
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
