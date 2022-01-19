@@ -191,7 +191,7 @@ function check_perms_mode {
 PROXY_PID=""
 ON_GITHUB=""
 
-if [ -n "${GITHUB_ACTION?:+""}" ]; then
+if [ -n "${GITHUB_ACTION:-}" ]; then
   ON_GITHUB="true"
 fi
 
