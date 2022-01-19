@@ -357,6 +357,10 @@ for i in $(seq 1 100); do
 done
 if [ "${HEALTHY}" != "true" ]; then
   echo "Servers never healthy"
+  printf "\nServer:\n\n"
+  cat ${LOGS}/server.log
+  printf "\nProxy:\n\n"
+  cat ${LOGS}/proxy.log
   exit 1
 fi
 echo "Servers healthy"
