@@ -4,6 +4,7 @@ package proxy_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,8 +17,12 @@ import (
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) map[string]*bufconn.Listener {
@@ -44,44 +49,61 @@ func TestDial(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:123")
 	startTestProxy(ctx, t, testServerMap)
 
+	// This should fail since we don't set credentials
+	_, err := proxy.DialContext(ctx, "b", []string{"foo:123"})
+	tu.FatalOnNoErr("DialContext", err, t)
+
 	for _, tc := range []struct {
 		name    string
 		proxy   string
 		targets []string
+		options []grpc.DialOption
 		wantErr bool
 	}{
 		{
 			name:    "proxy and N hosts",
 			proxy:   "proxy",
 			targets: []string{"foo:123", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
 			name:    "no proxy and a host",
 			targets: []string{"foo:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
 			name:    "proxy and 1 host",
 			proxy:   "proxy",
 			targets: []string{"foo:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
 			name:    "no proxy and N hosts",
 			targets: []string{"foo:123", "bar:123"},
 			wantErr: true,
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
 			name:    "proxy and no targets",
 			proxy:   "proxy",
 			wantErr: true,
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
 			name:    "no proxy no targets",
+			wantErr: true,
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+		},
+		{
+			name:    "no security set",
+			proxy:   "proxy",
+			targets: []string{"foo:123", "bar:123"},
 			wantErr: true,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := proxy.Dial(tc.proxy, tc.targets, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			_, err := proxy.Dial(tc.proxy, tc.targets, tc.options...)
 			tu.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
@@ -239,7 +261,9 @@ func TestStreaming(t *testing.T) {
 			err = stream.Send(&tdpb.TestRequest{Input: "error"})
 			tu.FatalOnErr("Send error", err, t)
 
-			// Shouldn't fail.
+			// Shouldn't fail even twice.
+			err = stream.CloseSend()
+			tu.FatalOnErr("CloseSend", err, t)
 			err = stream.CloseSend()
 			tu.FatalOnErr("CloseSend", err, t)
 
@@ -276,11 +300,11 @@ func TestStreaming(t *testing.T) {
 }
 
 type fakeProxy struct {
-	action string
+	action func(proxypb.Proxy_ProxyServer) error
 }
 
 func (f *fakeProxy) Proxy(stream proxypb.Proxy_ProxyServer) error {
-	return nil
+	return f.action(stream)
 }
 
 func TestWithFakeServerForErrors(t *testing.T) {
@@ -304,12 +328,236 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		return lis.Dial()
 	}
 
-	// This should fail since we don't set credentials
-	_, err := proxy.DialContext(ctx, "b", []string{"foo:123", "bar:123"})
-	tu.FatalOnNoErr("DialContext", err, t)
+	errorFunc := func(proxypb.Proxy_ProxyServer) error { return errors.New("error") }
+	channelSetup := func(stream proxypb.Proxy_ProxyServer) error {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StartStreamReply{
+				StartStreamReply: &proxypb.StartStreamReply{
+					Target: req.GetStartStream().Target,
+					Nonce:  req.GetStartStream().Nonce,
+					Reply: &proxypb.StartStreamReply_StreamId{
+						StreamId: 0,
+					},
+				},
+			},
+		})
+		return nil
+	}
+	setupThenError := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		return errors.New("error")
+	}
+	setupThenEOF := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 
-	// This should give us a valid conn for tests.
-	_, err = proxy.DialContext(ctx, "bufnet", []string{"foo:123", "bar:123"}, grpc.WithContextDialer(bd), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	tu.FatalOnErr("Dial", err, t)
+	notStartReply := func(stream proxypb.Proxy_ProxyServer) error {
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_ServerClose{},
+		})
+		return nil
+	}
+	nonMatchingData := func(stream proxypb.Proxy_ProxyServer) error {
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StartStreamReply{
+				StartStreamReply: &proxypb.StartStreamReply{},
+			},
+		})
+		return nil
+	}
+	dataPacketWrongID := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StreamData{
+				StreamData: &proxypb.StreamData{
+					StreamIds: []uint64{1},
+					Payload:   &anypb.Any{},
+				},
+			},
+		})
+		return nil
+	}
+	closePacketWrongID := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_ServerClose{
+				ServerClose: &proxypb.ServerClose{
+					StreamIds: []uint64{1},
+				},
+			},
+		})
+		return nil
+	}
+	badPacket := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{})
+		return nil
+	}
+	validReplyThenCloseError := func(stream proxypb.Proxy_ProxyServer) error {
+		channelSetup(stream)
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		payload, err := anypb.New(&emptypb.Empty{})
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StreamData{
+				StreamData: &proxypb.StreamData{
+					Payload:   payload,
+					StreamIds: []uint64{0},
+				},
+			},
+		})
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_ServerClose{
+				ServerClose: &proxypb.ServerClose{
+					Status: &proxypb.Status{
+						Code: int32(codes.Aborted),
+					},
+					StreamIds: []uint64{0},
+				},
+			},
+		})
 
+		return nil
+	}
+
+	for _, tc := range []struct {
+		name          string
+		action        func(stream proxypb.Proxy_ProxyServer) error
+		input         proto.Message
+		output        proto.Message
+		wantErr       bool
+		wantStreamErr bool
+	}{
+		{
+			name:          "base error on send",
+			action:        errorFunc,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
+		},
+		{
+			name:    "early EOF",
+			action:  channelSetup,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:          "invalid reply",
+			action:        notStartReply,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
+		},
+		{
+			name:          "don't match target/nonce",
+			action:        nonMatchingData,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
+		},
+		{
+			name:    "valid then error",
+			action:  setupThenError,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:    "setup then EOF but nil response",
+			action:  setupThenEOF,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:    "setup then EOF but bad output",
+			action:  setupThenEOF,
+			input:   &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:    "data packet wrong id",
+			action:  dataPacketWrongID,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:    "close packet wrong id",
+			action:  closePacketWrongID,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:    "bad packet - not close or data",
+			action:  badPacket,
+			input:   &emptypb.Empty{},
+			output:  &emptypb.Empty{},
+			wantErr: true,
+		},
+		{
+			name:   "valid reply then close error",
+			action: validReplyThenCloseError,
+			input:  &emptypb.Empty{},
+			output: &emptypb.Empty{},
+			// No error for this as it should eat it internally.
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			conn, err := proxy.DialContext(ctx, "bufnet", []string{"foo:123"}, grpc.WithContextDialer(bd), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			tu.FatalOnErr("DialContext", err, t)
+
+			fp.action = tc.action
+			err = conn.Invoke(ctx, "/method", tc.input, tc.output)
+			t.Log(err)
+			tu.WantErr(tc.name, err, tc.wantErr, t)
+
+			_, err = conn.NewStream(ctx, &grpc.StreamDesc{}, "/method")
+			tu.WantErr(tc.name+" NewStream", err, tc.wantStreamErr, t)
+		})
+	}
 }
