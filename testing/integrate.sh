@@ -529,19 +529,20 @@ else
 fi
 
 run_a_test false 50 ps
-run_a_test true 20 pstack --pid=$$
-
-echo
-echo "Expect an error about ptrace failing when we do 2 hosts"
-run_a_test true 20 dump --pid=$$ --dump-type=GCORE
-# Cores get their own additional checks.
-for i in ${LOGS}/?.dump*; do
-  file $i | egrep -q "LSB core file.*from 'bash'"
-  check_status $? $i not a core file
-done
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
+  run_a_test true 20 pstack --pid=$$
+
+  echo
+  echo "Expect an error about ptrace failing when we do 2 hosts"
+  run_a_test true 20 dump --pid=$$ --dump-type=GCORE
+  # Cores get their own additional checks.
+  for i in ${LOGS}/?.dump*; do
+    file $i | egrep -q "LSB core file.*from 'bash'"
+    check_status $? $i not a core file
+  done
+
   echo "Dumping core to s3 bucket"
   ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
   check_status $? Remote dump to s3
@@ -556,9 +557,10 @@ if [ -z "${ON_GITHUB}" ]; then
   check_status $? ${LOGS}/${CORE} is not a core file
 
   aws s3 rm s3://${USER}-dev/${CORE}
-else 
-  echo "Skipping core checks to s3 on Github"
+else
+  echo "Skipping pstack and dump tests on Github"
 fi
+
 
 # TO{DO(j}chacon): Provide a java binary for test{s
 echo 
