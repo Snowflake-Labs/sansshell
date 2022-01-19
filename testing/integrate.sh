@@ -208,7 +208,7 @@ check_status $? build
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=1 -race -timeout 30s  -v ./... 
+go test -count=10 -race -timeout 5m  -v ./... 
 check_status $? test
 
 echo
@@ -293,6 +293,8 @@ fi
 if [ -n "${abort_tests}" ]; then
   check_status 1 "${abort_tests}"
 fi
+
+env
 
 # Remove zziplib so we can reinstall it
 echo "Removing zziplib package so install can put it back"
