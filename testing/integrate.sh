@@ -254,6 +254,8 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/packages/client \
   github.com/Snowflake-Labs/sansshell/services/process \
   github.com/Snowflake-Labs/sansshell/services/process/client \
+  github.com/Snowflake-Labs/sansshell/services/service \
+  github.com/Snowflake-Labs/sansshell/services/service/client \
   github.com/Snowflake-Labs/sansshell/testing/testutil; do
   
   egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log > ${LOGS}/cover-filtered2.log
@@ -276,7 +278,7 @@ IFS="
 for i in $(egrep % ${LOGS}/cover-filtered.log); do
   percent=$(echo $i | sed -e "s,.*\(coverage:.*\),\1," | awk '{print $2}' | sed -e 's:\%::')
   # Have to use bc as expr can't handle floats...
-  if [ $(printf "$percent < 82.0\n" | bc) == "1" ]; then
+  if [ $(printf "$percent < 88.0\n" | bc) == "1" ]; then
     echo "Coverage not high enough"
     echo $i
     echo
