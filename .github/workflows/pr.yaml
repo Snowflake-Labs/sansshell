@@ -12,7 +12,6 @@ jobs:
         with:
           go-version: '^1.17'
       - name: integration tests
-        run: ./integration.sh
+        run: /home/runner/work/sansshell/sansshell/testing/integration.sh
         shell: bash
-        working-directory: testing
       
