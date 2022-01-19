@@ -95,6 +95,10 @@ function run_a_test {
       SIZE2=$(du -b ${LOGS}/2.${CMD} | cut -f1)
       if (( ${SIZE1} == ${SIZE2} )); then
         echo "FAIL - logs identical $*"
+        printf "\n1:\n\n"
+        cat ${LOGS}/1.${CMD}
+        printf "\n2:\n\n"
+        cat ${LOGS}/2.${CMD}
         exit 1
       fi
       if (( ${SIZE1} > ${SIZE2} )); then
