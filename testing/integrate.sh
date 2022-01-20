@@ -17,6 +17,7 @@ function check_status {
     echo "FAIL ${FAIL}"
     echo "Logs in ${LOGS}"
     if [ "${LOG}" != "/dev/null" ]; then
+      ls ${LOGS}
       print_logs ${LOG} ${FAIL}
     fi
     exit 1
