@@ -207,6 +207,7 @@ function check_perms_mode {
   fi
 }
 
+set -x
 PROXY_PID=""
 ON_GITHUB=""
 
