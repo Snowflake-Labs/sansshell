@@ -212,10 +212,14 @@ func TestList(t *testing.T) {
 }
 
 func TestPstackNative(t *testing.T) {
-	t.Skip("Skipping")
 	_, err := os.Stat(*pstackBin)
 	if *pstackBin == "" || err != nil {
 		t.Skip("OS not supported")
+	}
+
+	// Github specific check
+	if os.Getenv("GITHUB_ACTION") != "" {
+		t.Skip("Running on github, skipping due to flakiness of pstack")
 	}
 
 	ctx := context.Background()
