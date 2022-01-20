@@ -20,6 +20,8 @@ function check_status {
       ls ${LOGS}
       print_logs ${LOG} ${FAIL}
     fi
+    print_logs ${LOGS}/proxy.log proxy log
+    print_logs ${LOGS}/server.log server log
     exit 1
   fi
 }
@@ -34,13 +36,6 @@ function shutdown {
     aws s3 rm s3://${USER}-dev/hosts
   fi
   sudo killall sansshell-server
-  echo "Proxy log"
-  echo
-  cat ${LOGS}/proxy.log
-  echo
-  echo "Server log"
-  echo
-  cat ${LOGS}/server.log
 }
 
 # check_logs takes 3 args:
@@ -131,7 +126,7 @@ function run_a_test {
         echo "FAIL - logs identical $*"
         print_logs ${LOGS}/1.${CMD} log 1
         print_logs ${LOGS}/2.${CMD} log 2
-        exit 1
+        check_status 1 /dev/null logs identical
       fi
       if (( ${SIZE1} > ${SIZE2} )); then
         cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
@@ -559,7 +554,10 @@ fi
 
 run_a_test false 50 ps
 
-run_a_test true 20 pstack --pid=${PROXY_PID}
+# Skip if on github (pstack randomly fails)
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test true 20 pstack --pid=${PROXY_PID}
+fi
 
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
