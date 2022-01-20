@@ -7,6 +7,7 @@ set -o nounset
 # Logfile to print on error
 # Any text to output on failure (all remaining args).
 function check_status {
+  echo $*
   STATUS=$1
   shift
   LOG=$2
