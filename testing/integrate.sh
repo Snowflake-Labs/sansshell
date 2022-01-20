@@ -193,6 +193,10 @@ ON_GITHUB=""
 
 if [ -n "${GITHUB_ACTION:-}" ]; then
   ON_GITHUB="true"
+  # So we can run pstack/gcore below
+  sudo sysctl kernel.yama.ptrace_scope
+  sudo sysctl -w kernel.yama.ptrace_scope=0
+  sudo sysctl kernel.yama.ptrace_scope
 fi
 
 OS=$(uname -s)
