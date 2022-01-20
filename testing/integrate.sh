@@ -72,7 +72,7 @@ function copy_logs {
 
 # run_a_test takes 3 args:
 #
-# A boolean (i.e. true or false string) indicating one run for 2 hosts will error. 
+# A boolean (i.e. true or false string) indicating one run for 2 hosts can error. 
 # This can happen for ptrace related commands since 2 cannot act on the same process at once.
 # Minimum number of lines log must contain
 # The command to pass to the sanssh CLI. NOTE: This is also used as the logfile suffix.
@@ -536,7 +536,7 @@ fi
 
 run_a_test false 50 ps
 
-run_a_test true 20 pstack --pid=$$
+run_a_test true 20 pstack --pid=${PROXY_PID}
 
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
