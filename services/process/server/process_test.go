@@ -224,21 +224,30 @@ func TestPstackNative(t *testing.T) {
 
 	client := pb.NewProcessClient(conn)
 
-	// Our actual pid may not have symbols but our runner will.
+	pids, err := client.List(ctx, &pb.ListRequest{})
+	testutil.FatalOnErr("unexpected error for basic list", err, t)
+
+	if len(pids.ProcessEntries) == 0 {
+		t.Errorf("Returned ps list is empty?")
+	}
+
+	pid := int64(0)
+	for _, p := range pids.ProcessEntries {
+		if strings.Contains(p.Command, "bash") {
+			pid = p.Pid
+		}
+	}
+	// Bash has symbols
 	resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{
-		Pid: int64(os.Getppid()),
+		Pid: pid,
 	})
 	testutil.FatalOnErr("can't get native pstack", err, t)
 
-	// We're a go program. We have multiple threads.
-	if len(resp.Stacks) <= 1 {
-		t.Fatalf("Not enough threads in native response. Response: %+v", prototext.Format(resp))
-	}
-
 	found := false
+	want := "main ()"
 	for _, stack := range resp.Stacks {
 		for _, t := range stack.Stacks {
-			if strings.Contains(t, "runtime.") {
+			if strings.Contains(t, want) {
 				found = true
 				break
 			}
@@ -249,7 +258,7 @@ func TestPstackNative(t *testing.T) {
 	}
 
 	if !found {
-		t.Fatalf("pstack() : want response with stack containing 'runtime', got %v", prototext.Format(resp))
+		t.Fatalf("pstack() : want response with stack containing %q, got %v", want, prototext.Format(resp))
 	}
 }
 
