@@ -211,19 +211,28 @@ echo
 go test -count=1 -race -timeout 30s  -v ./... 
 check_status $? test
 
+echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
-go test -timeout 30s -v -coverprofile=/tmp/go-code-cover 2>&1 | tee ${LOGS}/cover.log
-check_status $? coverage
+go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >& ${LOGS}/cover.log
+RC=$?
+cat ${LOGS}/cover.log
+check_status ${RC} coverage
 
-egrep ^ok.*coverage:.*of.statements\|'no test files' ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
+# Print out coverage stats
+egrep "^ok.*coverage:.*of.statements|no test files" ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
+echo
+echo
+echo
+egrep "coverage:.*of.statements" ${LOGS}/cover-filtered.log
+echo
+egrep "no test files" ${LOGS}/cover-filtered.log
+echo
 
 # There are a bunch of directories where having no tests is fine.
 # They are either binaries, top level package directories or
 # testing code.
-# TODO(jchacon): Write these tests for proxy/proxy !
 for i in \
-  github.com/Snowflake-Labs/sansshell/proxy/proxy \
   github.com/Snowflake-Labs/sansshell/auth/mtls/flags \
   github.com/Snowflake-Labs/sansshell/cmd \
   github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
@@ -245,6 +254,8 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/packages/client \
   github.com/Snowflake-Labs/sansshell/services/process \
   github.com/Snowflake-Labs/sansshell/services/process/client \
+  github.com/Snowflake-Labs/sansshell/services/service \
+  github.com/Snowflake-Labs/sansshell/services/service/client \
   github.com/Snowflake-Labs/sansshell/testing/testutil; do
   
   egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log > ${LOGS}/cover-filtered2.log
@@ -267,7 +278,7 @@ IFS="
 for i in $(egrep % ${LOGS}/cover-filtered.log); do
   percent=$(echo $i | sed -e "s,.*\(coverage:.*\),\1," | awk '{print $2}' | sed -e 's:\%::')
   # Have to use bc as expr can't handle floats...
-  if [ $(printf "$percent < 85.0\n" | bc) == "1" ]; then
+  if [ $(printf "$percent < 88.0\n" | bc) == "1" ]; then
     echo "Coverage not high enough"
     echo $i
     echo

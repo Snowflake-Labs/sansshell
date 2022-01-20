@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
@@ -93,7 +94,7 @@ func TestServe(t *testing.T) {
 func TestRead(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 

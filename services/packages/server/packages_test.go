@@ -12,6 +12,7 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -45,7 +46,7 @@ func TestMain(m *testing.M) {
 func TestInstall(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -187,7 +188,7 @@ func TestInstall(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -426,7 +427,7 @@ func TestUpdate(t *testing.T) {
 func TestListInstalled(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -548,7 +549,7 @@ func TestListInstalled(t *testing.T) {
 func TestRepoList(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 

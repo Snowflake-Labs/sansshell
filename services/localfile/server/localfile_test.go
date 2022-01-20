@@ -19,6 +19,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -48,7 +49,7 @@ func TestMain(m *testing.M) {
 
 func TestEmptyRead(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -65,7 +66,7 @@ func TestEmptyRead(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -181,7 +182,7 @@ func TestRead(t *testing.T) {
 
 func TestTail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -246,7 +247,7 @@ func TestTail(t *testing.T) {
 
 func TestStat(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -342,7 +343,7 @@ func TestStat(t *testing.T) {
 
 func TestSum(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -486,7 +487,7 @@ func TestSum(t *testing.T) {
 
 func TestSetFileAttributes(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -814,7 +815,7 @@ func TestSetFileAttributes(t *testing.T) {
 
 func TestList(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -892,7 +893,7 @@ func TestList(t *testing.T) {
 
 func TestWrite(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
@@ -1366,7 +1367,7 @@ func TestWrite(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithInsecure())
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 

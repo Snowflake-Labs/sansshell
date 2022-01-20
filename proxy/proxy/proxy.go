@@ -191,6 +191,25 @@ func (p *proxyStream) send(requestMsg proto.Message) error {
 	return nil
 }
 
+func (p *proxyStream) closeClients() error {
+	var ids []uint64
+	for s := range p.ids {
+		ids = append(ids, s)
+	}
+	data := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_ClientClose{
+			ClientClose: &proxypb.ClientClose{
+				StreamIds: ids,
+			},
+		},
+	}
+	// Send the request to the proxy.
+	if err := p.stream.Send(data); err != nil {
+		return status.Errorf(codes.Internal, "can't send close data for %s on stream - %v", p.method, err)
+	}
+	return nil
+}
+
 // see grpc.ClientStream
 func (p *proxyStream) SendMsg(args interface{}) error {
 	if p.sendClosed {
@@ -356,6 +375,14 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 	if err := s.send(requestMsg); err != nil {
 		return nil, err
 	}
+	// TODO(): Put this back when the race in server.go is figured out. Causes a send and close
+	// on the channel processing server side which isn't allowed.
+	//if err := s.closeClients(); err != nil {
+	//	return nil, err
+	//}
+	//if err := s.CloseSend(); err != nil {
+	//	return nil, err
+	//}
 	retChan := make(chan *ProxyRet)
 
 	// Fire off a separate routine to read from the stream and send the responses down retChan.

@@ -14,6 +14,7 @@ import (
 
 import (
 	"fmt"
+	"io"
 )
 
 // LocalFileClientProxy is the superset of LocalFileClient which additionally includes the OneMany proxy methods
@@ -53,7 +54,8 @@ type LocalFile_ReadClientProxy interface {
 }
 
 type localFileClientReadClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -64,15 +66,23 @@ func (x *localFileClientReadClientProxy) Recv() ([]*ReadManyResponse, error) {
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &ReadReply{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &ReadReply{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &ReadManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -106,7 +116,7 @@ func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadActionRe
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientReadClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &localFileClientReadClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -131,7 +141,8 @@ type LocalFile_StatClientProxy interface {
 }
 
 type localFileClientStatClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -146,15 +157,23 @@ func (x *localFileClientStatClientProxy) Recv() ([]*StatManyResponse, error) {
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &StatReply{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &StatReply{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &StatManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -188,7 +207,7 @@ func (c *localFileClientProxy) StatOneMany(ctx context.Context, opts ...grpc.Cal
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientStatClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &localFileClientStatClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	return x, nil
 }
 
@@ -207,7 +226,8 @@ type LocalFile_SumClientProxy interface {
 }
 
 type localFileClientSumClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -222,15 +242,23 @@ func (x *localFileClientSumClientProxy) Recv() ([]*SumManyResponse, error) {
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &SumReply{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &SumReply{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &SumManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -264,7 +292,7 @@ func (c *localFileClientProxy) SumOneMany(ctx context.Context, opts ...grpc.Call
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientSumClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &localFileClientSumClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	return x, nil
 }
 
@@ -283,7 +311,8 @@ type LocalFile_WriteClientProxy interface {
 }
 
 type localFileClientWriteClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -301,15 +330,23 @@ func (x *localFileClientWriteClientProxy) CloseAndRecv() ([]*WriteManyResponse, 
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &emptypb.Empty{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &emptypb.Empty{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &WriteManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -360,7 +397,7 @@ func (c *localFileClientProxy) WriteOneMany(ctx context.Context, opts ...grpc.Ca
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientWriteClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &localFileClientWriteClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	return x, nil
 }
 
@@ -443,7 +480,8 @@ type LocalFile_ListClientProxy interface {
 }
 
 type localFileClientListClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -454,15 +492,23 @@ func (x *localFileClientListClientProxy) Recv() ([]*ListManyResponse, error) {
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &ListReply{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &ListReply{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &ListManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -496,7 +542,7 @@ func (c *localFileClientProxy) ListOneMany(ctx context.Context, in *ListRequest,
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientListClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &localFileClientListClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
