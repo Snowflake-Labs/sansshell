@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 set -o nounset
 
-# check_status takes 2 args:
+# check_status takes 3 args:
 #
 # A code to compare against
+# Logfile to print on error
 # Any text to output on failure (all remaining args).
 function check_status {
   STATUS=$1
   shift
+  LOG=$2
+  shift
+  FAIL=$*
 
   if [ $STATUS != 0 ]; then
-    echo "FAIL $*"
+    echo "FAIL ${FAIL}"
     echo "Logs in ${LOGS}"
+    if [ "${LOG}" != "/dev/null" ]; then
+      print_logs ${LOG} ${FAIL}
+    fi
     exit 1
   fi
 }
@@ -41,6 +48,8 @@ function check_logs {
   shift
   SUFFIX=$1
   shift
+  FAIL=$*
+
   wc -l ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} | awk "{
     line1=\$1
     readline
@@ -51,11 +60,9 @@ function check_logs {
     }
   }"
   if [ $? != 0 ]; then
-    printf "\nlog 1 ${LOGS}/1.${SUFFIX} :\n\n"
-    cat ${LOGS}/1.${SUFFIX} 
-    printf "\nlog 2 ${LOGS}/2.${SUFFIX} :\n\n"
-    cat ${LOGS}/2.${SUFFIX} 
-    check_status 1 logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
+    print_logs ${LOGS}/1.${SUFFIX} log 1
+    print_logs ${LOGS}/2.${SUFFIX} log 2
+    check_status 1 /dev/null logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - ${FAIL}
   fi
 }
 
@@ -68,6 +75,15 @@ function copy_logs {
     if [ -f "${LOGS}/2.${SUFFIX}" ]; then
       mv ${LOGS}/2.${SUFFIX} ${LOGS}/2.${SUFFIX}-${PURPOSE}
     fi
+}
+
+function print_logs {
+  LOG=$1
+  shift
+  PREFACE=$*
+
+  printf "\n${PREFACE}:\n\n"
+  cat ${LOG}
 }
 
 # run_a_test takes 3 args:
@@ -93,7 +109,11 @@ function run_a_test {
     ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD},${LOGS}/2.${CMD} ${CMD} ${ARGS}
     STATUS=$? 
     if [ "${ONE_WILL_ERROR}" = "false" ]; then
-      check_status ${STATUS} ${CHECK}
+      if [ "${STATUS}" != 0 ]; then
+        print_logs ${LOGS}/1.${CMD} log 1
+        print_logs ${LOGS}/2.${CMD} log 2
+        check_status ${STATUS} /dev/null ${CHECK}
+      fi
     else
       # If one of these is expected to error then one log is larger than the other.
       # Take the larger file and copy it so log checking will pass.
@@ -101,10 +121,8 @@ function run_a_test {
       SIZE2=$(du -b ${LOGS}/2.${CMD} | cut -f1)
       if (( ${SIZE1} == ${SIZE2} )); then
         echo "FAIL - logs identical $*"
-        printf "\n1:\n\n"
-        cat ${LOGS}/1.${CMD}
-        printf "\n2:\n\n"
-        cat ${LOGS}/2.${CMD}
+        print_logs ${LOGS}/1.${CMD} log 1
+        print_logs ${LOGS}/2.${CMD} log 2
         exit 1
       fi
       if (( ${SIZE1} > ${SIZE2} )); then
@@ -118,7 +136,7 @@ function run_a_test {
     CHECK="${CMD} proxy to 1 host"
     echo ${CHECK}
     ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS} 
-    check_status $? ${CHECK}
+    check_status $? ${LOGS}/1.${CMD} ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -127,7 +145,7 @@ function run_a_test {
     CHECK="${CMD} with no proxy"
     echo ${CHECK}
     ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS}
-    check_status $? ${CHECK}
+    check_status $? ${LOGS}/1.${CMD} ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -153,8 +171,8 @@ function tail_execute {
 #
 # Suffix for copied log files
 function tail_check {
-  diff -q ${LOGS}/1.tail ${LOGS}/hosts
-  check_status $? "tail: output differs from source"
+  diff ${LOGS}/1.tail ${LOGS}/hosts > ${LOGS}/tail.diff
+  check_status $? ${LOGS}/tail.diff "tail: output differs from source"
   copy_logs tail $*
 }
 
@@ -174,17 +192,17 @@ function check_perms_mode {
   NEW_IMMUTABLE=$(lsattr ${FILE} | cut -c5)
 
   if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
-    check_status 1 "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
+    check_status 1 /dev/null "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
   fi
   # These aren't quoted as parsed ones may have leading spaces
   if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
-    check_status 1 "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
+    check_status 1 /dev/null "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
   fi
   if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
-    check_status 1 "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
+    check_status 1 /dev/null "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
   fi
   if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-    check_status 1 "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+    check_status 1 /dev/null "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
   fi
 }
 
@@ -224,22 +242,20 @@ echo
 go build -v ./...
 go generate build.go
 
-check_status $? build
+check_status $? /dev/null build
 
 # Test everything
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=10 -race -timeout 5m  -v ./... 
-check_status $? test
+go test -count=10 -race -timeout 5m  -v ./... >& ${LOGS}/test.log
+check_status $? ${LOGS}/test.log test
 
 echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
 go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >& ${LOGS}/cover.log
-RC=$?
-cat ${LOGS}/cover.log
-check_status ${RC} coverage
+check_status $? ${LOGS}/cover.log coverage
 
 # Print out coverage stats
 egrep "^ok.*coverage:.*of.statements|no test files" ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
@@ -313,7 +329,7 @@ if [ "$bad" == "true" ]; then
   abort_tests="${abort_tests}  Packages with coverage too low"
 fi
 if [ -n "${abort_tests}" ]; then
-  check_status 1 "${abort_tests}"
+  check_status 1 /dev/null "${abort_tests}"
 fi
 
 # Skip if on github
@@ -346,11 +362,11 @@ if [ -z "${ON_GITHUB}" ]; then
   RC=$?
   if [ "$RC" = 0 ]; then
     if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
-      check_status 1 Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+      check_status 1 /dev/null Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
     fi
   else
     aws s3 mb s3://${USER}-dev --region us-west-2
-    check_status $? Making s3 bucket
+    check_status $? /dev/null Making s3 bucket
   fi
 else 
   echo "Skipping remote cloud setup on Github"
@@ -396,8 +412,8 @@ echo "tail checks"
 echo "tail proxy to 2 hosts"
 ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail tail ${LOGS}/hosts &
 tail_execute $!
-diff -q ${LOGS}/1.tail ${LOGS}/2.tail
-check_status $? "tail: output files differ"
+diff ${LOGS}/1.tail ${LOGS}/2.tail > ${LOGS}/tail.diff
+check_status $? ${LOGS}/tail.diff "tail: output files differ"
 tail_check proxy-2-hosts
 
 echo "tail proxy to 1 hosts"
@@ -423,7 +439,7 @@ EXPECTED_IMMUTABLE=3
 if [ "${IMMUTABLE_COUNT}" != "${EXPECTED_IMMUTABLE}" ]; then
   false
 fi
-check_status $? "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
+check_status $? /dev/null "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
 echo "stat immutable state validated"
 
 run_a_test false 1 sum /etc/hosts
@@ -456,11 +472,11 @@ check_perms_mode ${LOGS}/test-file
 
 # Now validate we can clear immutable too
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- immutable --state=false ${LOGS}/test-file
-check_status $? "setting immutable to false"
+check_status $? /dev/null "setting immutable to false"
 EXPECTED_NEW_IMMUTABLE="-"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
 if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  check_status 1 /dev/null "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 
 echo "uid, etc checks passed"
@@ -479,23 +495,20 @@ else
 fi
 
 # Trying without --overwrite to validate
-echo "This should emit an error message about overwrite"
+echo "This can emit an error message about overwrite"
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
-EC=$?
-printf "\nlog:\n\n"
-cat ${LOGS}/1.cp-no-overwrite
-if [ ${EC} == 0 ]; then
-  check_status 1 Expected failure for no --overwrite from cp for existing file.
+if [ $? == 0 ]; then
+  check_status 1 ${LOGS}/1.cp-no-overwrite Expected failure for no --overwrite from cp for existing file.
 fi
 
 # Make sure we can set immutable
 echo "cp test immutable/overwrite"
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-overwrite-immutable cp --overwrite --immutable --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
-check_status $? cp run with --overwrite and --immutable
+check_status $? ${LOGS}/1.cp-overwrite-immutable cp run with --overwrite and --immutable
 EXPECTED_NEW_IMMUTABLE="i"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/cp-hosts | cut -c5)
 if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  check_status 1 /dev/null "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 # Cleanup the file so we aren't leaving immutable files laying around
 sudo chattr -i ${LOGS}/cp-hosts
@@ -505,24 +518,24 @@ touch ${LOGS}/test/file
 echo "${LOGS}/test/file" >> ${LOGS}/ls.expected
 
 run_a_test false 1 ls ${LOGS}/test
-diff -u -q ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected
-check_status $? diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
+diff -u ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected > ${LOGS}/ls.diff
+check_status $?  ${LOGS}/ls.diff diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
 
 run_a_test false 1 ls --long ${LOGS}/test
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e '^-rw-'
-check_status $? long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
 
 run_a_test false 1 ls --long --directory ${LOGS}/test
 # Too painful to validate this content so we'll just check some basics
 head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
 # One last one...Check we can 2 multiple directories in a query
 run_a_test false 2 ls --long --directory ${LOGS}/test ${LOGS}/test
 head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
 # Skip if on github (we assume yum, no apt support yet)
 if [ -z "${ON_GITHUB}" ]; then
@@ -544,23 +557,23 @@ run_a_test true 20 dump --pid=$$ --dump-type=GCORE
 # Cores get their own additional checks.
 for i in ${LOGS}/?.dump*; do
   file $i | egrep -q "LSB core file.*from 'bash'"
-  check_status $? $i not a core file
+  check_status $? /dev/null $i not a core file
 done
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
   echo "Dumping core to s3 bucket"
   ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
-  check_status $? Remote dump to s3
+  check_status $? /dev/null Remote dump to s3
   echo Dumping bucket
   aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
   cat ${LOGS}/s3-ls
   egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
-  check_status $? cant find core in bucket
+  check_status $? ${LOGS}/s3-ls cant find core in bucket
   CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
   aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
   file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
-  check_status $? ${LOGS}/${CORE} is not a core file
+  check_status $? /dev/null ${LOGS}/${CORE} is not a core file
 
   aws s3 rm s3://${USER}-dev/${CORE}
 else
