@@ -557,7 +557,10 @@ run_a_test false 50 ps
 # Skip if on github (pstack randomly fails)
 if [ -z "${ON_GITHUB}" ]; then
   run_a_test true 20 pstack --pid=${PROXY_PID}
+else
+  echo "Skipping pstack tests on Github due to transient 'could not find _DYNAMIC symbol' errors"
 fi
+
 
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
