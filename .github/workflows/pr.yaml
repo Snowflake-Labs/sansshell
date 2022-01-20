@@ -21,4 +21,3 @@ jobs:
       - name: integration tests
         run: ./testing/integrate.sh
         shell: bash
-      
