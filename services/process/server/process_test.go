@@ -216,7 +216,7 @@ func TestPstackNative(t *testing.T) {
 	if *pstackBin == "" || err != nil {
 		t.Skip("OS not supported")
 	}
-
+	t.Skip("testing")
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
