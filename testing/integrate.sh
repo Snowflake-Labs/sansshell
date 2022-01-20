@@ -552,7 +552,7 @@ fi
 
 run_a_test false 50 ps
 
-run_a_test true 20 pstack --pid=${PROXY_PID}
+run_a_test true 20 "pstack --pid=${PROXY_PID} && sleep 5"
 
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
