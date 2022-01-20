@@ -18,7 +18,7 @@ service Service {
 // map to an appropriate implementation-defined default
 // for the system running SansShell.
 enum SystemType {
-  SYSTEM_TYPE_UKNOWN = 0;
+  SYSTEM_TYPE_UNKNOWN = 0;
   SYSTEM_TYPE_SYSTEMD = 1;
 };
 
@@ -81,5 +81,4 @@ message ActionRequest {
 message ActionReply {
   SystemType system_type = 1;
   string service_name = 2;
-  string debug_output = 3;
 }

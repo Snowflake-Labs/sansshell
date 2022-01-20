@@ -22,6 +22,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
