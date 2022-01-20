@@ -17,11 +17,9 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
-	"github.com/google/go-cmp/cmp"
 	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
-	"google.golang.org/protobuf/testing/protocmp"
 )
 
 var (
@@ -62,10 +60,7 @@ func TestEmptyRead(t *testing.T) {
 	if err == io.EOF {
 		t.Fatal("Expected a real error, not EOF")
 	}
-	if err == nil {
-		t.Fatal("Expected an error from an empty read request (no Read or Tail) and not nothing")
-	}
-
+	testutil.FatalOnNoErr("empty read request (no Read or Tail)", err, t)
 }
 
 func TestRead(t *testing.T) {
@@ -147,9 +142,7 @@ func TestRead(t *testing.T) {
 				if err == io.EOF {
 					break
 				}
-				if got, want := err != nil, tc.wantErr; got != want {
-					t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
-				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
 				if tc.wantErr {
 					// If this was an expected error we're done.
 					return
@@ -248,9 +241,7 @@ func TestTail(t *testing.T) {
 	// This should cause Recv() to fail
 	resp, err = stream.Recv()
 	t.Log(err)
-	if err == nil {
-		t.Fatalf("Didn't get error from recv. Got resp: %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("recv with cancelled context - resp %v", resp), err, t)
 }
 
 func TestStat(t *testing.T) {
@@ -342,9 +333,7 @@ func TestStat(t *testing.T) {
 			if tc.recvErrFunc != nil {
 				tc.recvErrFunc("stream.Recv", err, t)
 			}
-			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
-				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
-			}
+			testutil.DiffErr(tc.name, reply, tc.reply, t)
 			err = stream.CloseSend()
 			testutil.FatalOnErr("CloseSend", err, t)
 		})
@@ -488,9 +477,7 @@ func TestSum(t *testing.T) {
 			if tc.recvErrFunc != nil {
 				tc.recvErrFunc("stream.Recv", err, t)
 			}
-			if diff := cmp.Diff(tc.reply, reply, protocmp.Transform()); diff != "" {
-				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
-			}
+			testutil.DiffErr(tc.name, reply, tc.reply, t)
 			err = stream.CloseSend()
 			testutil.FatalOnErr("CloseSend", err, t)
 		})
@@ -787,9 +774,7 @@ func TestSetFileAttributes(t *testing.T) {
 
 			_, err := client.SetFileAttributes(ctx, tc.input)
 			t.Log(err)
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
-			}
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 
 			// Expected an error so we're done.
 			if tc.wantErr {
@@ -894,18 +879,13 @@ func TestList(t *testing.T) {
 					break
 				}
 				t.Log(err)
-				if got, want := err != nil, tc.wantErr; got != want {
-					t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
-				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
 				if tc.wantErr {
 					return
 				}
 				out = append(out, resp.Entry)
 			}
-			if diff := cmp.Diff(tc.expected, out, protocmp.Transform()); diff != "" {
-				t.Logf("%+v", out)
-				t.Fatalf("%s mismatch: (-want, +got)\n%s", tc.name, diff)
-			}
+			testutil.DiffErr(tc.name, out, tc.expected, t)
 		})
 	}
 }
@@ -1563,9 +1543,7 @@ func TestCopy(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
 			_, err := client.Copy(context.Background(), tc.req)
 			t.Log(err)
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("%s: error state inconsistent got %t and want %t err %v", tc.name, got, want, err)
-			}
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 			if tc.wantErr {
 				return
 			}

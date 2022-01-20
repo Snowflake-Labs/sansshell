@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -37,16 +38,17 @@ type CredentialsLoader interface {
 // Register associates a name with a mechanism for loading credentials.
 // Implementations of CredentialsLoader will typically call Register
 // during init()
-func Register(name string, loader CredentialsLoader) {
+func Register(name string, loader CredentialsLoader) error {
 	loaderMu.Lock()
 	defer loaderMu.Unlock()
 	if loader == nil {
-		panic("loader cannot be nil")
+		return errors.New("loader cannot be nil")
 	}
 	if _, exists := loaders[name]; exists {
-		panic("duplicate registation of credentials loader with name: " + name)
+		return errors.New("duplicate registation of credentials loader with name: " + name)
 	}
 	loaders[name] = loader
+	return nil
 }
 
 // Loader returns the CredentialsLoader associated with `name` or an

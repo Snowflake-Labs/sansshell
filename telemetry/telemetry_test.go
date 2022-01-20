@@ -80,9 +80,7 @@ func TestUnaryClient(t *testing.T) {
 
 	err = intercept(context.Background(), wantMethod, nil, nil, conn, invoker)
 	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get expected error from intercept")
-	}
+	testutil.FatalOnNoErr("intercept", err, t)
 	if got, want := err.Error(), wantError; got != want {
 		t.Fatalf("didn't get expected error. got %v want %v", got, want)
 	}
@@ -124,9 +122,7 @@ func TestStreamClient(t *testing.T) {
 	}
 	stream, err := intercept(context.Background(), nil, conn, wantMethod, streamer)
 	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get expected error from streamer")
-	}
+	testutil.FatalOnNoErr("streamer", err, t)
 	if got, want := err.Error(), wantError; got != want {
 		t.Fatalf("didn't get expected error. got %v want %v", got, want)
 	}
@@ -137,9 +133,7 @@ func TestStreamClient(t *testing.T) {
 	// Shouldn't get an error now and we get a real stream.
 	wantMethod = "bar"
 	stream, err = intercept(context.Background(), nil, conn, wantMethod, streamer)
-	if err != nil {
-		t.Fatalf("unexpected error from 2nd streamer call: %v", err)
-	}
+	testutil.FatalOnErr("2nd streamer call", err, t)
 
 	if _, err := logr.FromContext(stream.Context()); err != nil {
 		t.Fatal("returned stream doesn't contain a logging context")
@@ -152,15 +146,15 @@ func TestStreamClient(t *testing.T) {
 	// The error logging should have happened by now.
 	testLogging(t, args, "SendMsg")
 
-	if err := stream.RecvMsg(nil); err == nil {
-		t.Fatal("didn't get error from RecvMsg on fake client stream")
-	}
+	err = stream.RecvMsg(nil)
+	testutil.FatalOnNoErr("RecvMsg on fake", err, t)
+
 	// The error logging should have happened by now.
 	testLogging(t, args, "RecvMsg")
 
-	if err := stream.CloseSend(); err == nil {
-		t.Fatal("didn't get error from CloseSend on fake client stream")
-	}
+	err = stream.CloseSend()
+	testutil.FatalOnNoErr("CloseSend on fake", err, t)
+
 	// The error logging should have happened by now.
 	testLogging(t, args, "CloseSend")
 }
@@ -197,9 +191,7 @@ func TestUnaryServer(t *testing.T) {
 	ctx := peer.NewContext(context.Background(), &peer.Peer{})
 	_, err := intercept(ctx, nil, info, handler)
 	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get expected error from intercept")
-	}
+	testutil.FatalOnNoErr("intercept", err, t)
 	if got, want := err.Error(), wantError; got != want {
 		t.Fatalf("didn't get expected error. got %v want %v", got, want)
 	}
@@ -255,11 +247,8 @@ func TestStreamServer(t *testing.T) {
 
 	err := intercept(nil, ss, info, handler)
 	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get expected error from intercept")
-	}
+	testutil.FatalOnNoErr("intercept", err, t)
 	if got, want := err.Error(), wantError; got != want {
 		t.Fatalf("didn't get expected error. got %v want %v", got, want)
 	}
-
 }

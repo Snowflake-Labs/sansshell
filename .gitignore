@@ -5,3 +5,4 @@ cmd/sanssh/sanssh
 cmd/sansshell-server/sansshell-server
 certs/
 *.swp
+bin/

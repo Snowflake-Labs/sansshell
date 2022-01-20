@@ -34,19 +34,19 @@ func Name() string { return loaderName }
 // by command-line flags.
 type flagLoader struct{}
 
-func (f flagLoader) LoadClientCA(unused context.Context) (*x509.CertPool, error) {
+func (flagLoader) LoadClientCA(context.Context) (*x509.CertPool, error) {
 	return mtls.LoadRootOfTrust(rootCAFile)
 }
 
-func (f flagLoader) LoadRootCA(unused context.Context) (*x509.CertPool, error) {
+func (flagLoader) LoadRootCA(context.Context) (*x509.CertPool, error) {
 	return mtls.LoadRootOfTrust(rootCAFile)
 }
 
-func (f flagLoader) LoadClientCertificate(unused context.Context) (tls.Certificate, error) {
+func (flagLoader) LoadClientCertificate(context.Context) (tls.Certificate, error) {
 	return tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
 }
 
-func (f flagLoader) LoadServerCertificate(unused context.Context) (tls.Certificate, error) {
+func (flagLoader) LoadServerCertificate(context.Context) (tls.Certificate, error) {
 	return tls.LoadX509KeyPair(serverCertFile, serverKeyFile)
 }
 
@@ -68,5 +68,7 @@ func init() {
 	flag.StringVar(&serverKeyFile, "server-key", serverKeyFile, "Path to the server's TLS key")
 	flag.StringVar(&rootCAFile, "root-ca", rootCAFile, "The root of trust for remote identities, PEM format")
 
-	mtls.Register(loaderName, flagLoader{})
+	if err := mtls.Register(loaderName, flagLoader{}); err != nil {
+		panic(err)
+	}
 }

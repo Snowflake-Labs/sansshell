@@ -15,7 +15,6 @@ import (
 
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
-	"github.com/google/go-cmp/cmp"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
@@ -143,9 +142,7 @@ func TestList(t *testing.T) {
 	resp, err := client.List(ctx, &pb.ListRequest{})
 	testutil.FatalOnErr("unexpected error for basic list", err, t)
 
-	if diff := cmp.Diff(resp, testdata, protocmp.Transform(), sortEntries, sortCodes); diff != "" {
-		t.Fatalf("Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", resp, testdata, diff)
-	}
+	testutil.DiffErr("all processes", resp, testdata, t, sortEntries, sortCodes)
 
 	// Test 2: Ask for just one process (use the first one in testdata)
 	testPid := testdata.ProcessEntries[0].Pid
@@ -164,9 +161,7 @@ func TestList(t *testing.T) {
 	}
 
 	// Make sure it's what we got back
-	if diff := cmp.Diff(got, resp, protocmp.Transform(), sortEntries, sortCodes); diff != "" {
-		t.Fatalf("unexpected entry count. Want %+v, got %+v\nDiff:\n%s", resp, got, diff)
-	}
+	testutil.DiffErr("one process", got, resp, t, sortEntries, sortCodes)
 
 	// Test 3: Ask for a non-existant pid and we should get an error.
 
@@ -179,9 +174,7 @@ func TestList(t *testing.T) {
 	resp, err = client.List(ctx, &pb.ListRequest{
 		Pids: []int64{testPid},
 	})
-	if err == nil {
-		t.Fatalf("Expected error for invalid pid. Insteaf got %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("invalid pid - resp %v", resp), err, t)
 
 	// Test 4: Send some bad input in and make sure we fail (also gives some
 	// coverage in places we can fail).
@@ -192,26 +185,19 @@ func TestList(t *testing.T) {
 			}
 		}
 		resp, err := client.List(ctx, &pb.ListRequest{})
-		if err == nil {
-			t.Fatalf("Expected error for test file %s but got none. Instead got %+v", bf, resp)
-		}
+		testutil.FatalOnNoErr(fmt.Sprintf("invalid input file %s - resp %v", bf, resp), err, t)
 		t.Logf("Expected error: %v received", err)
 	}
 
 	// Test 5: Break the command which means we should error out.
-
 	*psBin = testutil.ResolvePath(t, "false")
 	resp, err = client.List(ctx, &pb.ListRequest{})
-	if err == nil {
-		t.Fatalf("Expected error for command returning non-zero Insteaf got %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("cmd returned non-zero - resp %v", resp), err, t)
 
 	// Test 6: Run an invalid command all-together.
 	*psBin = "/a/non-existant/command"
 	resp, err = client.List(ctx, &pb.ListRequest{})
-	if err == nil {
-		t.Fatalf("Expected error for invalid command. Insteaf got %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("non existant cmd - resp %v", resp), err, t)
 
 	// Test 7: Command with stderr output.
 	*psBin = testutil.ResolvePath(t, "sh")
@@ -221,9 +207,7 @@ func TestList(t *testing.T) {
 		}
 	}
 	resp, err = client.List(ctx, &pb.ListRequest{})
-	if err == nil {
-		t.Fatalf("Expected error for stderr output. Insteaf got %+v", resp)
-	}
+	testutil.FatalOnNoErr(fmt.Sprintf("stderr output - resp %v", resp), err, t)
 }
 
 func TestPstackNative(t *testing.T) {
@@ -409,14 +393,10 @@ func TestPstack(t *testing.T) {
 			}
 
 			resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{Pid: tc.pid})
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
-			}
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 
 			if !tc.wantErr {
-				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", tc.name, resp, testdata, diff)
-				}
+				testutil.DiffErr(tc.name, resp, testdata, t)
 			}
 		})
 	}
@@ -530,14 +510,9 @@ func TestJstack(t *testing.T) {
 			}
 
 			resp, err := client.GetJavaStacks(ctx, &pb.GetJavaStacksRequest{Pid: tc.pid})
-			if got, want := err != nil, tc.wantErr; got != want {
-				t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
-			}
-
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 			if !tc.wantErr {
-				if diff := cmp.Diff(resp, testdata, protocmp.Transform()); diff != "" {
-					t.Fatalf("%s: Responses differ.\nGot\n%+v\n\nWant\n%+v\nDiff:\n%s", tc.name, resp, testdata, diff)
-				}
+				testutil.DiffErr(tc.name, resp, testdata, t)
 			}
 		})
 	}
@@ -804,9 +779,7 @@ func TestMemoryDump(t *testing.T) {
 					t.Logf("%s - err: %v", tc.name, err)
 				}
 
-				if got, want := err != nil, tc.wantErr; got != want {
-					t.Fatalf("%s: unexpected error state. got %t want %t err %v", tc.name, got, want, err)
-				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
 
 				// If we got here and expected an error the response is nil so just break.
 				if tc.wantErr {
