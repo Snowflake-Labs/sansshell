@@ -34,6 +34,13 @@ function shutdown {
     aws s3 rm s3://${USER}-dev/hosts
   fi
   sudo killall sansshell-server
+  echo "Proxy log"
+  echo
+  cat ${LOGS}/proxy.log
+  echo
+  echo "Server log"
+  echo
+  cat ${LOGS}/server.log
 }
 
 # check_logs takes 3 args:

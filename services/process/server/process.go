@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,7 +148,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 			return nil, err
 		}
 		if strings.Contains(run.Stderr.String(), "could not find _DYNAMIC symbol") {
-			continue
+			log.Printf("got stderr: %s", run.Stderr.String())
 		}
 	}
 
