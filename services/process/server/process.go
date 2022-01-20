@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,18 +137,9 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	cmdName := *pstackBin
 	options := pstackOptions(req)
 
-	// Sometimes this can fail randomly with "could not find _DYNAMIC symbol"
-	// Loop a few times to check for that.
-	var run *util.CommandRun
-	var err error
-	for i := 0; i < 10; i++ {
-		run, err = util.RunCommand(ctx, cmdName, options)
-		if err != nil {
-			return nil, err
-		}
-		if strings.Contains(run.Stderr.String(), "could not find _DYNAMIC symbol") {
-			log.Printf("got stderr: %s", run.Stderr.String())
-		}
+	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
+	if err != nil {
+		return nil, err
 	}
 
 	if err := run.Error; err != nil {
