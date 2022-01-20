@@ -247,8 +247,6 @@ check_status $? /dev/null build
 go generate build.go
 check_status $? /dev/null build binaries
 
-ldd bin/sansshell-server 
-
 # Test everything
 echo
 echo "Running tests (with tsan)"
