@@ -335,14 +335,14 @@ func TestPstack(t *testing.T) {
 			pid:     1,
 			wantErr: true,
 		},
-		{
-			name:    "bad command - returns stderr",
-			command: testutil.ResolvePath(t, "sh"),
-			options: []string{"-c", "echo foo >&2"},
-			input:   testdataPstackThreads,
-			pid:     1,
-			wantErr: true,
-		},
+		//	{
+		//		name:    "bad command - returns stderr",
+		//		command: testutil.ResolvePath(t, "sh"),
+		//		options: []string{"-c", "echo foo >&2"},
+		//		input:   testdataPstackThreads,
+		//		pid:     1,
+		//		wantErr: true,
+		//	},
 		{
 			name:    "Bad thread data - thread",
 			command: testutil.ResolvePath(t, "cat"),
