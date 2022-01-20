@@ -386,7 +386,7 @@ echo "Servers healthy"
 run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 
 run_a_test false 2 run /usr/bin/echo Hello World
-run_a_test false 10 read /etc/hosts
+run_a_test false 5 read /etc/hosts
 
 # Tail is harder since we have to run the client in the background and then kill it
 cp /etc/hosts ${LOGS}/hosts
