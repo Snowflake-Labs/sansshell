@@ -3,6 +3,7 @@ module github.com/Snowflake-Labs/sansshell
 go 1.17
 
 require (
+	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/go-logr/logr v1.2.0
 	github.com/go-logr/stdr v1.2.0
 	github.com/google/go-cmp v0.5.6
@@ -40,6 +41,7 @@ require (
 	github.com/aws/smithy-go v1.8.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt/v4 v4.0.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
