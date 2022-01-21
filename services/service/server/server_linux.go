@@ -1,6 +1,19 @@
 //go:build linux
 // +build linux
 
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+     http://www.apache.org/licenses/LICENSE-2.0
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
 package server
 
 import (
@@ -15,12 +28,12 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
-// SystemD deals in 'units', which might be services, devices, sockets,
+// Systemd deals in 'units', which might be services, devices, sockets,
 // or a variety of other types.
 // Each unit has several associated fields which collectively describe
 // its status.
-// These are returned as strings from calls to systemd, and the values
-// are defined here:
+// These are returned as strings from calls to systemd, and the canonical
+// values are defined in systemd here:
 // https://github.com/systemd/systemd/blob/b09869eaf704a9fa0e90fbb2fde52b0ce7769e37/src/basic/unit-def.c
 
 // A unit's load state indicates the state of the unit's configuration
@@ -63,12 +76,12 @@ const (
 	modeReplace = "replace"
 )
 
-// SystemD operations are asynchronous, and typically return
+// Operations on units are asynchronous, and typically return
 // immediately with a job ID (or error). The ultimate status
 // of the operation is eventually delivered as a string
 // which describes the result.
 const (
-	resultDone = "done"
+	operationResultDone = "done"
 )
 
 // convert a dbus.UnitStatus to a servicepb.Status
@@ -97,6 +110,7 @@ type systemdConnection interface {
 
 // a server implements pb.ServiceServer
 type server struct {
+	// dialSystemd is the function used to create connections to systemd.
 	dialSystemd func(context.Context) (systemdConnection, error)
 }
 
@@ -250,7 +264,7 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	// deliver a value of 'cancelled' if the ctx is cancelled by a client disconnect,
 	// so it's safe to do a simple recv.
 	result := <-resultChan
-	if result != resultDone {
+	if result != operationResultDone {
 		return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
 	}
 	return &pb.ActionReply{
