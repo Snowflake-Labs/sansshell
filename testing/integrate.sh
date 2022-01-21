@@ -111,12 +111,13 @@ function print_logs {
   cat ${LOG}
 }
 
-# run_a_test takes 3 args:
+# run_a_test takes 4 args:
 #
 # A boolean (i.e. true or false string) indicating one run for 2 hosts can error. 
 # This can happen for ptrace related commands since 2 cannot act on the same process at once.
 # Minimum number of lines log must contain
-# The command to pass to the sanssh CLI. NOTE: This is also used as the logfile suffix.
+# The top level command to pass to the sanssh CLI. 
+# The subcommand to pass to the sanssh CLI.  NOTE: This is also used as the logfile suffix along with command.
 # Args to pass to sanssh after the command (all remaining args)
 function run_a_test {
     ONE_WILL_ERROR=$1
@@ -125,58 +126,60 @@ function run_a_test {
     shift
     CMD=$1
     shift
+    SUBCMD=$1
+    shift
     ARGS=$*
 
-    echo "${CMD} checks"
+    echo "${CMD} ${SUBCMD} checks"
 
-    CHECK="${CMD} proxy to 2 hosts"    
+    CHECK="${CMD} ${SUBCMD} proxy to 2 hosts"    
     echo ${CHECK}
-    ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD},${LOGS}/2.${CMD} ${CMD} ${ARGS}
+    ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD}-${SUBCMD},${LOGS}/2.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
     STATUS=$? 
     if [ "${ONE_WILL_ERROR}" = "false" ]; then
       if [ "${STATUS}" != 0 ]; then
-        print_logs ${LOGS}/1.${CMD} log 1
-        print_logs ${LOGS}/2.${CMD} log 2
+        print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
+        print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
         check_status ${STATUS} /dev/null ${CHECK}
       fi
     else
       # If one of these is expected to error then one log is larger than the other.
       # Take the larger file and copy it so log checking will pass.
-      SIZE1=$(du -b ${LOGS}/1.${CMD} | cut -f1)
-      SIZE2=$(du -b ${LOGS}/2.${CMD} | cut -f1)
+      SIZE1=$(du -b ${LOGS}/1.${CMD}-${SUBCMD} | cut -f1)
+      SIZE2=$(du -b ${LOGS}/2.${CMD}-${SUBCMD} | cut -f1)
       if (( ${SIZE1} == ${SIZE2} )); then
         echo "FAIL - logs identical $*"
-        print_logs ${LOGS}/1.${CMD} log 1
-        print_logs ${LOGS}/2.${CMD} log 2
+        print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
+        print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
         check_status 1 /dev/null logs identical
       fi
       if (( ${SIZE1} > ${SIZE2} )); then
-        cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
+        cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
       else
-        cp ${LOGS}/2.${CMD} ${LOGS}/1.${CMD}
+        cp ${LOGS}/2.${CMD}-${SUBCMD} ${LOGS}/1.${CMD}-${SUBCMD}
       fi
     fi
-    copy_logs ${CMD} proxy-2-hosts
+    copy_logs ${CMD}-${SUBCMD} proxy-2-hosts
         
-    CHECK="${CMD} proxy to 1 host"
+    CHECK="${CMD} ${SUBCMD} proxy to 1 host"
     echo ${CHECK}
-    ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS} 
-    check_status $? ${LOGS}/1.${CMD} ${CHECK}
+    ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS} 
+    check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
     # This way they pass the identical test
-    cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
-    check_logs ${LINE_MIN} ${CMD} ${CHECK}
-    copy_logs ${CMD} proxy-1-host
+    cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
+    check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
+    copy_logs ${CMD}-${SUBCMD} proxy-1-host
 
-    CHECK="${CMD} with no proxy"
+    CHECK="${CMD} ${SUBCMD} with no proxy"
     echo ${CHECK}
-    ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS}
-    check_status $? ${LOGS}/1.${CMD} ${CHECK}
+    ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
+    check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
     # This way they pass the identical test
-    cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
-    check_logs ${LINE_MIN} ${CMD} ${CHECK}
-    copy_logs ${CMD} no-proxy
+    cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
+    check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
+    copy_logs ${CMD}-${SUBCMD} no-proxy
 
-    echo "${CMD} passed"
+    echo "${CMD} ${SUBCMD} passed"
 }
 
 # Takes 1 arg:
@@ -478,7 +481,7 @@ echo "Checking server health"
 HEALTHY=false
 for i in $(seq 1 100); do
   echo -n "${i}: "
-  ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- healthcheck
+  ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- healthcheck validate
   if [ $? = 0 ]; then
     HEALTHY=true
     break
@@ -494,10 +497,10 @@ if [ "${HEALTHY}" != "true" ]; then
 fi
 echo "Servers healthy"
 
-run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 
-run_a_test false 2 run /usr/bin/echo Hello World
-run_a_test false 5 read /etc/hosts
+run_a_test false 2 exec run /usr/bin/echo Hello World
+run_a_test false 5 file read /etc/hosts
 
 # Tail is harder since we have to run the client in the background and then kill it
 cp /etc/hosts ${LOGS}/hosts
@@ -505,19 +508,19 @@ cp /etc/hosts ${LOGS}/hosts
 echo "tail checks"
 
 echo "tail proxy to 2 hosts"
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail tail ${LOGS}/hosts &
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail file tail ${LOGS}/hosts &
 tail_execute $!
 diff ${LOGS}/1.tail ${LOGS}/2.tail > ${LOGS}/tail.diff
 check_status $? ${LOGS}/tail.diff "tail: output files differ"
 tail_check proxy-2-hosts
 
 echo "tail proxy to 1 hosts"
-${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail tail ${LOGS}/hosts &
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail file tail ${LOGS}/hosts &
 tail_execute $!
 tail_check proxy-1-host
 
 echo "tail with no proxy"
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail tail ${LOGS}/hosts &
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.tail file tail ${LOGS}/hosts &
 tail_execute $!
 tail_check no-proxy
 
@@ -526,10 +529,10 @@ echo "tail passed"
 # Validate immutable with stat
 sudo chattr +i ${LOGS}/hosts
 
-run_a_test false 1 stat ${LOGS}/hosts
+run_a_test false 1 file stat ${LOGS}/hosts
 sudo chattr -i ${LOGS}/hosts
 
-IMMUTABLE_COUNT=$(egrep Immutable..true ${LOGS}/1.stat* | wc -l)
+IMMUTABLE_COUNT=$(egrep Immutable..true ${LOGS}/1.file-stat* | wc -l)
 EXPECTED_IMMUTABLE=3
 if [ "${IMMUTABLE_COUNT}" != "${EXPECTED_IMMUTABLE}" ]; then
   false
@@ -537,7 +540,7 @@ fi
 check_status $? /dev/null "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
 echo "stat immutable state validated"
 
-run_a_test false 1 sum /etc/hosts
+run_a_test false 1 file sum /etc/hosts
 
 # Record original state before we change it all with chown/etc
 touch ${LOGS}/test-file
@@ -555,15 +558,15 @@ CUR=$(printf "%d\n" ${ORIG_MODE})
 NEW=$(expr ${CUR} + 1)
 EXPECTED_NEW_MODE=$(printf "0%o" ${NEW})
 
-run_a_test false 0 chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
-run_a_test false 0 chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
-run_a_test false 0 chmod --mode=${EXPECTED_NEW_MODE} ${LOGS}/test-file
-run_a_test false 0 immutable --state=true ${LOGS}/test-file
+run_a_test false 0 file chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
+run_a_test false 0 file chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
+run_a_test false 0 file chmod --mode=${EXPECTED_NEW_MODE} ${LOGS}/test-file
+run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 
 check_perms_mode ${LOGS}/test-file
 
 # Now validate we can clear immutable too
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- immutable --state=false ${LOGS}/test-file
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file immutable --state=false ${LOGS}/test-file
 check_status $? /dev/null "setting immutable to false"
 EXPECTED_NEW_IMMUTABLE="-"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
@@ -573,13 +576,13 @@ fi
 
 echo "uid, etc checks passed"
 
-run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
   echo cp test with bucket syntax
   aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
-  run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
+  run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
   check_perms_mode ${LOGS}/cp-hosts
   aws s3 rm s3://${USER}-dev/hosts
 else 
@@ -588,14 +591,14 @@ fi
 
 # Trying without --overwrite to validate
 echo "This can emit an error message about overwrite"
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite file cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 if [ $? == 0 ]; then
   check_status 1 ${LOGS}/1.cp-no-overwrite Expected failure for no --overwrite from cp for existing file.
 fi
 
 # Make sure we can set immutable
 echo "cp test immutable/overwrite"
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-overwrite-immutable cp --overwrite --immutable --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-overwrite-immutable file cp --overwrite --immutable --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_status $? ${LOGS}/1.cp-overwrite-immutable cp run with --overwrite and --immutable
 EXPECTED_NEW_IMMUTABLE="i"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/cp-hosts | cut -c5)
@@ -609,25 +612,25 @@ mkdir ${LOGS}/test
 touch ${LOGS}/test/file
 echo "${LOGS}/test/file" >> ${LOGS}/ls.expected
 
-run_a_test false 1 ls ${LOGS}/test
-diff -u ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected > ${LOGS}/ls.diff
-check_status $?  ${LOGS}/ls.diff diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
+run_a_test false 1 file ls ${LOGS}/test
+diff -u ${LOGS}/1.file-ls-proxy-1-host ${LOGS}/ls.expected > ${LOGS}/ls.diff
+check_status $? ${LOGS}/ls.diff diff check ls wrong. See ${LOGS}/1.file-ls-proxy-1-host and ${LOGS}/ls.expected
 
-run_a_test false 1 ls --long ${LOGS}/test
-tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e '^-rw-'
-check_status $? /dev/null long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
+run_a_test false 1 file ls --long ${LOGS}/test
+tail -1 ${LOGS}/1.file-ls-proxy-1-host | egrep -q -e '^-rw-'
+check_status $? /dev/null long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.file-ls-proxy-1-host
 
-run_a_test false 1 ls --long --directory ${LOGS}/test
+run_a_test false 1 file ls --long --directory ${LOGS}/test
 # Too painful to validate this content so we'll just check some basics
-head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+head -1 ${LOGS}/1.file-ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.file-ls-proxy-1-host
 
 # One last one...Check we can 2 multiple directories in a query
-run_a_test false 2 ls --long --directory ${LOGS}/test ${LOGS}/test
-head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
-tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? /dev/null long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+run_a_test false 2 file ls --long --directory ${LOGS}/test ${LOGS}/test
+head -1 ${LOGS}/1.file-ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.file-ls-proxy-1-host
+tail -1 ${LOGS}/1.file-ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
+check_status $? /dev/null long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.file-ls-proxy-1-host
 
 # Skip if on github (we assume yum, no apt support yet)
 if [ -z "${ON_GITHUB}" ]; then
@@ -639,21 +642,20 @@ else
   echo "Skipping package tests on Github"
 fi
 
-run_a_test false 50 ps
+run_a_test false 50 process ps
 
 # Skip if on github (pstack randomly fails)
 if [ -z "${ON_GITHUB}" ]; then
-  run_a_test true 20 pstack --pid=${PROXY_PID}
+  run_a_test true 20 process pstack --pid=${PROXY_PID}
 else
   echo "Skipping pstack tests on Github due to transient 'could not find _DYNAMIC symbol' errors"
 fi
 
-
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
-run_a_test true 20 dump --pid=$$ --dump-type=GCORE
+run_a_test true 20 process dump --pid=$$ --dump-type=GCORE
 # Cores get their own additional checks.
-for i in ${LOGS}/?.dump*; do
+for i in ${LOGS}/?.process-dump*; do
   file $i | egrep -q "LSB core file.*from 'bash'"
   check_status $? /dev/null $i not a core file
 done
@@ -661,7 +663,7 @@ done
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
   echo "Dumping core to s3 bucket"
-  ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
+  ${SANSSH_PROXY} ${SINGLE_TARGET} process dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
   check_status $? /dev/null Remote dump to s3
   echo Dumping bucket
   aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
