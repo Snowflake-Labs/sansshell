@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -31,11 +32,48 @@ func init() {
 	subcommands.Register(&execCmd{}, "exec")
 }
 
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "exec")
+	c.Register(&runCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
 type execCmd struct{}
 
-func (*execCmd) Name() string     { return "run" }
-func (*execCmd) Synopsis() string { return "Run provided command and return a response." }
-func (*execCmd) Usage() string {
+func (*execCmd) Name() string { return "exec" }
+func (p *execCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *execCmd) Usage() string {
+	return "exec has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*execCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
+}
+
+type runCmd struct{}
+
+func (*runCmd) Name() string     { return "run" }
+func (*runCmd) Synopsis() string { return "Run provided command and return a response." }
+func (*runCmd) Usage() string {
 	return `run <command> [<args>...]:
   Run a command remotely and return the response
 
@@ -45,9 +83,9 @@ func (*execCmd) Usage() string {
 `
 }
 
-func (p *execCmd) SetFlags(f *flag.FlagSet) {}
+func (p *runCmd) SetFlags(f *flag.FlagSet) {}
 
-func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a command to execute.\n")

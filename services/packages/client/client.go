@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -31,10 +32,47 @@ import (
 )
 
 func init() {
-	subcommands.Register(&installCmd{}, "packages")
-	subcommands.Register(&updateCmd{}, "packages")
-	subcommands.Register(&listCmd{}, "packages")
-	subcommands.Register(&repoListCmd{}, "packages")
+	subcommands.Register(&packagesCmd{}, "packages")
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "packages")
+	c.Register(&installCmd{}, "")
+	c.Register(&updateCmd{}, "")
+	c.Register(&listCmd{}, "")
+	c.Register(&repoListCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
+type packagesCmd struct{}
+
+func (*packagesCmd) Name() string { return "packages" }
+func (p *packagesCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *packagesCmd) Usage() string {
+	return "packages has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*packagesCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *packagesCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 func flagToType(val string) (pb.PackageSystem, error) {

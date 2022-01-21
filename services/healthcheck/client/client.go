@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -34,19 +35,56 @@ func init() {
 	subcommands.Register(&healthcheckCmd{}, "healthcheck")
 }
 
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "process")
+	c.Register(&validateCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
 type healthcheckCmd struct{}
 
-func (*healthcheckCmd) Name() string     { return "healthcheck" }
-func (*healthcheckCmd) Synopsis() string { return "Confirm connectivity to working server." }
-func (*healthcheckCmd) Usage() string {
+func (*healthcheckCmd) Name() string { return "healthcheck" }
+func (p *healthcheckCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *healthcheckCmd) Usage() string {
+	return "health has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*healthcheckCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
+}
+
+type validateCmd struct{}
+
+func (*validateCmd) Name() string     { return "validate" }
+func (*validateCmd) Synopsis() string { return "Confirm connectivity to working server." }
+func (*validateCmd) Usage() string {
 	return `healthcheck:
   Sends an empty request and expects an empty response.  Only prints errors.
 `
 }
 
-func (p *healthcheckCmd) SetFlags(f *flag.FlagSet) {}
+func (p *validateCmd) SetFlags(f *flag.FlagSet) {}
 
-func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *validateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewHealthCheckClientProxy(state.Conn)
 

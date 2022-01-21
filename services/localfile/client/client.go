@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -35,16 +36,53 @@ import (
 )
 
 func init() {
-	subcommands.Register(&readCmd{}, "file")
-	subcommands.Register(&tailCmd{}, "file")
-	subcommands.Register(&statCmd{}, "file")
-	subcommands.Register(&sumCmd{}, "file")
-	subcommands.Register(&chownCmd{}, "file")
-	subcommands.Register(&chgrpCmd{}, "file")
-	subcommands.Register(&chmodCmd{}, "file")
-	subcommands.Register(&immutableCmd{}, "file")
-	subcommands.Register(&lsCmd{}, "file")
-	subcommands.Register(&cpCmd{}, "file")
+	subcommands.Register(&fileCmd{}, "file")
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "process")
+	c.Register(&readCmd{}, "")
+	c.Register(&tailCmd{}, "")
+	c.Register(&statCmd{}, "")
+	c.Register(&sumCmd{}, "")
+	c.Register(&chownCmd{}, "")
+	c.Register(&chgrpCmd{}, "")
+	c.Register(&chmodCmd{}, "")
+	c.Register(&immutableCmd{}, "")
+	c.Register(&lsCmd{}, "")
+	c.Register(&cpCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
+type fileCmd struct{}
+
+func (*fileCmd) Name() string { return "file" }
+func (p *fileCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *fileCmd) Usage() string {
+	return "file has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*fileCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *fileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 type readCmd struct {

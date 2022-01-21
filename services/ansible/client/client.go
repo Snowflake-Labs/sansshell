@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -32,7 +33,44 @@ func init() {
 	subcommands.Register(&ansibleCmd{}, "ansible")
 }
 
-type ansibleCmd struct {
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "ansible")
+	c.Register(&playbookCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
+type ansibleCmd struct{}
+
+func (*ansibleCmd) Name() string { return "ansible" }
+func (p *ansibleCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *ansibleCmd) Usage() string {
+	return "ansible has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*ansibleCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
+}
+
+type playbookCmd struct {
 	playbook string
 	vars     util.KeyValueSliceFlag
 	user     string
@@ -41,15 +79,15 @@ type ansibleCmd struct {
 	verbose  bool
 }
 
-func (*ansibleCmd) Name() string     { return "ansible" }
-func (*ansibleCmd) Synopsis() string { return "Run an ansible playbook on the server." }
-func (*ansibleCmd) Usage() string {
+func (*playbookCmd) Name() string     { return "playbook" }
+func (*playbookCmd) Synopsis() string { return "Run an ansible playbook on the server." }
+func (*playbookCmd) Usage() string {
 	return `ansible:
   Run an ansible playbook on the remote server.
 `
 }
 
-func (a *ansibleCmd) SetFlags(f *flag.FlagSet) {
+func (a *playbookCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&a.playbook, "playbook", "", "The absolute path to the playbook to execute on the remote server.")
 	f.Var(&a.vars, "vars", "Pass key=value (via -e) to ansible-playbook. Multiple values can be specified separated by commas")
 	f.StringVar(&a.user, "user", "", "Run the playbook as this user")
@@ -58,7 +96,7 @@ func (a *ansibleCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&a.verbose, "verbose", false, "If true the playbook wiill be run with -vvv passed as an argument")
 }
 
-func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if a.playbook == "" {
 		fmt.Fprintln(os.Stderr, "--playbook is required")
 		return subcommands.ExitFailure

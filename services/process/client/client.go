@@ -17,6 +17,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -32,10 +33,47 @@ import (
 )
 
 func init() {
-	subcommands.Register(&psCmd{}, "process")
-	subcommands.Register(&pstackCmd{}, "process")
-	subcommands.Register(&jstackCmd{}, "process")
-	subcommands.Register(&dumpCmd{}, "process")
+	subcommands.Register(&processCmd{}, "process")
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := subcommands.NewCommander(f, "process")
+	c.Register(&psCmd{}, "")
+	c.Register(&pstackCmd{}, "")
+	c.Register(&jstackCmd{}, "")
+	c.Register(&dumpCmd{}, "")
+	c.Register(c.HelpCommand(), "")
+	c.Register(c.FlagsCommand(), "")
+	c.Register(c.CommandsCommand(), "")
+	return c
+}
+
+type processCmd struct{}
+
+func (*processCmd) Name() string { return "process" }
+func (p *processCmd) Synopsis() string {
+	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
+	b := &bytes.Buffer{}
+	b.WriteString("\n")
+	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+		switch comm.Name() {
+		case "help", "flags", "commands":
+			break
+		default:
+			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+		}
+	}
+	c.VisitCommands(fn)
+	return b.String()
+}
+func (p *processCmd) Usage() string {
+	return "process has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+}
+func (*processCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 func outputEntryHeader(out io.Writer, target string, index int) {
@@ -49,9 +87,7 @@ type psCmd struct {
 func (*psCmd) Name() string     { return "ps" }
 func (*psCmd) Synopsis() string { return "Retrieve process list." }
 func (*psCmd) Usage() string {
-	return `ps:
-  Read the process list from the remote machine.
-`
+	return "ps: Read the process list from the remote machine.\n"
 }
 
 func (p *psCmd) SetFlags(f *flag.FlagSet) {
@@ -175,9 +211,7 @@ type pstackCmd struct {
 func (*pstackCmd) Name() string     { return "pstack" }
 func (*pstackCmd) Synopsis() string { return "Retrieve stacks." }
 func (*pstackCmd) Usage() string {
-	return `pstack:
-  Read the stacks for a given process id.
-`
+	return "pstack: Read the stacks for a given process id.\n"
 }
 
 func (p *pstackCmd) SetFlags(f *flag.FlagSet) {
@@ -230,9 +264,7 @@ type jstackCmd struct {
 func (*jstackCmd) Name() string     { return "jstack" }
 func (*jstackCmd) Synopsis() string { return "Retrieve java stacks." }
 func (*jstackCmd) Usage() string {
-	return `jstack:
-  Read the java stacks for a given process id.
-`
+	return "jstack: Read the java stacks for a given process id.\n"
 }
 
 func (p *jstackCmd) SetFlags(f *flag.FlagSet) {
@@ -321,9 +353,7 @@ type dumpCmd struct {
 func (*dumpCmd) Name() string     { return "dump" }
 func (*dumpCmd) Synopsis() string { return "Create a memory dump of a running process." }
 func (*dumpCmd) Usage() string {
-	return `dump:
-  Generate a memory dump for a given process id.
-`
+	return "dump: Generate a memory dump for a given process id."
 }
 
 func (p *dumpCmd) SetFlags(f *flag.FlagSet) {
