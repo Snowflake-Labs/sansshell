@@ -1,4 +1,20 @@
 #!/usr/bin/env bash
+
+# Copyright (c) 2019 Snowflake Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
 set -o nounset
 
 # check_status takes 3 args:
@@ -20,8 +36,12 @@ function check_status {
       ls ${LOGS}
       print_logs ${LOG} ${FAIL}
     fi
-    print_logs ${LOGS}/proxy.log proxy log
-    print_logs ${LOGS}/server.log server log
+    if [ -f ${LOGS}/proxy.log ]; then
+      print_logs ${LOGS}/proxy.log proxy log
+    fi
+    if [ -f ${LOGS}/server.log ]; then
+      print_logs ${LOGS}/server.log server log
+    fi
     exit 1
   fi
 }
@@ -35,7 +55,7 @@ function shutdown {
   if [ -z "${ON_GITHUB}" ]; then
     aws s3 rm s3://${USER}-dev/hosts
   fi
-  sudo killall sansshell-server
+  sudo killall sansshell-server >& /dev/null
 }
 
 # check_logs takes 3 args:
@@ -237,6 +257,77 @@ cd $(dirname $PWD/$BASH_SOURCE)/..
 # Open up policy for testing
 echo "package sansshell.authz" > ${LOGS}/policy
 echo "default allow = true" >> ${LOGS}/policy
+
+# Check licensing
+cat > ${LOGS}/required-license << EOF
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
+EOF
+cat > ${LOGS}/required-license.sh << EOF
+# Copyright (c) 2019 Snowflake Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+EOF
+
+# For Go we can ignore generate protobuf files.
+find . -type f -name \*.go ! -name \*.pb.go > ${LOGS}/license-go
+find . -type f -name \*.sh > ${LOGS}/license-sh
+find . -type f -name \*.proto > ${LOGS}/license-proto
+
+broke=""
+for i in $(cat ${LOGS}/license-go ${LOGS}/license-proto); do
+  LIC="${LOGS}/required-license"
+  SUF=${i##*.}
+  if [ "${SUF}" == "go" -o "${SUF}" == "proto" ]; then
+    head -16 $i > ${LOGS}/diff
+
+    # If this has a go directive it has to be the first line
+    # so skip forward to where the block should be right after that.
+    one=$(head -1 ${LOGS}/diff | cut -c1-5)
+    if [ "${one}" == "//go:" ]; then
+      printf "4,19p\n" | ed -s $i > ${LOGS}/diff 2> /dev/null
+    fi
+  fi
+  if [ "${SUF}" == "sh" ]; then
+    printf "3,17p\n" | ed -s $i > ${LOGS}/diff 2> /dev/null
+    LIC="${LOGS}/required-license.sh"
+  fi
+  diff ${LIC} ${LOGS}/diff > /dev/null
+  if [ $? != 0 ]; then
+    echo $i is missing required license.
+    broke=true
+  fi
+done
+
+if [ "${broke}" == "true" ]; then
+  check_status 1 /dev/null Files missing license
+fi
 
 # Build everything (this won't rebuild the binaries but the generate will)
 echo
