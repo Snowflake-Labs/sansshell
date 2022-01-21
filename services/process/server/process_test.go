@@ -359,11 +359,11 @@ func TestPstack(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "Bad thread data - thread",
-			command: testutil.ResolvePath(t, "cat"),
-			input:   testdataPstackThreadsBadThread,
-			pid:     1,
-			wantErr: true,
+			name:     "Extra thread data ok",
+			command:  testutil.ResolvePath(t, "cat"),
+			input:    testdataPstackThreadsBadThread,
+			validate: testdataPstackThreadsTextProto,
+			pid:      1,
 		},
 		{
 			name:    "Bad thread data - number",
