@@ -122,12 +122,6 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	// simultaneously, it is not safe for multiple goroutines
 	// to call "Recv" on the same stream
 	group.Go(func() error {
-		// Close 'requestChan' when receive returns, since we will
-		// never receive any additional messages from the client
-		// This can be used by the dispatching goroutine as a single
-		// to CloseSend on the target streams
-		defer close(requestChan)
-
 		// This double-dispatch is necessary because Recv() will block
 		// until the proxy stream itself is cancelled.
 		// If dispatch has failed, we need to exit, even though Recv
@@ -204,6 +198,11 @@ func send(replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
 // until EOF (or other error) is received from the stream, or the supplied context is
 // done
 func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan *pb.ProxyRequest) error {
+	// Close 'requestChan' when receive returns, since we will
+	// never receive any additional messages from the client
+	// This can be used by the dispatching goroutine as a single
+	// to CloseSend on the target streams
+	defer close(requestChan)
 	for {
 		// Receive from the client stream
 		// This will block, but can return early
