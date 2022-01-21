@@ -680,6 +680,14 @@ else
   echo "Skipping s3 dump tests on Github"
 fi
 
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test false 10 services --system-type systemd
+  run_a_test false 10 status --service-name systemd
+
+else
+  echo "Skipping systemd tests on Github"
+fi
+
 
 # TO{DO(j}chacon): Provide a java binary for test{s
 echo 
