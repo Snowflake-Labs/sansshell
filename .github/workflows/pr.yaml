@@ -16,7 +16,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install ansible
           sudo apt-get install gdb
-          sudo apt-get install pstack
           sudo apt-get install python3
       - name: integration tests
         run: ./testing/integrate.sh
