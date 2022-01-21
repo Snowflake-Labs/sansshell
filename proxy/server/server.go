@@ -1,3 +1,19 @@
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
 // package server provides the server-side implementation of the
 // sansshell proxy server
 package server
@@ -106,12 +122,6 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	// simultaneously, it is not safe for multiple goroutines
 	// to call "Recv" on the same stream
 	group.Go(func() error {
-		// Close 'requestChan' when receive returns, since we will
-		// never receive any additional messages from the client
-		// This can be used by the dispatching goroutine as a single
-		// to CloseSend on the target streams
-		defer close(requestChan)
-
 		// This double-dispatch is necessary because Recv() will block
 		// until the proxy stream itself is cancelled.
 		// If dispatch has failed, we need to exit, even though Recv
@@ -188,6 +198,11 @@ func send(replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
 // until EOF (or other error) is received from the stream, or the supplied context is
 // done
 func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan *pb.ProxyRequest) error {
+	// Close 'requestChan' when receive returns, since we will
+	// never receive any additional messages from the client
+	// This can be used by the dispatching goroutine as a single
+	// to CloseSend on the target streams
+	defer close(requestChan)
 	for {
 		// Receive from the client stream
 		// This will block, but can return early

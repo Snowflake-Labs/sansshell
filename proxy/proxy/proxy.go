@@ -1,3 +1,19 @@
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
 // Package proxy provides the client side API for working with a proxy server.
 //
 // If called without a proxy simply acts as a pass though and normal ClientConnInterface.
@@ -191,6 +207,25 @@ func (p *proxyStream) send(requestMsg proto.Message) error {
 	return nil
 }
 
+func (p *proxyStream) closeClients() error {
+	var ids []uint64
+	for s := range p.ids {
+		ids = append(ids, s)
+	}
+	data := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_ClientClose{
+			ClientClose: &proxypb.ClientClose{
+				StreamIds: ids,
+			},
+		},
+	}
+	// Send the request to the proxy.
+	if err := p.stream.Send(data); err != nil {
+		return status.Errorf(codes.Internal, "can't send close data for %s on stream - %v", p.method, err)
+	}
+	return nil
+}
+
 // see grpc.ClientStream
 func (p *proxyStream) SendMsg(args interface{}) error {
 	if p.sendClosed {
@@ -356,6 +391,14 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 	if err := s.send(requestMsg); err != nil {
 		return nil, err
 	}
+	// TODO(): Put this back when the race in server.go is figured out. Causes a send and close
+	// on the channel processing server side which isn't allowed.
+	//if err := s.closeClients(); err != nil {
+	//	return nil, err
+	//}
+	//if err := s.CloseSend(); err != nil {
+	//	return nil, err
+	//}
 	retChan := make(chan *ProxyRet)
 
 	// Fire off a separate routine to read from the stream and send the responses down retChan.

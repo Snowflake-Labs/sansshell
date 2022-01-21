@@ -1,3 +1,19 @@
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
 package main
 
 import (
@@ -32,6 +48,16 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		return
 	}
 
+	// In the streaming case we need to import io so check for that.
+	needIO := false
+	for _, service := range file.Services {
+		for _, method := range service.Methods {
+			if method.Desc.IsStreamingServer() || method.Desc.IsStreamingClient() {
+				needIO = true
+			}
+		}
+	}
+
 	// Create the output file and add the header + includes.
 	fn := file.GeneratedFilenamePrefix + "_grpcproxy.pb.go"
 	g := plugin.NewGeneratedFile(fn, file.GoImportPath)
@@ -44,6 +70,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	g.P()
 	g.P("import (")
 	g.P(`"fmt"`)
+	if needIO {
+		g.P(`"io"`)
+	}
 	g.P()
 	g.P(")")
 	g.P()
@@ -128,6 +157,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 				g.P()
 				g.P("type ", clientStruct, methodStruct, " struct {")
 				g.P("cc *", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")))
+				g.P("directDone bool")
 				g.P(g.QualifiedGoIdent(grpcPackage.Ident("ClientStream")))
 				g.P("}")
 				g.P()
@@ -167,15 +197,23 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("// convert it into a single slice entry return. This ensures the OneMany style calls")
 					g.P("// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.")
 					g.P("if x.cc.Direct() {")
-					g.P("m := &", g.QualifiedGoIdent(method.Output.GoIdent), "{}")
-					g.P("if err := x.ClientStream.RecvMsg(m); err != nil {")
-					g.P("return nil, err")
+					g.P("// Check if we're done. Just return EOF now. Any real error was already sent inside")
+					g.P("// of a ManyResponse.")
+					g.P("if x.directDone {")
+					g.P("return nil, io.EOF")
 					g.P("}")
+					g.P("m := &", g.QualifiedGoIdent(method.Output.GoIdent), "{}")
+					g.P("err := x.ClientStream.RecvMsg(m)")
 					g.P("ret = append(ret, &", method.GoName, "ManyResponse{")
 					g.P("Resp:   m,")
+					g.P("Error: err,")
 					g.P("Target: x.cc.Targets[0],")
 					g.P("Index:  0,")
 					g.P("})")
+					g.P("// An error means we're done so set things so a later call now gets an EOF.")
+					g.P("if err != nil {")
+					g.P("x.directDone = true")
+					g.P("}")
 					g.P("return ret, nil")
 					g.P("}")
 					g.P()
@@ -291,7 +329,7 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 			g.P("if err != nil {")
 			g.P("return nil, err")
 			g.P("}")
-			g.P("x := &", clientStruct, methodStruct, "{c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), "), stream}")
+			g.P("x := &", clientStruct, methodStruct, "{c.cc.(*", g.QualifiedGoIdent(grpcProxyPackage.Ident("ProxyConn")), "), false, stream}")
 			if !method.Desc.IsStreamingClient() {
 				g.P("if err := x.ClientStream.SendMsg(in); err != nil {")
 				g.P("return nil, err")

@@ -13,6 +13,7 @@ import (
 
 import (
 	"fmt"
+	"io"
 )
 
 // ProcessClientProxy is the superset of ProcessClient which additionally includes the OneMany proxy methods
@@ -244,7 +245,8 @@ type Process_GetMemoryDumpClientProxy interface {
 }
 
 type processClientGetMemoryDumpClientProxy struct {
-	cc *proxy.ProxyConn
+	cc         *proxy.ProxyConn
+	directDone bool
 	grpc.ClientStream
 }
 
@@ -255,15 +257,23 @@ func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResp
 	// convert it into a single slice entry return. This ensures the OneMany style calls
 	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
 	if x.cc.Direct() {
-		m := &GetMemoryDumpReply{}
-		if err := x.ClientStream.RecvMsg(m); err != nil {
-			return nil, err
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
 		}
+		m := &GetMemoryDumpReply{}
+		err := x.ClientStream.RecvMsg(m)
 		ret = append(ret, &GetMemoryDumpManyResponse{
 			Resp:   m,
+			Error:  err,
 			Target: x.cc.Targets[0],
 			Index:  0,
 		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
 		return ret, nil
 	}
 
@@ -297,7 +307,7 @@ func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMe
 	if err != nil {
 		return nil, err
 	}
-	x := &processClientGetMemoryDumpClientProxy{c.cc.(*proxy.ProxyConn), stream}
+	x := &processClientGetMemoryDumpClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
