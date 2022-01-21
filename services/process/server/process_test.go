@@ -217,6 +217,11 @@ func TestPstackNative(t *testing.T) {
 		t.Skip("OS not supported")
 	}
 
+	// Github specific check
+	if os.Getenv("GITHUB_ACTION") != "" {
+		t.Skip("Running on github, skipping due to flakiness of pstack")
+	}
+
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)

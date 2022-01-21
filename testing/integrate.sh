@@ -1,17 +1,27 @@
 #!/usr/bin/env bash
 set -o nounset
 
-# check_status takes 2 args:
+# check_status takes 3 args:
 #
 # A code to compare against
+# Logfile to print on error
 # Any text to output on failure (all remaining args).
 function check_status {
   STATUS=$1
   shift
+  LOG=$1
+  shift
+  FAIL=$*
 
   if [ $STATUS != 0 ]; then
-    echo "FAIL $*"
+    echo "FAIL ${FAIL}"
     echo "Logs in ${LOGS}"
+    if [ "${LOG}" != "/dev/null" ]; then
+      ls ${LOGS}
+      print_logs ${LOG} ${FAIL}
+    fi
+    print_logs ${LOGS}/proxy.log proxy log
+    print_logs ${LOGS}/server.log server log
     exit 1
   fi
 }
@@ -21,7 +31,10 @@ function shutdown {
   if [ -n "${PROXY_PID}" ]; then
     kill -KILL ${PROXY_PID}
   fi
-  aws s3 rm s3://${USER}-dev/hosts
+  # Skip if on github
+  if [ -z "${ON_GITHUB}" ]; then
+    aws s3 rm s3://${USER}-dev/hosts
+  fi
   sudo killall sansshell-server
 }
 
@@ -38,6 +51,8 @@ function check_logs {
   shift
   SUFFIX=$1
   shift
+  FAIL=$*
+
   wc -l ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} | awk "{
     line1=\$1
     readline
@@ -47,7 +62,11 @@ function check_logs {
       exit 1
     }
   }"
-  check_status $? logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - $*
+  if [ $? != 0 ]; then
+    print_logs ${LOGS}/1.${SUFFIX} log 1
+    print_logs ${LOGS}/2.${SUFFIX} log 2
+    check_status 1 /dev/null logs mismatch or too short ${LOGS}/1.${SUFFIX} ${LOGS}/2.${SUFFIX} - ${FAIL}
+  fi
 }
 
 function copy_logs {
@@ -61,9 +80,18 @@ function copy_logs {
     fi
 }
 
+function print_logs {
+  LOG=$1
+  shift
+  PREFACE=$*
+
+  printf "\n${PREFACE}:\n\n"
+  cat ${LOG}
+}
+
 # run_a_test takes 3 args:
 #
-# A boolean (i.e. true or false string) indicating one run for 2 hosts will error. 
+# A boolean (i.e. true or false string) indicating one run for 2 hosts can error. 
 # This can happen for ptrace related commands since 2 cannot act on the same process at once.
 # Minimum number of lines log must contain
 # The command to pass to the sanssh CLI. NOTE: This is also used as the logfile suffix.
@@ -84,7 +112,11 @@ function run_a_test {
     ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD},${LOGS}/2.${CMD} ${CMD} ${ARGS}
     STATUS=$? 
     if [ "${ONE_WILL_ERROR}" = "false" ]; then
-      check_status ${STATUS} ${CHECK}
+      if [ "${STATUS}" != 0 ]; then
+        print_logs ${LOGS}/1.${CMD} log 1
+        print_logs ${LOGS}/2.${CMD} log 2
+        check_status ${STATUS} /dev/null ${CHECK}
+      fi
     else
       # If one of these is expected to error then one log is larger than the other.
       # Take the larger file and copy it so log checking will pass.
@@ -92,7 +124,9 @@ function run_a_test {
       SIZE2=$(du -b ${LOGS}/2.${CMD} | cut -f1)
       if (( ${SIZE1} == ${SIZE2} )); then
         echo "FAIL - logs identical $*"
-        exit 1
+        print_logs ${LOGS}/1.${CMD} log 1
+        print_logs ${LOGS}/2.${CMD} log 2
+        check_status 1 /dev/null logs identical
       fi
       if (( ${SIZE1} > ${SIZE2} )); then
         cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
@@ -105,7 +139,7 @@ function run_a_test {
     CHECK="${CMD} proxy to 1 host"
     echo ${CHECK}
     ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS} 
-    check_status $? ${CHECK}
+    check_status $? ${LOGS}/1.${CMD} ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -114,7 +148,7 @@ function run_a_test {
     CHECK="${CMD} with no proxy"
     echo ${CHECK}
     ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD} ${CMD} ${ARGS}
-    check_status $? ${CHECK}
+    check_status $? ${LOGS}/1.${CMD} ${CHECK}
     # This way they pass the identical test
     cp ${LOGS}/1.${CMD} ${LOGS}/2.${CMD}
     check_logs ${LINE_MIN} ${CMD} ${CHECK}
@@ -140,8 +174,8 @@ function tail_execute {
 #
 # Suffix for copied log files
 function tail_check {
-  diff -q ${LOGS}/1.tail ${LOGS}/hosts
-  check_status $? "tail: output differs from source"
+  diff ${LOGS}/1.tail ${LOGS}/hosts > ${LOGS}/tail.diff
+  check_status $? ${LOGS}/tail.diff "tail: output differs from source"
   copy_logs tail $*
 }
 
@@ -161,21 +195,30 @@ function check_perms_mode {
   NEW_IMMUTABLE=$(lsattr ${FILE} | cut -c5)
 
   if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
-    check_status 1 "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
+    check_status 1 /dev/null "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
   fi
   # These aren't quoted as parsed ones may have leading spaces
   if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
-    check_status 1 "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
+    check_status 1 /dev/null "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
   fi
   if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
-    check_status 1 "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
+    check_status 1 /dev/null "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
   fi
   if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-    check_status 1 "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+    check_status 1 /dev/null "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
   fi
 }
 
 PROXY_PID=""
+ON_GITHUB=""
+
+if [ -n "${GITHUB_ACTION:-}" ]; then
+  ON_GITHUB="true"
+  # So we can run pstack/gcore below
+  sudo sysctl kernel.yama.ptrace_scope
+  sudo sysctl -w kernel.yama.ptrace_scope=0
+  sudo sysctl kernel.yama.ptrace_scope
+fi
 
 OS=$(uname -s)
 if [ "${OS}" != "Linux" ]; then
@@ -200,24 +243,22 @@ echo
 echo "Running builds"
 echo
 go build -v ./...
+check_status $? /dev/null build
 go generate build.go
-
-check_status $? build
+check_status $? /dev/null build binaries
 
 # Test everything
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=1 -race -timeout 30s  -v ./... 
-check_status $? test
+go test -count=10 -race -timeout 5m  -v ./... >& ${LOGS}/test.log
+check_status $? ${LOGS}/test.log test
 
 echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
 go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >& ${LOGS}/cover.log
-RC=$?
-cat ${LOGS}/cover.log
-check_status ${RC} coverage
+check_status $? ${LOGS}/cover.log coverage
 
 # Print out coverage stats
 egrep "^ok.*coverage:.*of.statements|no test files" ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
@@ -278,7 +319,7 @@ IFS="
 for i in $(egrep % ${LOGS}/cover-filtered.log); do
   percent=$(echo $i | sed -e "s,.*\(coverage:.*\),\1," | awk '{print $2}' | sed -e 's:\%::')
   # Have to use bc as expr can't handle floats...
-  if [ $(printf "$percent < 88.0\n" | bc) == "1" ]; then
+  if [ $(printf "$percent < 85.0\n" | bc) == "1" ]; then
     echo "Coverage not high enough"
     echo $i
     echo
@@ -291,40 +332,50 @@ if [ "$bad" == "true" ]; then
   abort_tests="${abort_tests}  Packages with coverage too low"
 fi
 if [ -n "${abort_tests}" ]; then
-  check_status 1 "${abort_tests}"
+  check_status 1 /dev/null "${abort_tests}"
 fi
 
-# Remove zziplib so we can reinstall it
-echo "Removing zziplib package so install can put it back"
-sudo yum remove -y zziplib
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  # Remove zziplib so we can reinstall it
+  echo "Removing zziplib package so install can put it back"
+  sudo yum remove -y zziplib
+else 
+  echo "Skipping package setup on Github"
+fi
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
 
-# Make sure remote cloud works.
-# TODO(jchacon): Plumb a test account in via a flag instead of assuming this works.
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  # Make sure remote cloud works.
+  # TODO(jchacon): Plumb a test account in via a flag instead of assuming this works.
 
-# Check if the bucket exists and is in the right region. If it doesn't exist we'll
-# make it but otherwise abort.
-aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
-RC=$?
-if [ "$RC" = 0 ]; then
-  if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
-    check_status 1 Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+  # Check if the bucket exists and is in the right region. If it doesn't exist we'll
+  # make it but otherwise abort.
+  aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
+  RC=$?
+  if [ "$RC" = 0 ]; then
+    if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
+      check_status 1 /dev/null Bucket ${USER}-dev not in us-west-2. Fix manually and run again.
+    fi
+  else
+    aws s3 mb s3://${USER}-dev --region us-west-2
+    check_status $? /dev/null Making s3 bucket
   fi
-else
-  aws s3 mb s3://${USER}-dev --region us-west-2
-  check_status $? Making s3 bucket
+else 
+  echo "Skipping remote cloud setup on Github"
 fi
 
-SANSSH_NOPROXY="./bin/sanssh --timeout=120s"
+SANSSH_NOPROXY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
 SINGLE_TARGET="--targets=localhost:50042"
 MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
@@ -343,13 +394,18 @@ for i in $(seq 1 100); do
 done
 if [ "${HEALTHY}" != "true" ]; then
   echo "Servers never healthy"
+  printf "\nServer:\n\n"
+  cat ${LOGS}/server.log
+  printf "\nProxy:\n\n"
+  cat ${LOGS}/proxy.log
   exit 1
 fi
 echo "Servers healthy"
 
 run_a_test false 50 ansible --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
+
 run_a_test false 2 run /usr/bin/echo Hello World
-run_a_test false 10 read /etc/hosts
+run_a_test false 5 read /etc/hosts
 
 # Tail is harder since we have to run the client in the background and then kill it
 cp /etc/hosts ${LOGS}/hosts
@@ -359,8 +415,8 @@ echo "tail checks"
 echo "tail proxy to 2 hosts"
 ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail tail ${LOGS}/hosts &
 tail_execute $!
-diff -q ${LOGS}/1.tail ${LOGS}/2.tail
-check_status $? "tail: output files differ"
+diff ${LOGS}/1.tail ${LOGS}/2.tail > ${LOGS}/tail.diff
+check_status $? ${LOGS}/tail.diff "tail: output files differ"
 tail_check proxy-2-hosts
 
 echo "tail proxy to 1 hosts"
@@ -386,7 +442,7 @@ EXPECTED_IMMUTABLE=3
 if [ "${IMMUTABLE_COUNT}" != "${EXPECTED_IMMUTABLE}" ]; then
   false
 fi
-check_status $? "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
+check_status $? /dev/null "Immutable count incorrect in ${LOGS}/1.stat* expected ${EXPECTED_IMMUTABLE} entries to be immutable"
 echo "stat immutable state validated"
 
 run_a_test false 1 sum /etc/hosts
@@ -406,7 +462,9 @@ EXPECTED_NEW_IMMUTABLE="i"
 # Determine the new mode but since it's in octal need help
 # adding this in the shell as we want to pass it in octal
 # to the chmod below.
-EXPECTED_NEW_MODE=0$(printf "8\ni\n8\no\n${ORIG_MODE}\n1\n+\np\n" | dc)
+CUR=$(printf "%d\n" ${ORIG_MODE})
+NEW=$(expr ${CUR} + 1)
+EXPECTED_NEW_MODE=$(printf "0%o" ${NEW})
 
 run_a_test false 0 chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
 run_a_test false 0 chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
@@ -417,38 +475,43 @@ check_perms_mode ${LOGS}/test-file
 
 # Now validate we can clear immutable too
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- immutable --state=false ${LOGS}/test-file
-check_status $? "setting immutable to false"
+check_status $? /dev/null "setting immutable to false"
 EXPECTED_NEW_IMMUTABLE="-"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
 if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  check_status 1 /dev/null "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 
 echo "uid, etc checks passed"
 
 run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
-echo cp test with bucket syntax
-aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
-run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
-check_perms_mode ${LOGS}/cp-hosts
-aws s3 rm s3://${USER}-dev/hosts
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  echo cp test with bucket syntax
+  aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
+  run_a_test false 0 cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
+  check_perms_mode ${LOGS}/cp-hosts
+  aws s3 rm s3://${USER}-dev/hosts
+else 
+  echo "Skipping cp with s3 on Github"
+fi
 
 # Trying without --overwrite to validate
-echo "This should emit an error message about overwrite"
+echo "This can emit an error message about overwrite"
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-no-overwrite cp --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 if [ $? == 0 ]; then
-  check_status 1 Expected failure for no --overwrite from cp for existing file.
+  check_status 1 ${LOGS}/1.cp-no-overwrite Expected failure for no --overwrite from cp for existing file.
 fi
 
 # Make sure we can set immutable
 echo "cp test immutable/overwrite"
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.cp-overwrite-immutable cp --overwrite --immutable --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
-check_status $? cp run with --overwrite and --immutable
+check_status $? ${LOGS}/1.cp-overwrite-immutable cp run with --overwrite and --immutable
 EXPECTED_NEW_IMMUTABLE="i"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/cp-hosts | cut -c5)
 if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-  check_status 1 "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+  check_status 1 /dev/null "immutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
 fi
 # Cleanup the file so we aren't leaving immutable files laying around
 sudo chattr -i ${LOGS}/cp-hosts
@@ -458,31 +521,44 @@ touch ${LOGS}/test/file
 echo "${LOGS}/test/file" >> ${LOGS}/ls.expected
 
 run_a_test false 1 ls ${LOGS}/test
-diff -u -q ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected
-check_status $? diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
+diff -u ${LOGS}/1.ls-proxy-1-host ${LOGS}/ls.expected > ${LOGS}/ls.diff
+check_status $?  ${LOGS}/ls.diff diff check ls wrong. See ${LOGS}/1.ls-proxy-1-host and ${LOGS}/ls.expected
 
 run_a_test false 1 ls --long ${LOGS}/test
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e '^-rw-'
-check_status $? long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list file wrong. 2nd line should start with -rw- - See ${LOGS}/1.ls-proxy-1-host
 
 run_a_test false 1 ls --long --directory ${LOGS}/test
 # Too painful to validate this content so we'll just check some basics
 head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
 # One last one...Check we can 2 multiple directories in a query
 run_a_test false 2 ls --long --directory ${LOGS}/test ${LOGS}/test
 head -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 1st line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 tail -1 ${LOGS}/1.ls-proxy-1-host | egrep -q -e "^drwx.*${LOGS}/test"
-check_status $? long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
+check_status $? /dev/null long list dir wrong. 2nd line should start with drwx - See ${LOGS}/1.ls-proxy-1-host
 
-run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
-run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
-run_a_test false 50 list
-run_a_test false 50 repolist --verbose
+# Skip if on github (we assume yum, no apt support yet)
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
+  run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
+  run_a_test false 50 list
+  run_a_test false 50 repolist --verbose
+else 
+  echo "Skipping package tests on Github"
+fi
+
 run_a_test false 50 ps
-run_a_test true 20 pstack --pid=$$
+
+# Skip if on github (pstack randomly fails)
+if [ -z "${ON_GITHUB}" ]; then
+  run_a_test true 20 pstack --pid=${PROXY_PID}
+else
+  echo "Skipping pstack tests on Github due to transient 'could not find _DYNAMIC symbol' errors"
+fi
+
 
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
@@ -490,23 +566,29 @@ run_a_test true 20 dump --pid=$$ --dump-type=GCORE
 # Cores get their own additional checks.
 for i in ${LOGS}/?.dump*; do
   file $i | egrep -q "LSB core file.*from 'bash'"
-  check_status $? $i not a core file
+  check_status $? /dev/null $i not a core file
 done
 
-echo "Dumping core to s3 bucket"
-${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
-check_status $? Remote dump to s3
-echo Dumping bucket
-aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
-cat ${LOGS}/s3-ls
-egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
-check_status $? cant find core in bucket
-CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
-aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
-file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
-check_status $? ${LOGS}/${CORE} is not a core file
+# Skip if on github
+if [ -z "${ON_GITHUB}" ]; then
+  echo "Dumping core to s3 bucket"
+  ${SANSSH_PROXY} ${SINGLE_TARGET} dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
+  check_status $? /dev/null Remote dump to s3
+  echo Dumping bucket
+  aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
+  cat ${LOGS}/s3-ls
+  egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
+  check_status $? ${LOGS}/s3-ls cant find core in bucket
+  CORE=$(egrep "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls | awk '{print $4}')
+  aws s3 cp s3://${USER}-dev/${CORE} ${LOGS}
+  file ${LOGS}/${CORE} | egrep -q "LSB core file.*from 'bash'"
+  check_status $? /dev/null ${LOGS}/${CORE} is not a core file
 
-aws s3 rm s3://${USER}-dev/${CORE}
+  aws s3 rm s3://${USER}-dev/${CORE}
+else
+  echo "Skipping s3 dump tests on Github"
+fi
+
 
 # TO{DO(j}chacon): Provide a java binary for test{s
 echo 
