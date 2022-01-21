@@ -470,6 +470,14 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		_, err = stream.Recv()
+		if err != nil {
+			return err
+		}
+		_, err = stream.Recv()
+		if err != nil {
+			return err
+		}
 
 		return nil
 	}
