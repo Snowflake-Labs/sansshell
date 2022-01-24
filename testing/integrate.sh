@@ -342,7 +342,7 @@ check_status $? /dev/null build binaries
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=100 -race -timeout 5m -v ./... >& ${LOGS}/test.log
+go test -count=10 -race -timeout 5m -v ./... >& ${LOGS}/test.log
 check_status $? ${LOGS}/test.log test
 
 echo
