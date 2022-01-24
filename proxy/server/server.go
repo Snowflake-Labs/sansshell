@@ -239,7 +239,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 		case <-ctx.Done():
 			// Our context has ended. This should propogate automtically
 			// to all target streams
-			return fmt.Errorf("dispatch: %v", ctx.Err())
+			return ctx.Err()
 		case closedStream := <-doneChan:
 			// A stream has closed, and sent its final ServerClose status
 			// Remove it from the active streams list. Further messages
