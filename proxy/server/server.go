@@ -144,7 +144,6 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		case err := <-errChan:
 			return err
 		case <-ctx.Done():
-			log.Printf("Checking context: %v", ctx.Err())
 			return ctx.Err()
 		}
 	})
@@ -226,7 +225,6 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 		select {
 		case requestChan <- req:
 		case <-ctx.Done():
-			log.Printf("Context error: %+v", ctx.Err())
 			return ctx.Err()
 		}
 	}
