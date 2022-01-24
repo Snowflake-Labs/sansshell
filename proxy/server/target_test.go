@@ -57,11 +57,6 @@ func TestEmptyStreamSet(t *testing.T) {
 	ss.Wait()
 	close(finishedWait)
 
-	// Close of nonexistent ids is an error
-	if err := ss.ClientClose(&pb.ClientClose{StreamIds: []uint64{1}}); status.Code(err) != codes.InvalidArgument {
-		t.Errorf("TargetStream.ClientClose(1) err code was %v, want code.InvalidArgument", status.Code(err))
-	}
-
 	// Cancel of nonexistent ids is an error
 	if err := ss.ClientCancel(&pb.ClientCancel{StreamIds: []uint64{1}}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("TargetStream.ClientCancel(1) err code was %v, want code.InvalidArgument", status.Code(err))
@@ -74,6 +69,13 @@ func TestEmptyStreamSet(t *testing.T) {
 	if err := ss.Send(ctx, &pb.StreamData{StreamIds: []uint64{1}, Payload: payload}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("TargetStream.ClientCancel(0) err code was %v, want code.InvalidArgument", status.Code(err))
 	}
+
+	// Close of nonexistent ids is not an error, to match gRPC semantics which are tolerent of CloseSend on complete
+	// connections.
+	if err := ss.ClientClose(&pb.ClientClose{StreamIds: []uint64{1}}); status.Code(err) != codes.OK {
+		t.Errorf("TargetStream.ClientClose(1) err code was %v, want code.OK", status.Code(err))
+	}
+
 }
 
 func TestStreamSetAddErrors(t *testing.T) {
