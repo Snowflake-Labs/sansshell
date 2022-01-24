@@ -342,9 +342,8 @@ check_status $? /dev/null build binaries
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=100 -race -timeout 5m -run ^TestUnary/proxy_N_targets$ github.com/Snowflake-Labs/sansshell/proxy/proxy -v >& ${LOGS}/test.log
+go test -count=100 -race -timeout 5m -v ./... >& ${LOGS}/test.log
 check_status $? ${LOGS}/test.log test
-exit 0
 
 echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
