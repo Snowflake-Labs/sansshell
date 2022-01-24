@@ -126,7 +126,7 @@ func (s *TargetStream) CloseWith(err error) {
 }
 
 // Send the supplied request to the target stream, returning
-// and error if the context has already been cancelled.
+// an error if the context has already been cancelled.
 func (s *TargetStream) Send(req proto.Message) error {
 	ctx := s.grpcStream.Context()
 	select {
