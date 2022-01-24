@@ -209,7 +209,6 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 		// This will block, but can return early
 		// if the stream context is cancelled
 		req, err := stream.Recv()
-		log.Printf("err from Recv: %+v", err)
 		if err == io.EOF {
 			// On the server, io.EOF indicates that the
 			// client has issued as CloseSend(), and will
