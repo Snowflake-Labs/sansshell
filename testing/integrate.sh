@@ -30,8 +30,10 @@ function check_status {
   FAIL=$*
 
   if [ $STATUS != 0 ]; then
-    echo "FAIL ${FAIL}"
-    echo "Logs in ${LOGS}"
+    {
+      echo "FAIL ${FAIL}"
+      echo "Logs in ${LOGS}"
+    } >&2
     if [ "${LOG}" != "/dev/null" ]; then
       ls ${LOGS}
       print_logs ${LOG} ${FAIL}
@@ -208,24 +210,21 @@ function check_perms_mode {
   FILE=$1
   shift
 
-  NEW_STATE=$(stat ${FILE} | egrep Uid)
-  NEW_MODE=$(echo ${NEW_STATE} | cut -c 10-13)
-  NEW_UID=$(echo ${NEW_STATE} | cut -c 34- | awk -F/ '{print $1}')
-  NEW_GID=$(echo ${NEW_STATE} | cut -c 55- | awk -F/ '{print $1}')
+  read NEW_MODE NEW_UID NEW_GID < <(stat -c '0%a %u %g' $FILE)
   NEW_IMMUTABLE=$(lsattr ${FILE} | cut -c5)
 
   if [ "$NEW_MODE" != "$EXPECTED_NEW_MODE" ]; then
-    check_status 1 /dev/null "modes not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
+    check_status 1 /dev/null "modes for $FILE not as expected. Have $NEW_MODE but expected $EXPECTED_NEW_MODE"
   fi
   # These aren't quoted as parsed ones may have leading spaces
   if [ $NEW_UID != $EXPECTED_NEW_UID ]; then
-    check_status 1 /dev/null "uid not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
+    check_status 1 /dev/null "uid for $FILE not as expected. Have $NEW_UID but expected $EXPECTED_NEW_UID"
   fi
   if [ $NEW_GID != $EXPECTED_NEW_GID ]; then
-    check_status 1 /dev/null "gid not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
+    check_status 1 /dev/null "gid for $FILE not as expected. Have $NEW_GID but expected $EXPECTED_NEW_GID"
   fi
   if [ "$NEW_IMMUTABLE" != "$EXPECTED_NEW_IMMUTABLE" ]; then
-    check_status 1 /dev/null "imutable not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
+    check_status 1 /dev/null "imutable for $FILE not as expected. Have $NEW_IMMUTABLE but expected $EXPECTED_NEW_IMMUTABLE"
   fi
 }
 
@@ -540,10 +539,7 @@ run_a_test false 1 sum /etc/hosts
 
 # Record original state before we change it all with chown/etc
 touch ${LOGS}/test-file
-STATE=$(stat ${LOGS}/test-file | egrep Uid)
-ORIG_MODE=$(echo ${STATE} | cut -c 10-13)
-ORIG_UID=$(echo ${STATE} | cut -c 34- | awk -F/ '{print $1}')
-ORIG_GID=$(echo ${STATE} | cut -c 55- | awk -F/ '{print $1}')
+read ORIG_MODE ORIG_UID ORIG_GID < <(stat -c '0%a %u %g' ${LOGS}/test-file)
 ORIG_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
 
 EXPECTED_NEW_UID=$(($ORIG_UID + 1))
@@ -681,9 +677,9 @@ else
 fi
 
 if [ -z "${ON_GITHUB}" ]; then
+  echo "Querying systemd for service status"
   run_a_test false 10 services --system-type systemd
-  run_a_test false 10 status --service-name systemd
-
+  run_a_test false 10 status --system-type systemd --service-name systemd-journal
 else
   echo "Skipping systemd tests on Github"
 fi
