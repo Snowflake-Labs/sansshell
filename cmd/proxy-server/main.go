@@ -42,6 +42,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
+	_ "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
 //go:embed default-policy.rego

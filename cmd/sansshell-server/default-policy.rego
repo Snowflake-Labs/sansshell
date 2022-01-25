@@ -50,3 +50,11 @@ allow {
 allow {
 	input.type = "Process.GetJavaStacksRequest"
 }
+
+allow {
+  input.type = "Service.ListRequest"
+}
+
+allow {
+  input.type = "Service.StatusRequest"
+}
