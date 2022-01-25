@@ -397,7 +397,12 @@ func (t *TargetStreamSet) ClientClose(req *pb.ClientClose) error {
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
 		if !ok {
-			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
+			// NB:
+			// Unlike other operations that accept a stream ID, ClientClosing
+			// a non-existent stream isn't a fatal error. This mirrors the native
+			// behavior of gRPC, which permits multiple calls to CloseSend, or
+			// a CloseSend on a stream which has already sent its last request.
+			continue
 		}
 		stream.CloseSend()
 	}

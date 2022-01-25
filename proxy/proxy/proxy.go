@@ -393,12 +393,12 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 	}
 	// TODO(): Put this back when the race in server.go is figured out. Causes a send and close
 	// on the channel processing server side which isn't allowed.
-	//if err := s.closeClients(); err != nil {
-	//	return nil, err
-	//}
-	//if err := s.CloseSend(); err != nil {
-	//	return nil, err
-	//}
+	if err := s.closeClients(); err != nil {
+		return nil, err
+	}
+	if err := s.CloseSend(); err != nil {
+		return nil, err
+	}
 	retChan := make(chan *ProxyRet)
 
 	// Fire off a separate routine to read from the stream and send the responses down retChan.
