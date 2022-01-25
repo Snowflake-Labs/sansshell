@@ -559,6 +559,14 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 	return &emptypb.Empty{}, nil
 }
 
+func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
+func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
 	pb.RegisterLocalFileServer(gs, s)

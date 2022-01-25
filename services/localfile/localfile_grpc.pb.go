@@ -34,6 +34,10 @@ type LocalFileClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClient, error)
 	// SetFileAttributes takes a given filename and sets the given attributes.
 	SetFileAttributes(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Rm removes the given file.
+	Rm(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Rmdir removes the given directory (must be empty).
+	Rmdir(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type localFileClient struct {
@@ -222,6 +226,24 @@ func (c *localFileClient) SetFileAttributes(ctx context.Context, in *SetFileAttr
 	return out, nil
 }
 
+func (c *localFileClient) Rm(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Rm", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *localFileClient) Rmdir(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Rmdir", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LocalFileServer is the server API for LocalFile service.
 // All implementations should embed UnimplementedLocalFileServer
 // for forward compatibility
@@ -241,6 +263,10 @@ type LocalFileServer interface {
 	List(*ListRequest, LocalFile_ListServer) error
 	// SetFileAttributes takes a given filename and sets the given attributes.
 	SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error)
+	// Rm removes the given file.
+	Rm(context.Context, *RmRequest) (*emptypb.Empty, error)
+	// Rmdir removes the given directory (must be empty).
+	Rmdir(context.Context, *RmdirRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
@@ -267,6 +293,12 @@ func (UnimplementedLocalFileServer) List(*ListRequest, LocalFile_ListServer) err
 }
 func (UnimplementedLocalFileServer) SetFileAttributes(context.Context, *SetFileAttributesRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetFileAttributes not implemented")
+}
+func (UnimplementedLocalFileServer) Rm(context.Context, *RmRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Rm not implemented")
+}
+func (UnimplementedLocalFileServer) Rmdir(context.Context, *RmdirRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Rmdir not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -436,6 +468,42 @@ func _LocalFile_SetFileAttributes_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LocalFile_Rm_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RmRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalFileServer).Rm(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/LocalFile.LocalFile/Rm",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalFileServer).Rm(ctx, req.(*RmRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LocalFile_Rmdir_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RmdirRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalFileServer).Rmdir(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/LocalFile.LocalFile/Rmdir",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalFileServer).Rmdir(ctx, req.(*RmdirRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -450,6 +518,14 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetFileAttributes",
 			Handler:    _LocalFile_SetFileAttributes_Handler,
+		},
+		{
+			MethodName: "Rm",
+			Handler:    _LocalFile_Rm_Handler,
+		},
+		{
+			MethodName: "Rmdir",
+			Handler:    _LocalFile_Rmdir_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

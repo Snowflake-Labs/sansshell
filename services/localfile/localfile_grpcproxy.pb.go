@@ -27,6 +27,8 @@ type LocalFileClientProxy interface {
 	CopyOneMany(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (<-chan *CopyManyResponse, error)
 	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (LocalFile_ListClientProxy, error)
 	SetFileAttributesOneMany(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (<-chan *SetFileAttributesManyResponse, error)
+	RmOneMany(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (<-chan *RmManyResponse, error)
+	RmdirOneMany(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (<-chan *RmdirManyResponse, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -593,6 +595,136 @@ func (c *localFileClientProxy) SetFileAttributesOneMany(ctx context.Context, in 
 	go func() {
 		for {
 			typedResp := &SetFileAttributesManyResponse{
+				Resp: &emptypb.Empty{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+type RmManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *emptypb.Empty
+	Error error
+}
+
+// RmOneMany provides the same API as Rm but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *localFileClientProxy) RmOneMany(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (<-chan *RmManyResponse, error) {
+	conn := c.cc.(*proxy.ProxyConn)
+	ret := make(chan *RmManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &RmManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &emptypb.Empty{},
+			}
+			err := conn.Invoke(ctx, "/LocalFile.LocalFile/Rm", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/LocalFile.LocalFile/Rm", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &RmManyResponse{
+				Resp: &emptypb.Empty{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+type RmdirManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	Index int
+	Resp  *emptypb.Empty
+	Error error
+}
+
+// RmdirOneMany provides the same API as Rmdir but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *localFileClientProxy) RmdirOneMany(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (<-chan *RmdirManyResponse, error) {
+	conn := c.cc.(*proxy.ProxyConn)
+	ret := make(chan *RmdirManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &RmdirManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &emptypb.Empty{},
+			}
+			err := conn.Invoke(ctx, "/LocalFile.LocalFile/Rmdir", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/LocalFile.LocalFile/Rmdir", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &RmdirManyResponse{
 				Resp: &emptypb.Empty{},
 			}
 
