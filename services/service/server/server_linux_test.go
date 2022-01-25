@@ -1,5 +1,5 @@
 //go:build linux
-//+build linux
+// +build linux
 
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 

@@ -34,7 +34,7 @@ func (s *sansshellServer) Register(gs *grpc.Server) {
 
 func init() {
 	services.RegisterSansShellService(&sansshellServer{
-    // createServer returns a build-target specific server instance.
+		// createServer returns a build-target specific server instance.
 		server: createServer(),
 	})
 }

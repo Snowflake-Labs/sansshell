@@ -630,7 +630,7 @@ check_status $? /dev/null long list dir wrong. 2nd line should start with drwx -
 # Skip if on github (we assume yum, no apt support yet)
 if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
-  run_a_test false 10 update --name=ansible --old_version=0:2.9.25-1.el7.noarch --new_version=0:2.9.25-1.el7.noarch
+  run_a_test false 10 update --name=ansible --old_version=0:2.9.27-1.el7.noarch --new_version=0:2.9.27-1.el7.noarch
   run_a_test false 50 list
   run_a_test false 50 repolist --verbose
 else 
@@ -676,13 +676,9 @@ else
   echo "Skipping s3 dump tests on Github"
 fi
 
-if [ -z "${ON_GITHUB}" ]; then
-  echo "Querying systemd for service status"
-  run_a_test false 10 services --system-type systemd
-  run_a_test false 10 status --system-type systemd --service-name systemd-journal
-else
-  echo "Skipping systemd tests on Github"
-fi
+echo "Querying systemd for service status"
+run_a_test false 10 services --system-type systemd
+run_a_test false 1 status --system-type systemd systemd-journald
 
 
 # TO{DO(j}chacon): Provide a java binary for test{s

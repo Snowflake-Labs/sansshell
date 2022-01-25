@@ -137,13 +137,19 @@ func (s byName) Len() int           { return len(s) }
 func (s byName) Less(i, j int) bool { return s[i].Name < s[j].Name }
 func (s byName) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func checkSupportedSystem(t pb.SystemType) error {
+	switch t {
+	case pb.SystemType_SYSTEM_TYPE_UNKNOWN, pb.SystemType_SYSTEM_TYPE_SYSTEMD:
+		return nil
+	default:
+		return status.Errorf(codes.InvalidArgument, "unsupported system type %s", t)
+	}
+}
+
 // See: pb.ServiceServer.List
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
-	switch req.SystemType {
-	case pb.SystemType_SYSTEM_TYPE_UNKNOWN, pb.SystemType_SYSTEM_TYPE_SYSTEMD:
-		// unknown and systemd both map to systemd, which we support
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported system type %s", req.SystemType)
+	if err := checkSupportedSystem(req.SystemType); err != nil {
+		return nil, err
 	}
 
 	conn, err := s.dialSystemd(ctx)
@@ -180,11 +186,8 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
-	switch req.SystemType {
-	case pb.SystemType_SYSTEM_TYPE_UNKNOWN, pb.SystemType_SYSTEM_TYPE_SYSTEMD:
-		// unknown and systemd both map to systemd, which we support
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported system type %s", req.SystemType)
+	if err := checkSupportedSystem(req.SystemType); err != nil {
+		return nil, err
 	}
 
 	unitName := req.GetServiceName()
@@ -226,11 +229,8 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 
 // See: pb.ServiceServer.Action
 func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionReply, error) {
-	switch req.SystemType {
-	case pb.SystemType_SYSTEM_TYPE_UNKNOWN, pb.SystemType_SYSTEM_TYPE_SYSTEMD:
-		// unknown and systemd both map to systemd, which we support
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unsupported system type %s", req.SystemType)
+	if err := checkSupportedSystem(req.SystemType); err != nil {
+		return nil, err
 	}
 
 	unitName := req.GetServiceName()
