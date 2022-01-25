@@ -233,11 +233,6 @@ func TestPstackNative(t *testing.T) {
 		t.Skip("OS not supported")
 	}
 
-	// Github specific check
-	if os.Getenv("GITHUB_ACTION") != "" {
-		t.Skip("Running on github, skipping due to flakiness of pstack")
-	}
-
 	ctx := context.Background()
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
@@ -364,11 +359,11 @@ func TestPstack(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "Bad thread data - thread",
-			command: testutil.ResolvePath(t, "cat"),
-			input:   testdataPstackThreadsBadThread,
-			pid:     1,
-			wantErr: true,
+			name:     "Extra thread data ok",
+			command:  testutil.ResolvePath(t, "cat"),
+			input:    testdataPstackThreadsBadThread,
+			validate: testdataPstackThreadsTextProto,
+			pid:      1,
 		},
 		{
 			name:    "Bad thread data - number",

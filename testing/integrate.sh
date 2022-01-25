@@ -238,6 +238,8 @@ if [ -n "${GITHUB_ACTION:-}" ]; then
   sudo sysctl kernel.yama.ptrace_scope
   sudo sysctl -w kernel.yama.ptrace_scope=0
   sudo sysctl kernel.yama.ptrace_scope
+  sudo cp testing/gdb-pstack /usr/bin/pstack
+  sudo chmod +x /usr/bin/pstack
 fi
 
 OS=$(uname -s)

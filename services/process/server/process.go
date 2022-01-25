@@ -179,7 +179,8 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 
 		// New thread so append last entry and start over.
 		if fields[0] == "Thread" {
-			if len(fields) != 6 {
+			// Depending on wrapper/gdb this may have additional fields but we don't need them.
+			if len(fields) < 6 {
 				return nil, status.Errorf(codes.Internal, "unparsable pstack output for new thread: %s", text)
 			}
 
