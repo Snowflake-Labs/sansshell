@@ -26,17 +26,42 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "service"
+
 func init() {
+	subcommands.Register(&serviceCmd{}, subPackage)
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(subPackage, f)
 	initSystemTypes()
-	subcommands.Register(&actionCmd{action: pb.Action_ACTION_START}, "service")
-	subcommands.Register(&actionCmd{action: pb.Action_ACTION_STOP}, "service")
-	subcommands.Register(&actionCmd{action: pb.Action_ACTION_RESTART}, "service")
-	subcommands.Register(&statusCmd{}, "service")
-	subcommands.Register(&listCmd{}, "service")
+	c.Register(&actionCmd{action: pb.Action_ACTION_RESTART}, "")
+	c.Register(&listCmd{}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_START}, "")
+	c.Register(&statusCmd{}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_STOP}, "")
+	return c
+}
+
+type serviceCmd struct{}
+
+func (*serviceCmd) Name() string { return subPackage }
+func (p *serviceCmd) Synopsis() string {
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+}
+func (p *serviceCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
+func (*serviceCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *serviceCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 var systemTypes []string
@@ -139,11 +164,11 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		out := state.Out[resp.Index]
 		output := fmt.Sprintf("[%s] %s %v: OK", systemTypeString(system), serviceName, as)
 		if resp.Error != nil {
-			lastErr = fmt.Errorf("Target %s (%d) returned error %w", resp.Target, resp.Index, resp.Error)
+			lastErr = fmt.Errorf("target %s (%d) returned error %w", resp.Target, resp.Index, resp.Error)
 			output = lastErr.Error()
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
-			lastErr = fmt.Errorf("Target %s (%d) output write error %w", resp.Target, resp.Index, err)
+			lastErr = fmt.Errorf("target %s (%d) output write error %w", resp.Target, resp.Index, err)
 		}
 	}
 	if lastErr != nil {
@@ -212,11 +237,11 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		system, status := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus()
 		output := fmt.Sprintf("[%s] %s : %s", systemTypeString(system), serviceName, statusString(status))
 		if resp.Error != nil {
-			lastErr = fmt.Errorf("Target %s [%d] error: %w", resp.Target, resp.Index, resp.Error)
+			lastErr = fmt.Errorf("target %s [%d] error: %w", resp.Target, resp.Index, resp.Error)
 			output = lastErr.Error()
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
-			lastErr = fmt.Errorf("Target %s [%d] write error: %w", resp.Target, resp.Index, err)
+			lastErr = fmt.Errorf("target %s [%d] write error: %w", resp.Target, resp.Index, err)
 		}
 	}
 	if lastErr != nil {
@@ -276,16 +301,16 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	for resp := range respChan {
 		out := state.Out[resp.Index]
 		if resp.Error != nil {
-			lastErr = fmt.Errorf("Target %s (%d) error: %w", resp.Target, resp.Index, resp.Error)
+			lastErr = fmt.Errorf("target %s (%d) error: %w", resp.Target, resp.Index, resp.Error)
 			if _, err := fmt.Fprintln(out, lastErr.Error()); err != nil {
-				lastErr = fmt.Errorf("Target %s (%d) writer error: %w", resp.Target, resp.Index, err)
+				lastErr = fmt.Errorf("target %s (%d) writer error: %w", resp.Target, resp.Index, err)
 			}
 			continue
 		}
 		system := systemTypeString(resp.Resp.GetSystemType())
 		for _, svc := range resp.Resp.Services {
 			if _, err := fmt.Fprintf(out, "[%s] %s : %s\n", system, svc.GetServiceName(), statusString(svc.GetStatus())); err != nil {
-				lastErr = fmt.Errorf("Target %s [%d] writer error: %w", resp.Target, resp.Index, err)
+				lastErr = fmt.Errorf("target %s [%d] writer error: %w", resp.Target, resp.Index, err)
 			}
 		}
 	}
