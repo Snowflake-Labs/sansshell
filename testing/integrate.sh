@@ -333,6 +333,16 @@ if [ "${broke}" == "true" ]; then
   check_status 1 /dev/null Files missing license
 fi
 
+echo
+echo "Checking formatting"
+echo
+find . -type f -name \*.go | xargs gofmt -l > ${LOGS}/gofmt
+check_status $? /dev/null gofmt
+if [ -s ${LOGS}/gofmt ]; then
+  cat ${LOGS}/gofmt
+  check_status 1 /dev/null "Files listed need gofmt run on them"
+fi
+
 # Build everything (this won't rebuild the binaries but the generate will)
 echo
 echo "Running builds"
