@@ -53,11 +53,13 @@ var (
 	// Functions we can replace with fakes for testing
 	kqueue = unix.Kqueue
 	kevent = unix.Kevent
+
+	osStat = darwinOsStat
 )
 
 // osStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func osStat(path string) (*pb.StatReply, error) {
+func darwinOsStat(path string) (*pb.StatReply, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)

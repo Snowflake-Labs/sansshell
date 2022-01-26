@@ -48,11 +48,13 @@ var (
 	epollCreate     = unix.EpollCreate
 	epollCtl        = unix.EpollCtl
 	epollWait       = unix.EpollWait
+
+	osStat = linuxOsStat
 )
 
 // osStat is the linux specific version of stat. Depending on OS version
 // returning immutable bits happens in different ways.
-func osStat(path string) (*pb.StatReply, error) {
+func linuxOsStat(path string) (*pb.StatReply, error) {
 	resp := &pb.StatReply{
 		Filename: path,
 	}
