@@ -340,8 +340,15 @@ find . -type f -name \*.go | xargs gofmt -l > ${LOGS}/gofmt
 check_status $? /dev/null gofmt
 if [ -s ${LOGS}/gofmt ]; then
   cat ${LOGS}/gofmt
+  echo
   check_status 1 /dev/null "Files listed need gofmt run on them"
 fi
+
+echo
+echo "Checking with go vet"
+echo
+go vet ./...
+check_status $? /dev/null go vet
 
 # Build everything (this won't rebuild the binaries but the generate will)
 echo
