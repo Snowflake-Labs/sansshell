@@ -17,7 +17,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -25,43 +24,31 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "ansible"
+
 func init() {
-	subcommands.Register(&ansibleCmd{}, "ansible")
+	subcommands.Register(&ansibleCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
-	c := subcommands.NewCommander(f, "ansible")
+	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&playbookCmd{}, "")
-	c.Register(c.HelpCommand(), "")
-	c.Register(c.FlagsCommand(), "")
-	c.Register(c.CommandsCommand(), "")
 	return c
 }
 
 type ansibleCmd struct{}
 
-func (*ansibleCmd) Name() string { return "ansible" }
+func (*ansibleCmd) Name() string { return subPackage }
 func (p *ansibleCmd) Synopsis() string {
-	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
-	b := &bytes.Buffer{}
-	b.WriteString("\n")
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
-		switch comm.Name() {
-		case "help", "flags", "commands":
-			break
-		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
-		}
-	}
-	c.VisitCommands(fn)
-	return b.String()
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
 func (p *ansibleCmd) Usage() string {
-	return "ansible has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 func (*ansibleCmd) SetFlags(f *flag.FlagSet) {}
 

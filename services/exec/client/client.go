@@ -17,50 +17,37 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/subcommands"
 )
 
+const subPackage = "exec"
+
 func init() {
-	subcommands.Register(&execCmd{}, "exec")
+	subcommands.Register(&execCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
-	c := subcommands.NewCommander(f, "exec")
+	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&runCmd{}, "")
-	c.Register(c.HelpCommand(), "")
-	c.Register(c.FlagsCommand(), "")
-	c.Register(c.CommandsCommand(), "")
 	return c
 }
 
 type execCmd struct{}
 
-func (*execCmd) Name() string { return "exec" }
+func (*execCmd) Name() string { return subPackage }
 func (p *execCmd) Synopsis() string {
-	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
-	b := &bytes.Buffer{}
-	b.WriteString("\n")
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
-		switch comm.Name() {
-		case "help", "flags", "commands":
-			break
-		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
-		}
-	}
-	c.VisitCommands(fn)
-	return b.String()
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
 func (p *execCmd) Usage() string {
-	return "exec has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 func (*execCmd) SetFlags(f *flag.FlagSet) {}
 

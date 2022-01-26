@@ -17,7 +17,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -27,46 +26,34 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "packages"
+
 func init() {
-	subcommands.Register(&packagesCmd{}, "packages")
+	subcommands.Register(&packagesCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
-	c := subcommands.NewCommander(f, "packages")
+	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&installCmd{}, "")
-	c.Register(&updateCmd{}, "")
 	c.Register(&listCmd{}, "")
 	c.Register(&repoListCmd{}, "")
-	c.Register(c.HelpCommand(), "")
-	c.Register(c.FlagsCommand(), "")
-	c.Register(c.CommandsCommand(), "")
+	c.Register(&updateCmd{}, "")
 	return c
 }
 
 type packagesCmd struct{}
 
-func (*packagesCmd) Name() string { return "packages" }
+func (*packagesCmd) Name() string { return subPackage }
 func (p *packagesCmd) Synopsis() string {
-	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
-	b := &bytes.Buffer{}
-	b.WriteString("\n")
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
-		switch comm.Name() {
-		case "help", "flags", "commands":
-			break
-		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
-		}
-	}
-	c.VisitCommands(fn)
-	return b.String()
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
 func (p *packagesCmd) Usage() string {
-	return "packages has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 func (*packagesCmd) SetFlags(f *flag.FlagSet) {}
 

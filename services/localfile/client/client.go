@@ -17,7 +17,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -31,52 +30,40 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "file"
+
 func init() {
-	subcommands.Register(&fileCmd{}, "file")
+	subcommands.Register(&fileCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
-	c := subcommands.NewCommander(f, "process")
-	c.Register(&readCmd{}, "")
-	c.Register(&tailCmd{}, "")
-	c.Register(&statCmd{}, "")
-	c.Register(&sumCmd{}, "")
-	c.Register(&chownCmd{}, "")
+	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&chgrpCmd{}, "")
 	c.Register(&chmodCmd{}, "")
+	c.Register(&chownCmd{}, "")
+	c.Register(&cpCmd{}, "")
 	c.Register(&immutableCmd{}, "")
 	c.Register(&lsCmd{}, "")
-	c.Register(&cpCmd{}, "")
-	c.Register(c.HelpCommand(), "")
-	c.Register(c.FlagsCommand(), "")
-	c.Register(c.CommandsCommand(), "")
+	c.Register(&readCmd{}, "")
+	c.Register(&statCmd{}, "")
+	c.Register(&sumCmd{}, "")
+	c.Register(&tailCmd{}, "")
 	return c
 }
 
 type fileCmd struct{}
 
-func (*fileCmd) Name() string { return "file" }
+func (*fileCmd) Name() string { return subPackage }
 func (p *fileCmd) Synopsis() string {
-	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
-	b := &bytes.Buffer{}
-	b.WriteString("\n")
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
-		switch comm.Name() {
-		case "help", "flags", "commands":
-			break
-		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
-		}
-	}
-	c.VisitCommands(fn)
-	return b.String()
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
 func (p *fileCmd) Usage() string {
-	return "file has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 func (*fileCmd) SetFlags(f *flag.FlagSet) {}
 

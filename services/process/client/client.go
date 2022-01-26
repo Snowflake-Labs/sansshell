@@ -17,7 +17,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -28,46 +27,34 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "process"
+
 func init() {
-	subcommands.Register(&processCmd{}, "process")
+	subcommands.Register(&processCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
-	c := subcommands.NewCommander(f, "process")
+	c := client.SetupSubpackage(subPackage, f)
+	c.Register(&dumpCmd{}, "")
+	c.Register(&jstackCmd{}, "")
 	c.Register(&psCmd{}, "")
 	c.Register(&pstackCmd{}, "")
-	c.Register(&jstackCmd{}, "")
-	c.Register(&dumpCmd{}, "")
-	c.Register(c.HelpCommand(), "")
-	c.Register(c.FlagsCommand(), "")
-	c.Register(c.CommandsCommand(), "")
 	return c
 }
 
 type processCmd struct{}
 
-func (*processCmd) Name() string { return "process" }
+func (*processCmd) Name() string { return subPackage }
 func (p *processCmd) Synopsis() string {
-	c := setup(flag.NewFlagSet("", flag.ContinueOnError))
-	b := &bytes.Buffer{}
-	b.WriteString("\n")
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
-		switch comm.Name() {
-		case "help", "flags", "commands":
-			break
-		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
-		}
-	}
-	c.VisitCommands(fn)
-	return b.String()
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
 func (p *processCmd) Usage() string {
-	return "process has several subcommands. Pick one to perform the action you wish\n" + p.Synopsis()
+	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 func (*processCmd) SetFlags(f *flag.FlagSet) {}
 
