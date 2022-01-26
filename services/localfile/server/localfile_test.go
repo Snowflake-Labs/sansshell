@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	_ "gocloud.dev/blob/fileblob"
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -514,6 +516,15 @@ func TestSetFileAttributes(t *testing.T) {
 	f1Stat, err := osStat(f1.Name())
 	testutil.FatalOnErr("f1.Stat", err, t)
 
+	// Construct a directory with no perms. We'll put
+	// a file in there which should make chmod fail on it.
+	badDir := filepath.Join(t.TempDir(), "/foo")
+	os.Mkdir(badDir, fs.ModePerm)
+	f2, err := os.CreateTemp(badDir, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	err = unix.Chmod(badDir, 0)
+	testutil.FatalOnErr("chmod", err, t)
+
 	setPath := ""
 	setUid, setGid := 0, 0
 	setImmutable, chownError, immutableError := false, false, false
@@ -547,6 +558,8 @@ func TestSetFileAttributes(t *testing.T) {
 	t.Cleanup(func() {
 		chown = savedChown
 		changeImmutableOS = savedChangeImmutableOS
+		// Needed or we panic with generated cleanup trying to remove tmp directories.
+		unix.Chmod(badDir, uint32(fs.ModePerm))
 	})
 
 	for _, tc := range []struct {
@@ -748,6 +761,22 @@ func TestSetFileAttributes(t *testing.T) {
 			expectedImmutable: true,
 		},
 		{
+			name: "Chmod fails (path not accessible)",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f2.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: f1Stat.Mode + 1,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
 			name: "Call OS immutable function",
 			input: &pb.SetFileAttributesRequest{
 				Attrs: &pb.FileAttributes{
@@ -844,9 +873,17 @@ func TestList(t *testing.T) {
 	f1Stat, err := osStat(f1.Name())
 	testutil.FatalOnErr("osStat", err, t)
 
+	// Construct a directory with no perms. We should be able
+	// to stat this but then fail to readdir on it.
+	badDir := filepath.Join(t.TempDir(), "/foo")
+	os.Mkdir(badDir, 0)
+
+	origOsStat := osStat
+
 	for _, tc := range []struct {
 		name     string
 		req      *pb.ListRequest
+		osStat   func(string) (*pb.StatReply, error)
 		wantErr  bool
 		expected []*pb.StatReply
 	}{
@@ -859,6 +896,13 @@ func TestList(t *testing.T) {
 			name: "Non absolute path",
 			req: &pb.ListRequest{
 				Entry: "/tmp/foo/../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid but bad path",
+			req: &pb.ListRequest{
+				Entry: "/bad-file-name",
 			},
 			wantErr: true,
 		},
@@ -881,28 +925,63 @@ func TestList(t *testing.T) {
 				f1Stat,
 			},
 		},
+		{
+			name: "directory open fail",
+			req: &pb.ListRequest{
+				Entry: badDir,
+			},
+			wantErr: true,
+		},
+		{
+			name: "stat fails inside directory",
+			req: &pb.ListRequest{
+				Entry: temp,
+			},
+			osStat: func(s string) (*pb.StatReply, error) {
+				fmt.Printf("stat: %s - %s\n", s, f1.Name())
+				if s == f1.Name() {
+					return nil, errors.New("stat error")
+				}
+				return origOsStat(s)
+			},
+			wantErr: true,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
 
+			t.Cleanup(func() {
+				osStat = origOsStat
+			})
+
+			if tc.osStat != nil {
+				osStat = tc.osStat
+			}
 			// This end shouldn't error, when we receive from the stream is where we'll get those.
 			stream, err := client.List(ctx, tc.req)
 			testutil.FatalOnErr("List", err, t)
 			var out []*pb.StatReply
+			var gotErr error
 			for {
 				resp, err := stream.Recv()
 				if err == io.EOF {
 					break
 				}
 				t.Log(err)
-				testutil.WantErr(tc.name, err, tc.wantErr, t)
-				if tc.wantErr {
-					return
+				// We can't check errors here directly as we may get a few entries
+				// and then an error. So record the last one we see and test outside
+				// the loop.
+				if err != nil {
+					gotErr = err
+					break
 				}
 				out = append(out, resp.Entry)
 			}
-			testutil.DiffErr(tc.name, out, tc.expected, t)
+			testutil.WantErr(tc.name, gotErr, tc.wantErr, t)
+			if !tc.wantErr {
+				testutil.DiffErr(tc.name, out, tc.expected, t)
+			}
 		})
 	}
 }
@@ -1571,6 +1650,110 @@ func TestCopy(t *testing.T) {
 			if got, want := c, []byte(tc.validate); !bytes.Equal(got, want) {
 				t.Fatalf("%s: contents not equal.\nGot : %s\nWant: %s", tc.name, got, want)
 			}
+		})
+	}
+}
+
+func TestRm(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	badDir := filepath.Join(temp, "/bad")
+	err = os.Mkdir(badDir, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	f2, err := os.CreateTemp(badDir, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	err = unix.Chmod(badDir, 0)
+	testutil.FatalOnErr("Chmod", err, t)
+
+	t.Cleanup(func() {
+		// Needed or we panic with generated cleanup trying to remove tmp directories.
+		unix.Chmod(badDir, uint32(fs.ModePerm))
+	})
+
+	for _, tc := range []struct {
+		name     string
+		filename string
+		wantErr  bool
+	}{
+		{
+			name:     "bad path",
+			filename: "/tmp/foo/../../etc/passwd",
+			wantErr:  true,
+		},
+		{
+			name:     "bad permissions to file",
+			filename: f2.Name(),
+			wantErr:  true,
+		},
+		{
+			name:     "working remove",
+			filename: f1.Name(),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+			_, err := client.Rm(ctx, &pb.RmRequest{Filename: tc.filename})
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+		})
+	}
+}
+
+func TestRmdir(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	dir := filepath.Join(temp, "/dir")
+	err = os.Mkdir(dir, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	badDir := filepath.Join(temp, "/bad")
+	err = os.Mkdir(badDir, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	failDir := filepath.Join(temp, "/bad", "/bad")
+	err = os.Mkdir(failDir, 0)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	err = unix.Chmod(badDir, 0)
+	testutil.FatalOnErr("Chmod", err, t)
+
+	t.Cleanup(func() {
+		// Needed or we panic with generated cleanup trying to remove tmp directories.
+		unix.Chmod(badDir, uint32(fs.ModePerm))
+	})
+
+	for _, tc := range []struct {
+		name      string
+		directory string
+		wantErr   bool
+	}{
+		{
+			name:      "bad path",
+			directory: "/tmp/foo/../../etc",
+			wantErr:   true,
+		},
+		{
+			name:      "bad permissions to direcotry",
+			directory: failDir,
+			wantErr:   true,
+		},
+		{
+			name:      "working remove",
+			directory: dir,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directory: tc.directory})
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
 }
