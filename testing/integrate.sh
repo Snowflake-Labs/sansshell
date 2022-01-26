@@ -370,6 +370,7 @@ echo
 # testing code.
 for i in \
   github.com/Snowflake-Labs/sansshell/auth/mtls/flags \
+  github.com/Snowflake-Labs/sansshell/client \
   github.com/Snowflake-Labs/sansshell/cmd \
   github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
   github.com/Snowflake-Labs/sansshell/cmd/sanssh \
@@ -634,10 +635,10 @@ check_status $? /dev/null long list dir wrong. 2nd line should start with drwx -
 
 # Skip if on github (we assume yum, no apt support yet)
 if [ -z "${ON_GITHUB}" ]; then
-  run_a_test false 10 install --name=zziplib --version=0:0.13.62-12.el7.x86_64
-  run_a_test false 10 update --name=ansible --old_version=0:2.9.27-1.el7.noarch --new_version=0:2.9.27-1.el7.noarch
-  run_a_test false 50 list
-  run_a_test false 50 repolist --verbose
+  run_a_test false 10 pacakges install --name=zziplib --version=0:0.13.62-12.el7.x86_64
+  run_a_test false 10 packages update --name=ansible --old_version=0:2.9.27-1.el7.noarch --new_version=0:2.9.27-1.el7.noarch
+  run_a_test false 50 packages list
+  run_a_test false 50 packages repolist --verbose
 else 
   echo "Skipping package tests on Github"
 fi
@@ -681,8 +682,8 @@ else
 fi
 
 echo "Querying systemd for service status"
-run_a_test false 10 services --system-type systemd
-run_a_test false 1 status --system-type systemd systemd-journald
+run_a_test false 10 service services --system-type systemd
+run_a_test false 1 service status --system-type systemd systemd-journald
 
 
 # TO{DO(j}chacon): Provide a java binary for test{s
