@@ -560,11 +560,23 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 }
 
 func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("rm request", "filename", req.Filename)
+	if err := util.ValidPath(req.Filename); err != nil {
+		return nil, err
+	}
+	// No need to check since unlink only returns an error.
+	return &emptypb.Empty{}, unix.Unlink(req.Filename)
 }
 
 func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("rmdir request", "directory", req.Directory)
+	if err := util.ValidPath(req.Directory); err != nil {
+		return nil, err
+	}
+	// No need to check since rmdir only returns an error.
+	return &emptypb.Empty{}, unix.Rmdir(req.Directory)
 }
 
 // Register is called to expose this handler to the gRPC server
