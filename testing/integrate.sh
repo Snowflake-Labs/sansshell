@@ -699,8 +699,7 @@ else
 fi
 
 echo "Querying systemd for service status"
-run_a_test false 10 service services --system-type systemd
-# TODO(jchacon): Rename to service list
+run_a_test false 10 service list --system-type systemd
 run_a_test false 1 service status --system-type systemd systemd-journald
 
 # Have to do these one by one since the parallel rm/rmdir will fail
