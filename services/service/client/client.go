@@ -40,8 +40,8 @@ func init() {
 func setup(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	initSystemTypes()
-	c.Register(&actionCmd{action: pb.Action_ACTION_RESTART}, "")
 	c.Register(&listCmd{}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_RESTART}, "")
 	c.Register(&actionCmd{action: pb.Action_ACTION_START}, "")
 	c.Register(&statusCmd{}, "")
 	c.Register(&actionCmd{action: pb.Action_ACTION_STOP}, "")
@@ -255,10 +255,10 @@ type listCmd struct {
 	systemType string
 }
 
-func (*listCmd) Name() string     { return "services" }
+func (*listCmd) Name() string     { return "list" }
 func (*listCmd) Synopsis() string { return "list services with status" }
 func (*listCmd) Usage() string {
-	return `services [--system-type <type>]
+	return `list [--system-type <type>]
     list services and their status
   `
 }
@@ -315,7 +315,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 	}
 	if lastErr != nil {
-		fmt.Fprintf(errWriter, "services finished with error: %v\n", lastErr)
+		fmt.Fprintf(errWriter, "list finished with error: %v\n", lastErr)
 		return subcommands.ExitFailure
 	}
 	return subcommands.ExitSuccess
