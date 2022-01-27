@@ -703,6 +703,70 @@ run_a_test false 10 service services --system-type systemd
 # TODO(jchacon): Rename to service list
 run_a_test false 1 service status --system-type systemd systemd-journald
 
+# Have to do these one by one since the parallel rm/rmdir will fail
+# since it's the same host and that's ok.
+function setup_rmdir {
+  mkdir -p ${LOGS}/testdir
+}
+
+function setup_rm {
+  setup_rmdir
+  touch ${LOGS}/testdir/file
+}
+
+function check_rm {
+  if [ -f ${LOGS}/testdir/file ]; then
+    check_status 1 /dev/null ${LOGS}/testdir/file not removed as expected
+  fi
+}
+
+function check_rmdir {
+  if [ -d ${LOGS}/testdir ]; then
+    check_status 1 /dev/null ${LOGS}/testdir not removed as expected
+  fi
+}
+
+echo "rm checks"
+echo "rm proxy to 2 hosts (one will fail)"
+setup_rm
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- rm ${LOGS}/testdir/file
+if [ $? != 1 ]; then
+  check_status 1 /dev/null "rm didn't get error when expected"
+fi
+check_rm
+
+echo "rm proxy to 1 host"
+setup_rm
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- rm ${LOGS}/testdir/file
+check_status $? /dev/null rm failed
+check_rm
+
+echo "rm with no proxy"
+setup_rm
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- rm ${LOGS}/testdir/file
+check_status $? /dev/null rm failed
+check_rm
+
+echo "rmdir checks"
+echo "rmdir proxy to 2 hosts (one will fail)"
+setup_rmdir
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- rmdir ${LOGS}/testdir
+if [ $? != 1 ]; then
+  check_status 1 /dev/null "rmdir didn't get error when expected"
+fi
+check_rmdir
+
+echo "rmdir proxy to 1 host"
+setup_rmdir
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- rmdir ${LOGS}/testdir
+check_status $? /dev/null rmdir failed
+check_rmdir
+
+echo "rmdir with no proxy"
+setup_rmdir
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- rmdir ${LOGS}/testdir
+check_status $? /dev/null rmdir failed
+check_rmdir
 
 # TO{DO(j}chacon): Provide a java binary for test{s
 echo 
