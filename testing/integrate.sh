@@ -683,6 +683,7 @@ fi
 
 echo "Querying systemd for service status"
 run_a_test false 10 service services --system-type systemd
+# TODO(jchacon): Rename to service list
 run_a_test false 1 service status --system-type systemd systemd-journald
 
 
