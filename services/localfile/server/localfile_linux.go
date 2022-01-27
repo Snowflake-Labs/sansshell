@@ -31,13 +31,14 @@ import (
 )
 
 const (
+	// FS_IMMUTABLE_FL is the flag which masks immutable state.
 	// While x/sys/unix exposes a lot this particular flag isn't
 	// mapped. It's the one to match below for immutable state if
 	// the ioctl route has to be taken.
 	FS_IMMUTABLE_FL = int(0x00000010)
 
-	// The mask of flags that are user modifiable. The ioctl can return
-	// more when querying but setting should mask with this first.
+	// FS_FL_USER_MODIFIABLE is the flag mask of flags that are user modifiable.
+	// The ioctl can return more when querying but setting should mask with this first.
 	FS_FL_USER_MODIFIABLE = int(0x000380FF)
 )
 
@@ -67,13 +68,13 @@ func linuxOsStat(path string) (*pb.StatReply, error) {
 		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
 	}
 	// Linux supports stat so we can blindly convert.
-	stat_t := stat.Sys().(*syscall.Stat_t)
+	statT := stat.Sys().(*syscall.Stat_t)
 
 	resp.Size = stat.Size()
 	resp.Mode = uint32(stat.Mode())
 	resp.Modtime = timestamppb.New(stat.ModTime())
-	resp.Uid = stat_t.Uid
-	resp.Gid = stat_t.Gid
+	resp.Uid = statT.Uid
+	resp.Gid = statT.Gid
 
 	statx := &unix.Statx_t{}
 	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
@@ -211,7 +212,7 @@ func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
 		}
 
 		// Wait READ_TIMEOUT between runs to check the context.
-		n, err := epollWait(inotify.epoll, events, int(READ_TIMEOUT.Milliseconds()))
+		n, err := epollWait(inotify.epoll, events, int(ReadTimeout.Milliseconds()))
 		if err != nil {
 			// If we got EINTR we can just loop again.
 			if err == unix.EINTR {

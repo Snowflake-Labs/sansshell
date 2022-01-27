@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package proxy defines the RPC interface for the sansshell proxy server.
 package proxy
 
 // To regenerate the proto headers if the .proto changes, just run go generate

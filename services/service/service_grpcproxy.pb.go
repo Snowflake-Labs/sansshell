@@ -29,14 +29,16 @@ type serviceClientProxy struct {
 }
 
 // NewServiceClientProxy creates a ServiceClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewServiceClientProxy(cc *proxy.ProxyConn) ServiceClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewServiceClientProxy(cc *proxy.Conn) ServiceClientProxy {
 	return &serviceClientProxy{NewServiceClient(cc).(*serviceClient)}
 }
 
+// ListManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ListManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ListReply
 	Error error
@@ -47,7 +49,7 @@ type ListManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *serviceClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *ListManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -99,9 +101,11 @@ func (c *serviceClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	return ret, nil
 }
 
+// StatusManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type StatusManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *StatusReply
 	Error error
@@ -112,7 +116,7 @@ type StatusManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *serviceClientProxy) StatusOneMany(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (<-chan *StatusManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *StatusManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -164,9 +168,11 @@ func (c *serviceClientProxy) StatusOneMany(ctx context.Context, in *StatusReques
 	return ret, nil
 }
 
+// ActionManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ActionManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ActionReply
 	Error error
@@ -177,7 +183,7 @@ type ActionManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *serviceClientProxy) ActionOneMany(ctx context.Context, in *ActionRequest, opts ...grpc.CallOption) (<-chan *ActionManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *ActionManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {

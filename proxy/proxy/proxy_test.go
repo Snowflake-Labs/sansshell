@@ -45,7 +45,7 @@ func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufco
 	t.Helper()
 	targetDialer := server.NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	lis := bufconn.Listen(testutil.BufSize)
-	authz := testutil.NewAllowAllRpcAuthorizer(ctx, t)
+	authz := testutil.NewAllowAllRPCAuthorizer(ctx, t)
 	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
 	proxyServer := server.New(targetDialer, authz)
 	proxyServer.Register(grpcServer)
@@ -327,7 +327,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 	// Setup our fake server.
 	ctx := context.Background()
 	lis := bufconn.Listen(testutil.BufSize)
-	authz := testutil.NewAllowAllRpcAuthorizer(ctx, t)
+	authz := testutil.NewAllowAllRPCAuthorizer(ctx, t)
 	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
 	fp := &fakeProxy{}
 	proxypb.RegisterProxyServer(grpcServer, fp)

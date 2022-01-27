@@ -14,7 +14,7 @@
    under the License.
 */
 
-// package client provides the client interface for 'service'
+// Package client provides the client interface for 'service'
 package client
 
 import (

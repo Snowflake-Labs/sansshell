@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package ansible defines the RPC interface for the sansshell Ansible actions.
 package ansible
 
 // To regenerate the proto headers if the .proto changes, just run go generate

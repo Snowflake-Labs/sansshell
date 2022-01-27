@@ -79,7 +79,7 @@ func Loader(name string) (CredentialsLoader, error) {
 	return loader, nil
 }
 
-// Loaders() returns the names of all currently registered CredentialLoader
+// Loaders returns the names of all currently registered CredentialLoader
 // implementations as a sorted list of strings.
 func Loaders() []string {
 	loaderMu.RLock()

@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package process defines the RPC interface for the sansshell Process actions.
 package process
 
 // To regenerate the proto headers if the .proto changes, just run go generate

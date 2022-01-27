@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package util provides utility operations used in building sansshell system services.
 package util
 
 import (
@@ -35,14 +36,15 @@ import (
 // ExecuteState is used by client packages in services to pass
 // relevant state down to subcommands.
 type ExecuteState struct {
-	Conn *proxy.ProxyConn
+	Conn *proxy.Conn
 	Out  []io.Writer
 }
 
+// StreamingChunkSize is the chunk size we use when sending replies on a stream.
 // TODO(jchacon): Make this configurable
-// The chunk size we use when sending replies on a stream.
 var StreamingChunkSize = 128 * 1024
 
+// CommandRun groups all of the status and output from executing a command.
 type CommandRun struct {
 	Stdout   *bytes.Buffer
 	Stderr   *bytes.Buffer
@@ -56,6 +58,8 @@ type cmdOptions struct {
 	failOnStderr bool
 }
 
+// Option will run the apply operation to change required checking/state
+// before executing RunCommand.
 type Option interface {
 	apply(*cmdOptions)
 }
@@ -66,7 +70,7 @@ func (f optionfunc) apply(opts *cmdOptions) {
 	f(opts)
 }
 
-// If FailOnStderr is passed as am option the command will return an error if any output appears on stderr
+// FailOnStderr is an option where the command will return an error if any output appears on stderr
 // regardless of exit code. As we're often parsing the text output of specific commands as root
 // this is a sanity check we're getting expected output. i.e. ps never returns anything on stderr
 // so if some run does that's suspect. Up to callers to decide as some tools (yum...) like to emit
@@ -122,15 +126,15 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	return run, nil
 }
 
-// The maximum we should allow stdout or stderr to be when sending back in an error string.
+// MaxBuf is the maximum we should allow stdout or stderr to be when sending back in an error string.
 // grpc has limits on how large a returned error can be (generally 4-8k depending on language).
-const MAX_BUF = 1024
+const MaxBuf = 1024
 
 // TrimString will return the given string truncated to MAX_BUF size so it can be used in
 // grpc error replies.
 func TrimString(s string) string {
-	if len(s) > MAX_BUF {
-		s = s[:MAX_BUF]
+	if len(s) > MaxBuf {
+		s = s[:MaxBuf]
 	}
 	return s
 }
@@ -146,10 +150,12 @@ func ValidPath(path string) error {
 	return nil
 }
 
+// StringSliceFlag is the parsed form of a flag using "foo,bar,baz" style.
 type StringSliceFlag struct {
 	Target *[]string
 }
 
+// Set - see flag.Value
 func (s *StringSliceFlag) Set(val string) error {
 	if s.Target == nil {
 		s.Target = new([]string)
@@ -158,6 +164,7 @@ func (s *StringSliceFlag) Set(val string) error {
 	return nil
 }
 
+// String - see flag.String
 func (s *StringSliceFlag) String() string {
 	if s.Target == nil {
 		return ""
@@ -171,10 +178,11 @@ type KeyValue struct {
 	Value string
 }
 
-// A type for a custom flag for a list of strings in a comma separated list.
+// KeyValueSliceFlag is a custom flag for a list of strings in a comma separated list of the
+// form key=value,key=value
 type KeyValueSliceFlag []*KeyValue
 
-// String implements as needed for flag.Value
+// String - see flag.Value
 func (i *KeyValueSliceFlag) String() string {
 	var out bytes.Buffer
 
@@ -189,8 +197,7 @@ func (i *KeyValueSliceFlag) String() string {
 	return o
 }
 
-// Set implements parsing for strings list flags as needed
-// for flag.Value
+// Set - see flag.Value
 func (i *KeyValueSliceFlag) Set(val string) error {
 	// Setting will reset anything previous, not append.
 	*i = nil
@@ -208,10 +215,10 @@ func (i *KeyValueSliceFlag) Set(val string) error {
 	return nil
 }
 
-// A type for a custom flag for a list of ints in a comma separated list.
+// IntSliceFlags is a custom flag for a list of ints in a comma separated list.
 type IntSliceFlags []int64
 
-// String implements as needed for flag.Value
+// String - see flag.Value
 func (i *IntSliceFlags) String() string {
 	var out bytes.Buffer
 
@@ -226,8 +233,7 @@ func (i *IntSliceFlags) String() string {
 	return o
 }
 
-// Set implements parsing for int list flags as needed
-// for flag.Value
+// Set - see flag.Value
 func (i *IntSliceFlags) Set(val string) error {
 	// Setting will reset anything previous, not append.
 	*i = nil

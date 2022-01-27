@@ -30,14 +30,16 @@ type packagesClientProxy struct {
 }
 
 // NewPackagesClientProxy creates a PackagesClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewPackagesClientProxy(cc *proxy.ProxyConn) PackagesClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewPackagesClientProxy(cc *proxy.Conn) PackagesClientProxy {
 	return &packagesClientProxy{NewPackagesClient(cc).(*packagesClient)}
 }
 
+// InstallManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type InstallManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *InstallReply
 	Error error
@@ -48,7 +50,7 @@ type InstallManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *packagesClientProxy) InstallOneMany(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (<-chan *InstallManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *InstallManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -100,9 +102,11 @@ func (c *packagesClientProxy) InstallOneMany(ctx context.Context, in *InstallReq
 	return ret, nil
 }
 
+// UpdateManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type UpdateManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *UpdateReply
 	Error error
@@ -113,7 +117,7 @@ type UpdateManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *packagesClientProxy) UpdateOneMany(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (<-chan *UpdateManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *UpdateManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -165,9 +169,11 @@ func (c *packagesClientProxy) UpdateOneMany(ctx context.Context, in *UpdateReque
 	return ret, nil
 }
 
+// ListInstalledManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ListInstalledManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ListInstalledReply
 	Error error
@@ -178,7 +184,7 @@ type ListInstalledManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *packagesClientProxy) ListInstalledOneMany(ctx context.Context, in *ListInstalledRequest, opts ...grpc.CallOption) (<-chan *ListInstalledManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *ListInstalledManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -230,9 +236,11 @@ func (c *packagesClientProxy) ListInstalledOneMany(ctx context.Context, in *List
 	return ret, nil
 }
 
+// RepoListManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type RepoListManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *RepoListReply
 	Error error
@@ -243,7 +251,7 @@ type RepoListManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *packagesClientProxy) RepoListOneMany(ctx context.Context, in *RepoListRequest, opts ...grpc.CallOption) (<-chan *RepoListManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *RepoListManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {

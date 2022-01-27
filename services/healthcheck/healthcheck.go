@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package healthcheck defines the RPC interface for the sansshell HealthCheck actions.
 package healthcheck
 
 // To regenerate the proto headers if the proto changes, just run go generate

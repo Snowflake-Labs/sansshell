@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'Exec' service.
 package server
 
 import (

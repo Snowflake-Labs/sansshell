@@ -27,14 +27,16 @@ type execClientProxy struct {
 }
 
 // NewExecClientProxy creates a ExecClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewExecClientProxy(cc *proxy.ProxyConn) ExecClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewExecClientProxy(cc *proxy.Conn) ExecClientProxy {
 	return &execClientProxy{NewExecClient(cc).(*execClient)}
 }
 
+// RunManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type RunManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ExecResponse
 	Error error
@@ -45,7 +47,7 @@ type RunManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *execClientProxy) RunOneMany(ctx context.Context, in *ExecRequest, opts ...grpc.CallOption) (<-chan *RunManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *RunManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {

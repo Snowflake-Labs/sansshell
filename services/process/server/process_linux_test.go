@@ -36,6 +36,6 @@ var (
 	testdataPstackThreadsTextProto       = "./testdata/linux_pstack_threads.textproto"
 	testdataPstackThreadsBadThread       = "./testdata/linux_pstack_threads_bad_thread.txt"
 	testdataPstackThreadsBadThreadNumber = "./testdata/linux_pstack_threads_bad_thread_number.txt"
-	testdataPstackThreadsBadThreadId     = "./testdata/linux_pstack_threads_bad_thread_id.txt"
+	testdataPstackThreadsBadThreadID     = "./testdata/linux_pstack_threads_bad_thread_id.txt"
 	testdataPstackThreadsBadLwp          = "./testdata/linux_pstack_threads_bad_lwp.txt"
 )

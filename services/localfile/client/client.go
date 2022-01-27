@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package client provides the client interface for 'file'
 package client
 
 import (
@@ -110,7 +111,7 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		},
 	}
 
-	err := ReadFile(ctx, state, req)
+	err := readFile(ctx, state, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not read file %s: %v\n", filename, err)
 		return subcommands.ExitFailure
@@ -118,7 +119,7 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	return subcommands.ExitSuccess
 }
 
-func ReadFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionRequest) error {
+func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionRequest) error {
 	c := pb.NewLocalFileClientProxy(state.Conn)
 	stream, err := c.ReadOneMany(ctx, req)
 	if err != nil {
@@ -187,7 +188,7 @@ func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		},
 	}
 
-	err := ReadFile(ctx, state, req)
+	err := readFile(ctx, state, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not tail file: %v\n", err)
 		return subcommands.ExitFailure

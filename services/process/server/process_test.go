@@ -375,7 +375,7 @@ func TestPstack(t *testing.T) {
 		{
 			name:    "Bad thread data - id",
 			command: testutil.ResolvePath(t, "cat"),
-			input:   testdataPstackThreadsBadThreadId,
+			input:   testdataPstackThreadsBadThreadID,
 			pid:     1,
 			wantErr: true,
 		},

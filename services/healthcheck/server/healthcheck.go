@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'HealthCheck' service.
 package server
 
 import (

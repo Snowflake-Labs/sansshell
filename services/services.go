@@ -14,6 +14,8 @@
    under the License.
 */
 
+// Package services provides functions to register and list all the
+// services contained in a sansshell gRPC server.
 package services
 
 import (
@@ -24,23 +26,25 @@ import (
 
 var (
 	mu          sync.RWMutex
-	rpcServices []SansShellRpcService
+	rpcServices []SansShellRPCService
 )
 
-type SansShellRpcService interface {
+// SansShellRPCService provides an interface for services to implement
+// to make them registerable in this package.
+type SansShellRPCService interface {
 	Register(*grpc.Server)
 }
 
 // RegisterSansShellService provides a mechanism for imported modules to
 // register themselves with a gRPC server.
-func RegisterSansShellService(s SansShellRpcService) {
+func RegisterSansShellService(s SansShellRPCService) {
 	mu.Lock()
 	defer mu.Unlock()
 	rpcServices = append(rpcServices, s)
 }
 
-// ListServices returns the list of registered serfvices.
-func ListServices() []SansShellRpcService {
+// ListServices returns the list of registered services.
+func ListServices() []SansShellRPCService {
 	mu.RLock()
 	defer mu.RUnlock()
 	return rpcServices
