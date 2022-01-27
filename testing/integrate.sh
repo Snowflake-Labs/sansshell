@@ -768,6 +768,13 @@ ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
 check_status $? /dev/null rmdir failed
 check_rmdir
 
-# TO{DO(j}chacon): Provide a java binary for test{s
+echo "rmdir with files in directory (should fail)"
+setup_rm
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
+if [ $? != 1 ]; then
+  check_status 1 /dev/null "rmdir didn't get error when expected"
+fi
+
+# TODO(jchacon): Provide a java binary for test{s
 echo 
 echo "All tests pass. Logs in ${LOGS}"
