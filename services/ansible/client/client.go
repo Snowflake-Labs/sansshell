@@ -24,15 +24,40 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "ansible"
+
 func init() {
-	subcommands.Register(&ansibleCmd{}, "ansible")
+	subcommands.Register(&ansibleCmd{}, subPackage)
 }
 
-type ansibleCmd struct {
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(subPackage, f)
+	c.Register(&playbookCmd{}, "")
+	return c
+}
+
+type ansibleCmd struct{}
+
+func (*ansibleCmd) Name() string { return subPackage }
+func (p *ansibleCmd) Synopsis() string {
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+}
+func (p *ansibleCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
+func (*ansibleCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
+}
+
+type playbookCmd struct {
 	playbook string
 	vars     util.KeyValueSliceFlag
 	user     string
@@ -41,15 +66,15 @@ type ansibleCmd struct {
 	verbose  bool
 }
 
-func (*ansibleCmd) Name() string     { return "ansible" }
-func (*ansibleCmd) Synopsis() string { return "Run an ansible playbook on the server." }
-func (*ansibleCmd) Usage() string {
+func (*playbookCmd) Name() string     { return "playbook" }
+func (*playbookCmd) Synopsis() string { return "Run an ansible playbook on the server." }
+func (*playbookCmd) Usage() string {
 	return `ansible:
   Run an ansible playbook on the remote server.
 `
 }
 
-func (a *ansibleCmd) SetFlags(f *flag.FlagSet) {
+func (a *playbookCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&a.playbook, "playbook", "", "The absolute path to the playbook to execute on the remote server.")
 	f.Var(&a.vars, "vars", "Pass key=value (via -e) to ansible-playbook. Multiple values can be specified separated by commas")
 	f.StringVar(&a.user, "user", "", "Run the playbook as this user")
@@ -58,7 +83,7 @@ func (a *ansibleCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&a.verbose, "verbose", false, "If true the playbook wiill be run with -vvv passed as an argument")
 }
 
-func (a *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if a.playbook == "" {
 		fmt.Fprintln(os.Stderr, "--playbook is required")
 		return subcommands.ExitFailure

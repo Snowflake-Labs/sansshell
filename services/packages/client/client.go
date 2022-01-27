@@ -26,15 +26,40 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "packages"
+
 func init() {
-	subcommands.Register(&installCmd{}, "packages")
-	subcommands.Register(&updateCmd{}, "packages")
-	subcommands.Register(&listCmd{}, "packages")
-	subcommands.Register(&repoListCmd{}, "packages")
+	subcommands.Register(&packagesCmd{}, subPackage)
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(subPackage, f)
+	c.Register(&installCmd{}, "")
+	c.Register(&listCmd{}, "")
+	c.Register(&repoListCmd{}, "")
+	c.Register(&updateCmd{}, "")
+	return c
+}
+
+type packagesCmd struct{}
+
+func (*packagesCmd) Name() string { return subPackage }
+func (p *packagesCmd) Synopsis() string {
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+}
+func (p *packagesCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
+func (*packagesCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *packagesCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 func flagToType(val string) (pb.PackageSystem, error) {

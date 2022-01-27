@@ -22,20 +22,45 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/subcommands"
 )
 
+const subPackage = "exec"
+
 func init() {
-	subcommands.Register(&execCmd{}, "exec")
+	subcommands.Register(&execCmd{}, subPackage)
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(subPackage, f)
+	c.Register(&runCmd{}, "")
+	return c
 }
 
 type execCmd struct{}
 
-func (*execCmd) Name() string     { return "run" }
-func (*execCmd) Synopsis() string { return "Run provided command and return a response." }
-func (*execCmd) Usage() string {
+func (*execCmd) Name() string { return subPackage }
+func (p *execCmd) Synopsis() string {
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+}
+func (p *execCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
+func (*execCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
+}
+
+type runCmd struct{}
+
+func (*runCmd) Name() string     { return "run" }
+func (*runCmd) Synopsis() string { return "Run provided command and return a response." }
+func (*runCmd) Usage() string {
 	return `run <command> [<args>...]:
   Run a command remotely and return the response
 
@@ -45,9 +70,9 @@ func (*execCmd) Usage() string {
 `
 }
 
-func (p *execCmd) SetFlags(f *flag.FlagSet) {}
+func (p *runCmd) SetFlags(f *flag.FlagSet) {}
 
-func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
 		fmt.Fprintf(os.Stderr, "Please specify a command to execute.\n")

@@ -30,21 +30,46 @@ import (
 
 	"github.com/google/subcommands"
 
+	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+const subPackage = "file"
+
 func init() {
-	subcommands.Register(&readCmd{}, "file")
-	subcommands.Register(&tailCmd{}, "file")
-	subcommands.Register(&statCmd{}, "file")
-	subcommands.Register(&sumCmd{}, "file")
-	subcommands.Register(&chownCmd{}, "file")
-	subcommands.Register(&chgrpCmd{}, "file")
-	subcommands.Register(&chmodCmd{}, "file")
-	subcommands.Register(&immutableCmd{}, "file")
-	subcommands.Register(&lsCmd{}, "file")
-	subcommands.Register(&cpCmd{}, "file")
+	subcommands.Register(&fileCmd{}, subPackage)
+}
+
+func setup(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(subPackage, f)
+	c.Register(&chgrpCmd{}, "")
+	c.Register(&chmodCmd{}, "")
+	c.Register(&chownCmd{}, "")
+	c.Register(&cpCmd{}, "")
+	c.Register(&immutableCmd{}, "")
+	c.Register(&lsCmd{}, "")
+	c.Register(&readCmd{}, "")
+	c.Register(&statCmd{}, "")
+	c.Register(&sumCmd{}, "")
+	c.Register(&tailCmd{}, "")
+	return c
+}
+
+type fileCmd struct{}
+
+func (*fileCmd) Name() string { return subPackage }
+func (p *fileCmd) Synopsis() string {
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+}
+func (p *fileCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
+func (*fileCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *fileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setup(f)
+	return c.Execute(ctx, args...)
 }
 
 type readCmd struct {
