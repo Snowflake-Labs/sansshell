@@ -565,8 +565,11 @@ func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, err
 	if err := util.ValidPath(req.Filename); err != nil {
 		return nil, err
 	}
-	// No need to check since unlink only returns an error.
-	return &emptypb.Empty{}, unix.Unlink(req.Filename)
+	err := unix.Unlink(req.Filename)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unlink error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empty, error) {
@@ -575,8 +578,11 @@ func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empt
 	if err := util.ValidPath(req.Directory); err != nil {
 		return nil, err
 	}
-	// No need to check since rmdir only returns an error.
-	return &emptypb.Empty{}, unix.Rmdir(req.Directory)
+	err := unix.Rmdir(req.Directory)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "rmdir error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
