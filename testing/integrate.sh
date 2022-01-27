@@ -729,7 +729,7 @@ function check_rmdir {
 echo "rm checks"
 echo "rm proxy to 2 hosts (one will fail)"
 setup_rm
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- rm ${LOGS}/testdir/file
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- file rm ${LOGS}/testdir/file
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rm didn't get error when expected"
 fi
@@ -737,20 +737,20 @@ check_rm
 
 echo "rm proxy to 1 host"
 setup_rm
-${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- rm ${LOGS}/testdir/file
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- file rm ${LOGS}/testdir/file
 check_status $? /dev/null rm failed
 check_rm
 
 echo "rm with no proxy"
 setup_rm
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- rm ${LOGS}/testdir/file
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rm ${LOGS}/testdir/file
 check_status $? /dev/null rm failed
 check_rm
 
 echo "rmdir checks"
 echo "rmdir proxy to 2 hosts (one will fail)"
 setup_rmdir
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- rmdir ${LOGS}/testdir
+${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- file rmdir ${LOGS}/testdir
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rmdir didn't get error when expected"
 fi
@@ -758,13 +758,13 @@ check_rmdir
 
 echo "rmdir proxy to 1 host"
 setup_rmdir
-${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- rmdir ${LOGS}/testdir
+${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
 check_status $? /dev/null rmdir failed
 check_rmdir
 
 echo "rmdir with no proxy"
 setup_rmdir
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- rmdir ${LOGS}/testdir
+${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
 check_status $? /dev/null rmdir failed
 check_rmdir
 
