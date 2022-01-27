@@ -50,6 +50,8 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&immutableCmd{}, "")
 	c.Register(&lsCmd{}, "")
 	c.Register(&readCmd{}, "")
+	c.Register(&rmCmd{}, "")
+	c.Register(&rmdirCmd{}, "")
 	c.Register(&statCmd{}, "")
 	c.Register(&sumCmd{}, "")
 	c.Register(&tailCmd{}, "")
@@ -588,7 +590,7 @@ func (i *immutableCmd) SetFlags(f *flag.FlagSet) {
 func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "please specify a filename to chmod")
+		fmt.Fprintln(os.Stderr, "please specify a filename to change immutable state")
 		return subcommands.ExitUsageError
 	}
 
@@ -898,5 +900,85 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 
+	return retCode
+}
+
+type rmCmd struct {
+}
+
+func (*rmCmd) Name() string     { return "rm" }
+func (*rmCmd) Synopsis() string { return "Remove a file." }
+func (*rmCmd) Usage() string {
+	return `rm <filename>:
+  Remove the given filename.
+  `
+}
+
+func (i *rmCmd) SetFlags(f *flag.FlagSet) {}
+
+func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a filename to rm")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.RmRequest{
+		Filename: f.Args()[0],
+	}
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.RmOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rm client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "rm client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type rmdirCmd struct {
+}
+
+func (*rmdirCmd) Name() string     { return "rmdir" }
+func (*rmdirCmd) Synopsis() string { return "Remove a directory." }
+func (*rmdirCmd) Usage() string {
+	return `rm <directory>:
+  Remove the given directory.
+  `
+}
+
+func (i *rmdirCmd) SetFlags(f *flag.FlagSet) {}
+
+func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "please specify a directory to rm")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.RmdirRequest{
+		Directory: f.Args()[0],
+	}
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.RmdirOneMany(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "rmdir client error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(os.Stderr, "rm client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
 	return retCode
 }

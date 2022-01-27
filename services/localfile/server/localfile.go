@@ -559,6 +559,32 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 	return &emptypb.Empty{}, nil
 }
 
+func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("rm request", "filename", req.Filename)
+	if err := util.ValidPath(req.Filename); err != nil {
+		return nil, err
+	}
+	err := unix.Unlink(req.Filename)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unlink error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("rmdir request", "directory", req.Directory)
+	if err := util.ValidPath(req.Directory); err != nil {
+		return nil, err
+	}
+	err := unix.Rmdir(req.Directory)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "rmdir error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
 	pb.RegisterLocalFileServer(gs, s)

@@ -49,9 +49,17 @@ const (
 	SF_IMMUTABLE = uint32(0x00020000)
 )
 
+var (
+	// Functions we can replace with fakes for testing
+	kqueue = unix.Kqueue
+	kevent = unix.Kevent
+
+	osStat = darwinOsStat
+)
+
 // osStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func osStat(path string) (*pb.StatReply, error) {
+func darwinOsStat(path string) (*pb.StatReply, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
@@ -108,7 +116,7 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 	}
 	var err error
 	// Initialize kqueue and setup for cleaning it up later.
-	kq.kqFD, err = unix.Kqueue()
+	kq.kqFD, err = kqueue()
 	if err != nil {
 		return nil, nil, status.Errorf(codes.Internal, "can't allocate kqueue: %v", err)
 	}
@@ -122,10 +130,8 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 // file has more data. With Darwin we use kqueue to watch the file
 // Assuming the file was already at EOF.
 func dataReady(kq interface{}, stream pb.LocalFile_ReadServer) error {
-	kqf, ok := kq.(*kqueueFile)
-	if !ok {
-		return status.Errorf(codes.Internal, "invalid type passed. Expected *kqueueFD and got %T", kq)
-	}
+	kqf := kq.(*kqueueFile)
+
 	changes := make([]unix.Kevent_t, 1)
 	events := make([]unix.Kevent_t, 1)
 
@@ -135,16 +141,16 @@ func dataReady(kq interface{}, stream pb.LocalFile_ReadServer) error {
 		}
 		unix.SetKevent(&changes[0], int(kqf.fileFD), unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_CLEAR|unix.EV_ENABLE)
 		changes[0].Fflags = unix.NOTE_WRITE
-		ret, err := unix.Kevent(kqf.kqFD, changes, nil, nil)
-		if ret == -1 {
-			return status.Errorf(codes.Internal, "can't register kqueue: %v", err)
+		ret, err := kevent(kqf.kqFD, changes, nil, nil)
+		if err != nil || ret < 0 {
+			return status.Errorf(codes.Internal, "can't register kqueue: ret %d err %v", ret, err)
 		}
 
 		// Wait 10s in between requests so we can check the stream context too.
 		ts := &unix.Timespec{
 			Sec: int64(READ_TIMEOUT.Seconds()),
 		}
-		n, err := unix.Kevent(kqf.kqFD, nil, events, ts)
+		n, err := kevent(kqf.kqFD, nil, events, ts)
 		if err != nil {
 			return status.Errorf(codes.Internal, "can't get kqueue events: %v", err)
 		}

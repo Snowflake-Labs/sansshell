@@ -47,6 +47,12 @@ service LocalFile {
   // SetFileAttributes takes a given filename and sets the given attributes.
   rpc SetFileAttributes(SetFileAttributesRequest)
       returns (google.protobuf.Empty) {}
+
+  // Rm removes the given file.
+  rpc Rm(RmRequest) returns (google.protobuf.Empty) {}
+
+  // Rmdir removes the given directory (must be empty).
+  rpc Rmdir(RmdirRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -214,3 +220,14 @@ message ListReply { StatReply entry = 1; }
 // permissions, etc) it is not transactional and can leave an entity in a
 // partial state if errors occur.
 message SetFileAttributesRequest { FileAttributes attrs = 1; }
+
+message RmRequest {
+  // The fully qualified path to the file to remove.
+  string filename = 1;
+}
+
+message RmdirRequest {
+  // The fully qualified path to the directory to remove.
+  // Must be empty of any entries.
+  string directory = 1;
+}

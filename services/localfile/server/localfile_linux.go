@@ -20,7 +20,6 @@
 package server
 
 import (
-	"log"
 	"os"
 	"syscall"
 
@@ -42,9 +41,20 @@ const (
 	FS_FL_USER_MODIFIABLE = int(0x000380FF)
 )
 
+var (
+	// Functions we can replace with fakes for testing
+	inotifyInit1    = unix.InotifyInit1
+	inotifyAddWatch = unix.InotifyAddWatch
+	epollCreate     = unix.EpollCreate
+	epollCtl        = unix.EpollCtl
+	epollWait       = unix.EpollWait
+
+	osStat = linuxOsStat
+)
+
 // osStat is the linux specific version of stat. Depending on OS version
 // returning immutable bits happens in different ways.
-func osStat(path string) (*pb.StatReply, error) {
+func linuxOsStat(path string) (*pb.StatReply, error) {
 	resp := &pb.StatReply{
 		Filename: path,
 	}
@@ -77,7 +87,6 @@ func osStat(path string) (*pb.StatReply, error) {
 		attrs, err := getFlags(path)
 		if err != nil {
 			// If we can't get attributes just mark it as immutable=false
-			log.Printf("error getting flags: %v", err)
 			resp.Immutable = false
 		} else {
 			resp.Immutable = (attrs & FS_IMMUTABLE_FL) != 0
@@ -158,30 +167,31 @@ func dataPrep(f *os.File) (obj interface{}, closer func(), retErr error) {
 
 	// Setup inotify and set a watch on our path.
 	var err error
-	in.iFD, err = unix.InotifyInit1(0)
+	in.iFD, err = inotifyInit1(0)
 	if err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "can't allocate inotify fd: %v", err)
+		return nil, closer, status.Errorf(codes.Internal, "can't allocate inotify fd: %v", err)
+
 	}
 
 	// NOTE: This is *not* a file descriptor but an internal descriptor for inotify to
 	//       use when pushing data through iFD above. Do not close() on it.
-	in.watchFD, err = unix.InotifyAddWatch(in.iFD, in.file, unix.IN_MODIFY)
+	in.watchFD, err = inotifyAddWatch(in.iFD, in.file, unix.IN_MODIFY)
 	if err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "can't setup inotify watch: %v", err)
+		return nil, closer, status.Errorf(codes.Internal, "can't setup inotify watch: %v", err)
 	}
 
 	// Initialize epoll and set it to watch for the inotify FD to return events
 	// This is only needed once, not per read.
-	in.epoll, err = unix.EpollCreate(1)
+	in.epoll, err = epollCreate(1)
 	if err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "can't create epoll: %v", err)
+		return nil, closer, status.Errorf(codes.Internal, "can't create epoll: %v", err)
 	}
 	in.event = &unix.EpollEvent{
 		Events: unix.EPOLLIN,
 		Fd:     int32(in.iFD),
 	}
-	if err := unix.EpollCtl(in.epoll, unix.EPOLL_CTL_ADD, in.iFD, in.event); err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "epollctl failed: %v", err)
+	if err := epollCtl(in.epoll, unix.EPOLL_CTL_ADD, in.iFD, in.event); err != nil {
+		return nil, closer, status.Errorf(codes.Internal, "epollctl failed: %v", err)
 	}
 	return in, closer, nil
 }
@@ -190,10 +200,7 @@ func dataPrep(f *os.File) (obj interface{}, closer func(), retErr error) {
 // file has more data. With Linux we use inotify to watch the file and
 // assuming the file was already at EOF.
 func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
-	inotify, ok := fd.(*inotify)
-	if !ok {
-		return status.Errorf(codes.Internal, "invalid type passed. Expected *inotify and got %T", fd)
-	}
+	inotify := fd.(*inotify)
 
 	events := make([]unix.EpollEvent, 1)
 
@@ -204,7 +211,7 @@ func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
 		}
 
 		// Wait READ_TIMEOUT between runs to check the context.
-		n, err := unix.EpollWait(inotify.epoll, events, int(READ_TIMEOUT.Milliseconds()))
+		n, err := epollWait(inotify.epoll, events, int(READ_TIMEOUT.Milliseconds()))
 		if err != nil {
 			// If we got EINTR we can just loop again.
 			if err == unix.EINTR {
