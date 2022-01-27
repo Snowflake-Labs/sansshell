@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server provides helpers for building and running a sansshell server.
 package server
 
 import (

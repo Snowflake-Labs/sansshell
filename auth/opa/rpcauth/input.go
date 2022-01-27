@@ -31,8 +31,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// RpcAuthInput is used as policy input to validate Sansshell RPCs
-type RpcAuthInput struct {
+// RPCAuthInput is used as policy input to validate Sansshell RPCs
+type RPCAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
 
@@ -111,10 +111,10 @@ type PrincipalAuthInput struct {
 	Groups []string `json:"groups"`
 }
 
-// NewRpcAuthInput creates RpcAuthInput for the supplied method and request, deriving
+// NewRPCAuthInput creates RpcAuthInput for the supplied method and request, deriving
 // other information (if available) from the context.
-func NewRpcAuthInput(ctx context.Context, method string, req proto.Message) (*RpcAuthInput, error) {
-	out := &RpcAuthInput{
+func NewRPCAuthInput(ctx context.Context, method string, req proto.Message) (*RPCAuthInput, error) {
+	out := &RPCAuthInput{
 		Method: method,
 	}
 
@@ -147,7 +147,7 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	return out
 }
 
-// NetInputFrom returns NetAuthInput from the supplied net.Addr
+// NetInputFromAddr returns NetAuthInput from the supplied net.Addr
 func NetInputFromAddr(addr net.Addr) *NetAuthInput {
 	if addr == nil {
 		return nil

@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'Process' service.
 package server
 
 import (
@@ -27,9 +28,9 @@ import (
 	"strings"
 
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/azureblob"
-	_ "gocloud.dev/blob/gcsblob"
-	_ "gocloud.dev/blob/s3blob"
+	_ "gocloud.dev/blob/azureblob" // Bring Azure blob support in.
+	_ "gocloud.dev/blob/gcsblob"   // Bring GCS blob support in.
+	_ "gocloud.dev/blob/s3blob"    // Bring S3 blob support in.
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"

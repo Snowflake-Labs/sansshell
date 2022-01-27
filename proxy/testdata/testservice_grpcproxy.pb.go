@@ -31,14 +31,16 @@ type testServiceClientProxy struct {
 }
 
 // NewTestServiceClientProxy creates a TestServiceClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewTestServiceClientProxy(cc *proxy.ProxyConn) TestServiceClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewTestServiceClientProxy(cc *proxy.Conn) TestServiceClientProxy {
 	return &testServiceClientProxy{NewTestServiceClient(cc).(*testServiceClient)}
 }
 
+// TestUnaryManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type TestUnaryManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *TestResponse
 	Error error
@@ -49,7 +51,7 @@ type TestUnaryManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *testServiceClientProxy) TestUnaryOneMany(ctx context.Context, in *TestRequest, opts ...grpc.CallOption) (<-chan *TestUnaryManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *TestUnaryManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -101,9 +103,11 @@ func (c *testServiceClientProxy) TestUnaryOneMany(ctx context.Context, in *TestR
 	return ret, nil
 }
 
+// TestServerStreamManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type TestServerStreamManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *TestResponse
 	Error error
@@ -115,7 +119,7 @@ type TestService_TestServerStreamClientProxy interface {
 }
 
 type testServiceClientTestServerStreamClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -147,7 +151,7 @@ func (x *testServiceClientTestServerStreamClientProxy) Recv() ([]*TestServerStre
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -177,7 +181,7 @@ func (c *testServiceClientProxy) TestServerStreamOneMany(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestServerStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &testServiceClientTestServerStreamClientProxy{c.cc.(*proxy.Conn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -187,9 +191,11 @@ func (c *testServiceClientProxy) TestServerStreamOneMany(ctx context.Context, in
 	return x, nil
 }
 
+// TestClientStreamManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type TestClientStreamManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *TestResponse
 	Error error
@@ -202,7 +208,7 @@ type TestService_TestClientStreamClientProxy interface {
 }
 
 type testServiceClientTestClientStreamClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -257,7 +263,7 @@ func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() ([]*TestCl
 		if done {
 			break
 		}
-		m := []*proxy.ProxyRet{}
+		m := []*proxy.Ret{}
 		if err := x.ClientStream.RecvMsg(&m); err != nil {
 			return nil, err
 		}
@@ -288,13 +294,15 @@ func (c *testServiceClientProxy) TestClientStreamOneMany(ctx context.Context, op
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestClientStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &testServiceClientTestClientStreamClientProxy{c.cc.(*proxy.Conn), false, stream}
 	return x, nil
 }
 
+// TestBidiStreamManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type TestBidiStreamManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *TestResponse
 	Error error
@@ -307,7 +315,7 @@ type TestService_TestBidiStreamClientProxy interface {
 }
 
 type testServiceClientTestBidiStreamClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -343,7 +351,7 @@ func (x *testServiceClientTestBidiStreamClientProxy) Recv() ([]*TestBidiStreamMa
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -373,6 +381,6 @@ func (c *testServiceClientProxy) TestBidiStreamOneMany(ctx context.Context, opts
 	if err != nil {
 		return nil, err
 	}
-	x := &testServiceClientTestBidiStreamClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &testServiceClientTestBidiStreamClientProxy{c.cc.(*proxy.Conn), false, stream}
 	return x, nil
 }

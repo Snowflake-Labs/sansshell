@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'Ansible' service.
 package server
 
 import (

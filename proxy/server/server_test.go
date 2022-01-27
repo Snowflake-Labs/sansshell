@@ -63,7 +63,7 @@ func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[stri
 }
 
 func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) pb.Proxy_ProxyClient {
-	return startTestProxyWithAuthz(ctx, t, targets, testutil.NewAllowAllRpcAuthorizer(ctx, t))
+	return startTestProxyWithAuthz(ctx, t, targets, testutil.NewAllowAllRPCAuthorizer(ctx, t))
 }
 
 func TestProxyServerStartStream(t *testing.T) {
@@ -159,14 +159,14 @@ func TestProxyServerUnaryCall(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:123")
 	proxyStream := startTestProxy(ctx, t, testServerMap)
 
-	streamId := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+	streamID := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
 
-	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamId)
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamID)
 
 	reply := testutil.Exchange(t, proxyStream, req)
 	ids, data := testutil.UnpackStreamData(t, reply)
-	if ids[0] != streamId {
-		t.Errorf("StreamData.StreamIds[0] = %d, want %d", ids[0], streamId)
+	if ids[0] != streamID {
+		t.Errorf("StreamData.StreamIds[0] = %d, want %d", ids[0], streamID)
 	}
 	want := &tdpb.TestResponse{
 		Output: "foo:123 Foo",
@@ -190,10 +190,10 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 	proxyStream := startTestProxy(ctx, t, testServerMap)
 
-	fooId := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
-	barId := testutil.MustStartStream(t, proxyStream, "bar:456", "/Testdata.TestService/TestUnary")
+	fooID := testutil.MustStartStream(t, proxyStream, "foo:123", "/Testdata.TestService/TestUnary")
+	barID := testutil.MustStartStream(t, proxyStream, "bar:456", "/Testdata.TestService/TestUnary")
 
-	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, fooId, barId)
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, fooID, barID)
 
 	err := proxyStream.Send(req)
 	tu.FatalOnErr(fmt.Sprintf("Send(%v)", req), err, t)
@@ -208,12 +208,12 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 			sc := reply.GetServerClose()
 			ids := sc.StreamIds
 			switch ids[0] {
-			case fooId:
+			case fooID:
 				// expected
-			case barId:
+			case barID:
 				// expected
 			default:
-				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
+				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooID, barID)
 			}
 			if sc.GetStatus() != nil {
 				t.Fatalf("got ServerClose with error %v, want nil", sc.GetStatus())
@@ -222,12 +222,12 @@ func TestProxyServerUnaryFanout(t *testing.T) {
 			ids, data := testutil.UnpackStreamData(t, reply)
 			want := &tdpb.TestResponse{}
 			switch ids[0] {
-			case fooId:
+			case fooID:
 				want.Output = "foo:123 Foo"
-			case barId:
+			case barID:
 				want.Output = "bar:456 Foo"
 			default:
-				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooId, barId)
+				t.Fatalf("got response with id %d, want one of (%d, %d)", ids[0], fooID, barID)
 			}
 			if !proto.Equal(want, data) {
 				t.Errorf("proto.Equal(%v, %v) for id %d was false, want true", ids[0], want, data)
@@ -243,9 +243,9 @@ func TestProxyServerServerStream(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:456")
 	proxyStream := startTestProxy(ctx, t, testServerMap)
 
-	streamId := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestServerStream")
+	streamID := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestServerStream")
 
-	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamId)
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamID)
 	reply := testutil.Exchange(t, proxyStream, req)
 	replies := []*pb.ProxyReply{reply}
 
@@ -269,9 +269,9 @@ func TestProxyServerClientStream(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:456")
 	proxyStream := startTestProxy(ctx, t, testServerMap)
 
-	streamId := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestClientStream")
+	streamID := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestClientStream")
 
-	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamId)
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamID)
 
 	for i := 0; i < 3; i++ {
 		err := proxyStream.Send(req)
@@ -282,7 +282,7 @@ func TestProxyServerClientStream(t *testing.T) {
 	hc := &pb.ProxyRequest{
 		Request: &pb.ProxyRequest_ClientClose{
 			ClientClose: &pb.ClientClose{
-				StreamIds: []uint64{streamId},
+				StreamIds: []uint64{streamID},
 			},
 		},
 	}
@@ -312,9 +312,9 @@ func TestProxyServerBidiStream(t *testing.T) {
 	testServerMap := testutil.StartTestDataServers(t, "foo:456")
 	proxyStream := startTestProxy(ctx, t, testServerMap)
 
-	streamId := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestBidiStream")
+	streamID := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestBidiStream")
 
-	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamId)
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamID)
 
 	want := &tdpb.TestResponse{
 		Output: "foo:456 Foo",
@@ -331,7 +331,7 @@ func TestProxyServerBidiStream(t *testing.T) {
 	hc := &pb.ProxyRequest{
 		Request: &pb.ProxyRequest_ClientClose{
 			ClientClose: &pb.ClientClose{
-				StreamIds: []uint64{streamId},
+				StreamIds: []uint64{streamID},
 			},
 		},
 	}
@@ -419,7 +419,7 @@ allow {
   input.message.start_stream.target = "foo:123"
 }
 `
-	authz := testutil.NewRpcAuthorizer(ctx, t, policy)
+	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 
@@ -475,7 +475,7 @@ allow {
   input.host.net.address = "bar"
 }
 `
-	authz := testutil.NewRpcAuthorizer(ctx, t, policy)
+	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 
 	packReply := func(t *testing.T, reply *tdpb.TestResponse) *pb.ProxyReply {
@@ -564,7 +564,7 @@ allow {
   input.message.input = "allowed_input"
 }
 `
-	authz := testutil.NewRpcAuthorizer(ctx, t, policy)
+	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 
@@ -606,7 +606,7 @@ allow {
   input.host.net.address = "foo"
 }
 `
-	authz := testutil.NewRpcAuthorizer(ctx, t, policy)
+	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 

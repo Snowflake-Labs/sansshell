@@ -28,14 +28,16 @@ type healthCheckClientProxy struct {
 }
 
 // NewHealthCheckClientProxy creates a HealthCheckClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewHealthCheckClientProxy(cc *proxy.ProxyConn) HealthCheckClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewHealthCheckClientProxy(cc *proxy.Conn) HealthCheckClientProxy {
 	return &healthCheckClientProxy{NewHealthCheckClient(cc).(*healthCheckClient)}
 }
 
+// OkManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type OkManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -46,7 +48,7 @@ type OkManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *healthCheckClientProxy) OkOneMany(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (<-chan *OkManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *OkManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {

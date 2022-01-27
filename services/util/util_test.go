@@ -108,7 +108,7 @@ func TestRunCommand(t *testing.T) {
 
 func TestTrimString(t *testing.T) {
 	b := &bytes.Buffer{}
-	for i := 0; i < 2*MAX_BUF; i++ {
+	for i := 0; i < 2*MaxBuf; i++ {
 		b.WriteByte('c')
 	}
 	w := TrimString(b.String())

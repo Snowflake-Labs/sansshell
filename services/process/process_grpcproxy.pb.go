@@ -31,14 +31,16 @@ type processClientProxy struct {
 }
 
 // NewProcessClientProxy creates a ProcessClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewProcessClientProxy(cc *proxy.ProxyConn) ProcessClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewProcessClientProxy(cc *proxy.Conn) ProcessClientProxy {
 	return &processClientProxy{NewProcessClient(cc).(*processClient)}
 }
 
+// ListManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ListManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ListReply
 	Error error
@@ -49,7 +51,7 @@ type ListManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *ListManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -101,9 +103,11 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 	return ret, nil
 }
 
+// GetStacksManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type GetStacksManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *GetStacksReply
 	Error error
@@ -114,7 +118,7 @@ type GetStacksManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *GetStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -166,9 +170,11 @@ func (c *processClientProxy) GetStacksOneMany(ctx context.Context, in *GetStacks
 	return ret, nil
 }
 
+// GetJavaStacksManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type GetJavaStacksManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *GetJavaStacksReply
 	Error error
@@ -179,7 +185,7 @@ type GetJavaStacksManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *GetJavaStacksManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -231,9 +237,11 @@ func (c *processClientProxy) GetJavaStacksOneMany(ctx context.Context, in *GetJa
 	return ret, nil
 }
 
+// GetMemoryDumpManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type GetMemoryDumpManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *GetMemoryDumpReply
 	Error error
@@ -245,7 +253,7 @@ type Process_GetMemoryDumpClientProxy interface {
 }
 
 type processClientGetMemoryDumpClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -277,7 +285,7 @@ func (x *processClientGetMemoryDumpClientProxy) Recv() ([]*GetMemoryDumpManyResp
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -307,7 +315,7 @@ func (c *processClientProxy) GetMemoryDumpOneMany(ctx context.Context, in *GetMe
 	if err != nil {
 		return nil, err
 	}
-	x := &processClientGetMemoryDumpClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &processClientGetMemoryDumpClientProxy{c.cc.(*proxy.Conn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}

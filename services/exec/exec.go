@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package exec defines the RPC interface for the sansshell Exec actions.
 package exec
 
 // To regenerate the proto headers if the .proto changes, just run go generate

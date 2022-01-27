@@ -94,7 +94,7 @@ func main() {
 		logger.Info("using default authorization policy")
 	}
 
-	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RpcAuthInput) bool {
+	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
 	authz, err := rpcauth.NewWithPolicy(ctx, policy, addressHook)

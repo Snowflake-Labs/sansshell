@@ -14,7 +14,7 @@
    under the License.
 */
 
-// package testutil contains helpers and utilities for
+// Package testutil contains helpers and utilities for
 // writing unittests against the sansshell proxy.
 package testutil
 
@@ -54,7 +54,7 @@ func Exchange(t *testing.T, stream pb.Proxy_ProxyClient, req *pb.ProxyRequest) *
 	return reply
 }
 
-// StartTargetStream establishes a new target stream through the proxy connection in `stream`.
+// StartStream establishes a new target stream through the proxy connection in `stream`.
 // Will fail `t` on any errors communicating with the proxy, or if the returned response from
 // the proxy is not a valid StartStreamReply.
 func StartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method string) *pb.StartStreamReply {
@@ -111,6 +111,8 @@ func PackStreamData(t *testing.T, req proto.Message, streamIds ...uint64) *pb.Pr
 	}
 }
 
+// UnpackStreamData will unmarshal a StreamData entry into a slice of stream ids
+// and the message associated with it.
 func UnpackStreamData(t *testing.T, reply *pb.ProxyReply) ([]uint64, proto.Message) {
 	t.Helper()
 	sd := reply.GetStreamData()
@@ -127,6 +129,7 @@ type EchoTestDataServer struct {
 	serverName string
 }
 
+// TestUnary implements the service for EchoTestDataServer
 func (e *EchoTestDataServer) TestUnary(ctx context.Context, req *tdpb.TestRequest) (*tdpb.TestResponse, error) {
 	if req.Input == "error" {
 		return nil, errors.New("error")
@@ -136,6 +139,7 @@ func (e *EchoTestDataServer) TestUnary(ctx context.Context, req *tdpb.TestReques
 	}, nil
 }
 
+// TestServerStream implements the service for EchoTestDataServer
 func (e *EchoTestDataServer) TestServerStream(req *tdpb.TestRequest, stream tdpb.TestService_TestServerStreamServer) error {
 	if req.Input == "error" {
 		return errors.New("error")
@@ -148,6 +152,7 @@ func (e *EchoTestDataServer) TestServerStream(req *tdpb.TestRequest, stream tdpb
 	return nil
 }
 
+// TestClientStream implements the service for EchoTestDataServer
 func (e *EchoTestDataServer) TestClientStream(stream tdpb.TestService_TestClientStreamServer) error {
 	var inputs []string
 	for {
@@ -169,6 +174,7 @@ func (e *EchoTestDataServer) TestClientStream(stream tdpb.TestService_TestClient
 	}
 }
 
+// TestBidiStream implements the service for EchoTestDataServer
 func (e *EchoTestDataServer) TestBidiStream(stream tdpb.TestService_TestBidiStreamServer) error {
 	for {
 		req, err := stream.Recv()
@@ -189,21 +195,25 @@ func (e *EchoTestDataServer) TestBidiStream(stream tdpb.TestService_TestBidiStre
 	}
 }
 
-func NewRpcAuthorizer(ctx context.Context, t *testing.T, policy string) *rpcauth.Authorizer {
+// NewRPCAuthorizer generates a new authorizer with the given policy. Will handle errors for testing.
+func NewRPCAuthorizer(ctx context.Context, t *testing.T, policy string) *rpcauth.Authorizer {
 	t.Helper()
 	auth, err := rpcauth.NewWithPolicy(ctx, policy)
 	testutil.FatalOnErr(fmt.Sprintf("rpcauth.NewWithPolicy(%s)", policy), err, t)
 	return auth
 }
 
-func NewAllowAllRpcAuthorizer(ctx context.Context, t *testing.T) *rpcauth.Authorizer {
+// NewAllowAllRPCAuthorizer generates a new authorizer which allows all RPCs to pass through.
+func NewAllowAllRPCAuthorizer(ctx context.Context, t *testing.T) *rpcauth.Authorizer {
 	policy := `
 package sansshell.authz
 default allow = true
 `
-	return NewRpcAuthorizer(ctx, t, policy)
+	return NewRPCAuthorizer(ctx, t, policy)
 }
 
+// WithBufDialer returns a DialOption which will lookup a bufnet connection in the
+// map passed to it. Allows arbitrary N backend servers to run simultaneously.
 func WithBufDialer(m map[string]*bufconn.Listener) grpc.DialOption {
 	return grpc.WithContextDialer(func(ctx context.Context, target string) (net.Conn, error) {
 		l := m[target]
@@ -218,7 +228,7 @@ func WithBufDialer(m map[string]*bufconn.Listener) grpc.DialOption {
 	})
 }
 
-//
+// BufSize is the buffer size used for a bufnet listener.
 const BufSize = 1024 * 1024
 
 // targetAddr is a net.Addr that returns a target as it's address.
@@ -227,6 +237,7 @@ type targetAddr string
 func (t targetAddr) String() string {
 	return string(t)
 }
+
 func (t targetAddr) Network() string {
 	return "bufconn"
 }
@@ -242,6 +253,9 @@ func (t *targetConn) RemoteAddr() net.Addr {
 	return targetAddr(t.target)
 }
 
+// StartTestDataServer will start the given server running (as a separate Go routine)
+// and return the Listener to connect to it over. The server will be automatically
+// stopped when the enclosing test exits.
 func StartTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
 	t.Helper()
 	lis := bufconn.Listen(BufSize)
@@ -259,6 +273,8 @@ func StartTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
 	return lis
 }
 
+// StartTestDataServers will start N servers using StartTestDataServer returning a map
+// of server -> Listener
 func StartTestDataServers(t *testing.T, serverNames ...string) map[string]*bufconn.Listener {
 	t.Helper()
 	out := map[string]*bufconn.Listener{}

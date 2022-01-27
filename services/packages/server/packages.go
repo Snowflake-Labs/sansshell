@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'Packages' service.
 package server
 
 import (
@@ -349,10 +350,10 @@ func parseYumRepoListOutput(r io.Reader) (*pb.RepoListReply, error) {
 		text := scanner.Text()
 		fields := strings.Fields(text)
 
-		const MIN_LINE = len("Repo-filename: ")
+		const MinLine = len("Repo-filename: ")
 
 		// Ignore anything which isn't long enough or doesn't start with "Repo-"
-		if len(text) < MIN_LINE || !strings.HasPrefix(text, "Repo-") {
+		if len(text) < MinLine || !strings.HasPrefix(text, "Repo-") {
 			continue
 		}
 

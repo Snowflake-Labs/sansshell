@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package server implements the sansshell 'LocalFile' service.
 package server
 
 import (
@@ -33,9 +34,9 @@ import (
 	"time"
 
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/azureblob"
-	_ "gocloud.dev/blob/gcsblob"
-	_ "gocloud.dev/blob/s3blob"
+	_ "gocloud.dev/blob/azureblob" // Pull in Azure blob support
+	_ "gocloud.dev/blob/gcsblob"   // Pull in GCS blob support
+	_ "gocloud.dev/blob/s3blob"    // Pull in S3 blob support
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -51,15 +52,16 @@ import (
 )
 
 var (
+	// AbsolutePathError is a typed error for path errors on file/directory names.
 	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 
 	// For testing since otherwise tests have to run as root for these.
 	chown             = unix.Chown
 	changeImmutableOS = changeImmutable
 
-	// READ_TIMEOUT is how long tail should wait on a given poll call
+	// ReadTimeout is how long tail should wait on a given poll call
 	// before checking context.Err() and possibly looping.
-	READ_TIMEOUT = 10 * time.Second
+	ReadTimeout = 10 * time.Second
 )
 
 // This encompasses the permission plus the setuid/gid/sticky bits one

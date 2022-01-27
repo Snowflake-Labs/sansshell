@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package client provides the client interface for 'packages'
 package client
 
 import (
@@ -140,8 +141,8 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 type updateCmd struct {
 	packageSystem string
 	name          string
-	old_version   string
-	new_version   string
+	oldVersion    string
+	newVersion    string
 	repo          string
 }
 
@@ -156,13 +157,13 @@ func (*updateCmd) Usage() string {
 func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&u.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&u.name, "name", "", "Name of package to install")
-	f.StringVar(&u.old_version, "old_version", "", "Old version of package which must be on the system. For YUM this must be a full nevra version")
-	f.StringVar(&u.new_version, "new_version", "", "New version of package to update. For YUM this must be a full nevra version")
+	f.StringVar(&u.oldVersion, "old_version", "", "Old version of package which must be on the system. For YUM this must be a full nevra version")
+	f.StringVar(&u.newVersion, "new_version", "", "New version of package to update. For YUM this must be a full nevra version")
 	f.StringVar(&u.repo, "repo", "", "If set also enable this repo when resolving packages.")
 }
 
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	if u.name == "" || u.old_version == "" || u.new_version == "" {
+	if u.name == "" || u.oldVersion == "" || u.newVersion == "" {
 		fmt.Fprintln(os.Stderr, "--name, --old_version and --new_version must be supplied")
 		return subcommands.ExitFailure
 	}
@@ -179,8 +180,8 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	req := &pb.UpdateRequest{
 		PackageSystem: ps,
 		Name:          u.name,
-		OldVersion:    u.old_version,
-		NewVersion:    u.new_version,
+		OldVersion:    u.oldVersion,
+		NewVersion:    u.newVersion,
 		Repo:          u.repo,
 	}
 

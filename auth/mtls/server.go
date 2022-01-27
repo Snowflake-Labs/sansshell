@@ -25,7 +25,7 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// GetServerCredentials returns transport credentials for a SansShell server as
+// LoadServerCredentials returns transport credentials for a SansShell server as
 // retrieved from the specified `loaderName`
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	loader, err := Loader(loaderName)

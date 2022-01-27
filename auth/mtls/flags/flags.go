@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package flags provides flag support for loading client/server certs and CA root of trust.
 package flags
 
 import (
@@ -44,6 +45,7 @@ var (
 	rootCAFile                    string
 )
 
+// Name returns the loader to use to set mtls params via flags.
 func Name() string { return loaderName }
 
 // flagLoader implements mtls.CredentialsLoader by reading files specified

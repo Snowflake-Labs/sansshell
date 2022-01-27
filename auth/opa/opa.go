@@ -14,7 +14,7 @@
    under the License.
 */
 
-// package opa contains code for performing authorization
+// Package opa contains code for performing authorization
 // checks using opa/rego.
 package opa
 
@@ -27,11 +27,11 @@ import (
 )
 
 const (
-	// The rego package used by all Sansshell policy files.
+	// SansshellRegoPackage is the rego package used by all Sansshell policy files.
 	// Any policy not using this package will be rejected.
 	SansshellRegoPackage = "sansshell.authz"
 
-	// The default query used for policy evaluation.
+	// DefaultAuthzQuery is the default query used for policy evaluation.
 	DefaultAuthzQuery = "data.sansshell.authz.allow"
 )
 
@@ -64,9 +64,9 @@ func (o optionFunc) apply(opts *policyOptions) {
 	o(opts)
 }
 
-// Use `query` to evaulate the policy, instead of DefaultAuthzQuery.
-// The supplied query should be simple evaluation expression that
-// creates no binding, and evaluates to 'true' iff the input
+// WithAllowQuery returns an option to use `query` to evaulate the policy,
+// instead of DefaultAuthzQuery. The supplied query should be simple evaluation
+// expressions that creates no binding, and evaluates to 'true' iff the input
 // satisfies the conditions of the policy.
 func WithAllowQuery(query string) Option {
 	return optionFunc(func(o *policyOptions) {

@@ -37,14 +37,16 @@ type localFileClientProxy struct {
 }
 
 // NewLocalFileClientProxy creates a LocalFileClientProxy for use in proxied connections.
-// NOTE: This takes a ProxyConn instead of a generic ClientConnInterface as the methods here are only valid in ProxyConn contexts.
-func NewLocalFileClientProxy(cc *proxy.ProxyConn) LocalFileClientProxy {
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewLocalFileClientProxy(cc *proxy.Conn) LocalFileClientProxy {
 	return &localFileClientProxy{NewLocalFileClient(cc).(*localFileClient)}
 }
 
+// ReadManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ReadManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ReadReply
 	Error error
@@ -56,7 +58,7 @@ type LocalFile_ReadClientProxy interface {
 }
 
 type localFileClientReadClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -88,7 +90,7 @@ func (x *localFileClientReadClientProxy) Recv() ([]*ReadManyResponse, error) {
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -118,7 +120,7 @@ func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadActionRe
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientReadClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &localFileClientReadClientProxy{c.cc.(*proxy.Conn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -128,9 +130,11 @@ func (c *localFileClientProxy) ReadOneMany(ctx context.Context, in *ReadActionRe
 	return x, nil
 }
 
+// StatManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type StatManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *StatReply
 	Error error
@@ -143,7 +147,7 @@ type LocalFile_StatClientProxy interface {
 }
 
 type localFileClientStatClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -179,7 +183,7 @@ func (x *localFileClientStatClientProxy) Recv() ([]*StatManyResponse, error) {
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -209,13 +213,15 @@ func (c *localFileClientProxy) StatOneMany(ctx context.Context, opts ...grpc.Cal
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientStatClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &localFileClientStatClientProxy{c.cc.(*proxy.Conn), false, stream}
 	return x, nil
 }
 
+// SumManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type SumManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *SumReply
 	Error error
@@ -228,7 +234,7 @@ type LocalFile_SumClientProxy interface {
 }
 
 type localFileClientSumClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -264,7 +270,7 @@ func (x *localFileClientSumClientProxy) Recv() ([]*SumManyResponse, error) {
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -294,13 +300,15 @@ func (c *localFileClientProxy) SumOneMany(ctx context.Context, opts ...grpc.Call
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientSumClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &localFileClientSumClientProxy{c.cc.(*proxy.Conn), false, stream}
 	return x, nil
 }
 
+// WriteManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type WriteManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -313,7 +321,7 @@ type LocalFile_WriteClientProxy interface {
 }
 
 type localFileClientWriteClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -368,7 +376,7 @@ func (x *localFileClientWriteClientProxy) CloseAndRecv() ([]*WriteManyResponse, 
 		if done {
 			break
 		}
-		m := []*proxy.ProxyRet{}
+		m := []*proxy.Ret{}
 		if err := x.ClientStream.RecvMsg(&m); err != nil {
 			return nil, err
 		}
@@ -399,13 +407,15 @@ func (c *localFileClientProxy) WriteOneMany(ctx context.Context, opts ...grpc.Ca
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientWriteClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &localFileClientWriteClientProxy{c.cc.(*proxy.Conn), false, stream}
 	return x, nil
 }
 
+// CopyManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type CopyManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -416,7 +426,7 @@ type CopyManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *localFileClientProxy) CopyOneMany(ctx context.Context, in *CopyRequest, opts ...grpc.CallOption) (<-chan *CopyManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *CopyManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -468,9 +478,11 @@ func (c *localFileClientProxy) CopyOneMany(ctx context.Context, in *CopyRequest,
 	return ret, nil
 }
 
+// ListManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type ListManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *ListReply
 	Error error
@@ -482,7 +494,7 @@ type LocalFile_ListClientProxy interface {
 }
 
 type localFileClientListClientProxy struct {
-	cc         *proxy.ProxyConn
+	cc         *proxy.Conn
 	directDone bool
 	grpc.ClientStream
 }
@@ -514,7 +526,7 @@ func (x *localFileClientListClientProxy) Recv() ([]*ListManyResponse, error) {
 		return ret, nil
 	}
 
-	m := []*proxy.ProxyRet{}
+	m := []*proxy.Ret{}
 	if err := x.ClientStream.RecvMsg(&m); err != nil {
 		return nil, err
 	}
@@ -544,7 +556,7 @@ func (c *localFileClientProxy) ListOneMany(ctx context.Context, in *ListRequest,
 	if err != nil {
 		return nil, err
 	}
-	x := &localFileClientListClientProxy{c.cc.(*proxy.ProxyConn), false, stream}
+	x := &localFileClientListClientProxy{c.cc.(*proxy.Conn), false, stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -554,9 +566,11 @@ func (c *localFileClientProxy) ListOneMany(ctx context.Context, in *ListRequest,
 	return x, nil
 }
 
+// SetFileAttributesManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type SetFileAttributesManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -567,7 +581,7 @@ type SetFileAttributesManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *localFileClientProxy) SetFileAttributesOneMany(ctx context.Context, in *SetFileAttributesRequest, opts ...grpc.CallOption) (<-chan *SetFileAttributesManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *SetFileAttributesManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -619,9 +633,11 @@ func (c *localFileClientProxy) SetFileAttributesOneMany(ctx context.Context, in 
 	return ret, nil
 }
 
+// RmManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type RmManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -632,7 +648,7 @@ type RmManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *localFileClientProxy) RmOneMany(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (<-chan *RmManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *RmManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
@@ -684,9 +700,11 @@ func (c *localFileClientProxy) RmOneMany(ctx context.Context, in *RmRequest, opt
 	return ret, nil
 }
 
+// RmdirManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
 type RmdirManyResponse struct {
 	Target string
-	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
 	Resp  *emptypb.Empty
 	Error error
@@ -697,7 +715,7 @@ type RmdirManyResponse struct {
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
 func (c *localFileClientProxy) RmdirOneMany(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (<-chan *RmdirManyResponse, error) {
-	conn := c.cc.(*proxy.ProxyConn)
+	conn := c.cc.(*proxy.Conn)
 	ret := make(chan *RmdirManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {

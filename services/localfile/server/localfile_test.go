@@ -204,7 +204,7 @@ func TestTail(t *testing.T) {
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	READ_TIMEOUT = 1 * time.Second
+	ReadTimeout = 1 * time.Second
 
 	// Create a file with some initial data.
 	temp := t.TempDir()
@@ -255,7 +255,7 @@ func TestTail(t *testing.T) {
 
 	// Pause n+1s to make sure the server goes through a poll loop if we're
 	// not on an OS that can immediately return.
-	time.Sleep(READ_TIMEOUT + 1*time.Second)
+	time.Sleep(ReadTimeout + 1*time.Second)
 
 	// This should cause Recv() to fail
 	resp, err = stream.Recv()
@@ -526,7 +526,7 @@ func TestSetFileAttributes(t *testing.T) {
 	testutil.FatalOnErr("chmod", err, t)
 
 	setPath := ""
-	setUid, setGid := 0, 0
+	setUID, setGID := 0, 0
 	setImmutable, chownError, immutableError := false, false, false
 
 	// Setup a mock chown so we can tell it's getting called
@@ -534,8 +534,8 @@ func TestSetFileAttributes(t *testing.T) {
 	savedChown := chown
 	chown = func(path string, uid int, gid int) error {
 		setPath = path
-		setUid = uid
-		setGid = gid
+		setUID = uid
+		setGID = gid
 		if chownError {
 			return errors.New("chown error")
 		}
@@ -568,10 +568,10 @@ func TestSetFileAttributes(t *testing.T) {
 		wantErr           bool
 		chownError        bool
 		immutableError    bool
-		setUid            bool
-		expectedUid       int
-		setGid            bool
-		expectedGid       int
+		setUID            bool
+		expectedUID       int
+		setGID            bool
+		expectedGID       int
 		setMode           bool
 		expectedMode      uint32
 		setImmutable      bool
@@ -751,10 +751,10 @@ func TestSetFileAttributes(t *testing.T) {
 					},
 				},
 			},
-			setUid:            true,
-			expectedUid:       uid + 1,
-			setGid:            true,
-			expectedGid:       gid + 1,
+			setUID:            true,
+			expectedUID:       uid + 1,
+			setGID:            true,
+			expectedGID:       gid + 1,
 			setMode:           true,
 			expectedMode:      f1Stat.Mode + 1,
 			setImmutable:      true,
@@ -830,13 +830,13 @@ func TestSetFileAttributes(t *testing.T) {
 			if got, want := setPath, tc.input.Attrs.Filename; got != want {
 				t.Fatalf("%s: didn't use correct path. Got %s and want %s", tc.name, got, want)
 			}
-			if tc.setUid {
-				if got, want := setUid, tc.expectedUid; got != want {
+			if tc.setUID {
+				if got, want := setUID, tc.expectedUID; got != want {
 					t.Fatalf("%s: didn't use correct uid. Got %d and want %d", tc.name, got, want)
 				}
 			}
-			if tc.setGid {
-				if got, want := setGid, tc.expectedGid; got != want {
+			if tc.setGID {
+				if got, want := setGID, tc.expectedGID; got != want {
 					t.Fatalf("%s: didn't use correct gid. Got %d and want %d", tc.name, got, want)
 				}
 			}

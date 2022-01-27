@@ -14,7 +14,7 @@
    under the License.
 */
 
-// package rpcauth provides OPA policy authorization
+// Package rpcauth provides OPA policy authorization
 // for Sansshell RPCs.
 package rpcauth
 
@@ -40,26 +40,26 @@ type Authorizer struct {
 	policy *opa.AuthzPolicy
 
 	// Additional authorization hooks invoked before policy evaluation.
-	hooks []RpcAuthzHook
+	hooks []RPCAuthzHook
 }
 
-// An RpcAuthzHook is invoked on populated RpcAuthInput prior to policy
+// A RPCAuthzHook is invoked on populated RpcAuthInput prior to policy
 // evaluation, and may augment / mutate the input, or pre-emptively
 // reject a request.
-type RpcAuthzHook interface {
-	Hook(context.Context, *RpcAuthInput) error
+type RPCAuthzHook interface {
+	Hook(context.Context, *RPCAuthInput) error
 }
 
 // New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
-func New(policy *opa.AuthzPolicy, authzHooks ...RpcAuthzHook) *Authorizer {
+func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
 	return &Authorizer{policy: policy, hooks: authzHooks}
 }
 
 // NewWithPolicy creates a new Authorizer from a policy string. Any supplied
 // authorization hooks will be executed, in the order provided, on each policy
 // evaluation.
-func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHook) (*Authorizer, error) {
+func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {
 		return nil, err
@@ -67,12 +67,12 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RpcAuthzHoo
 	return New(p, authzHooks...), nil
 }
 
-// Evalulate the supplied input against the authorization policy, returning
+// Eval will evalulate the supplied input against the authorization policy, returning
 // nil iff policy evaulation was successful, and the request is permitted, or
 // an appropriate status.Error otherwise. Any input hooks will be executed
 // prior to policy evaluation, and may mutate `input`, regardless of the
 // the success or failure of policy.
-func (g *Authorizer) Eval(ctx context.Context, input *RpcAuthInput) error {
+func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	if input != nil {
 		logger.V(1).Info("evaluating authz policy", "input", string(input.Message), input)
@@ -105,7 +105,7 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 	if !ok {
 		return nil, status.Errorf(codes.Internal, "unable to authorize request of type %T, which is not proto.Message", req)
 	}
-	authInput, err := NewRpcAuthInput(ctx, info.FullMethod, msg)
+	authInput, err := NewRPCAuthInput(ctx, info.FullMethod, msg)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to create auth input: %v", err)
 	}
@@ -116,11 +116,11 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 }
 
 // AuthorizeStream implements grpc.StreamServerInterceptor
-func (c *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	wrapped := &wrappedStream{
 		ServerStream: ss,
 		info:         info,
-		authz:        c,
+		authz:        g,
 	}
 	return handler(srv, wrapped)
 }
@@ -146,7 +146,7 @@ func (e *wrappedStream) RecvMsg(req interface{}) error {
 	if !ok {
 		return status.Errorf(codes.Internal, "unable to authorize request of type %T, which is not proto.Message", req)
 	}
-	authInput, err := NewRpcAuthInput(ctx, e.info.FullMethod, msg)
+	authInput, err := NewRPCAuthInput(ctx, e.info.FullMethod, msg)
 	if err != nil {
 		return err
 	}

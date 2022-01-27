@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package client provides the client interface for 'healthcheck'
 package client
 
 import (

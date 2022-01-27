@@ -34,9 +34,9 @@ import (
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
-// ProxyConn is a grpc.ClientConnInterface which is connected to the proxy
+// Conn is a grpc.ClientConnInterface which is connected to the proxy
 // converting calls into RPC the proxy understands.
-type ProxyConn struct {
+type Conn struct {
 	// The targets we're proxying for currently.
 	Targets []string
 
@@ -47,9 +47,9 @@ type ProxyConn struct {
 	direct bool
 }
 
-// ProxyRet defines the internal API for getting responses from the proxy.
+// Ret defines the internal API for getting responses from the proxy.
 // Callers will need to convert the anypb.Any into their final type (generally via generated code).
-type ProxyRet struct {
+type Ret struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to ProxyConn.
 	Index int
@@ -58,7 +58,7 @@ type ProxyRet struct {
 }
 
 // Direct indicates whether the proxy is in use or a direct connection is being made.
-func (p *ProxyConn) Direct() bool {
+func (p *Conn) Direct() bool {
 	return p.direct
 }
 
@@ -67,12 +67,12 @@ func (p *ProxyConn) Direct() bool {
 type proxyStream struct {
 	method     string
 	stream     proxypb.Proxy_ProxyClient
-	ids        map[uint64]*ProxyRet
+	ids        map[uint64]*Ret
 	sendClosed bool
 }
 
-// See grpc.ClientConnInterface
-func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+// Invoke - see grpc.ClientConnInterface
+func (p *Conn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
 	if p.Direct() {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.Invoke(ctx, method, args, reply, opts...)
@@ -124,8 +124,8 @@ func (p *ProxyConn) Invoke(ctx context.Context, method string, args interface{},
 	return nil
 }
 
-// See grpc.ClientConnInterface
-func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+// NewStream - see grpc.ClientConnInterface
+func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	if p.direct {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.NewStream(ctx, desc, method, opts...)
@@ -145,17 +145,17 @@ func (p *ProxyConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method
 	return s, nil
 }
 
-// see grpc.ClientStream
+// Header - see grpc.ClientStream
 func (p *proxyStream) Header() (metadata.MD, error) {
 	return nil, status.Error(codes.Unimplemented, "Not implemented for proxy")
 }
 
-// see grpc.ClientStream
+// Trailer - see grpc.ClientStream
 func (p *proxyStream) Trailer() metadata.MD {
 	return nil
 }
 
-// see grpc.ClientStream
+// CloseSend - see grpc.ClientStream
 func (p *proxyStream) CloseSend() error {
 	// Already closed, just return.
 	if p.sendClosed {
@@ -174,7 +174,7 @@ func (p *proxyStream) CloseSend() error {
 	return nil
 }
 
-// see grpc.ClientStream
+// Context - see grpc.ClientStream
 func (p *proxyStream) Context() context.Context {
 	return p.stream.Context()
 }
@@ -252,7 +252,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	// expects from a proto.Message to a *[]*ProxyRet instead.
 	//
 	// Anything else is an error.
-	manyRet, ok := m.(*[]*ProxyRet)
+	manyRet, ok := m.(*[]*Ret)
 	if !ok {
 		return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*ProxyRet) - got %T", m)
 	}
@@ -314,13 +314,13 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 // createStreams is a helper which does the heavy lifting of creating N tracked streams to the proxy
 // for later RPCs to flow across. It returns a proxy stream object (for clients), and a map of stream ids to prefilled ProxyRet
 // objects. These will have Index/Target already filled in so clients can map them to their requests.
-func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*ProxyRet, error) {
+func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*Ret, error) {
 	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
 	if err != nil {
 		return nil, nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
 	}
 
-	streamIds := make(map[uint64]*ProxyRet)
+	streamIds := make(map[uint64]*Ret)
 
 	// For every target we have to send a separate StartStream (with a nonce which in our case is the target index so clients can map too).
 	// We then validate the nonce matches and record the stream ID so later processing can match responses to the right targets.
@@ -359,7 +359,7 @@ func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.P
 		}
 
 		// Save stream ID/nonce for later matching.
-		streamIds[r.GetStreamId()] = &ProxyRet{
+		streamIds[r.GetStreamId()] = &Ret{
 			Target: r.GetTarget(),
 			Index:  int(r.GetNonce()),
 		}
@@ -372,7 +372,7 @@ func (p *ProxyConn) createStreams(ctx context.Context, method string) (proxypb.P
 // will need to convert those to the proper expected specific types.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *ProxyRet, error) {
+func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *Ret, error) {
 	requestMsg, ok := args.(proto.Message)
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "args must be a proto.Message")
@@ -399,7 +399,7 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 	if err := s.CloseSend(); err != nil {
 		return nil, err
 	}
-	retChan := make(chan *ProxyRet)
+	retChan := make(chan *Ret)
 
 	// Fire off a separate routine to read from the stream and send the responses down retChan.
 	go func() {
@@ -487,26 +487,26 @@ func (p *ProxyConn) InvokeOneMany(ctx context.Context, method string, args inter
 }
 
 // Close tears down the ProxyConn and closes all connections to it.
-func (p *ProxyConn) Close() error {
+func (p *Conn) Close() error {
 	return p.cc.Close()
 }
 
 // Dial will connect to the given proxy and setup to send RPCs to the listed targets.
 // If proxy is blank and there is only one target this will return a normal grpc connection object (*grpc.ClientConn).
 // Otherwise this will return a *ProxyConn setup to act with the proxy.
-func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*ProxyConn, error) {
+func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
 	return DialContext(context.Background(), proxy, targets, opts...)
 }
 
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
 // By default dial operations are non-blocking. See grpc.Dial for a complete explanation.
-func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*ProxyConn, error) {
+func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
 	if len(targets) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "no targets passed")
 	}
 
 	dialTarget := proxy
-	ret := &ProxyConn{}
+	ret := &Conn{}
 	if proxy == "" {
 		if len(targets) != 1 {
 			return nil, status.Error(codes.InvalidArgument, "no proxy specified but more than one target set")

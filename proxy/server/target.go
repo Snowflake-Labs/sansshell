@@ -409,7 +409,7 @@ func (t *TargetStreamSet) ClientClose(req *pb.ClientClose) error {
 	return nil
 }
 
-// ClientCloseAll() issues ClientClose to all associated TargetStreams
+// ClientCloseAll issues ClientClose to all associated TargetStreams
 func (t *TargetStreamSet) ClientCloseAll() {
 	for _, stream := range t.streams {
 		stream.CloseSend()
@@ -459,7 +459,7 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
 		}
 
-		authinput, err := rpcauth.NewRpcAuthInput(ctx, stream.Method(), streamReq)
+		authinput, err := rpcauth.NewRPCAuthInput(ctx, stream.Method(), streamReq)
 		if err != nil {
 			return status.Errorf(codes.Internal, "error creating authz input %v", err)
 		}

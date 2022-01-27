@@ -14,6 +14,8 @@
    under the License.
 */
 
+// Package client provides utility functions for gluing new commands
+// easily into sanssh.
 package client
 
 import (
@@ -24,6 +26,9 @@ import (
 	"github.com/google/subcommands"
 )
 
+// SetupSubpackage is a helper to create a Commander to hold the actual
+// commands run inside of a top-level command. The returned Commander should
+// then have the relevant sub-commands registered within it.
 func SetupSubpackage(name string, f *flag.FlagSet) *subcommands.Commander {
 	c := subcommands.NewCommander(f, name)
 	c.Register(c.HelpCommand(), "")
@@ -32,6 +37,8 @@ func SetupSubpackage(name string, f *flag.FlagSet) *subcommands.Commander {
 	return c
 }
 
+// GenerateSynopsis will generate a consistent snnopysis for a top level command
+// with N sub-commands contained within it.
 func GenerateSynopsis(c *subcommands.Commander) string {
 	b := &bytes.Buffer{}
 	b.WriteString("\n")
@@ -47,6 +54,8 @@ func GenerateSynopsis(c *subcommands.Commander) string {
 	return b.String()
 }
 
+// GenerateUsage will return a usage string to a top level command with N
+// sub-commands contained within it.
 func GenerateUsage(name string, synopsis string) string {
 	return fmt.Sprintf("%s has several subcommands. Pick one to perform the action you wish:\n%s", name, synopsis)
 }

@@ -21,19 +21,20 @@ import (
 	"net"
 )
 
-// AuthzHookFunc implements RpcAuthzHook for a simple function
-type RpcAuthzHookFunc func(context.Context, *RpcAuthInput) error
+// RPCAuthzHookFunc implements RpcAuthzHook for a simple function
+type RPCAuthzHookFunc func(context.Context, *RPCAuthInput) error
 
-func (r RpcAuthzHookFunc) Hook(ctx context.Context, input *RpcAuthInput) error {
+// Hook runs the hook function on the given input
+func (r RPCAuthzHookFunc) Hook(ctx context.Context, input *RPCAuthInput) error {
 	return r(ctx, input)
 }
 
-// An HookPredicate returns true if a conditional hook should run
-type HookPredicate func(*RpcAuthInput) bool
+// A HookPredicate returns true if a conditional hook should run
+type HookPredicate func(*RPCAuthInput) bool
 
 // HookIf wraps an existing hook, and only executes it when
 // the provided condition returns true
-func HookIf(hook RpcAuthzHook, condition HookPredicate) RpcAuthzHook {
+func HookIf(hook RPCAuthzHook, condition HookPredicate) RPCAuthzHook {
 	return &conditionalHook{
 		hook:      hook,
 		predicate: condition,
@@ -41,11 +42,11 @@ func HookIf(hook RpcAuthzHook, condition HookPredicate) RpcAuthzHook {
 }
 
 type conditionalHook struct {
-	hook      RpcAuthzHook
+	hook      RPCAuthzHook
 	predicate HookPredicate
 }
 
-func (c *conditionalHook) Hook(ctx context.Context, input *RpcAuthInput) error {
+func (c *conditionalHook) Hook(ctx context.Context, input *RPCAuthInput) error {
 	if c.predicate(input) {
 		return c.hook.Hook(ctx, input)
 	}
@@ -53,8 +54,8 @@ func (c *conditionalHook) Hook(ctx context.Context, input *RpcAuthInput) error {
 }
 
 // HostNetHook returns an RpcAuthzHook that sets host networking information.
-func HostNetHook(addr net.Addr) RpcAuthzHook {
-	return RpcAuthzHookFunc(func(ctx context.Context, input *RpcAuthInput) error {
+func HostNetHook(addr net.Addr) RPCAuthzHook {
+	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 		if input.Host == nil {
 			input.Host = &HostAuthInput{}
 		}

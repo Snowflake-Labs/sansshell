@@ -14,7 +14,7 @@
    under the License.
 */
 
-// package telemetry contains code for emitting telemetry
+// Package telemetry contains code for emitting telemetry
 // from Sansshell processes.
 package telemetry
 

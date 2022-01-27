@@ -14,6 +14,7 @@
    under the License.
 */
 
+// Package testutil provides many test helpers/assertions used to simplify common testing patterns.
 package testutil
 
 import (
@@ -37,7 +38,7 @@ func ResolvePath(t *testing.T, path string) string {
 	return binPath
 }
 
-// FataOnErr is a testing helper function to test and abort on an error.
+// FatalOnErr is a testing helper function to test and abort on an error.
 // Reduces 3 lines to 1 for common error checking.
 func FatalOnErr(op string, e error, t *testing.T) {
 	t.Helper()
@@ -46,7 +47,7 @@ func FatalOnErr(op string, e error, t *testing.T) {
 	}
 }
 
-// FataOnNoErr is a testing helper function to test and abort when we get no error.
+// FatalOnNoErr is a testing helper function to test and abort when we get no error.
 // Reduces 3 lines to 1 for common error checking.
 func FatalOnNoErr(op string, e error, t *testing.T) {
 	t.Helper()
@@ -78,69 +79,69 @@ func DiffErr(op string, resp interface{}, compare interface{}, t *testing.T, opt
 	}
 }
 
-// Need a null ClientStream for testing.
+// FakeClientStream provides a null ClientStream for testing.
 type FakeClientStream struct{}
 
-// See grpc.ClientStream
+// Header - see grpc.ClientStream
 func (*FakeClientStream) Header() (metadata.MD, error) {
 	return nil, errors.New("unimplemented")
 }
 
-// See grpc.ClientStream
+// Trailer - see grpc.ClientStream
 func (*FakeClientStream) Trailer() metadata.MD {
 	return nil
 }
 
-// See grpc.ClientStream
+// CloseSend - see grpc.ClientStream
 func (*FakeClientStream) CloseSend() error {
 	return errors.New("unimplemented")
 }
 
-// See grpc.ClientStream
+// Context - see grpc.ClientStream
 func (*FakeClientStream) Context() context.Context {
 	return context.Background()
 }
 
-// See grpc.ClientStream
+// SendMsg - see grpc.ClientStream
 func (*FakeClientStream) SendMsg(interface{}) error {
 	return errors.New("unimplemented")
 }
 
-// See grpc.ClientStream
+// RecvMsg - see grpc.ClientStream
 func (*FakeClientStream) RecvMsg(interface{}) error {
 	return errors.New("unimplemented")
 }
 
-// Need a null ServerStream for testing
+// FakeServerStream provides a null ServerStream for testing
 type FakeServerStream struct {
 	Ctx context.Context
 }
 
-// See grpc.ServerStream
+// SetHeader - see grpc.ServerStream
 func (*FakeServerStream) SetHeader(metadata.MD) error {
 	return errors.New("unimplemented")
 }
 
-// See grpc.ServerStream
+// SendHeader - see grpc.ServerStream
 func (*FakeServerStream) SendHeader(metadata.MD) error {
 	return errors.New("unimplemented")
 }
 
-// See grpc.ServerStream
+// SetTrailer - see grpc.ServerStream
 func (*FakeServerStream) SetTrailer(metadata.MD) {
 }
 
-// See grpc.ServerStream
+// Context - see grpc.ServerStream
 func (f *FakeServerStream) Context() context.Context {
 	return f.Ctx
 }
 
-// See grpc.ServerStream
+// SendMsg - see grpc.ServerStream
 func (*FakeServerStream) SendMsg(interface{}) error {
 	return errors.New("unimplemented")
 }
 
-// See grpc.ServerStream
+// RecvMsg - see grpc.ServerStream
 func (*FakeServerStream) RecvMsg(interface{}) error {
 	return errors.New("unimplemented")
 }

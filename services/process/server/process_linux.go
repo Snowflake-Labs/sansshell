@@ -100,10 +100,10 @@ func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 
 		// We know there are at least 28 fields but can be more
 		// since command could have spaces.
-		const FIELD_COUNT = 28
+		const FieldCount = 28
 
-		if len(fields) < FIELD_COUNT {
-			return nil, status.Errorf(codes.Internal, "invalid field count for line. Must be %d minimum. Input: %q", FIELD_COUNT, text)
+		if len(fields) < FieldCount {
+			return nil, status.Errorf(codes.Internal, "invalid field count for line. Must be %d minimum. Input: %q", FieldCount, text)
 		}
 
 		for _, f := range []struct {
@@ -277,11 +277,11 @@ func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 		}
 
 		// Class and stat have to be direct parsed.
-		const SCHEDULE_CLASS = 18
-		const STATE = 20
+		const ScheduleClass = 18
+		const State = 20
 
 		// Class
-		switch fields[SCHEDULE_CLASS] {
+		switch fields[ScheduleClass] {
 		case "-":
 			out.SchedulingClass = pb.SchedulingClass_SCHEDULING_CLASS_NOT_REPORTED
 		case "TS":
@@ -305,7 +305,7 @@ func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 		}
 
 		// State
-		switch fields[STATE][0] {
+		switch fields[State][0] {
 		case 'D':
 			out.State = pb.ProcessState_PROCESS_STATE_UNINTERRUPTIBLE_SLEEP
 		case 'R':
@@ -321,8 +321,8 @@ func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 		}
 
 		// Now process any trailing symbols on State
-		for i := 1; i < len(fields[STATE]); i++ {
-			switch fields[STATE][i] {
+		for i := 1; i < len(fields[State]); i++ {
+			switch fields[State][i] {
 			case '<':
 				out.StateCode = append(out.StateCode, pb.ProcessStateCode_PROCESS_STATE_CODE_HIGH_PRIORITY)
 			case 'N':
@@ -342,7 +342,7 @@ func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 
 		// Everything left is the command so gather it up, rejoin with spaces
 		// and we're done with this line.
-		out.Command = strings.Join(fields[FIELD_COUNT:], " ")
+		out.Command = strings.Join(fields[FieldCount:], " ")
 		entries[out.Pid] = out
 		out = &pb.ProcessEntry{}
 	}
