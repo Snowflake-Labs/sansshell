@@ -84,19 +84,24 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 
 	resp, err := c.RunOneMany(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not execute due to likely program failure: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Could not execute due to likely program failure: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	returnCode := subcommands.ExitSuccess
 	for r := range resp {
-		// TODO(jchacon): Is stderr output really an error? We should just depend on return code most likely.
-		if r.Error != nil || len(r.Resp.Stderr) > 0 {
-			fmt.Fprintf(state.Out[r.Index], "Command execution failure for target %s (%d) - error - %v\nStderr:\n%v\n", r.Target, r.Index, r.Error, string(r.Resp.Stderr))
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Command execution failure for target %s (%d) - error - %v\n", r.Target, r.Index, r.Error)
 			returnCode = subcommands.ExitFailure
 			continue
 		}
-		fmt.Fprintf(state.Out[r.Index], "Command execution success: %v\n", string(r.Resp.Stdout))
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
 	}
 	return returnCode
 }

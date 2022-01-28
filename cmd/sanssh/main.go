@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +51,7 @@ var (
 	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
 	timeout    = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
 	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	outputsDir = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -60,11 +62,14 @@ var (
 
 func init() {
 	targetsFlag.Set(defaultAddress)
-	outputsFlag.Set(defaultOutput)
+	// Setup an empty slice so it can be deref'd below regardless of user input.
+	outputsFlag.Target = &[]string{}
 
 	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
-	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into. Use - to indicated stdout.
-	NOTE: This must map 1:1 with --targets.`)
+	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into.
+    Use - to indicated stdout/stderr (default if nothing else is set). Using - does not have to be repeated per target.
+	Errors will be emitted to <destination>.error separately from command/execution output which will be in the destination file.
+	NOTE: This must map 1:1 with --targets except in the '-' case.`)
 
 	subcommands.ImportantFlag("credential-source")
 	subcommands.ImportantFlag("proxy")
@@ -88,11 +93,50 @@ func main() {
 		os.Exit(1)
 	}
 
-	if len(*outputsFlag.Target) != len(*targetsFlag.Target) {
-		fmt.Fprintln(os.Stderr, "--outputs and --targets must contain the same number of entries")
-		os.Exit(1)
-	}
+	// Process combinations of outputs/output-dir that are valid and in the end
+	// make sure outputsFlag has the correct relevant entries.
+	if *outputsDir != "" {
+		if len(*outputsFlag.Target) > 0 {
+			fmt.Fprintln(os.Stderr, "Can't set --outputs and --output-dir at the same time.")
+			os.Exit(1)
+		}
+		o, err := os.Stat(*outputsDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Can't open %s: %v\n", *outputsDir, err)
+			os.Exit(1)
+		}
+		if !o.Mode().IsDir() {
+			fmt.Fprintf(os.Stderr, "%s: is not a directory\n", *outputsDir)
+			os.Exit(1)
+		}
+		// Generate --outputs from --output-dir and the target count.
+		for i := 0; i < len(*targetsFlag.Target); i++ {
+			*outputsFlag.Target = append(*outputsFlag.Target, filepath.Join(*outputsDir, fmt.Sprintf("%d", i)))
+		}
+	} else {
+		// No --outputs or --outputs-dir so we default to -. It'll process below.
+		if len(*outputsFlag.Target) == 0 {
+			*outputsFlag.Target = append(*outputsFlag.Target, defaultOutput)
+		}
 
+		if len(*outputsFlag.Target) != len(*targetsFlag.Target) {
+			// Special case. We allow a single - and everything goes to stdout/stderr.
+			if !(len(*outputsFlag.Target) == 1 && (*outputsFlag.Target)[0] == "-") {
+				fmt.Fprintln(os.Stderr, "--outputs and --targets must contain the same number of entries")
+				os.Exit(1)
+			}
+			if len(*outputsFlag.Target) > 1 && (*outputsFlag.Target)[0] == "-" {
+				fmt.Fprintln(os.Stderr, "--outputs using '-' can only have one entry")
+				os.Exit(1)
+			}
+			// Now if we have - passed we'll autofill it into the remaining slots for processing below.
+			if (*outputsFlag.Target)[0] == "-" {
+				for i := 1; i < len(*targetsFlag.Target); i++ {
+					*outputsFlag.Target = append(*outputsFlag.Target, "-")
+				}
+			}
+		}
+	}
 	ctx := context.Background()
 	creds, err := mtls.LoadClientCredentials(ctx, *credSource)
 	if err != nil {
@@ -118,6 +162,7 @@ func main() {
 	for _, out := range *outputsFlag.Target {
 		if out == "-" {
 			state.Out = append(state.Out, os.Stdout)
+			state.Err = append(state.Err, os.Stderr)
 			continue
 		}
 		file, err := os.Create(out)
@@ -126,7 +171,16 @@ func main() {
 			os.Exit(1)
 		}
 		defer file.Close()
+		errorFile := fmt.Sprintf("%s.error", out)
+		errF, err := os.Create(errorFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Can't create error file file %s - %v", errorFile, err)
+			os.Exit(1)
+		}
+		defer errF.Close()
+
 		state.Out = append(state.Out, file)
+		state.Err = append(state.Err, errF)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, *timeout)

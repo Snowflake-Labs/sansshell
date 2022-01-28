@@ -19,7 +19,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -111,47 +110,53 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		},
 	}
 
-	err := readFile(ctx, state, req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not read file %s: %v\n", filename, err)
-		return subcommands.ExitFailure
-	}
-	return subcommands.ExitSuccess
+	return readFile(ctx, state, req)
 }
 
-func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionRequest) error {
+func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionRequest) subcommands.ExitStatus {
 	c := pb.NewLocalFileClientProxy(state.Conn)
 	stream, err := c.ReadOneMany(ctx, req)
 	if err != nil {
-		return err
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			filename := req.GetFile().Filename
+			fmt.Fprintf(e, "Could not read file %s: %v\n", filename, err)
+		}
+		return subcommands.ExitFailure
 	}
 
-	var retErr error
+	exit := subcommands.ExitSuccess
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			retErr = err
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Stream error: %v\n", err)
+			}
+			exit = subcommands.ExitFailure
 			break
 		}
 		for _, r := range resp {
 			contents := r.Resp.Contents
 			if r.Error != nil && r.Error != io.EOF {
-				contents = []byte(fmt.Sprintf("Target %s (%d) returned error - %v", r.Target, r.Index, r.Error))
-				retErr = errors.New("error received for remote file. See output for details")
+				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v", r.Target, r.Index, r.Error)
+				exit = subcommands.ExitFailure
 			}
 			n, err := state.Out[r.Index].Write(contents)
 			if got, want := n, len(contents); got != want {
-				return fmt.Errorf("can't write into buffer at correct length. Got %d want %d", got, want)
+				fmt.Fprintf(state.Err[r.Index], "can't write into buffer at correct length. Got %d want %d", got, want)
+				exit = subcommands.ExitFailure
 			}
 			if err != nil {
-				return fmt.Errorf("error writing output to output index %d - %v", r.Index, err)
+				fmt.Fprintf(state.Err[r.Index], "error writing output to output index %d - %v", r.Index, err)
+				exit = subcommands.ExitFailure
 			}
 		}
 	}
-	return retErr
+	return exit
 }
 
 type tailCmd struct {
@@ -188,12 +193,7 @@ func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		},
 	}
 
-	err := readFile(ctx, state, req)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not tail file: %v\n", err)
-		return subcommands.ExitFailure
-	}
-	return subcommands.ExitSuccess
+	return readFile(ctx, state, req)
 }
 
 type statCmd struct{}
@@ -218,7 +218,10 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	stream, err := client.StatOneMany(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "stat client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "stat client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -231,7 +234,10 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		var err error
 		for _, filename := range f.Args() {
 			if err = stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
-				fmt.Fprintf(os.Stderr, "stat: send error: %v\n", err)
+				// Emit this to every error file as it's not specific to a given target.
+				for _, e := range state.Err {
+					fmt.Fprintf(e, "stat: send error: %v\n", err)
+				}
 				break
 			}
 		}
@@ -250,13 +256,16 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			break
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "stat: receive error: %v\n", err)
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "stat: receive error: %v\n", err)
+			}
 			return subcommands.ExitFailure
 		}
 		for _, r := range reply {
 			if r.Error != nil {
 				if r.Error != io.EOF {
-					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 					retCode = subcommands.ExitFailure
 				}
 				continue
@@ -343,7 +352,10 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	stream, err := client.SumOneMany(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sum client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "sum client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -356,7 +368,10 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		var err error
 		for _, filename := range f.Args() {
 			if err = stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
-				fmt.Fprintf(os.Stderr, "sum: send error: %v\n", err)
+				// Emit this to every error file as it's not specific to a given target.
+				for _, e := range state.Err {
+					fmt.Fprintf(e, "sum: send error: %v\n", err)
+				}
 				break
 			}
 		}
@@ -375,14 +390,17 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			break
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "stat: receive error: %v\n", err)
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "stat: receive error: %v\n", err)
+			}
 			retCode = subcommands.ExitFailure
 			break
 		}
 		for _, r := range reply {
 			if r.Error != nil {
 				if r.Error != io.EOF {
-					fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 					retCode = subcommands.ExitFailure
 				}
 				continue
@@ -396,7 +414,6 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			retCode = subcommands.ExitFailure
 		}
 	}
-
 	return retCode
 }
 
@@ -443,14 +460,17 @@ func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.SetFileAttributesOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "chown client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "chown client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "chown client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "chown client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
@@ -501,14 +521,17 @@ func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.SetFileAttributesOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "chgrp client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "chgrp client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "chgrp client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "chgrp client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
@@ -558,14 +581,17 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.SetFileAttributesOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "chmod client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "chmod client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "chmod client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "chmod client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
@@ -610,14 +636,17 @@ func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.SetFileAttributesOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "immutable client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "immutable client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "immutable client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
@@ -661,8 +690,12 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 		stream, err := c.ListOneMany(ctx, req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error from ListOneMany for %s: %v\n", filename, err)
-			return subcommands.ExitFailure
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Error from ListOneMany for %s: %v\n", filename, err)
+			}
+			retCode = subcommands.ExitFailure
+			continue
 		}
 
 		type seen struct {
@@ -677,7 +710,10 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				break
 			}
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+				// Emit this to every error file as it's not specific to a given target.
+				for _, e := range state.Err {
+					fmt.Fprintf(e, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+				}
 				retCode = subcommands.ExitFailure
 				break
 			}
@@ -685,7 +721,7 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			for _, r := range resp {
 				if r.Error != nil {
 					if r.Error != io.EOF {
-						fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+						fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 						retCode = subcommands.ExitFailure
 					}
 					continue
@@ -829,13 +865,16 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 		respChan, err := c.CopyOneMany(ctx, req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error from CopyOneMany: %v\n", err)
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Error from CopyOneMany: %v\n", err)
+			}
 			return subcommands.ExitFailure
 		}
 		retCode := subcommands.ExitSuccess
 		for r := range respChan {
 			if r.Error != nil {
-				fmt.Fprintf(os.Stderr, "immutable client error: %v\n", r.Error)
+				fmt.Fprintf(state.Err[r.Index], "immutable client error: %v\n", r.Error)
 				retCode = subcommands.ExitFailure
 			}
 		}
@@ -852,7 +891,10 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 	stream, err := c.WriteOneMany(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error from WriteOneMany: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Error from WriteOneMany: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -863,7 +905,10 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		},
 	}
 	if err := stream.Send(req); err != nil {
-		fmt.Fprintf(os.Stderr, "Error sending on stream - %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Error sending on stream - %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -881,13 +926,19 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			},
 		}
 		if err := stream.Send(req); err != nil {
-			fmt.Fprintf(os.Stderr, "Error sending on stream - %v\n", err)
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Error sending on stream - %v\n", err)
+			}
 			return subcommands.ExitFailure
 		}
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil && err != io.EOF {
-		fmt.Fprintf(os.Stderr, "Error closing stream - %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Error closing stream - %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -896,11 +947,10 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	// There are no responses to process but we do need to check for errors.
 	for _, r := range resp {
 		if r.Error != nil && r.Error != io.EOF {
-			fmt.Fprintf(state.Out[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+			fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
-
 	return retCode
 }
 
@@ -930,14 +980,17 @@ func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rm client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "rm client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "rm client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "rm client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}
@@ -970,14 +1023,17 @@ func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmdirOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "rmdir client error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "rmdir client error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(os.Stderr, "rm client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "rm client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}

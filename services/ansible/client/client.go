@@ -110,7 +110,10 @@ func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 	resp, err := c.RunOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Run returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Run returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -118,7 +121,7 @@ func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	for r := range resp {
 		fmt.Fprintf(state.Out[r.Index], "Target: %s (%d)\n\n", r.Target, r.Index)
 		if r.Error != nil {
-			fmt.Fprintf(state.Out[r.Index], "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			fmt.Fprintf(state.Err[r.Index], "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
