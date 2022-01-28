@@ -1,24 +1,23 @@
 ---
-name: PR
+name: integration tests
 on:
   pull_request:
     branches: [ main ]
 jobs:
   test:
-    name: Unit tests
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@5a4ac9002d0be2fb38bd78e4b4dbde5606d7042f
       - uses: actions/setup-go@331ce1d993939866bb63c32c6cbbfd48fa76fc57
         with:
           go-version: '^1.17'
-      - name: Install tools
+      - name: tools
         run: |
           sudo apt-get update
           sudo apt-get install ansible
           sudo apt-get install gdb
           sudo apt-get install python3
-      - name: integration tests
+      - name: run tests
         run: ./testing/integrate.sh
         shell: bash
       
