@@ -378,9 +378,6 @@ echo
 echo
 echo
 egrep "coverage:.*of.statements" ${LOGS}/cover-filtered.log
-echo
-egrep "no test files" ${LOGS}/cover-filtered.log
-echo
 
 # There are a bunch of directories where having no tests is fine.
 # They are either binaries, top level package directories or
@@ -415,6 +412,9 @@ for i in \
   egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log > ${LOGS}/cover-filtered2.log
   cp ${LOGS}/cover-filtered2.log ${LOGS}/cover-filtered.log
 done
+echo
+egrep "no test files" ${LOGS}/cover-filtered.log
+echo
 
 # Abort if either required packaged have no tests or coverage is below 85%
 # for any package.
@@ -498,8 +498,8 @@ MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
 echo "Checking server health"
 HEALTHY=false
 for i in $(seq 1 100); do
-  echo -n "${i}: "
-  ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- healthcheck validate
+  echo "${i}:"
+  ${SANSSH_PROXY} ${MULTI_TARGETS} healthcheck validate
   if [ $? = 0 ]; then
     HEALTHY=true
     break
@@ -517,7 +517,19 @@ echo "Servers healthy"
 
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 
-run_a_test false 2 exec run /usr/bin/echo Hello World
+run_a_test false 1 exec run /usr/bin/echo Hello World
+
+# Test that outputs/errors go where expected and --output-dir works.
+mkdir -p ${LOGS}/exec-testdir
+${SANSSH_PROXY} ${MULTI_TARGETS} --output-dir=${LOGS}/exec-testdir exec run /bin/sh -c "echo foo >&2"
+check_status $? /dev/null exec failed emitting to stderr
+if [ -s ${LOGS}/exec-testdir/0 ] || [ -s ${LOGS}/exec-testdir/1 ]; then
+  check_status 1 /dev/null exec output appeared in normal output files in ${LOGS}/exec-testdir
+fi
+if [ ! -s ${LOGS}/exec-testdir/0.error ] || [ ! -s ${LOGS}/exec-testdir/1.error ]; then
+  check_status 1 /dev/null exec error output did not appear in ${LOGS}/exec-testdir error files
+fi
+
 run_a_test false 5 file read /etc/hosts
 
 # Tail is harder since we have to run the client in the background and then kill it
@@ -584,7 +596,7 @@ run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 check_perms_mode ${LOGS}/test-file
 
 # Now validate we can clear immutable too
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file immutable --state=false ${LOGS}/test-file
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file immutable --state=false ${LOGS}/test-file
 check_status $? /dev/null "setting immutable to false"
 EXPECTED_NEW_IMMUTABLE="-"
 NEW_IMMUTABLE=$(lsattr ${LOGS}/test-file | cut -c5)
@@ -674,6 +686,10 @@ echo "Expect an error about ptrace failing when we do 2 hosts"
 run_a_test true 20 process dump --pid=$$ --dump-type=GCORE
 # Cores get their own additional checks.
 for i in ${LOGS}/?.process-dump*; do
+  # Skip the .error files
+  if [ "$(basename $i)" != "$(basename $i .error)" ]; then
+    continue
+  fi
   file $i | egrep -q "LSB core file.*from 'bash'"
   check_status $? /dev/null $i not a core file
 done
@@ -728,7 +744,7 @@ function check_rmdir {
 echo "rm checks"
 echo "rm proxy to 2 hosts (one will fail)"
 setup_rm
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- file rm ${LOGS}/testdir/file
+${SANSSH_PROXY} ${MULTI_TARGETS} file rm ${LOGS}/testdir/file
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rm didn't get error when expected"
 fi
@@ -736,20 +752,20 @@ check_rm
 
 echo "rm proxy to 1 host"
 setup_rm
-${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- file rm ${LOGS}/testdir/file
+${SANSSH_PROXY} ${SINGLE_TARGET} file rm ${LOGS}/testdir/file
 check_status $? /dev/null rm failed
 check_rm
 
 echo "rm with no proxy"
 setup_rm
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rm ${LOGS}/testdir/file
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file rm ${LOGS}/testdir/file
 check_status $? /dev/null rm failed
 check_rm
 
 echo "rmdir checks"
 echo "rmdir proxy to 2 hosts (one will fail)"
 setup_rmdir
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=-,- file rmdir ${LOGS}/testdir
+${SANSSH_PROXY} ${MULTI_TARGETS} file rmdir ${LOGS}/testdir
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rmdir didn't get error when expected"
 fi
@@ -757,19 +773,19 @@ check_rmdir
 
 echo "rmdir proxy to 1 host"
 setup_rmdir
-${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
+${SANSSH_PROXY} ${SINGLE_TARGET} file rmdir ${LOGS}/testdir
 check_status $? /dev/null rmdir failed
 check_rmdir
 
 echo "rmdir with no proxy"
 setup_rmdir
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file rmdir ${LOGS}/testdir
 check_status $? /dev/null rmdir failed
 check_rmdir
 
 echo "rmdir with files in directory (should fail)"
 setup_rm
-${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=- file rmdir ${LOGS}/testdir
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file rmdir ${LOGS}/testdir
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rmdir didn't get error when expected"
 fi

@@ -122,14 +122,17 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	resp, err := c.InstallOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Install returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Install returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range resp {
 		if r.Error != nil {
-			fmt.Fprintf(state.Out[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			fmt.Fprintf(state.Err[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
@@ -187,14 +190,17 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 	resp, err := c.UpdateOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Update returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Update returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range resp {
 		if r.Error != nil {
-			fmt.Fprintf(state.Out[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			fmt.Fprintf(state.Err[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
@@ -233,14 +239,17 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		PackageSystem: ps,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "List returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "List returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for r := range resp {
 		if r.Error != nil {
-			fmt.Fprintf(state.Out[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			fmt.Fprintf(state.Err[r.Index], "Update for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
@@ -285,14 +294,17 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		PackageSystem: ps,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Repo list returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Repo list returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for s := range resp {
 		if s.Error != nil {
-			fmt.Fprintf(state.Out[s.Index], "Repo list for target %s (%d) returned error: %v\n", s.Target, s.Index, s.Error)
+			fmt.Fprintf(state.Err[s.Index], "Repo list for target %s (%d) returned error: %v\n", s.Target, s.Index, s.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}

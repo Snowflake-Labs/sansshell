@@ -93,12 +93,15 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 	respChan, err := c.ListOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ListOneMany returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "ListOneMany returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 	for resp := range respChan {
 		if resp.Error != nil {
-			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			fmt.Fprintf(state.Err[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
 			continue
 		}
 		outputEntryHeader(state.Out[resp.Index], resp.Target, resp.Index)
@@ -221,14 +224,17 @@ func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 	respChan, err := c.GetStacksOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GetStacks returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "GetStacks returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for resp := range respChan {
 		if resp.Error != nil {
-			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			fmt.Fprintf(state.Err[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
@@ -274,14 +280,17 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 	respChan, err := c.GetJavaStacksOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GetJavaStacks returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "GetJavaStacks returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
 	for resp := range respChan {
 		if resp.Error != nil {
-			fmt.Fprintf(state.Out[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			fmt.Fprintf(state.Err[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
@@ -397,7 +406,10 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 	stream, err := c.GetMemoryDumpOneMany(ctx, req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "GetMemoryDump returned error: %v\n", err)
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "GetMemoryDump returned error: %v\n", err)
+		}
 		return subcommands.ExitFailure
 	}
 
@@ -409,25 +421,24 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 		// If the stream returns an error we're just done.
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Receive error: %v\n", err)
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Receive error: %v\n", err)
+			}
 			retCode = subcommands.ExitFailure
 			break
 		}
 		// Even if we're not writing output we have to process all responses to check for errors.
 		for _, r := range resp {
 			if r.Error != nil && r.Error != io.EOF {
-				dest := state.Out[r.Index]
-				if p.output == "" {
-					dest = os.Stderr
-				}
-				fmt.Fprintf(dest, "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
+				fmt.Fprintf(state.Err[r.Index], "Error for target %s (%d): %v\n", r.Target, r.Index, r.Error)
 				retCode = subcommands.ExitFailure
 				continue
 			}
 			if p.output == "" {
 				n, err := state.Out[r.Index].Write(r.Resp.Data)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(r.Resp.Data), err)
+					fmt.Fprintf(state.Err[r.Index], "Error writing to %s. Only wrote %d bytes, expected %d - %v\n", p.output, n, len(r.Resp.Data), err)
 					return subcommands.ExitFailure
 				}
 			}
