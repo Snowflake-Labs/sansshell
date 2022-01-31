@@ -14,7 +14,7 @@
    under the License.
 */
 
-// Package client provides functioanlity so that other uses of sansshell can provide their
+// Package client provides functionality so that other uses of sansshell can provide their
 // own main.go without having to cargo-cult everything across for common use cases.
 // i.e. adding additional modules that are locally defined.
 package client

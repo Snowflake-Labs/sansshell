@@ -14,7 +14,7 @@
    under the License.
 */
 
-// Package server provides functioanlity so that other uses of sansshell can provide their
+// Package server provides functionality so that other uses of sansshell can provide their
 // own main.go without having to cargo-cult everything across for common use cases. i.e. simply
 // adding your own authz hooks but using the standard modules. Or adding additional modules that
 // are locally defined.
