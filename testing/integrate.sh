@@ -387,8 +387,12 @@ for i in \
   github.com/Snowflake-Labs/sansshell/client \
   github.com/Snowflake-Labs/sansshell/cmd \
   github.com/Snowflake-Labs/sansshell/cmd/proxy-server \
+  github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server \
   github.com/Snowflake-Labs/sansshell/cmd/sanssh \
+  github.com/Snowflake-Labs/sansshell/cmd/sanssh/client \
   github.com/Snowflake-Labs/sansshell/cmd/sansshell-server \
+  github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server \
+  github.com/Snowflake-Labs/sansshell/cmd/util \
   github.com/Snowflake-Labs/sansshell/proxy \
   github.com/Snowflake-Labs/sansshell/proxy/protoc-gen-go-grpcproxy \
   github.com/Snowflake-Labs/sansshell/proxy/testutil \
