@@ -770,8 +770,7 @@ func TestMemoryDump(t *testing.T) {
 
 			// Need a tmp dir and a copy of the test input since the options
 			// caller is expecting to cleanup the directory when it's done.
-			dir, err := os.MkdirTemp("", "cores")
-			testutil.FatalOnErr("can't make tmpdir", err, t)
+			dir := t.TempDir()
 
 			file := filepath.Join(dir, "core")
 			var testdata []byte
