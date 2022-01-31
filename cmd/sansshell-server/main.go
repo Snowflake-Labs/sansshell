@@ -23,15 +23,14 @@ package main
 import (
 	"context"
 	_ "embed"
-	"errors"
 	"flag"
 	"log"
 	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
+	"github.com/Snowflake-Labs/sansshell/cmd/util"
 )
 
 var (
@@ -40,34 +39,6 @@ var (
 	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
 	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
 )
-
-// choosePolicy selects an OPA policy based on the flags, or calls log.Fatal if
-// an invalid combination is provided.
-func choosePolicy(logger logr.Logger) string {
-	if *policyFlag != defaultPolicy && *policyFile != "" {
-		logger.Error(errors.New("invalid policy flags"), "do not set both --policy and --policy-file")
-		os.Exit(1)
-	}
-
-	var policy string
-	if *policyFile != "" {
-		pff, err := os.ReadFile(*policyFile)
-		if err != nil {
-			logger.Error(err, "os.ReadFile(policyFile)", "file", *policyFile)
-		}
-		logger.Info("using policy from --policy-file", "file", *policyFile)
-		policy = string(pff)
-	} else {
-		if *policyFlag != defaultPolicy {
-			logger.Info("using policy from --policy")
-			policy = *policyFlag
-		} else {
-			logger.Info("using built-in policy")
-			policy = defaultPolicy
-		}
-	}
-	return policy
-}
 
 func main() {
 	flag.Parse()
@@ -78,7 +49,7 @@ func main() {
 	// TODO(jallie): implement the ability to 'hot reload' policy, since
 	// that could likely be done underneath the authorizer, with little
 	// disruption to existing connections.
-	policy := choosePolicy(logger)
+	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	ctx := context.Background()
 
 	server.Run(ctx, logger, policy)
