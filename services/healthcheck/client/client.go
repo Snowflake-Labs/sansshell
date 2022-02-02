@@ -91,6 +91,7 @@ func (p *validateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Healthcheck for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
+			continue
 		}
 		fmt.Fprintf(state.Out[r.Index], "Target %s (%d) healthy\n", r.Target, r.Index)
 	}
