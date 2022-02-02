@@ -171,6 +171,7 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			lastErr = fmt.Errorf("target %s (%d) returned error %w", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 			output = lastErr.Error()
+			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
 			lastErr = fmt.Errorf("target %s (%d) output write error %w", resp.Target, resp.Index, err)
@@ -248,6 +249,7 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			lastErr = fmt.Errorf("target %s [%d] error: %w", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 			output = lastErr.Error()
+			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
 			lastErr = fmt.Errorf("target %s [%d] write error: %w", resp.Target, resp.Index, err)
