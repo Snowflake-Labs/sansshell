@@ -144,6 +144,7 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 			if r.Error != nil && r.Error != io.EOF {
 				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v", r.Target, r.Index, r.Error)
 				exit = subcommands.ExitFailure
+				continue
 			}
 			n, err := state.Out[r.Index].Write(contents)
 			if got, want := n, len(contents); got != want {
