@@ -797,3 +797,4 @@ fi
 # TODO(jchacon): Provide a java binary for test{s
 echo 
 echo "All tests pass. Logs in ${LOGS}"
+echo

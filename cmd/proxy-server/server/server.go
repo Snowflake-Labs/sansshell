@@ -22,14 +22,10 @@ package server
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"net"
 	"os"
-	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
@@ -46,66 +42,74 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
-var (
-	hostport   = flag.String("hostport", "localhost:50043", "Where to listen for connections.")
-	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-)
+// RunState encapsulates all of the variable state needed
+// to run a proxy server.
+type RunState struct {
+	// Logger is used for all logging.
+	Logger logr.Logger
+	// Policy is an OPA policy for determining authz decisions.
+	Policy string
+	// CredSource is a registered credential source with the mtls package.
+	CredSource string
+	// Hostport is the host:port to run the server.
+	Hostport string
+}
 
-// Run takes the given context, logger, policy and any authz hooks and starts up a sansshell proxy server
+// Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
-func Run(ctx context.Context, logger logr.Logger, policy string, hooks ...rpcauth.RPCAuthzHook) {
-	serverCreds, err := mtls.LoadServerCredentials(ctx, *credSource)
+func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
+	serverCreds, err := mtls.LoadServerCredentials(ctx, rs.CredSource)
 	if err != nil {
-		logger.Error(err, "mtls.LoadServerCredentials", "credsource", *credSource)
+		rs.Logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.CredSource)
 		os.Exit(1)
 	}
-	clientCreds, err := mtls.LoadClientCredentials(ctx, *credSource)
+	clientCreds, err := mtls.LoadClientCredentials(ctx, rs.CredSource)
 	if err != nil {
-		logger.Error(err, "mtls.LoadClientCredentials", "credsource", *credSource)
+		rs.Logger.Error(err, "mtls.LoadClientCredentials", "credsource", rs.CredSource)
 		os.Exit(1)
 	}
 
-	lis, err := net.Listen("tcp", *hostport)
+	lis, err := net.Listen("tcp", rs.Hostport)
 	if err != nil {
-		logger.Error(err, "net.Listen", "hostport", *hostport)
+		rs.Logger.Error(err, "net.Listen", "hostport", rs.Hostport)
 		os.Exit(1)
 	}
-	logger.Info("listening", "hostport", *hostport)
+	rs.Logger.Info("listening", "hostport", rs.Hostport)
 
 	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
 	h := []rpcauth.RPCAuthzHook{addressHook}
 	h = append(h, hooks...)
-	authz, err := rpcauth.NewWithPolicy(ctx, policy, h...)
+	authz, err := rpcauth.NewWithPolicy(ctx, rs.Policy, h...)
 	if err != nil {
-		logger.Error(err, "rpcauth.NewWithPolicy")
+		rs.Logger.Error(err, "rpcauth.NewWithPolicy")
 		os.Exit(1)
 	}
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
-		grpc.WithStreamInterceptor(telemetry.StreamClientLogInterceptor(logger)),
+		grpc.WithStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger)),
 	}
 	targetDialer := server.NewDialer(dialOpts...)
 
 	svcMap := server.LoadGlobalServiceMap()
-	logger.Info("loaded service map", "serviceMap", svcMap)
+	rs.Logger.Info("loaded service map", "serviceMap", svcMap)
 	server := server.New(targetDialer, authz)
 
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger), authz.AuthorizeStream),
+		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger), authz.AuthorizeStream),
 	}
 	g := grpc.NewServer(serverOpts...)
 
 	server.Register(g)
-	logger.Info("initialized proxy service", "credsource", *credSource)
-	logger.Info("serving..")
+	rs.Logger.Info("initialized proxy service", "credsource", rs.CredSource)
+	rs.Logger.Info("serving..")
 
 	if err := g.Serve(lis); err != nil {
-		logger.Error(err, "grpcserver.Serve()")
+		rs.Logger.Error(err, "grpcserver.Serve()")
 		os.Exit(1)
 	}
 }

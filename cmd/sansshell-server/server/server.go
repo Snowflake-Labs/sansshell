@@ -21,13 +21,9 @@ package server
 
 import (
 	"context"
-	"flag"
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/go-logr/logr"
 
@@ -41,23 +37,28 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 )
 
-var (
-	hostport   = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
-	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-)
+type RunState struct {
+	// Logger is used for all logging.
+	Logger logr.Logger
+	// CredSource is a registered credential source with the mtls package.
+	CredSource string
+	// Hostport is the host:port to run the server.
+	Hostport string
+	// Policy is an OPA policy for determining authz decisions.
+	Policy string
+}
 
-// Run takes the given context, logger and policy and starts up a sansshell server using the flags above
-// to provide credentials.
+// Run takes the given context and RunState and starts up a sansshell server.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
-func Run(ctx context.Context, logger logr.Logger, policy string) {
-	creds, err := mtls.LoadServerCredentials(ctx, *credSource)
+func Run(ctx context.Context, rs RunState) {
+	creds, err := mtls.LoadServerCredentials(ctx, rs.CredSource)
 	if err != nil {
-		logger.Error(err, "mtls.LoadServerCredentials", "credsource", *credSource)
+		rs.Logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.CredSource)
 		os.Exit(1)
 	}
 
-	if err := server.Serve(*hostport, creds, policy, logger); err != nil {
-		logger.Error(err, "server.Serve", "hostport", *hostport)
+	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger); err != nil {
+		rs.Logger.Error(err, "server.Serve", "hostport", rs.Hostport)
 		os.Exit(1)
 	}
 }
