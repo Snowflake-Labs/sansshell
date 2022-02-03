@@ -142,17 +142,17 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 		for _, r := range resp {
 			contents := r.Resp.Contents
 			if r.Error != nil && r.Error != io.EOF {
-				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v", r.Target, r.Index, r.Error)
+				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
 				exit = subcommands.ExitFailure
 				continue
 			}
 			n, err := state.Out[r.Index].Write(contents)
 			if got, want := n, len(contents); got != want {
-				fmt.Fprintf(state.Err[r.Index], "can't write into buffer at correct length. Got %d want %d", got, want)
+				fmt.Fprintf(state.Err[r.Index], "can't write into buffer at correct length. Got %d want %d\n", got, want)
 				exit = subcommands.ExitFailure
 			}
 			if err != nil {
-				fmt.Fprintf(state.Err[r.Index], "error writing output to output index %d - %v", r.Index, err)
+				fmt.Fprintf(state.Err[r.Index], "error writing output to output index %d - %v\n", r.Index, err)
 				exit = subcommands.ExitFailure
 			}
 		}

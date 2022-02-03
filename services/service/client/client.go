@@ -170,7 +170,6 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		if resp.Error != nil && err != io.EOF {
 			lastErr = fmt.Errorf("target %s (%d) returned error %w", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
-			output = lastErr.Error()
 			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
@@ -248,7 +247,6 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		if resp.Error != nil {
 			lastErr = fmt.Errorf("target %s [%d] error: %w", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
-			output = lastErr.Error()
 			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
