@@ -20,9 +20,13 @@ import (
 	"context"
 	_ "embed"
 	"flag"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
+	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/go-logr/stdr"
@@ -34,6 +38,9 @@ var (
 
 	policyFlag = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
 	policyFile = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+	hostport   = flag.String("hostport", "localhost:50043", "Where to listen for connections.")
+	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	verbosity  = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 )
 
 func main() {
@@ -41,6 +48,7 @@ func main() {
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-proxy")
+	stdr.SetVerbosity(*verbosity)
 
 	ctx := context.Background()
 
@@ -49,5 +57,11 @@ func main() {
 	// disruption to existing connections.
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 
-	server.Run(ctx, logger, policy)
+	rs := server.RunState{
+		Logger:     logger,
+		Policy:     policy,
+		CredSource: *credSource,
+		Hostport:   *hostport,
+	}
+	server.Run(ctx, rs)
 }

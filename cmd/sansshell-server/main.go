@@ -24,11 +24,15 @@ import (
 	"context"
 	_ "embed"
 	"flag"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/go-logr/stdr"
 
+	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 )
@@ -36,8 +40,12 @@ import (
 var (
 	//go:embed default-policy.rego
 	defaultPolicy string
-	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
-	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+
+	policyFlag = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
+	policyFile = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+	hostport   = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
+	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	verbosity  = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 )
 
 func main() {
@@ -45,6 +53,7 @@ func main() {
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")
+	stdr.SetVerbosity(*verbosity)
 
 	// TODO(jallie): implement the ability to 'hot reload' policy, since
 	// that could likely be done underneath the authorizer, with little
@@ -52,5 +61,11 @@ func main() {
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	ctx := context.Background()
 
-	server.Run(ctx, logger, policy)
+	rs := server.RunState{
+		Logger:     logger,
+		CredSource: *credSource,
+		Hostport:   *hostport,
+		Policy:     policy,
+	}
+	server.Run(ctx, rs)
 }
