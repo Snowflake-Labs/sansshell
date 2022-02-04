@@ -10,26 +10,26 @@ default allow = false
 ## Access control for the proxy. By default, anyone can
 # communicate with the proxy itself.
 allow {
-  input.method = "/Proxy.Proxy/Proxy"
+	input.method = "/Proxy.Proxy/Proxy"
 }
 
 ## Access control for targets
 
 # Allow anyone to call healthcheck on any host
 allow {
-  input.method = "/HealthCheck.HealthCheck/Ok"
+	input.method = "/HealthCheck.HealthCheck/Ok"
 }
 
 # Allow anyone to read /etc/hosts on any host
 allow {
-  input.method = "/LocalFile.LocalFile/Read"
-  input.message.filename = "/etc/hosts"
+	input.method = "/LocalFile.LocalFile/Read"
+	input.message.file.filename = "/etc/hosts"
 }
 
 # Allow anyone to stat /etc/hosts on any host
 allow {
-  input.method = "/LocalFile.LocalFile/Stat"
-  input.message.filename = "/etc/hosts"
+	input.method = "/LocalFile.LocalFile/Stat"
+	input.message.filename = "/etc/hosts"
 }
 
 # More complex example: allow stat of any file in /etc/ for

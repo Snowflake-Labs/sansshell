@@ -75,7 +75,7 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	if input != nil {
-		logger.V(1).Info("evaluating authz policy", "input", string(input.Message), input)
+		logger.V(1).Info("evaluating authz policy", "input.message", string(input.Message), "input", input)
 	}
 	if input == nil {
 		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
@@ -89,11 +89,13 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			return status.Errorf(codes.Internal, "authz hook error: %v", err)
 		}
 	}
+	logger.V(1).Info("evaluating authz policy post hooks", "input.message", string(input.Message), "input", input)
 	allowed, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
 	if !allowed {
+		logger.V(1).Info("permission denied")
 		return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
 	}
 	return nil

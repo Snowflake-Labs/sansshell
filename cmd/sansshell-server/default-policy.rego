@@ -3,12 +3,12 @@ package sansshell.authz
 default allow = false
 
 allow {
-	input.type = "HealthCheck.Empty"
+	input.method = "/HealthCheck.HealthCheck/Ok"
 }
 
 allow {
 	input.type = "LocalFile.ReadActionRequest"
-	input.message.request.file.filename = "/etc/hosts"
+	input.message.file.filename = "/etc/hosts"
 }
 
 allow {
@@ -52,9 +52,9 @@ allow {
 }
 
 allow {
-  input.type = "Service.ListRequest"
+	input.type = "Service.ListRequest"
 }
 
 allow {
-  input.type = "Service.StatusRequest"
+	input.type = "Service.StatusRequest"
 }
