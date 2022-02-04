@@ -134,7 +134,7 @@ func Run(ctx context.Context, rs RunState) {
 	}
 	creds, err := mtls.LoadClientCredentials(ctx, rs.CredSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not load creds from %s - %v", rs.CredSource, err)
+		fmt.Fprintf(os.Stderr, "Could not load creds from %s - %v\n", rs.CredSource, err)
 		os.Exit(1)
 	}
 
@@ -146,7 +146,7 @@ func Run(ctx context.Context, rs RunState) {
 	}
 	defer func() {
 		if err := conn.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing connection - %v", err)
+			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
 		}
 	}()
 
@@ -161,14 +161,14 @@ func Run(ctx context.Context, rs RunState) {
 		}
 		file, err := os.Create(out)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Can't create output file %s - %v", out, err)
+			fmt.Fprintf(os.Stderr, "Can't create output file %s - %v\n", out, err)
 			os.Exit(1)
 		}
 		defer file.Close()
 		errorFile := fmt.Sprintf("%s.error", out)
 		errF, err := os.Create(errorFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Can't create error file file %s - %v", errorFile, err)
+			fmt.Fprintf(os.Stderr, "Can't create error file file %s - %v\n", errorFile, err)
 			os.Exit(1)
 		}
 		defer errF.Close()
