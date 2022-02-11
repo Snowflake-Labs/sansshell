@@ -49,7 +49,7 @@ var (
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
-	justification = flag.Bool("justification", false, "If true then justification (which is logged) must be passed along in the client context Metadata with the key "+telemetry.ReqJustKey)
+	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+telemetry.ReqJustKey+"'")
 )
 
 func main() {
