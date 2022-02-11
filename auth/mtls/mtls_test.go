@@ -100,7 +100,7 @@ func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) (*bufc
 	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	lis := bufconn.Listen(bufSize)
-	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard())
+	s, err := server.BuildServer(creds, policy, lis.Addr(), logr.Discard(), false, nil)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
 	go func() {

@@ -38,15 +38,15 @@ var (
 	mu  sync.Mutex
 )
 
-// Serve wraps up BuildServer in a succinct API for callers
-func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger) error {
+// Serve wraps up BuildServer in a succinct API for callers passing along various parameters.
+func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger, justification bool, justificationFunc func(string) error) error {
 	lis, err := net.Listen("tcp", hostport)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
 	mu.Lock()
-	srv, err = BuildServer(c, policy, lis.Addr(), logger)
+	srv, err = BuildServer(c, policy, lis.Addr(), logger, justification, justificationFunc)
 	mu.Unlock()
 	if err != nil {
 		return err
@@ -62,10 +62,10 @@ func getSrv() *grpc.Server {
 	return srv
 }
 
-// BuildServer creates a gRPC server, attaches the OPA policy interceptor,
+// BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
-func BuildServer(c credentials.TransportCredentials, policy string, address net.Addr, logger logr.Logger) (*grpc.Server, error) {
+func BuildServer(c credentials.TransportCredentials, policy string, address net.Addr, logger logr.Logger, justification bool, justificationFunc func(string) error) (*grpc.Server, error) {
 	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, rpcauth.HostNetHook(address))
 	if err != nil {
 		return nil, err
@@ -74,8 +74,8 @@ func BuildServer(c credentials.TransportCredentials, policy string, address net.
 		grpc.Creds(c),
 		// NB: the order of chained interceptors is meaningful.
 		// The first interceptor is outermost, and the final interceptor will wrap the real handler.
-		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logger), authz.Authorize),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger), authz.AuthorizeStream),
+		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logger, justification, justificationFunc), authz.Authorize),
+		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger, justification, justificationFunc), authz.AuthorizeStream),
 	}
 	s := grpc.NewServer(opts...)
 	for _, sansShellService := range services.ListServices() {

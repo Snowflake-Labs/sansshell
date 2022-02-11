@@ -24,7 +24,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
 )
 
 // UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
@@ -34,6 +37,7 @@ func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		l := logger.WithValues("method", method, "target", cc.Target())
 		logCtx := logr.NewContext(ctx, l)
+		logCtx, l = passAlongJustification(logCtx, l)
 		l.Info("new client request")
 		err := invoker(logCtx, method, req, reply, cc, opts...)
 		if err != nil {
@@ -44,13 +48,14 @@ func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 }
 
 // StreamClientLogInterceptor returns a new grpc.StreamClientInterceptor that logs
-// client requests using the supplied logger, as as as injecting into into the Context
+// client requests using the supplied logger, as well as injecting it into the context
 // of the created stream.
 func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		l := logger.WithValues("method", method, "target", cc.Target())
-		l.Info("new client stream")
 		logCtx := logr.NewContext(ctx, l)
+		logCtx, l = passAlongJustification(logCtx, l)
+		l.Info("new client stream")
 		stream, err := streamer(logCtx, desc, cc, method, opts...)
 		if err != nil {
 			l.Error(err, "create stream")
@@ -62,6 +67,19 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 			logger:       l,
 		}, nil
 	}
+}
+
+func passAlongJustification(ctx context.Context, l logr.Logger) (context.Context, logr.Logger) {
+	// See if we got any metadata and if it contains the justification
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		v := md[ReqJustKey]
+		if len(v) > 0 {
+			ctx = metadata.AppendToOutgoingContext(ctx, ReqJustKey, v[0])
+			l = l.WithValues(ReqJustKey, v[0])
+		}
+	}
+	return ctx, l
 }
 
 type loggedClientStream struct {
@@ -105,14 +123,59 @@ func (l *loggedClientStream) CloseSend() error {
 	return err
 }
 
+const (
+	// ReqJustKey is the key name that must exist in the incoming
+	// context metadata if client side provided justification is required.
+	ReqJustKey = "justification"
+)
+
+var (
+	// ErrJustification is the error returned for missing justification.
+	ErrJustification = status.Error(codes.FailedPrecondition, "missing justification")
+)
+
+// validateJustification takes the given context and sees if a justification key exists (if required).
+// If it is required and passes the optional validation function a new logger is returned with
+// a kv pair of ReqJustKey and the extracted justification.
+func validateJustification(ctx context.Context, l logr.Logger, justification bool, justificationFunc func(string) error) (logr.Logger, error) {
+	if justification {
+		// See if we got any metadata and if it contains the justification
+		md, ok := metadata.FromIncomingContext(ctx)
+		var j string
+		if ok {
+			v := md[ReqJustKey]
+			if len(v) > 0 {
+				j = v[0]
+			}
+		}
+		if j == "" {
+			return l, ErrJustification
+		}
+		if justificationFunc != nil {
+			if err := justificationFunc(j); err != nil {
+				return l, status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
+			}
+		}
+		return l.WithValues(ReqJustKey, j), nil
+	}
+	return l, nil
+}
+
 // UnaryServerLogInterceptor returns a new gprc.UnaryServerInterceptor that logs
 // incoming requests using the supplied logger, as well as injecting it into the
-// context of downstream handlers.
-func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
+// context of downstream handlers. If incoming calls require client side provided justification
+// (which is logged) then the justification parameter should be true and a required
+// key of ReqJustKey must be in the context when the interceptor runs.
+func UnaryServerLogInterceptor(logger logr.Logger, justification bool, justificationFunc func(string) error) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		l := logger.WithValues("method", info.FullMethod)
 		if p, ok := peer.FromContext(ctx); ok {
 			l = l.WithValues("peer-address", p.Addr)
+		}
+		l, err := validateJustification(ctx, l, justification, justificationFunc)
+		if err != nil {
+			l.Error(err, "new request")
+			return nil, err
 		}
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
@@ -126,12 +189,19 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 
 // StreamServerLogInterceptor returns a new grpc.StreamServerInterceptor that logs
 // incoming streams using the supplied logger, and makes it available via the stream
-// context to stream handlers.
-func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor {
+// context to stream handlers. If incoming calls require client side provided justification
+// (which is logged) then the justification parameter should be true and a required
+// key of ReqJustKey must be in the context when the interceptor runs.
+func StreamServerLogInterceptor(logger logr.Logger, justification bool, justificationFunc func(string) error) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		l := logger.WithValues("method", info.FullMethod)
 		if p, ok := peer.FromContext(ss.Context()); ok {
 			l = l.WithValues("peer-address", p.Addr)
+		}
+		l, err := validateJustification(ss.Context(), l, justification, justificationFunc)
+		if err != nil {
+			l.Error(err, "new request")
+			return err
 		}
 		l.Info("new stream")
 		stream := &loggedStream{
@@ -139,7 +209,7 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 			logger:       l,
 			logCtx:       logr.NewContext(ss.Context(), l),
 		}
-		err := handler(srv, stream)
+		err = handler(srv, stream)
 		if err != nil {
 			l.Error(err, "handler")
 		}

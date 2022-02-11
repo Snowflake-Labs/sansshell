@@ -53,6 +53,13 @@ type RunState struct {
 	CredSource string
 	// Hostport is the host:port to run the server.
 	Hostport string
+	// Justification if true requires justification to be set in the
+	// incoming RPC context Metadata (to the key defined in the telemetry package).
+	Justification bool
+	// JustificationFunc will be called if Justication is true and a justification
+	// entry is found. The supplied function can then do any validation it wants
+	// in order to ensure it's compliant.
+	JustificationFunc func(string) error
 }
 
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
@@ -100,7 +107,7 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger), authz.AuthorizeStream),
+		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger, rs.Justification, rs.JustificationFunc), authz.AuthorizeStream),
 	}
 	g := grpc.NewServer(serverOpts...)
 

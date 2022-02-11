@@ -28,17 +28,20 @@ import (
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/google/subcommands"
+	"google.golang.org/grpc/metadata"
 )
 
 var (
 	defaultAddress = "localhost:50042"
 	defaultTimeout = 3 * time.Second
 
-	proxyAddr  = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
-	timeout    = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
-	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-	outputsDir = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
+	proxyAddr     = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
+	timeout       = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
+	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	outputsDir    = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
+	justification = flag.String("justification", "", "If non-empty will add the key "+telemetry.ReqJustKey+" to the outgoing context to be passed along to the server for logging.")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -75,5 +78,9 @@ func main() {
 		CredSource: *credSource,
 		Timeout:    *timeout,
 	}
-	client.Run(context.Background(), rs)
+	ctx := context.Background()
+	if *justification != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, telemetry.ReqJustKey, *justification)
+	}
+	client.Run(ctx, rs)
 }

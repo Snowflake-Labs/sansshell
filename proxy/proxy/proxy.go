@@ -336,8 +336,15 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 		}
 
 		err = stream.Send(req)
-		if err != nil {
+		// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
+		// for SendMsg. However it appears SendMsg will return actual errors "sometimes" when it's the first stream
+		// a server has ever handled so account for that here.
+		if err != nil && err != io.EOF {
 			return nil, nil, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
+		}
+		if err != nil {
+			_, err := stream.Recv()
+			return nil, nil, status.Errorf(codes.Internal, "remote error from Send for %s - %v", method, err)
 		}
 		resp, err := stream.Recv()
 		if err != nil {
@@ -391,8 +398,7 @@ func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{
 	if err := s.send(requestMsg); err != nil {
 		return nil, err
 	}
-	// TODO(): Put this back when the race in server.go is figured out. Causes a send and close
-	// on the channel processing server side which isn't allowed.
+
 	if err := s.closeClients(); err != nil {
 		return nil, err
 	}

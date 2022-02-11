@@ -67,7 +67,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy, lis.Addr(), logr.Discard())
+	s, err := BuildServer(nil, policy, lis.Addr(), logr.Discard(), false, nil)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -83,7 +83,7 @@ func TestMain(m *testing.M) {
 
 func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
-	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard())
+	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard(), false, nil)
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
@@ -98,12 +98,12 @@ func TestServe(t *testing.T) {
 		}
 	}()
 
-	err := Serve("-", nil, policy, logr.Discard())
+	err := Serve("-", nil, policy, logr.Discard(), false, nil)
 	testutil.FatalOnNoErr("bad hostport", err, t)
-	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
+	err = Serve("127.0.0.1:0", nil, "", logr.Discard(), false, nil)
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
+	err = Serve("127.0.0.1:0", nil, policy, logr.Discard(), false, nil)
 	testutil.FatalOnErr("Serve 127.0.0.1:0", err, t)
 }
 

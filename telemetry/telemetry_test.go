@@ -30,6 +30,7 @@ import (
 	"github.com/go-logr/logr/funcr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/test/bufconn"
 )
@@ -86,6 +87,18 @@ func TestUnaryClient(t *testing.T) {
 		if _, err := logr.FromContext(ctx); err != nil {
 			t.Fatal("didn't get passed a logging context")
 		}
+		// Test the outgoing context has the justification key
+		md, ok := metadata.FromOutgoingContext(ctx)
+		if !ok {
+			t.Fatal("can't find outgoing context")
+		}
+		v := md[ReqJustKey]
+		if len(v) != 1 {
+			t.Fatalf("Invalid justification key. Got %+v", v)
+		}
+		if got, want := v[0], "justification"; got != want {
+			t.Fatalf("didn't get expected justication reason. got %s and %s", got, want)
+		}
 		if got, want := method, wantMethod; got != want {
 			t.Fatalf("didn't get expected method. got %s want %s", got, want)
 		}
@@ -95,12 +108,16 @@ func TestUnaryClient(t *testing.T) {
 		return errors.New(wantError)
 	}
 
-	err = intercept(context.Background(), wantMethod, nil, nil, conn, invoker)
+	md := metadata.Pairs(ReqJustKey, "justification")
+	// This has to be an incoming context because there's no RPC layer to transform it.
+	ctx = metadata.NewIncomingContext(ctx, md)
+	err = intercept(ctx, wantMethod, nil, nil, conn, invoker)
 	t.Log(err)
 	testutil.FatalOnNoErr("intercept", err, t)
 	if got, want := err.Error(), wantError; got != want {
 		t.Fatalf("didn't get expected error. got %v want %v", got, want)
 	}
+
 }
 
 func TestStreamClient(t *testing.T) {
@@ -181,36 +198,104 @@ func TestUnaryServer(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
 
-	intercept := UnaryServerLogInterceptor(logger)
-
-	wantMethod := "foo"
-	wantError := "error"
-	// Testing is a little weird. This will be called below when we call intercept. Then additional state
-	// gets set on the error return we test below that.
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		// Validate this is a proper logger context.
-		if _, err := logr.FromContext(ctx); err != nil {
-			t.Fatal("didn't get passed a logging context")
+	j := func(s string) error {
+		if s == "justification" {
+			return nil
 		}
-
-		// The logging should have happened by now
-		testLogging(t, args, wantMethod)
-		testLogging(t, args, "new request")
-		// Return an error
-		return nil, errors.New(wantError)
+		return errors.New("error2")
 	}
 
-	info := &grpc.UnaryServerInfo{
-		FullMethod: wantMethod,
-	}
-	ctx := peer.NewContext(context.Background(), &peer.Peer{})
-	_, err := intercept(ctx, nil, info, handler)
-	t.Log(err)
-	testutil.FatalOnNoErr("intercept", err, t)
-	if got, want := err.Error(), wantError; got != want {
-		t.Fatalf("didn't get expected error. got %v want %v", got, want)
+	for _, tc := range []struct {
+		name              string
+		wantLogging       string
+		wantError         string
+		wantJustification bool
+		justification     string
+		justificationFunc func(string) error
+	}{
+		{
+			name:        "no justification req",
+			wantLogging: "new request",
+			wantError:   "error",
+		},
+		{
+			name:              "justification req and provided",
+			wantLogging:       "new request",
+			wantJustification: true,
+			justification:     "justification",
+			wantError:         "error",
+		},
+		{
+			name:              "justification req and none provided",
+			wantLogging:       ErrJustification.Error(),
+			wantJustification: true,
+			wantError:         ErrJustification.Error(),
+		},
+		{
+			name:              "justification req and function passes",
+			wantLogging:       "new request",
+			wantJustification: true,
+			justification:     "justification",
+			justificationFunc: j,
+			wantError:         "error",
+		},
+		{
+			name:              "justification req and function doesn't pass",
+			wantLogging:       "new request",
+			wantJustification: true,
+			justification:     "not justification",
+			justificationFunc: j,
+			wantError:         "rpc error: code = FailedPrecondition desc = justification failed: error2",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+
+			logger := funcr.New(fn, funcr.Options{})
+
+			intercept := UnaryServerLogInterceptor(logger, tc.wantJustification, tc.justificationFunc)
+			wantMethod := "foo"
+			wantError := "error"
+			// Testing is a little weird. This will be called below when we call intercept. Then additional state
+			// gets set on the error return we test below that.
+			handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+				// Validate this is a proper logger context.
+				if _, err := logr.FromContext(ctx); err != nil {
+					t.Fatal("didn't get passed a logging context")
+				}
+
+				// The logging should have happened by now
+				testLogging(t, args, wantMethod)
+				if tc.wantJustification {
+					if tc.justification != "" {
+						testLogging(t, args, tc.wantLogging)
+						testLogging(t, args, tc.justification)
+					} else {
+						testLogging(t, args, ErrJustification.Error())
+					}
+				}
+				// Return an error
+				return nil, errors.New(wantError)
+			}
+
+			info := &grpc.UnaryServerInfo{
+				FullMethod: wantMethod,
+			}
+			ctx := peer.NewContext(context.Background(), &peer.Peer{})
+			if tc.wantJustification && tc.justification != "" {
+				md := metadata.Pairs(ReqJustKey, tc.justification)
+				// This has to be an incoming context because there's no RPC layer to transform it.
+				ctx = metadata.NewIncomingContext(ctx, md)
+			}
+			_, err := intercept(ctx, nil, info, handler)
+			t.Log(err)
+			testutil.FatalOnNoErr("intercept", err, t)
+			if got, want := err.Error(), tc.wantError; got != want {
+				t.Fatalf("didn't get expected error. got %v want %v", got, want)
+			}
+
+		})
 	}
 }
 
@@ -219,53 +304,96 @@ func TestStreamServer(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
+	for _, tc := range []struct {
+		name              string
+		wantLogging       string
+		wantError         string
+		wantJustification bool
+		justification     string
+		justificationFunc func(string) error
+	}{
+		{
+			name:        "no justification req",
+			wantLogging: "new stream",
+			wantError:   "error",
+		},
+		{
+			name:              "justification req and provided",
+			wantLogging:       "new stream",
+			wantJustification: true,
+			justification:     "justification",
+			wantError:         "error",
+		},
+		{
+			name:              "justification req and none provided",
+			wantLogging:       ErrJustification.Error(),
+			wantJustification: true,
+			wantError:         ErrJustification.Error(),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
 
-	intercept := StreamServerLogInterceptor(logger)
+			logger := funcr.New(fn, funcr.Options{})
 
-	wantMethod := "foo"
-	wantError := "error"
-	// Testing is a little weird. This will be called below when we call intercept. Then additional state
-	// gets set on the error return we test below that.
-	handler := func(srv interface{}, stream grpc.ServerStream) error {
-		// Validate this is a proper logger context.
-		if _, err := logr.FromContext(stream.Context()); err != nil {
-			t.Fatal("didn't get passed a logging context")
-		}
+			intercept := StreamServerLogInterceptor(logger, tc.wantJustification, tc.justificationFunc)
+			wantMethod := "foo"
+			wantError := "error"
+			// Testing is a little weird. This will be called below when we call intercept. Then additional state
+			// gets set on the error return we test below that.
+			handler := func(srv interface{}, stream grpc.ServerStream) error {
+				// Validate this is a proper logger context.
+				if _, err := logr.FromContext(stream.Context()); err != nil {
+					t.Fatal("didn't get passed a logging context")
+				}
 
-		// The logging should have happened by now
-		testLogging(t, args, wantMethod)
-		testLogging(t, args, "new stream")
+				// The logging should have happened by now
+				testLogging(t, args, wantMethod)
+				if tc.wantJustification {
+					if tc.justification != "" {
+						testLogging(t, args, tc.wantLogging)
+						testLogging(t, args, tc.justification)
+					} else {
+						testLogging(t, args, ErrJustification.Error())
+					}
+				}
 
-		if err := stream.SendMsg(nil); err == nil {
-			t.Fatal("didn't get error from SendMsg on fake client stream")
-		}
+				if err := stream.SendMsg(nil); err == nil {
+					t.Fatal("didn't get error from SendMsg on fake client stream")
+				}
 
-		// The error logging should have happened by now.
-		testLogging(t, args, "SendMsg")
+				// The error logging should have happened by now.
+				testLogging(t, args, "SendMsg")
 
-		if err := stream.RecvMsg(nil); err == nil {
-			t.Fatal("didn't get error from RecvMsg on fake client stream")
-		}
-		// The error logging should have happened by now.
-		testLogging(t, args, "RecvMsg")
+				if err := stream.RecvMsg(nil); err == nil {
+					t.Fatal("didn't get error from RecvMsg on fake client stream")
+				}
+				// The error logging should have happened by now.
+				testLogging(t, args, "RecvMsg")
 
-		// Return an error
-		return errors.New(wantError)
-	}
+				// Return an error
+				return errors.New(wantError)
+			}
 
-	info := &grpc.StreamServerInfo{
-		FullMethod: wantMethod,
-	}
-	ctx := peer.NewContext(context.Background(), &peer.Peer{})
-	ss := &testutil.FakeServerStream{
-		Ctx: ctx,
-	}
+			info := &grpc.StreamServerInfo{
+				FullMethod: wantMethod,
+			}
+			ctx := peer.NewContext(context.Background(), &peer.Peer{})
+			if tc.wantJustification && tc.justification != "" {
+				md := metadata.Pairs(ReqJustKey, tc.justification)
+				// This has to be an incoming context because there's no RPC layer to transform it.
+				ctx = metadata.NewIncomingContext(ctx, md)
+			}
+			ss := &testutil.FakeServerStream{
+				Ctx: ctx,
+			}
 
-	err := intercept(nil, ss, info, handler)
-	t.Log(err)
-	testutil.FatalOnNoErr("intercept", err, t)
-	if got, want := err.Error(), wantError; got != want {
-		t.Fatalf("didn't get expected error. got %v want %v", got, want)
+			err := intercept(nil, ss, info, handler)
+			t.Log(err)
+			testutil.FatalOnNoErr("intercept", err, t)
+			if got, want := err.Error(), tc.wantError; got != want {
+				t.Fatalf("didn't get expected error. got %v want %v", got, want)
+			}
+		})
 	}
 }
