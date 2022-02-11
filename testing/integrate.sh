@@ -461,6 +461,15 @@ else
   echo "Skipping package setup on Github"
 fi
 
+echo 
+echo "Testing policy validation for proxy"
+./bin/proxy-server --policy-file=${LOGS}/policy --validate
+check_status $? /dev/null policy check failed for proxy
+echo 
+echo "Testing policy validation for server"
+./bin/sansshell-server --policy-file=${LOGS}/policy --validate
+check_status $? /dev/null policy check failed for server
+
 echo
 echo "Starting servers. Logs in ${LOGS}"
 ./bin/proxy-server -v=1 --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &

@@ -33,6 +33,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 )
@@ -46,6 +47,7 @@ var (
 	hostport   = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
 	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity  = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
+	validate   = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 )
 
 func main() {
@@ -55,11 +57,17 @@ func main() {
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")
 	stdr.SetVerbosity(*verbosity)
 
-	// TODO(jallie): implement the ability to 'hot reload' policy, since
-	// that could likely be done underneath the authorizer, with little
-	// disruption to existing connections.
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	ctx := context.Background()
+
+	if *validate {
+		_, err := opa.NewAuthzPolicy(ctx, policy)
+		if err != nil {
+			log.Fatalf("Invalid policy: %v\n", err)
+		}
+		fmt.Println("Policy passes.")
+		os.Exit(0)
+	}
 
 	rs := server.RunState{
 		Logger:     logger,
