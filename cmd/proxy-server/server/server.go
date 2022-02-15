@@ -87,7 +87,11 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
-	h := []rpcauth.RPCAuthzHook{addressHook}
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.JustificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return rs.Justification
+	})
+
+	h := []rpcauth.RPCAuthzHook{addressHook, justificationHook}
 	h = append(h, hooks...)
 	authz, err := rpcauth.NewWithPolicy(ctx, rs.Policy, h...)
 	if err != nil {
@@ -107,7 +111,7 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger, rs.Justification, rs.JustificationFunc), authz.AuthorizeStream),
+		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger), authz.AuthorizeStream),
 	}
 	g := grpc.NewServer(serverOpts...)
 

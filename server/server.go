@@ -66,7 +66,11 @@ func getSrv() *grpc.Server {
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(c credentials.TransportCredentials, policy string, address net.Addr, logger logr.Logger, justification bool, justificationFunc func(string) error) (*grpc.Server, error) {
-	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, rpcauth.HostNetHook(address))
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return justification
+	})
+	h := []rpcauth.RPCAuthzHook{rpcauth.HostNetHook(address), justificationHook}
+	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, h...)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +78,8 @@ func BuildServer(c credentials.TransportCredentials, policy string, address net.
 		grpc.Creds(c),
 		// NB: the order of chained interceptors is meaningful.
 		// The first interceptor is outermost, and the final interceptor will wrap the real handler.
-		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logger, justification, justificationFunc), authz.Authorize),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger, justification, justificationFunc), authz.AuthorizeStream),
+		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logger), authz.Authorize),
+		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger), authz.AuthorizeStream),
 	}
 	s := grpc.NewServer(opts...)
 	for _, sansShellService := range services.ListServices() {

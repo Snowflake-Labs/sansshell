@@ -220,6 +220,59 @@ func TestAuthzHook(t *testing.T) {
 			errFunc: wantStatusCode(codes.OK),
 		},
 		{
+			name: "network data allow with justification (no func)",
+			input: &RPCAuthInput{
+				Method: "/Foo.Bar/Foo",
+				Metadata: metadata.MD{
+					ReqJustKey: []string{"justification"},
+				},
+			},
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(nil),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name: "network data allow with justification req but none given (no func)",
+			input: &RPCAuthInput{
+				Method: "/Foo.Bar/Foo",
+			},
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(nil),
+			},
+			errFunc: wantStatusCode(codes.FailedPrecondition),
+		},
+		{
+			name: "network data allow with justification (with func)",
+			input: &RPCAuthInput{
+				Method: "/Foo.Bar/Foo",
+				Metadata: metadata.MD{
+					ReqJustKey: []string{"justification"},
+				},
+			},
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(func(string) error { return nil }),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name: "network data allow with justification req given and func fails",
+			input: &RPCAuthInput{
+				Method: "/Foo.Bar/Foo",
+				Metadata: metadata.MD{
+					ReqJustKey: []string{"justification"},
+				},
+			},
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(func(string) error { return errors.New("error") }),
+			},
+			errFunc: wantStatusCode(codes.FailedPrecondition),
+		},
+		{
 			name:  "conditional hook, triggered",
 			input: &RPCAuthInput{Method: "/Some.Random/Method"},
 			// Set principal to admin if method = "/Some.Random/Method"
