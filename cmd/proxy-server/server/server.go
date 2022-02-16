@@ -53,6 +53,13 @@ type RunState struct {
 	CredSource string
 	// Hostport is the host:port to run the server.
 	Hostport string
+	// Justification if true requires justification to be set in the
+	// incoming RPC context Metadata (to the key defined in the telemetry package).
+	Justification bool
+	// JustificationFunc will be called if Justication is true and a justification
+	// entry is found. The supplied function can then do any validation it wants
+	// in order to ensure it's compliant.
+	JustificationFunc func(string) error
 }
 
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
@@ -80,7 +87,11 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
-	h := []rpcauth.RPCAuthzHook{addressHook}
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.JustificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return rs.Justification
+	})
+
+	h := []rpcauth.RPCAuthzHook{addressHook, justificationHook}
 	h = append(h, hooks...)
 	authz, err := rpcauth.NewWithPolicy(ctx, rs.Policy, h...)
 	if err != nil {

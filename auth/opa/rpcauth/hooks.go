@@ -19,6 +19,9 @@ package rpcauth
 import (
 	"context"
 	"net"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // RPCAuthzHookFunc implements RpcAuthzHook for a simple function
@@ -53,13 +56,48 @@ func (c *conditionalHook) Hook(ctx context.Context, input *RPCAuthInput) error {
 	return nil
 }
 
-// HostNetHook returns an RpcAuthzHook that sets host networking information.
+// HostNetHook returns an RPCAuthzHook that sets host networking information.
 func HostNetHook(addr net.Addr) RPCAuthzHook {
 	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 		if input.Host == nil {
 			input.Host = &HostAuthInput{}
 		}
 		input.Host.Net = NetInputFromAddr(addr)
+		return nil
+	})
+}
+
+const (
+	// ReqJustKey is the key name that must exist in the incoming
+	// context metadata if client side provided justification is required.
+	ReqJustKey = "sansshell-justification"
+)
+
+var (
+	// ErrJustification is the error returned for missing justification.
+	ErrJustification = status.Error(codes.FailedPrecondition, "missing justification")
+)
+
+// JustificationHook takes the given optional justification function and returns an RPCAuthzHook
+// that validates if justification was included. If it is required and passes the optional validation function
+// it will return nil, otherwise an error.
+func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
+	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+		// See if we got any metadata and if it contains the justification
+		var j string
+		v := input.Metadata[ReqJustKey]
+		if len(v) > 0 {
+			j = v[0]
+		}
+
+		if j == "" {
+			return ErrJustification
+		}
+		if justificationFunc != nil {
+			if err := justificationFunc(j); err != nil {
+				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
+			}
+		}
 		return nil
 	})
 }

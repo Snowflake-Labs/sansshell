@@ -34,6 +34,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 )
@@ -42,12 +43,13 @@ var (
 	//go:embed default-policy.rego
 	defaultPolicy string
 
-	policyFlag = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
-	policyFile = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
-	hostport   = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
-	credSource = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-	verbosity  = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
-	validate   = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
+	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
+	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
+	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
+	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
+	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 )
 
 func main() {
@@ -70,10 +72,11 @@ func main() {
 	}
 
 	rs := server.RunState{
-		Logger:     logger,
-		CredSource: *credSource,
-		Hostport:   *hostport,
-		Policy:     policy,
+		Logger:        logger,
+		CredSource:    *credSource,
+		Hostport:      *hostport,
+		Policy:        policy,
+		Justification: *justification,
 	}
 	server.Run(ctx, rs)
 }

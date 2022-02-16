@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/go-logr/logr"
 
@@ -46,6 +47,13 @@ type RunState struct {
 	Hostport string
 	// Policy is an OPA policy for determining authz decisions.
 	Policy string
+	// Justification if true requires justification to be set in the
+	// incoming RPC context Metadata (to the key defined in the telemetry package).
+	Justification bool
+	// JustificationFunc will be called if Justication is true and a justification
+	// entry is found. The supplied function can then do any validation it wants
+	// in order to ensure it's compliant.
+	JustificationFunc func(string) error
 }
 
 // Run takes the given context and RunState and starts up a sansshell server.
@@ -57,7 +65,10 @@ func Run(ctx context.Context, rs RunState) {
 		os.Exit(1)
 	}
 
-	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger); err != nil {
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.JustificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return rs.Justification
+	})
+	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger, justificationHook); err != nil {
 		rs.Logger.Error(err, "server.Serve", "hostport", rs.Hostport)
 		os.Exit(1)
 	}

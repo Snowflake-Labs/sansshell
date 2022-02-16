@@ -472,13 +472,13 @@ check_status $? /dev/null policy check failed for server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server -v=1 --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server -v=1 --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server -v=1 --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server -v=1 --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
@@ -501,7 +501,8 @@ else
   echo "Skipping remote cloud setup on Github"
 fi
 
-SANSSH_NOPROXY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
+SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
+SANSSH_NOPROXY="${SANSSH_NOPROXY_NO_JUSTIFY} --justification=yes"
 SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
 SINGLE_TARGET="--targets=localhost:50042"
 MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
@@ -527,6 +528,15 @@ if [ "${HEALTHY}" != "true" ]; then
   exit 1
 fi
 echo "Servers healthy"
+
+# Now a simple test to validate justification requirements are working
+# and are passing along from proxy->clients
+echo "Expect a failure here about a lack of justification"
+${SANSSH_NOPROXY_NO_JUSTIFY} --proxy=localhost:50043 ${MULTI_TARGETS} healthcheck validate
+if [ $? != 1 ]; then 
+  check_status 1 /dev/null missing justification failed
+fi
+
 
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 

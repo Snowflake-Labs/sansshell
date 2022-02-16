@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
@@ -67,7 +68,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy, lis.Addr(), logr.Discard())
+	s, err := BuildServer(nil, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -83,7 +84,7 @@ func TestMain(m *testing.M) {
 
 func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
-	_, err := BuildServer(nil, "", lis.Addr(), logr.Discard())
+	_, err := BuildServer(nil, "", logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
