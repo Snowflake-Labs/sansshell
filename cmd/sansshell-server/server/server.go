@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/go-logr/logr"
 
@@ -64,7 +65,10 @@ func Run(ctx context.Context, rs RunState) {
 		os.Exit(1)
 	}
 
-	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger, rs.Justification, rs.JustificationFunc); err != nil {
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.JustificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return rs.Justification
+	})
+	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger, justificationHook); err != nil {
 		rs.Logger.Error(err, "server.Serve", "hostport", rs.Hostport)
 		os.Exit(1)
 	}

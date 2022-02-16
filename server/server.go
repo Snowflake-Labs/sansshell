@@ -38,15 +38,19 @@ var (
 	mu  sync.Mutex
 )
 
-// Serve wraps up BuildServer in a succinct API for callers passing along various parameters.
-func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger, justification bool, justificationFunc func(string) error) error {
+// Serve wraps up BuildServer in a succinct API for callers passing along various parameters. It will automatically add
+// an authz hook for HostNet based on the listener address. Additional hooks are passed along after this one.
+func Serve(hostport string, c credentials.TransportCredentials, policy string, logger logr.Logger, authzHooks ...rpcauth.RPCAuthzHook) error {
 	lis, err := net.Listen("tcp", hostport)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
 	mu.Lock()
-	srv, err = BuildServer(c, policy, lis.Addr(), logger, justification, justificationFunc)
+	h := []rpcauth.RPCAuthzHook{rpcauth.HostNetHook(lis.Addr())}
+	h = append(h, authzHooks...)
+
+	srv, err = BuildServer(c, policy, logger, h...)
 	mu.Unlock()
 	if err != nil {
 		return err
@@ -65,12 +69,8 @@ func getSrv() *grpc.Server {
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
-func BuildServer(c credentials.TransportCredentials, policy string, address net.Addr, logger logr.Logger, justification bool, justificationFunc func(string) error) (*grpc.Server, error) {
-	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
-		return justification
-	})
-	h := []rpcauth.RPCAuthzHook{rpcauth.HostNetHook(address), justificationHook}
-	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, h...)
+func BuildServer(c credentials.TransportCredentials, policy string, logger logr.Logger, authzHooks ...rpcauth.RPCAuthzHook) (*grpc.Server, error) {
+	authz, err := rpcauth.NewWithPolicy(context.Background(), policy, authzHooks...)
 	if err != nil {
 		return nil, err
 	}
