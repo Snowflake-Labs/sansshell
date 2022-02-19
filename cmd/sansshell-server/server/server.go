@@ -33,6 +33,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/logging/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"

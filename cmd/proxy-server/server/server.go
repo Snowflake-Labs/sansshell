@@ -38,6 +38,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/exec"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
+	ls "github.com/Snowflake-Labs/sansshell/services/logging/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
@@ -112,12 +113,18 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
+		// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
+		// also need to properly auth and log.
+		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(rs.Logger), authz.Authorize),
 		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger), authz.AuthorizeStream),
 	}
 	g := grpc.NewServer(serverOpts...)
 
 	server.Register(g)
 	reflection.Register(g)
+	// Create a an instance of logging for the proxy server itself.
+	s := &ls.Server{}
+	s.Register(g)
 	rs.Logger.Info("initialized proxy service", "credsource", rs.CredSource)
 	rs.Logger.Info("serving..")
 

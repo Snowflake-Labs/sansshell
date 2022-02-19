@@ -1,0 +1,38 @@
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
+syntax = "proto3";
+
+package Logging;
+
+option go_package = "github.com/Snowflake-Labs/sansshell/logging";
+
+import "google/protobuf/empty.proto";
+
+service Logging {
+  // SetVerbosity will change the logging level of the stdr logger package.
+  // This can be called concurrently with no guarentees on ordering so the
+  // final level set is the last RPC processed. This will return the previous
+  // verbosity setting that was in effect before setting.
+  rpc SetVerbosity(SetVerbosityRequest) returns (VerbosityReply) {}
+  // GetVerbosity returns the latest verbosity level based on the most
+  // recently processed SetVerbosity RPC.
+  rpc GetVerbosity(google.protobuf.Empty) returns (VerbosityReply) {}
+}
+
+message SetVerbosityRequest { int32 Level = 1; }
+
+message VerbosityReply { int32 Level = 1; }
