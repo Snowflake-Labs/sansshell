@@ -6,6 +6,11 @@ allow {
 	input.method = "/HealthCheck.HealthCheck/Ok"
 }
 
+# Allow people to run reflection against the server
+allow {
+	input.method = "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+}
+
 allow {
 	input.type = "LocalFile.ReadActionRequest"
 	input.message.file.filename = "/etc/hosts"

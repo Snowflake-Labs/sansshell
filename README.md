@@ -65,16 +65,37 @@ $ cd ../
 $ ln -s $(pwd)/certs ~/.sansshell
 ```
 
+Or copy the test certificates from auth/mtls/testdata to ~/.sanshell
+
 Then you can build and run the server, in separate terminal windows:
 ```
 $ cd cmd/sansshell-server && go build && ./sansshell-server
 $ cd cmd/sanssh && go build && ./sanssh read /etc/hosts
 ```
 
+## Debugging
+Reflection is included in the RPC servers (proxy and sansshell-server)
+allowing for the use of [grpc_cli](https://github.com/grpc/grpc/blob/master/doc/command_line_tool.md).
+
+If you are using the certificates from above in ~/.sansshell invoking
+grpc_cli requires some additional flags for local testing:
+
+```
+$ GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=$HOME/.sansshell/root.pem grpc_cli \
+  --ssl_client_key=$HOME/.sansshell/client.key --ssl_client_cert=$HOME/.sansshell/client.pem \
+  --ssl_target=127.0.0.1 --channel_creds_type=ssl ls 127.0.0.1:50043
+```
+
+NOTE: This connects to the proxy. Change to 50042 if you want to connect to the sansshell-server.
+
 # A tour of the codebase
-SansShell is composed of 4 primary concepts:
+SansShell is composed of 5 primary concepts:
    1. A series of services, which live in the =services/= directory.
    1. A server which wraps these services into a local host agent.
+   1. A proxy server which can be used as an entry point to processing sansshell
+      RPCs by validating policy and then doing fanout to 1..N actual
+      sansshell servers. This can be done as a one to many RPC where
+      a single incoming RPC is replicated to N backend hosts in one RPC call.
    1. A reference server binary, which includes all of the services.
    1. A CLI, which serves as the reference implementation of how to use the
       services via the agent.
@@ -87,9 +108,15 @@ use, and have zero overhead or risk from services they do not import at compile
 time.
 
 ###List of available Services:
-1) HealthCheck
-2) Read File: Read contents of file
-3) Execute: Execute a command
+1. Ansible: Run a local ansible playbook and return output
+1. Execute: Execute a command
+1. HealthCheck
+1. File operations: Read, Write, Stat, Sum, rm/rmdir, chmod/chown/chgrp
+   and immutable operations (if OS supported).
+1. Package operations: Install, Upgrade, List, Repolist
+1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
+1. Service operations: List, Status, Start/stop/restart
+
 
 TODO: Document service/.../client expectations.
 
@@ -98,14 +125,20 @@ Most of the logic of instantiating a local SansShell server lives in =/server=.
 This instantiates a gRPC server, registers the imported services with that
 server, and constraints them with the supplied OPA policy.
 
+## The reference Proxy Server binary
+There is a reference implementation of a SansShell Proxy Server in
+=cmd/proxy-server=, which should be suitable as-written for many use cases.
+It's intentionally kept relatively short, so that it can be copied to another
+repository and customized by adjusting only the imported services.
+
 ## The reference Server binary
-There is a reference implementation of an SansShell Server in
+There is a reference implementation of a SansShell Server in
 =cmd/sansshell-server=, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
 ## The reference CLI client
-There is a reference implementation of an SansShell CLI Client in
+There is a reference implementation of a SansShell CLI Client in
 =cmd/sanssh=.  It provides raw access to each gRPC endpoint, as well
 as a way to implement "convenience" commands which chain together a series of
 actions.
@@ -127,14 +160,22 @@ derivative of SansShell with more (or less!) functionality.
 That same extensibility makes it easy to add additional functionality by
 implementing your own module.
 
+To quickly rebuild all binaries you can run:
+```
+$ go generate build.go
+```
+
+and they will be placed in a bin directory (which is ignored by git).
+
 TODO: Add example client and server, building in different SansShell modules.
 
 If you need to edit a proto file (to augment an existing service or 
 create a new one) you'll need to generate proto outputs.
 
 ```
-$ cd services/SERVICE
-$ go generate
+$ go generate tools.go
 ```
+
+NOTE: tools.go will need to have additions to it if you add new services.
 
 [1]: https://github.com/protocolbuffers/protobuf/releases

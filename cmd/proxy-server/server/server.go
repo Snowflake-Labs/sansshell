@@ -31,6 +31,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	// Import services here to make them proxy-able
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
@@ -116,6 +117,7 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 	g := grpc.NewServer(serverOpts...)
 
 	server.Register(g)
+	reflection.Register(g)
 	rs.Logger.Info("initialized proxy service", "credsource", rs.CredSource)
 	rs.Logger.Info("serving..")
 

@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -82,6 +83,8 @@ func BuildServer(c credentials.TransportCredentials, policy string, logger logr.
 		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(logger), authz.AuthorizeStream),
 	}
 	s := grpc.NewServer(opts...)
+	reflection.Register(s)
+
 	for _, sansShellService := range services.ListServices() {
 		sansShellService.Register(s)
 	}

@@ -13,6 +13,11 @@ allow {
 	input.method = "/Proxy.Proxy/Proxy"
 }
 
+# Allow people to run reflection against the proxy
+allow {
+	input.method = "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+}
+
 ## Access control for targets
 
 # Allow anyone to call healthcheck on any host
