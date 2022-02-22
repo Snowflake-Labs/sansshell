@@ -542,19 +542,19 @@ fi
 
 # Now set logging to v=1 and validate we saw that in the logs
 echo "Setting logging level higher"
-${SANSSH_PROXY} ${MULTI_TARGETS} logging set-verbosity --verbosity=1
+${SANSSH_PROXY} ${MULTI_TARGETS} sansshell set-verbosity --verbosity=1
 egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/server.log
 check_status $? /dev/null cant find log entry for changing levels
 
 echo "Setting proxy logging level higher"
-${SANSSH_PROXY} logging set-proxy-verbosity --verbosity=1
+${SANSSH_PROXY} sansshell set-proxy-verbosity --verbosity=1
 egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/proxy.log
 check_status $? /dev/null cant find log entry in proxy for changing levels
 
-${SANSSH_PROXY} logging get-proxy-verbosity
+${SANSSH_PROXY} sansshell get-proxy-verbosity
 check_status $? /dev/null cant get proxy verbosity
 
-run_a_test false 1 logging get-verbosity
+run_a_test false 1 sansshell get-verbosity
 
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 

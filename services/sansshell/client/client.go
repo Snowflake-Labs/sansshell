@@ -32,10 +32,10 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
-const subPackage = "logging"
+const subPackage = "sansshell"
 
 func init() {
-	subcommands.Register(&loggingCmd{}, subPackage)
+	subcommands.Register(&sansshellCmd{}, subPackage)
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
@@ -47,18 +47,18 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	return c
 }
 
-type loggingCmd struct{}
+type sansshellCmd struct{}
 
-func (*loggingCmd) Name() string { return subPackage }
-func (p *loggingCmd) Synopsis() string {
+func (*sansshellCmd) Name() string { return subPackage }
+func (p *sansshellCmd) Synopsis() string {
 	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
 }
-func (p *loggingCmd) Usage() string {
+func (p *sansshellCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
 }
-func (*loggingCmd) SetFlags(f *flag.FlagSet) {}
+func (*sansshellCmd) SetFlags(f *flag.FlagSet) {}
 
-func (p *loggingCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *sansshellCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	c := setup(f)
 	return c.Execute(ctx, args...)
 }
