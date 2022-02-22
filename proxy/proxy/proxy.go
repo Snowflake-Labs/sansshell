@@ -62,6 +62,13 @@ func (p *Conn) Direct() bool {
 	return p.direct
 }
 
+// Proxy will return the ClientConn which connects directly to the proxy rather
+// than wrapped as proxy.Conn normally does. This allows callers to invoke direct RPCs
+// against the proxy as needed (such as services/logging).
+func (p *Conn) Proxy() *grpc.ClientConn {
+	return p.cc
+}
+
 // proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
 // we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
 type proxyStream struct {

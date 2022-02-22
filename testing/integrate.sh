@@ -50,6 +50,7 @@ function check_status {
 
 function shutdown {
   echo "Shutting down"
+  echo "Logs in ${LOGS}"
   if [ -n "${PROXY_PID}" ]; then
     kill -KILL ${PROXY_PID}
   fi
@@ -409,6 +410,8 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/packages/client \
   github.com/Snowflake-Labs/sansshell/services/process \
   github.com/Snowflake-Labs/sansshell/services/process/client \
+  github.com/Snowflake-Labs/sansshell/services/sansshell \
+  github.com/Snowflake-Labs/sansshell/services/sansshell/client \
   github.com/Snowflake-Labs/sansshell/services/service \
   github.com/Snowflake-Labs/sansshell/services/service/client \
   github.com/Snowflake-Labs/sansshell/testing/testutil; do
@@ -472,13 +475,13 @@ check_status $? /dev/null policy check failed for server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server -v=1 --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server -v=1 --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
@@ -537,6 +540,21 @@ if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
+# Now set logging to v=1 and validate we saw that in the logs
+echo "Setting logging level higher"
+${SANSSH_PROXY} ${MULTI_TARGETS} sansshell set-verbosity --verbosity=1
+egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/server.log
+check_status $? /dev/null cant find log entry for changing levels
+
+echo "Setting proxy logging level higher"
+${SANSSH_PROXY} sansshell set-proxy-verbosity --verbosity=1
+egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/proxy.log
+check_status $? /dev/null cant find log entry in proxy for changing levels
+
+${SANSSH_PROXY} sansshell get-proxy-verbosity
+check_status $? /dev/null cant get proxy verbosity
+
+run_a_test false 1 sansshell get-verbosity
 
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 
@@ -815,5 +833,5 @@ fi
 
 # TODO(jchacon): Provide a java binary for test{s
 echo 
-echo "All tests pass. Logs in ${LOGS}"
+echo "All tests pass."
 echo
