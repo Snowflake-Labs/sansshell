@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/logging"
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"

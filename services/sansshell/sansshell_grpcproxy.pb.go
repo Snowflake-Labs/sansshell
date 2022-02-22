@@ -3,7 +3,7 @@
 
 // Adds OneMany versions of RPC methods for use by proxy clients
 
-package logging
+package sansshell
 
 import (
 	context "context"
@@ -59,7 +59,7 @@ func (c *loggingClientProxy) SetVerbosityOneMany(ctx context.Context, in *SetVer
 				Index:  0,
 				Resp:   &VerbosityReply{},
 			}
-			err := conn.Invoke(ctx, "/Logging.Logging/SetVerbosity", in, out.Resp, opts...)
+			err := conn.Invoke(ctx, "/Sansshell.Logging/SetVerbosity", in, out.Resp, opts...)
 			if err != nil {
 				out.Error = err
 			}
@@ -69,7 +69,7 @@ func (c *loggingClientProxy) SetVerbosityOneMany(ctx context.Context, in *SetVer
 		}()
 		return ret, nil
 	}
-	manyRet, err := conn.InvokeOneMany(ctx, "/Logging.Logging/SetVerbosity", in, opts...)
+	manyRet, err := conn.InvokeOneMany(ctx, "/Sansshell.Logging/SetVerbosity", in, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (c *loggingClientProxy) GetVerbosityOneMany(ctx context.Context, in *emptyp
 				Index:  0,
 				Resp:   &VerbosityReply{},
 			}
-			err := conn.Invoke(ctx, "/Logging.Logging/GetVerbosity", in, out.Resp, opts...)
+			err := conn.Invoke(ctx, "/Sansshell.Logging/GetVerbosity", in, out.Resp, opts...)
 			if err != nil {
 				out.Error = err
 			}
@@ -136,7 +136,7 @@ func (c *loggingClientProxy) GetVerbosityOneMany(ctx context.Context, in *emptyp
 		}()
 		return ret, nil
 	}
-	manyRet, err := conn.InvokeOneMany(ctx, "/Logging.Logging/GetVerbosity", in, opts...)
+	manyRet, err := conn.InvokeOneMany(ctx, "/Sansshell.Logging/GetVerbosity", in, opts...)
 	if err != nil {
 		return nil, err
 	}

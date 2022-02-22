@@ -406,12 +406,12 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/healthcheck/client \
   github.com/Snowflake-Labs/sansshell/services/localfile \
   github.com/Snowflake-Labs/sansshell/services/localfile/client \
-  github.com/Snowflake-Labs/sansshell/services/logging \
-  github.com/Snowflake-Labs/sansshell/services/logging/client \
   github.com/Snowflake-Labs/sansshell/services/packages \
   github.com/Snowflake-Labs/sansshell/services/packages/client \
   github.com/Snowflake-Labs/sansshell/services/process \
   github.com/Snowflake-Labs/sansshell/services/process/client \
+  github.com/Snowflake-Labs/sansshell/services/sansshell \
+  github.com/Snowflake-Labs/sansshell/services/sansshell/client \
   github.com/Snowflake-Labs/sansshell/services/service \
   github.com/Snowflake-Labs/sansshell/services/service/client \
   github.com/Snowflake-Labs/sansshell/testing/testutil; do

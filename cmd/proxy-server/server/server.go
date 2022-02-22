@@ -38,9 +38,9 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/exec"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
-	ls "github.com/Snowflake-Labs/sansshell/services/logging/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
+	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
@@ -123,7 +123,7 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 	server.Register(g)
 	reflection.Register(g)
 	// Create a an instance of logging for the proxy server itself.
-	s := &ls.Server{}
+	s := &ss.Server{}
 	s.Register(g)
 	rs.Logger.Info("initialized proxy service", "credsource", rs.CredSource)
 	rs.Logger.Info("serving..")

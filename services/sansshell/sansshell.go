@@ -14,11 +14,11 @@
    under the License.
 */
 
-// Package logging defines the RPC interface for changing logging verbosity dynamically.
+// Package sansshell defines the RPC interface for internal Sansshell operations.
 // This differs from other sansshell services as it is only changing internal state and not
 // otherwise interacting with the host OS.
-package logging
+package sansshell
 
 // To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
-//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative --go-grpcproxy_out=. --go-grpcproxy_opt=paths=source_relative logging.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative --go-grpcproxy_out=. --go-grpcproxy_opt=paths=source_relative sansshell.proto

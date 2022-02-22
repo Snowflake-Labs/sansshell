@@ -23,7 +23,7 @@ import (
 	"os"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/logging"
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

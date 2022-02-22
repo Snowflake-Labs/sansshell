@@ -16,9 +16,9 @@
 
 syntax = "proto3";
 
-package Logging;
+package Sansshell;
 
-option go_package = "github.com/Snowflake-Labs/sansshell/logging";
+option go_package = "github.com/Snowflake-Labs/sansshell/sansshell";
 
 import "google/protobuf/empty.proto";
 

@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/Snowflake-Labs/sansshell/client"
-	pb "github.com/Snowflake-Labs/sansshell/services/logging"
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
