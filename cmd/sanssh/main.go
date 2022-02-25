@@ -31,6 +31,16 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/subcommands"
 	"google.golang.org/grpc/metadata"
+
+	// Import services here to make them accessible for CLI
+	_ "github.com/Snowflake-Labs/sansshell/services/ansible/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 )
 
 var (
