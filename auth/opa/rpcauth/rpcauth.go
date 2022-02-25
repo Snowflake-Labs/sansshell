@@ -53,7 +53,7 @@ type RPCAuthzHook interface {
 
 // New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
-func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
+func New(policy *opa.AuthzPolicy, clientPolicy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
 	return &Authorizer{policy: policy, hooks: authzHooks}
 }
 
@@ -130,6 +130,11 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 		return nil, err
 	}
 	return handler(ctx, req)
+}
+
+// AuthorizeClient implements grpc.UnaryClientInterceptor
+func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return nil
 }
 
 // AuthorizeStream implements grpc.StreamServerInterceptor
