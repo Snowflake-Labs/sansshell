@@ -47,8 +47,8 @@ var StreamingChunkSize = 128 * 1024
 
 // CommandRun groups all of the status and output from executing a command.
 type CommandRun struct {
-	Stdout   *bytes.Buffer
-	Stderr   *bytes.Buffer
+	Stdout   *LimitedBuffer
+	Stderr   *LimitedBuffer
 	Error    error
 	ExitCode int
 }
@@ -57,6 +57,8 @@ type CommandRun struct {
 // it's easy to add more (such as dropping permissions, etc).
 type cmdOptions struct {
 	failOnStderr bool
+	stdoutMax    uint
+	stderrMax    uint
 }
 
 // Option will run the apply operation to change required checking/state
@@ -82,8 +84,89 @@ func FailOnStderr() Option {
 	})
 }
 
+// StdoutMax is an option where the command run will limit output buffered from stdout to this
+// many bytes before truncating.
+func StdoutMax(max uint) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.stdoutMax = max
+	})
+
+}
+
+// StderrMax is an option where the command run will limit output buffered from stdout to this
+// many bytes before truncating.
+func StderrMax(max uint) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.stderrMax = max
+	})
+}
+
+// DefRunBufLimit is the default limit we'll buffer for stdout/stderr from RunCommand exec'ing
+// a process.
+const DefRunBufLimit = 10 * 1024 * 1024
+
+// LimitedBuffer is a bytes.Buffer with the added limitation that it will not grow
+// infinitely and will instead stop at a max size limit.
+type LimitedBuffer struct {
+	max  uint
+	full bool
+	buf  *bytes.Buffer
+}
+
+// NewLimitedBuffer will create a LimitedBuffer with the given maximum size.
+func NewLimitedBuffer(max uint) *LimitedBuffer {
+	return &LimitedBuffer{
+		max: max,
+		buf: &bytes.Buffer{},
+	}
+}
+
+// Write acts exactly as a bytes.Buffer defines except if the underlying
+// buffer has reached the max size no more bytes will be added.
+// TODO: Implement remaining bytes.Buffer methods if needed.
+// NOTE: This is not an error condition and instead no more bytes
+//       will be written and normal return will happen so writes
+//       so not fail. Use the Truncated() method
+//       to determine if this has happened.
+func (l *LimitedBuffer) Write(p []byte) (int, error) {
+	if l.full || uint(len(p)+l.buf.Len()) > l.max {
+		if !l.full {
+			l.full = true
+			// Write enough to fill the buffer and then stop.
+			size := int(l.max) - l.buf.Len()
+			l.buf.Write(p[:size])
+			fmt.Printf("size: %d\n", size)
+		}
+		// Lie and return the length we could have written.
+		return len(p), nil
+	}
+	return l.buf.Write(p)
+}
+
+// String - see bytes.Buffer
+func (l *LimitedBuffer) String() string {
+	return l.buf.String()
+}
+
+// Bytes - see bytes.Buffer
+func (l *LimitedBuffer) Bytes() []byte {
+	return l.buf.Bytes()
+}
+
+// Read - see io.Reader
+func (l *LimitedBuffer) Read(p []byte) (int, error) {
+	return l.buf.Read(p)
+}
+
+// Truncated will return true if the LimitedBuffer has filled and refused
+// to write additional bytes.
+func (l *LimitedBuffer) Truncated() bool {
+	return l.full
+}
+
 // RunCommand will take the given binary and args and execute it returning all
-// relevent state (stdout, stderr, errors, etc).
+// relevent state (stdout, stderr, errors, etc). The returned buffers for stdout
+// and stderr are limited by possible options but default limit to DefRunBufLimit.
 //
 // The binary must be a clean absolute path or an error will result and nothing will
 // be run. Any other errors (starting or from waiting) are recorded in the Error field.
@@ -99,15 +182,18 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a clean path", bin)
 	}
 
-	options := &cmdOptions{}
+	options := &cmdOptions{
+		stdoutMax: DefRunBufLimit,
+		stderrMax: DefRunBufLimit,
+	}
 	for _, opt := range opts {
 		opt.apply(options)
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	run := &CommandRun{
-		Stdout: &bytes.Buffer{},
-		Stderr: &bytes.Buffer{},
+		Stdout: NewLimitedBuffer(options.stdoutMax),
+		Stderr: NewLimitedBuffer(options.stderrMax),
 	}
 	// These probably should be streaming through a go-routine to rate limit what we
 	// can buffer. In practice output tends to be in the low K range size wise.

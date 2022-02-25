@@ -79,7 +79,10 @@ func TestRunCommand(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			var opts []Option
+			opts := []Option{
+				StdoutMax(100),
+				StderrMax(100),
+			}
 			if tc.stderrIsError {
 				opts = append(opts, FailOnStderr())
 			}
@@ -117,6 +120,53 @@ func TestTrimString(t *testing.T) {
 	}
 }
 
+func TestLimitedBuffer(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		max         uint
+		numBytes    int
+		isTruncated bool
+	}{
+		{
+			name:        "basic functionality",
+			max:         10,
+			numBytes:    20,
+			isTruncated: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			lb := NewLimitedBuffer(tc.max)
+			buf := make([]byte, tc.numBytes)
+			for i := 0; i < tc.numBytes; i++ {
+				buf[i] = 'a'
+			}
+			// Do this twice so we know we filled it potentially.
+			for i := 0; i < 2; i++ {
+				n, err := lb.Write(buf)
+				t.Logf("n: %d err: %v", n, err)
+				testutil.FatalOnErr(tc.name, err, t)
+				if got, want := n, tc.numBytes; got != want {
+					t.Fatalf("didn't get expected byte count back. got %d want %d", got, want)
+				}
+			}
+			if got, want := len(lb.String()), int(tc.max); got != want {
+				t.Fatalf("wrote too much to buffer. wrote %d want %d - buffer %q", got, want, lb.String())
+			}
+			if got, want := len(lb.Bytes()), int(tc.max); got != want {
+				t.Fatalf("wrote too much to buffer. wrote %d want %d", got, want)
+			}
+			n, err := lb.Read(buf)
+			testutil.FatalOnErr(tc.name, err, t)
+			if got, want := n, int(tc.max); got != want {
+				t.Fatalf("Reading from buf got wrong result. Want %d and got %d", want, got)
+			}
+			if got, want := tc.isTruncated, lb.Truncated(); got != want {
+				t.Fatalf("truncate state bad. Want %t got %t", want, got)
+			}
+		})
+	}
+}
 func TestValidPath(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
