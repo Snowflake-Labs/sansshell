@@ -22,8 +22,10 @@ import (
 	"os"
 )
 
-// LoadRootOfTrust will load an CA root of trust from the given
+// LoadRootOfTrust will load an CA root of trust(s) from the given
 // file and return a CertPool to use in validating certificates.
+// All CA's to validate against must be presented together in the PEM
+// file.
 func LoadRootOfTrust(filename string) (*x509.CertPool, error) {
 	// Read in the root of trust for client identities
 	ca, err := os.ReadFile(filename)
