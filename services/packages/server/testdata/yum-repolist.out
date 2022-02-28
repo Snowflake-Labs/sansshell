@@ -36,7 +36,7 @@ Repo-status  : enabled
 Repo-updated : Mon Apr 26 11:18:09 2021
 Repo-pkgs    : 234
 Repo-size    : 24 G
-Repo-baseurl : https://nexus.int.snowflakecomputing.com/repository/adoptopenjdk-centos7-x86_64/
+Repo-baseurl : https://somerepo.com/repository/adoptopenjdk-centos7-x86_64/
 Repo-expire  : 21,600 second(s) (last: Mon Oct 18 20:36:02 2021)
   Filter     : read-only:present
 Repo-filename: /etc/yum.repos.d/adoptopenjdk.repo
