@@ -37,6 +37,16 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+
+	// Import the server modules you want to expose, they automatically register
+	_ "github.com/Snowflake-Labs/sansshell/services/ansible/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/packages/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 )
 
 var (

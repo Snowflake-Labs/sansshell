@@ -28,20 +28,11 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
+	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
-
-	// Import services here to make them proxy-able
-	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
-	_ "github.com/Snowflake-Labs/sansshell/services/exec"
-	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
-	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
-	_ "github.com/Snowflake-Labs/sansshell/services/packages"
-	_ "github.com/Snowflake-Labs/sansshell/services/process"
-	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
 // RunState encapsulates all of the variable state needed

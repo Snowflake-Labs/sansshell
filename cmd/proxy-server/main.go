@@ -32,6 +32,16 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/go-logr/stdr"
+
+	// Import services here to make them proxy-able
+	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
+	_ "github.com/Snowflake-Labs/sansshell/services/exec"
+	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
+	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/packages"
+	_ "github.com/Snowflake-Labs/sansshell/services/process"
+	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/service"
 )
 
 var (
