@@ -36,16 +36,16 @@ var (
 type CredentialsLoader interface {
 	// LoadClientCA returns a CertPool which should be used by a server to
 	// validate client certificates.
-	// NOTE: If this is non-nil it will be the only pool used to validate
-	//       certificates so likely it should be a copy of x509.SystemCertPool()
-	//       with additional certs loaded into that.
+	// NOTE: The pool returned here will be the only pool used to validate certificates.
+	//       Inclusion of system certificates should be done by copying from x509.SystemCertPool(),
+	//       with any custom certificates appended.
 	LoadClientCA(context.Context) (*x509.CertPool, error)
 
 	// LoadRootCA returns a CertPool which should be used by clients to
 	// validate server certificates.
-	// NOTE: If this is non-nil it will be the only pool used to validate
-	//       certificates so likely it should be a copy of x509.SystemCertPool()
-	//       with additional certs loaded into that.
+	// NOTE: The pool returned here will be the only pool used to validate certificates.
+	//       Inclusion of system certificates should be done by copying from x509.SystemCertPool(),
+	//       with any custom certificates appended.
 	LoadRootCA(context.Context) (*x509.CertPool, error)
 
 	// LoadClientCertificates returns the certificate that should be presented
