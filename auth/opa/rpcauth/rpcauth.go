@@ -20,6 +20,7 @@ package rpcauth
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -75,7 +76,14 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	if input != nil {
-		logger.V(1).Info("evaluating authz policy", "input.message", string(input.Message), "input", input)
+		if logger.V(2).Enabled() {
+			b, err := json.Marshal(input)
+			if err != nil {
+				logger.V(2).Info("marshal", "can't marshal input", err)
+			} else {
+				logger.V(2).Info("evaluating authz policy", "input", string(b))
+			}
+		}
 	}
 	if input == nil {
 		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
@@ -89,7 +97,14 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			return status.Errorf(codes.Internal, "authz hook error: %v", err)
 		}
 	}
-	logger.V(1).Info("evaluating authz policy post hooks", "input.message", string(input.Message), "input", input)
+	if logger.V(1).Enabled() {
+		b, err := json.Marshal(input)
+		if err != nil {
+			logger.V(1).Info("marshal", "can't marshal input", err)
+		} else {
+			logger.V(1).Info("evaluating authz policy post hooks", "input", string(b))
+		}
+	}
 	allowed, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)

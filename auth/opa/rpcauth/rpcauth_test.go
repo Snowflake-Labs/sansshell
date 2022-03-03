@@ -22,8 +22,10 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"log"
 	"net"
 	"net/url"
+	"os"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -37,6 +39,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 )
 
 var policyString = `
@@ -71,6 +75,10 @@ allow {
 
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
+	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
+	ctx = logr.NewContext(ctx, logger)
+	// This way the tests exercise the logging code.
+	stdr.SetVerbosity(2)
 	policy, err := opa.NewAuthzPolicy(ctx, policyString)
 	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
