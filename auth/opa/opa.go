@@ -19,11 +19,14 @@
 package opa
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/topdown"
 )
 
 const (
@@ -47,6 +50,7 @@ var (
 // a sansshell rego policy file.
 type AuthzPolicy struct {
 	query rego.PreparedEvalQuery
+	b     *bytes.Buffer
 }
 
 type policyOptions struct {
@@ -94,25 +98,35 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (*AuthzP
 		return nil, fmt.Errorf("policy has invalid package '%s' (must be '%s')", module.Package, sansshellPackage)
 	}
 
+	b := &bytes.Buffer{}
 	r := rego.New(
 		rego.Query(options.query),
 		rego.ParsedModule(module),
+		rego.EnablePrintStatements(true),
+		rego.PrintHook(topdown.NewPrintHook(b)),
 	)
 
 	prepared, err := r.PrepareForEval(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("rego: PrepareForEval() error: %w", err)
 	}
-	return &AuthzPolicy{query: prepared}, nil
+	return &AuthzPolicy{
+		query: prepared,
+		b:     b,
+	}, nil
 }
 
 // Eval evaluates this policy using the provided input, returning 'true'
 // iff the evaulation was successful, and the operation represented by
 // `input` is permitted by the policy.
 func (q *AuthzPolicy) Eval(ctx context.Context, input interface{}) (bool, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	results, err := q.query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
 		return false, fmt.Errorf("authz policy evaluation error: %w", err)
+	}
+	if q.b.Len() > 0 {
+		logger.V(1).Info("print statements", "buffer", q.b.String())
 	}
 	return results.Allowed(), nil
 }
