@@ -82,6 +82,9 @@ type HostAuthInput struct {
 	// The host address
 	Net *NetAuthInput `json:"net"`
 
+	// Information about the certificate served by the host, if any
+	Cert *CertAuthInput `json:"cert"`
+
 	// Information about the principal associated with the host, if any
 	Principal *PrincipalAuthInput `json:"principal"`
 }
