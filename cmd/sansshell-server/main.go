@@ -29,6 +29,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -70,7 +71,7 @@ func main() {
 	stdr.SetVerbosity(*verbosity)
 
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
-	ctx := context.Background()
+	ctx := logr.NewContext(context.Background(), logger)
 
 	if *validate {
 		_, err := opa.NewAuthzPolicy(ctx, policy)

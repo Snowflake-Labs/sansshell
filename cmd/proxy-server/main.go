@@ -31,6 +31,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 
 	// Import services here to make them proxy-able
@@ -65,7 +66,7 @@ func main() {
 	stdr.SetVerbosity(*verbosity)
 
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
-	ctx := context.Background()
+	ctx := logr.NewContext(context.Background(), logger)
 
 	if *validate {
 		_, err := opa.NewAuthzPolicy(ctx, policy)
