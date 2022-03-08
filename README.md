@@ -121,9 +121,9 @@ time.
 TODO: Document service/.../client expectations.
 
 ## The Server class
-Most of the logic of instantiating a local SansShell server lives in `/server`.
-This instantiates a gRPC server, registers the imported services with that
-server, and constraints them with the supplied OPA policy.
+Most of the logic of instantiating a local SansShell server lives in the
+`server` directory.  This instantiates a gRPC server, registers the imported
+services with that server, and constraints them with the supplied OPA policy.
 
 ## The reference Proxy Server binary
 There is a reference implementation of a SansShell Proxy Server in
