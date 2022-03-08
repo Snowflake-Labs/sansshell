@@ -90,7 +90,7 @@ NOTE: This connects to the proxy. Change to 50042 if you want to connect to the 
 
 # A tour of the codebase
 SansShell is composed of 5 primary concepts:
-   1. A series of services, which live in the *services/* directory.
+   1. A series of services, which live in the `services/` directory.
    1. A server which wraps these services into a local host agent.
    1. A proxy server which can be used as an entry point to processing sansshell
       RPCs by validating policy and then doing fanout to 1..N actual
@@ -102,7 +102,7 @@ SansShell is composed of 5 primary concepts:
 
 ## Services
 Services implement at least one gRPC API endpoint, and expose it by calling
-*RegisterSansShellService* from *init()*.  The goal is to allow custom
+`RegisterSansShellService` from `init()`.  The goal is to allow custom
 implementations of the SansShell Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
@@ -121,25 +121,25 @@ time.
 TODO: Document service/.../client expectations.
 
 ## The Server class
-Most of the logic of instantiating a local SansShell server lives in */server*.
+Most of the logic of instantiating a local SansShell server lives in `/server`.
 This instantiates a gRPC server, registers the imported services with that
 server, and constraints them with the supplied OPA policy.
 
 ## The reference Proxy Server binary
 There is a reference implementation of a SansShell Proxy Server in
-*cmd/proxy-server*, which should be suitable as-written for many use cases.
+`cmd/proxy-server`, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
 ## The reference Server binary
 There is a reference implementation of a SansShell Server in
-*cmd/sansshell-server*, which should be suitable as-written for many use cases.
+`cmd/sansshell-server`, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
 ## The reference CLI client
 There is a reference implementation of a SansShell CLI Client in
-*cmd/sanssh*.  It provides raw access to each gRPC endpoint, as well
+`cmd/sanssh`.  It provides raw access to each gRPC endpoint, as well
 as a way to implement "convenience" commands which chain together a series of
 actions.
 
