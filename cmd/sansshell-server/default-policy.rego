@@ -41,10 +41,6 @@ allow {
 }
 
 allow {
-	input.type = "Ansible.RunRequest"
-}
-
-allow {
 	input.type = "Packages.ListInstalledRequest"
 }
 
