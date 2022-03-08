@@ -160,13 +160,13 @@ allow {
 		},
 		{
 			name:    "allowed case 3",
-			input:   map[string][]string{"group": []string{"okayOne", "okayTwo"}},
+			input:   map[string][]string{"group": {"okayOne", "okayTwo"}},
 			allowed: true,
 			errFunc: expectNoError,
 		},
 		{
 			name:    "in not matched",
-			input:   map[string][]string{"group": []string{"okayThree", "okayFour"}},
+			input:   map[string][]string{"group": {"okayThree", "okayFour"}},
 			allowed: false,
 			errFunc: expectNoError,
 		},
