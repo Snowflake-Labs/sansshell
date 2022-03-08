@@ -85,7 +85,8 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (*AuthzP
 	for _, opt := range opts {
 		opt.apply(options)
 	}
-	module, err := ast.ParseModule("sanshell-authz-policy.rego", policy)
+	parserOpts := ast.ParserOptions{FutureKeywords: []string{"in"}}
+	module, err := ast.ParseModuleWithOpts("sanshell-authz-policy.rego", policy, parserOpts)
 	if err != nil {
 		return nil, fmt.Errorf("policy parse error: %w", err)
 	}
