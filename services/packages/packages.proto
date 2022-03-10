@@ -16,7 +16,7 @@
 
 syntax = "proto3";
 
-option go_package = "github.com/Snowflake-Labs/unshelled/services/packages";
+option go_package = "github.com/Snowflake-Labs/sansshell/services/packages";
 
 package Packages;
 
