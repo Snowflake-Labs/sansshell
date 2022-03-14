@@ -1,7 +1,7 @@
 # SansShell
 A non-interactive daemon for host management
 
-SansShell is primarily gRPC server with a variety of options for localhost
+SansShell is primarily a gRPC server with a variety of options for localhost
 debugging and management. Its goal is to replace the need to use an
 interactive shell for emergency debugging and recovery with a much safer
 interface. Each authorized action can be evaluated against an OPA policy,
