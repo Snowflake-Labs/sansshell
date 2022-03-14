@@ -109,6 +109,10 @@ allow {
   input.foo = "baz"
   input.bar = "bazzle"
 }
+
+allow {
+  "okayOne" in input.group
+}
 `
 	ctx := context.Background()
 	policy, err := NewAuthzPolicy(ctx, policyString)
@@ -152,6 +156,18 @@ allow {
 			name:    "allowed case 2",
 			input:   map[string]string{"foo": "baz", "bar": "bazzle"},
 			allowed: true,
+			errFunc: expectNoError,
+		},
+		{
+			name:    "allowed case 3",
+			input:   map[string][]string{"group": {"okayOne", "okayTwo"}},
+			allowed: true,
+			errFunc: expectNoError,
+		},
+		{
+			name:    "in not matched",
+			input:   map[string][]string{"group": {"okayThree", "okayFour"}},
+			allowed: false,
 			errFunc: expectNoError,
 		},
 		{
