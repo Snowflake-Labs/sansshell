@@ -13,7 +13,7 @@ interacting with a remote machine.  It also includes a set of convenient but
 perhaps-less-friendly subcommands to address the raw SansShell API endpoints.
 
 # Getting Started
-How to setup, build and run locally for testing.  All commands are relative to
+How to set up, build and run locally for testing.  All commands are relative to
 the project root directory.
 
 Building SansShell requires a recent version of Go (check the go.mod file for
@@ -57,7 +57,7 @@ $ go generate tools.go
 ## Build and run
 You only need to do these steps once to configure example mTLS certs:
 ```
-$ go get -u github.com/meterup/generate-cert
+$ go install github.com/meterup/generate-cert@latest
 $ mkdir -m 0700 certs
 $ cd certs
 $ $(go env GOPATH)/bin/generate-cert --host=localhost,127.0.0.1,::1
