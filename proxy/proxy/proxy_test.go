@@ -149,6 +149,13 @@ func TestUnary(t *testing.T) {
 			wantErr: true, // can't do unary call with N targets
 		},
 		{
+			name:           "proxy N targets one down",
+			proxy:          "proxy",
+			targets:        []string{"foo:123", "bar:123", "baz:123"},
+			wantErr:        true, // can't do unary call with N targets
+			wantErrOneMany: true,
+		},
+		{
 			name:    "proxy 1 target",
 			proxy:   "proxy",
 			targets: []string{"foo:123"},
@@ -166,11 +173,10 @@ func TestUnary(t *testing.T) {
 			ts := tdpb.NewTestServiceClientProxy(conn)
 			resp, err := ts.TestUnaryOneMany(context.Background(), &tdpb.TestRequest{Input: "input"})
 			t.Log(err)
-			tu.WantErr(tc.name, err, tc.wantErrOneMany, t)
 
-			if !tc.wantErrOneMany {
-				for r := range resp {
-					t.Logf("%+v", r)
+			for r := range resp {
+				t.Logf("%+v", r)
+				if !tc.wantErrOneMany {
 					tu.FatalOnErr(fmt.Sprintf("target %s", r.Target), r.Error, t)
 				}
 			}
@@ -193,8 +199,15 @@ func TestUnary(t *testing.T) {
 			}
 
 			// Do some direct calls against the conn to get at error cases
-			_, err = conn.InvokeOneMany(context.Background(), "bad_method", &tdpb.TestRequest{Input: "input"})
-			tu.FatalOnNoErr("InvokeOneMany bad method", err, t)
+			resp2, err := conn.InvokeOneMany(context.Background(), "bad_method", &tdpb.TestRequest{Input: "input"})
+			if tc.proxy == "" {
+				tu.FatalOnNoErr("InvokeOneMany bad msg", err, t)
+			} else {
+				tu.FatalOnErr("InvokeOneMany bad msg", err, t)
+				for r := range resp2 {
+					tu.FatalOnNoErr("InvokeOneMany bad method", r.Error, t)
+				}
+			}
 			_, err = conn.InvokeOneMany(context.Background(), "/Testdata.TestService/TestUnary", nil)
 			tu.FatalOnNoErr("InvokeOneMany bad msg", err, t)
 
