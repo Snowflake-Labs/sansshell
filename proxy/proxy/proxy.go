@@ -76,6 +76,7 @@ type proxyStream struct {
 	stream     proxypb.Proxy_ProxyClient
 	ids        map[uint64]*Ret
 	errors     []*Ret
+	sentErrors bool
 	sendClosed bool
 }
 
@@ -267,7 +268,11 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	}
 
 	// If we have any pre-canned errors push them on now.
-	*manyRet = append(*manyRet, p.errors...)
+	// Only send once or else the user gets spammed with errors for every Recv called.
+	if !p.sentErrors {
+		*manyRet = append(*manyRet, p.errors...)
+		p.sentErrors = true
+	}
 
 	resp, err := p.stream.Recv()
 	// If it's io.EOF the upper level code will handle that.
