@@ -69,10 +69,9 @@ const (
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
-
 	// Bunch of flag sanity checking
-	if len(rs.Targets) == 0 {
-		fmt.Fprintln(os.Stderr, "Must set targets")
+	if len(rs.Targets) == 0 && rs.Proxy == "" {
+		fmt.Fprintln(os.Stderr, "Must set a target or a proxy")
 		os.Exit(1)
 	}
 	if len(rs.Targets) > 1 && rs.Proxy == "" {

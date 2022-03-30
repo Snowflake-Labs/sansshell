@@ -102,7 +102,6 @@ func TestDial(t *testing.T) {
 		{
 			name:    "proxy and no targets",
 			proxy:   "proxy",
-			wantErr: true,
 			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{

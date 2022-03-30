@@ -393,6 +393,7 @@ func (x *localFileClientWriteClientProxy) CloseAndRecv() ([]*WriteManyResponse, 
 				}
 			}
 			ret = append(ret, typedResp)
+			eof[r.Index] = true
 		}
 	}
 	return ret, nil

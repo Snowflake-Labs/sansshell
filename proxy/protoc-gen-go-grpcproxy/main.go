@@ -256,6 +256,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("}")
 					g.P("}")
 					g.P("ret = append(ret, typedResp)")
+					if clientOnly {
+						g.P("eof[r.Index] = true")
+					}
 					g.P("}")
 					if clientOnly {
 						g.P("}")

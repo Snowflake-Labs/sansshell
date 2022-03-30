@@ -875,7 +875,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		retCode := subcommands.ExitSuccess
 		for r := range respChan {
 			if r.Error != nil {
-				fmt.Fprintf(state.Err[r.Index], "immutable client error: %v\n", r.Error)
+				fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
 				retCode = subcommands.ExitFailure
 			}
 		}

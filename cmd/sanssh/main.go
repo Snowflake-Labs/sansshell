@@ -18,9 +18,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -43,15 +46,25 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 )
 
-var (
-	defaultAddress = "localhost:50042"
-	defaultTimeout = 3 * time.Second
+const (
+	defaultProxyPort  = 50043
+	defaultTargetPort = 50042
+	proxyEnv          = "SANSSHELL_PROXY"
+)
 
-	proxyAddr     = flag.String("proxy", "", "Address to contact for proxy to sansshell-server. If blank a direct connection to the first entry in --targets will be made")
+var (
+	defaultTimeout = 30 * time.Second
+
+	proxyAddr = flag.String("proxy", "", fmt.Sprintf(
+		`Address (host[:port]) to contact for proxy to sansshell-server.
+%s in the environment can also be set instead of setting this flag. The flag will take precedence.
+If blank a direct connection to the first entry in --targets will be made.
+If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	timeout       = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	outputsDir    = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
-	justification = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possbile validation and logging.")
+	justification = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
+	targetsFile   = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -61,11 +74,11 @@ var (
 )
 
 func init() {
-	targetsFlag.Set(defaultAddress)
 	// Setup an empty slice so it can be deref'd below regardless of user input.
 	outputsFlag.Target = &[]string{}
+	targetsFlag.Target = &[]string{}
 
-	flag.Var(&targetsFlag, "targets", "List of targets (separated by commas) to apply RPC against. If --proxy is not set must be one entry only.")
+	flag.Var(&targetsFlag, "targets", fmt.Sprintf("List of targets (host[:port] separated by commas) to apply RPC against. If --proxy is not set must be one entry only. If port is blank the default of %d will be used", defaultTargetPort))
 	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into.
     Use - to indicated stdout/stderr (default if nothing else is set). Using - does not have to be repeated per target.
 	Errors will be emitted to <destination>.error separately from command/execution output which will be in the destination file.
@@ -76,11 +89,47 @@ func init() {
 	subcommands.ImportantFlag("targets")
 	subcommands.ImportantFlag("outputs")
 	subcommands.ImportantFlag("output-dir")
+	subcommands.ImportantFlag("targets-file")
 	subcommands.ImportantFlag("justification")
 }
 
 func main() {
+	// If this is blank it'll remain blank which is fine
+	// as that means just talk to --targets[0] instead.
+	// If the flag itself was set that will override.
+	*proxyAddr = os.Getenv(proxyEnv)
 	flag.Parse()
+
+	// If we're given a --targets-file read it in and stuff into targetsFlag
+	// so it can be processed below as if it was set that way.
+	if *targetsFile != "" {
+		// Can't set both flags.
+		if len(*targetsFlag.Target) > 0 {
+			log.Fatal("can't set --targets-file and --targets at the same time")
+		}
+		f, err := os.Open(*targetsFile)
+		if err != nil {
+			log.Fatalf("can't open %s: %v", *targetsFile, err)
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			*targetsFlag.Target = append(*targetsFlag.Target, scanner.Text())
+		}
+		if err := scanner.Err(); err != nil {
+			log.Fatalf("scanning error reading %s: %v", *targetsFile, err)
+		}
+	}
+
+	// Fixup proxy and targets flags if needed.
+	if !strings.Contains(*proxyAddr, ":") {
+		*proxyAddr = fmt.Sprintf("%s:%d", *proxyAddr, defaultProxyPort)
+	}
+	for i, t := range *targetsFlag.Target {
+		if !strings.Contains(t, ":") {
+			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
+		}
+	}
 
 	rs := client.RunState{
 		Proxy:      *proxyAddr,
