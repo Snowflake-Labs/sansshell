@@ -315,7 +315,6 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		if streamStatus.Code() != codes.OK {
 			closedErr = streamStatus.Err()
 		}
-
 		for _, id := range cl.StreamIds {
 			p.ids[id].Error = closedErr
 			p.ids[id].Resp = nil
@@ -538,10 +537,8 @@ func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
 // By default dial operations are non-blocking. See grpc.Dial for a complete explanation.
 func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
-	if len(targets) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "no targets passed")
-	}
-
+	// If there are no targets things will likely fail but this gives the ability to still send RPCs to the
+	// proxy itself.
 	dialTarget := proxy
 	ret := &Conn{}
 	if proxy == "" {
