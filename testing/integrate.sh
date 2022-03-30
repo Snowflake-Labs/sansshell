@@ -547,7 +547,7 @@ egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/server.
 check_status $? /dev/null cant find log entry for changing levels
 
 echo "Setting proxy logging level higher"
-${SANSSH_PROXY} ${SINGLE_TARGET} sansshell set-proxy-verbosity --verbosity=1
+${SANSSH_PROXY} sansshell set-proxy-verbosity --verbosity=1
 egrep -q -e '"msg"="set-verbosity".*"new level"=1 "old level"=0' ${LOGS}/proxy.log
 check_status $? /dev/null cant find log entry in proxy for changing levels
 
