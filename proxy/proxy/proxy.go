@@ -75,6 +75,8 @@ type proxyStream struct {
 	method     string
 	stream     proxypb.Proxy_ProxyClient
 	ids        map[uint64]*Ret
+	errors     []*Ret
+	sentErrors bool
 	sendClosed bool
 }
 
@@ -138,7 +140,7 @@ func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 		return p.cc.NewStream(ctx, desc, method, opts...)
 	}
 
-	stream, streamIds, err := p.createStreams(ctx, method)
+	stream, streamIds, errors, err := p.createStreams(ctx, method)
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +149,7 @@ func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 		method: method,
 		stream: stream,
 		ids:    streamIds,
+		errors: errors,
 	}
 
 	return s, nil
@@ -264,6 +267,13 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*ProxyRet) - got %T", m)
 	}
 
+	// If we have any pre-canned errors push them on now.
+	// Only send once or else the user gets spammed with errors for every Recv called.
+	if !p.sentErrors {
+		*manyRet = append(*manyRet, p.errors...)
+		p.sentErrors = true
+	}
+
 	resp, err := p.stream.Recv()
 	// If it's io.EOF the upper level code will handle that.
 	if err != nil {
@@ -320,11 +330,14 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 // createStreams is a helper which does the heavy lifting of creating N tracked streams to the proxy
 // for later RPCs to flow across. It returns a proxy stream object (for clients), and a map of stream ids to prefilled ProxyRet
-// objects. These will have Index/Target already filled in so clients can map them to their requests.
-func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*Ret, error) {
+// objects. If any of the targets had an error connecting these will be collected and returned as a slice. This way later calls
+// can complete to the online hosts and return precanned errors for the offline ones.
+// All Ret structs will have Index/Target already filled in so clients can map them to their requests.
+func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_ProxyClient, map[uint64]*Ret, []*Ret, error) {
+	var errors []*Ret
 	stream, err := proxypb.NewProxyClient(p.cc).Proxy(ctx)
 	if err != nil {
-		return nil, nil, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
+		return nil, nil, errors, status.Errorf(codes.Internal, "can't setup proxy stream - %v", err)
 	}
 
 	streamIds := make(map[uint64]*Ret)
@@ -347,38 +360,44 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 		// for SendMsg. However it appears SendMsg will return actual errors "sometimes" when it's the first stream
 		// a server has ever handled so account for that here.
 		if err != nil && err != io.EOF {
-			return nil, nil, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
+			return nil, nil, errors, status.Errorf(codes.Internal, "can't send request for %s on stream - %v", method, err)
 		}
 		if err != nil {
 			_, err := stream.Recv()
-			return nil, nil, status.Errorf(codes.Internal, "remote error from Send for %s - %v", method, err)
+			return nil, nil, errors, status.Errorf(codes.Internal, "remote error from Send for %s - %v", method, err)
 		}
 		resp, err := stream.Recv()
 		if err != nil {
-			return nil, nil, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
+			return nil, nil, errors, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
 		}
 
 		// Validate we got an answer and it has expected reflected values.
+		// These are all sanity checks for the entire session so an overall error is appropriate since we're likely
+		// dealing with a broken proxy of some sort.
 		r := resp.GetStartStreamReply()
 		if r == nil {
-			return nil, nil, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
-		}
-
-		if s := r.GetErrorStatus(); s != nil {
-			return nil, nil, status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code).String(), s.Message)
+			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
 		}
 
 		if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
-			return nil, nil, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
+			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
 		}
 
-		// Save stream ID/nonce for later matching.
-		streamIds[r.GetStreamId()] = &Ret{
+		ret := &Ret{
 			Target: r.GetTarget(),
 			Index:  int(r.GetNonce()),
 		}
+		// If the target reported an error stick it in errors.
+		if s := r.GetErrorStatus(); s != nil {
+			ret.Error = status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code), s.Message)
+			errors = append(errors, ret)
+			continue
+		}
+
+		// Save stream ID/nonce for later matching.
+		streamIds[r.GetStreamId()] = ret
 	}
-	return stream, streamIds, nil
+	return stream, streamIds, errors, nil
 }
 
 // InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
@@ -392,7 +411,7 @@ func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{
 		return nil, status.Error(codes.InvalidArgument, "args must be a proto.Message")
 	}
 
-	stream, streamIds, err := p.createStreams(ctx, method)
+	stream, streamIds, errors, err := p.createStreams(ctx, method)
 	if err != nil {
 		return nil, err
 	}
@@ -418,6 +437,11 @@ func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{
 	go func() {
 		// An error that may occur in processing we'll do in bulk.
 		var chanErr error
+
+		// If we have any pre-canned target errors just ship those down.
+		for _, e := range errors {
+			retChan <- e
+		}
 
 		// Now do receives until we get all the responses or closes for each stream ID.
 	processing:
