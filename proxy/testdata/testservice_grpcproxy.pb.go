@@ -280,6 +280,7 @@ func (x *testServiceClientTestClientStreamClientProxy) CloseAndRecv() ([]*TestCl
 				}
 			}
 			ret = append(ret, typedResp)
+			eof[r.Index] = true
 		}
 	}
 	return ret, nil
