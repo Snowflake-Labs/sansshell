@@ -68,6 +68,10 @@ func (flagLoader) LoadServerCertificate(context.Context) (tls.Certificate, error
 	return tls.LoadX509KeyPair(serverCertFile, serverKeyFile)
 }
 
+func (flagLoader) CertsRefreshed() bool {
+	return false
+}
+
 func init() {
 	cd, err := os.UserHomeDir()
 	if err != nil {

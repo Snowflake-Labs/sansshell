@@ -26,8 +26,25 @@ import (
 )
 
 // LoadServerCredentials returns transport credentials for a SansShell server as
-// retrieved from the specified `loaderName`
+// retrieved from the specified `loaderName`. This should be the most commonly
+// used method to generate credentials as this will support reloadable credentials
+// as the TransportCredentials returned are a WrappedTransportCredentials which
+// will check at call time if new certificates are available.
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	creds, err := internalLoadServerCredentials(ctx, loaderName)
+	if err != nil {
+		return nil, err
+	}
+	wrapped := &WrappedTransportCredentials{
+		creds:      creds,
+		ctx:        ctx,
+		loaderName: loaderName,
+		loader:     internalLoadServerCredentials,
+	}
+	return wrapped, nil
+}
+
+func internalLoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	loader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
@@ -45,6 +62,7 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 }
 
 // NewServerCredentials creates transport credentials for a SansShell server.
+// NOTE: This doesn't support reloadable credentials.
 func NewServerCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentials.TransportCredentials {
 	return credentials.NewTLS(&tls.Config{
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -56,6 +74,7 @@ func NewServerCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentia
 
 // LoadServerTLS reads the certificates and keys from disk at the supplied paths,
 // and assembles them into a set of TransportCredentials for the gRPC server.
+// NOTE: This doesn't support reloadable credentials.
 func LoadServerTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) (credentials.TransportCredentials, error) {
 	// Read in client credentials
 	cert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)

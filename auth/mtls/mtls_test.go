@@ -96,57 +96,8 @@ func bufDialer(lis *bufconn.Listener) func(context.Context, string) (net.Conn, e
 	}
 }
 
-func serverWithPolicy(t *testing.T, policy string, CAPool *x509.CertPool) (*bufconn.Listener, *grpc.Server) {
-	t.Helper()
-	creds, err := LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
-	testutil.FatalOnErr("Failed to load client cert", err, t)
-	lis := bufconn.Listen(bufSize)
-	s, err := server.BuildServer(creds, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
-	testutil.FatalOnErr("Could not build server", err, t)
-	listening := make(chan struct{})
-	go func() {
-		listening <- struct{}{}
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	<-listening
-	return lis, s
-}
-
-func TestLoadServerTLS(t *testing.T) {
-	CAPool, err := LoadRootOfTrust("testdata/root.pem")
-	testutil.FatalOnErr("Failed to load root CA", err, t)
-
-	// Make sure this errors if we pass bad data like reversing things.
-	_, err = LoadServerTLS("testdata/leaf.key", "testdata/leaf.pem", CAPool)
-	t.Log(err)
-	if err == nil {
-		t.Fatal("didn't get an error for bad TLS server data")
-	}
-}
-
-func TestLoadClientTLS(t *testing.T) {
-	CAPool, err := LoadRootOfTrust("testdata/root.pem")
-	testutil.FatalOnErr("Failed to load root CA", err, t)
-
-	// Make sure this errors if we pass bad data like reversing things.
-	_, err = LoadClientTLS("testdata/leaf.key", "testdata/leaf.pem", CAPool)
-	t.Log(err)
-	testutil.FatalOnNoErr("bad TLS client data", err, t)
-}
-
-func TestLoadRootOfTrust(t *testing.T) {
-	_, err := LoadRootOfTrust("testdata/root.pem")
-	testutil.FatalOnErr("Failed to load root CA", err, t)
-
-	_, err = LoadRootOfTrust("no-file")
-	testutil.FatalOnNoErr("bad CA root", err, t)
-}
-
 type simpleLoader struct {
 	name string
-	CredentialsLoader
 }
 
 func (s *simpleLoader) LoadClientCA(context.Context) (*x509.CertPool, error) {
@@ -174,7 +125,66 @@ func (s *simpleLoader) LoadClientCertificate(context.Context) (tls.Certificate, 
 	if s.name == "errorCert" {
 		return tls.Certificate{}, errors.New("LoadClientCertificate error")
 	}
-	return tls.LoadX509KeyPair("testdata/leaf.pem", "testdata/leaf.key")
+	return tls.LoadX509KeyPair("testdata/client.pem", "testdata/client.key")
+}
+
+func (s *simpleLoader) CertsRefreshed() bool {
+	return s.name == "refresh"
+}
+
+func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Server) {
+	t.Helper()
+	Register("refresh", &simpleLoader{name: "refresh"})
+	creds, err := LoadServerCredentials(context.Background(), "refresh")
+	testutil.FatalOnErr("Failed to load server cert", err, t)
+	lis := bufconn.Listen(bufSize)
+	s, err := server.BuildServer(creds, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+	testutil.FatalOnErr("Could not build server", err, t)
+	listening := make(chan struct{})
+	go func() {
+		listening <- struct{}{}
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("Server exited with error: %v", err)
+		}
+	}()
+	<-listening
+	return lis, s
+}
+
+func TestLoadServerTLS(t *testing.T) {
+	CAPool, err := LoadRootOfTrust("testdata/root.pem")
+	testutil.FatalOnErr("Failed to load root CA", err, t)
+
+	// Make sure this errors if we pass bad data like reversing things.
+	_, err = LoadServerTLS("testdata/leaf.key", "testdata/leaf.pem", CAPool)
+	t.Log(err)
+	testutil.FatalOnNoErr("bad TLS server data", err, t)
+
+	// Also that it works on correct input.
+	_, err = LoadServerTLS("testdata/leaf.pem", "testdata/leaf.key", CAPool)
+	testutil.FatalOnErr("tls server data", err, t)
+}
+
+func TestLoadClientTLS(t *testing.T) {
+	CAPool, err := LoadRootOfTrust("testdata/root.pem")
+	testutil.FatalOnErr("Failed to load root CA", err, t)
+
+	// Make sure this errors if we pass bad data like reversing things.
+	_, err = LoadClientTLS("testdata/client.key", "testdata/client.pem", CAPool)
+	t.Log(err)
+	testutil.FatalOnNoErr("bad TLS client data", err, t)
+
+	// Also that it works on correct input.
+	_, err = LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
+	testutil.FatalOnErr("tls client data", err, t)
+}
+
+func TestLoadRootOfTrust(t *testing.T) {
+	_, err := LoadRootOfTrust("testdata/root.pem")
+	testutil.FatalOnErr("Failed to load root CA", err, t)
+
+	_, err = LoadRootOfTrust("no-file")
+	testutil.FatalOnNoErr("bad CA root", err, t)
 }
 
 func TestLoadClientServerCredentials(t *testing.T) {
@@ -182,6 +192,7 @@ func TestLoadClientServerCredentials(t *testing.T) {
 	Register("simple", &simpleLoader{name: "simple"})
 	Register("errorCA", &simpleLoader{name: "errorCA"})
 	Register("errorCert", &simpleLoader{name: "errorCert"})
+	Register("refresh", &simpleLoader{name: "refresh"})
 
 	for _, tc := range []struct {
 		name    string
@@ -207,6 +218,10 @@ func TestLoadClientServerCredentials(t *testing.T) {
 			name:   "good creds",
 			loader: "simple",
 		},
+		{
+			name:   "refresh creds",
+			loader: "refresh",
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -221,9 +236,9 @@ func TestLoadClientServerCredentials(t *testing.T) {
 func TestHealthCheck(t *testing.T) {
 	var err error
 	ctx := context.Background()
-	CAPool, err := LoadRootOfTrust("testdata/root.pem")
-	testutil.FatalOnErr("Failed to load root CA", err, t)
-	creds, err := LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
+	unregisterAll()
+	Register("refresh", &simpleLoader{name: "refresh"})
+	creds, err := LoadClientCredentials(ctx, "refresh")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	for _, tc := range []struct {
 		name   string
@@ -253,7 +268,7 @@ func TestHealthCheck(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			l, s := serverWithPolicy(t, tc.policy, CAPool)
+			l, s := serverWithPolicy(t, tc.policy)
 			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
 			testutil.FatalOnErr("Failed to dial bufnet", err, t)
 			t.Cleanup(func() { conn.Close() })

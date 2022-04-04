@@ -23,8 +23,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"sync"
+
+	"google.golang.org/grpc/credentials"
 )
 
 var (
@@ -55,6 +58,70 @@ type CredentialsLoader interface {
 	// LoadServerCertificate returns the certificate that should be presented
 	// by the server to incoming clients.
 	LoadServerCertificate(context.Context) (tls.Certificate, error)
+
+	// CertRefreshed indicates if internally any of the cert data has
+	// been refreshed and should be reloaded. This will depend on the
+	// implementation to support but allows for dynamic refresh of certificates
+	// without a server restart.
+	CertsRefreshed() bool
+}
+
+type WrappedTransportCredentials struct {
+	creds      credentials.TransportCredentials
+	ctx        context.Context
+	loaderName string
+	loader     func(context.Context, string) (credentials.TransportCredentials, error)
+}
+
+func (w *WrappedTransportCredentials) checkRefresh() error {
+	loader, err := Loader(w.loaderName)
+	if err != nil {
+		return err
+	}
+	if loader.CertsRefreshed() {
+		newCreds, err := w.loader(w.ctx, w.loaderName)
+		if err != nil {
+			return err
+		}
+		w.creds = newCreds
+	}
+	return nil
+}
+
+// ClientHandshake -- see credentials.ClientHandshake
+func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s string, n net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	if err := w.checkRefresh(); err != nil {
+		return nil, nil, err
+	}
+	return w.creds.ClientHandshake(ctx, s, n)
+}
+
+// ServerHandshake -- see credentials.ServerHandshake
+func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	if err := w.checkRefresh(); err != nil {
+		return nil, nil, err
+	}
+	return w.creds.ServerHandshake(n)
+}
+
+// Info -- see credentials.Info
+func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
+	w.checkRefresh()
+	return w.creds.Info()
+}
+
+// Clone -- see credentials.Clone
+func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
+	w.checkRefresh()
+	return w.creds.Clone()
+}
+
+// OverrideServerName -- see credentials.OverrideServerName
+func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
+	if err := w.checkRefresh(); err != nil {
+		return err
+	}
+	return w.creds.OverrideServerName(s)
 }
 
 // Register associates a name with a mechanism for loading credentials.
