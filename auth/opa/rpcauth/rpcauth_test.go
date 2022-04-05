@@ -73,6 +73,15 @@ allow {
 
 `
 
+type KeyValExtension struct {
+	Key string `json:"key"`
+	Val string `json:"val"`
+}
+
+type IntExtension struct {
+	Value int `json:"value"`
+}
+
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
 	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
@@ -119,6 +128,23 @@ func TestAuthzHook(t *testing.T) {
 				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.MessageType = "Foo.BazRequest"
+					return nil
+				}),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name:  "extension hook",
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+					input.Extensions = append(input.Extensions, &KeyValExtension{
+						Key: "key1",
+						Val: "val2",
+					},
+						&IntExtension{
+							Value: 12345,
+						})
 					return nil
 				}),
 			},
