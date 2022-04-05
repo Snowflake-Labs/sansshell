@@ -71,6 +71,15 @@ allow {
   input.peer.principal.groups[i] = "admin_users"
 }
 
+allow {
+  some i
+  input.extensions[i].key = "key1"
+}
+
+allow {
+  some i
+  input.extensions[i].value = 12345
+}
 `
 
 type KeyValExtension struct {
