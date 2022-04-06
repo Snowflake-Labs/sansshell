@@ -72,13 +72,9 @@ allow {
 }
 
 allow {
-  some i
-  input.extensions[i].key = "key1"
-}
-
-allow {
-  some i
+  some i, j
   input.extensions[i].value = 12345
+  input.extensions[j].key = "key1"
 }
 `
 
@@ -111,6 +107,17 @@ func TestAuthzHook(t *testing.T) {
 			}
 		}
 	}
+
+	extensions, err := json.Marshal([]interface{}{
+		&KeyValExtension{
+			Key: "key1",
+			Val: "val2",
+		},
+		&IntExtension{
+			Value: 12345,
+		},
+	})
+	testutil.FatalOnErr("json.Marshal extensions", err, t)
 
 	for _, tc := range []struct {
 		name    string
@@ -147,13 +154,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &RPCAuthInput{},
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
-					input.Extensions = append(input.Extensions, &KeyValExtension{
-						Key: "key1",
-						Val: "val2",
-					},
-						&IntExtension{
-							Value: 12345,
-						})
+					input.Extensions = extensions
 					return nil
 				}),
 			},

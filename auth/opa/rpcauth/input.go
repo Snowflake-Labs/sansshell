@@ -52,7 +52,7 @@ type RPCAuthInput struct {
 	Host *HostAuthInput `json:"host"`
 
 	// Implementation specific extensions.
-	Extensions []interface{} `json:"extensions"`
+	Extensions json.RawMessage `json:"extensions"`
 }
 
 // PeerAuthInput contains policy-relevant information about an RPC peer.
