@@ -53,13 +53,17 @@ type RPCAuthzHook interface {
 
 // New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
-func New(policy *opa.AuthzPolicy, clientPolicy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
+// NOTE: The policy is used for both client and server hooks below. If you need
+//       distinct policy for client vs server, create 2 Authorizer's.
+func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
 	return &Authorizer{policy: policy, hooks: authzHooks}
 }
 
 // NewWithPolicy creates a new Authorizer from a policy string. Any supplied
 // authorization hooks will be executed, in the order provided, on each policy
 // evaluation.
+// NOTE: The policy is used for both client and server hooks below. If you need
+//       distinct policy for client vs server, create 2 Authorizer's.
 func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {
@@ -120,7 +124,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	msg, ok := req.(proto.Message)
 	if !ok {
-		return nil, status.Errorf(codes.Internal, "unable to authorize request of type %T, which is not proto.Message", req)
+		return nil, status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
 	authInput, err := NewRPCAuthInput(ctx, info.FullMethod, msg)
 	if err != nil {
@@ -134,10 +138,59 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 
 // AuthorizeClient implements grpc.UnaryClientInterceptor
 func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	return nil
+	msg, ok := req.(proto.Message)
+	if !ok {
+		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
+	}
+	authInput, err := NewRPCAuthInput(ctx, method, msg)
+	if err != nil {
+		return status.Errorf(codes.Internal, "unable to create auth input: %v", err)
+	}
+	if err := g.Eval(ctx, authInput); err != nil {
+		return err
+	}
+	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-// AuthorizeStream implements grpc.StreamServerInterceptor
+// AuthorizeClientStream implements grpc.StreamClientInterceptor and applies policy checks on any SendMsg calls.
+func (g *Authorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	clientStream, err := streamer(ctx, desc, cc, method, opts...)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't create clientStream: %v", err)
+	}
+	wrapped := &wrappedClientStream{
+		ClientStream: clientStream,
+		method:       method,
+		authz:        g,
+	}
+	return wrapped, nil
+}
+
+// wrappedClientStream wraps an existing grpc.ClientStream with authorization checking.
+type wrappedClientStream struct {
+	grpc.ClientStream
+	method string
+	authz  *Authorizer
+}
+
+// see: grpc.ClientStream.SendMsg
+func (e *wrappedClientStream) SendMsg(req interface{}) error {
+	ctx := e.Context()
+	msg, ok := req.(proto.Message)
+	if !ok {
+		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
+	}
+	authInput, err := NewRPCAuthInput(ctx, e.method, msg)
+	if err != nil {
+		return err
+	}
+	if err := e.authz.Eval(ctx, authInput); err != nil {
+		return err
+	}
+	return e.ClientStream.SendMsg(req)
+}
+
+// AuthorizeStream implements grpc.StreamServerInterceptor and applies policy checks on any RecvMsg calls.
 func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	wrapped := &wrappedStream{
 		ServerStream: ss,
@@ -166,7 +219,7 @@ func (e *wrappedStream) RecvMsg(req interface{}) error {
 	}
 	msg, ok := req.(proto.Message)
 	if !ok {
-		return status.Errorf(codes.Internal, "unable to authorize request of type %T, which is not proto.Message", req)
+		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
 	authInput, err := NewRPCAuthInput(ctx, e.info.FullMethod, msg)
 	if err != nil {

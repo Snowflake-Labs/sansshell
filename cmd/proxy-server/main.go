@@ -49,13 +49,15 @@ var (
 	//go:embed default-policy.rego
 	defaultPolicy string
 
-	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
-	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
-	hostport      = flag.String("hostport", "localhost:50043", "Where to listen for connections.")
-	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
-	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
-	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	policyFlag       = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
+	policyFile       = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions (i.e. connecting to sansshell servers). If empty no policy is applied.")
+	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
+	hostport         = flag.String("hostport", "localhost:50043", "Where to listen for connections.")
+	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
+	validate         = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
+	justification    = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 )
 
 func main() {
@@ -66,6 +68,7 @@ func main() {
 	stdr.SetVerbosity(*verbosity)
 
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
+	clientPolicy := util.ChoosePolicy(logger, "", *clientPolicyFlag, *clientPolicyFile)
 	ctx := logr.NewContext(context.Background(), logger)
 
 	if *validate {
@@ -80,6 +83,7 @@ func main() {
 	rs := server.RunState{
 		Logger:        logger,
 		Policy:        policy,
+		ClientPolicy:  clientPolicy,
 		CredSource:    *credSource,
 		Hostport:      *hostport,
 		Justification: *justification,

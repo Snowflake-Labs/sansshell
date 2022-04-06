@@ -327,9 +327,10 @@ func TestAuthzHook(t *testing.T) {
 }
 
 func TestNewWithPolicy(t *testing.T) {
-	_, err := NewWithPolicy(context.Background(), policyString)
+	ctx := context.Background()
+	_, err := NewWithPolicy(ctx, policyString)
 	testutil.FatalOnErr("NewWithPolicy valid", err, t)
-	if _, err := NewWithPolicy(context.Background(), ""); err == nil {
+	if _, err := NewWithPolicy(ctx, ""); err == nil {
 		t.Error("didn't get error for empty policy")
 	}
 }
@@ -350,6 +351,8 @@ func TestRpcAuthInput(t *testing.T) {
 	tcp, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:1")
 	testutil.FatalOnErr("ResolveIPAddr", err, t)
 
+	ctx := context.Background()
+
 	for _, tc := range []struct {
 		name    string
 		ctx     context.Context
@@ -359,7 +362,7 @@ func TestRpcAuthInput(t *testing.T) {
 	}{
 		{
 			name:   "method only",
-			ctx:    context.Background(),
+			ctx:    ctx,
 			method: "/AMethod",
 			compare: &RPCAuthInput{
 				Method: "/AMethod",
@@ -368,7 +371,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name:   "method and metadata",
-			ctx:    metadata.NewIncomingContext(context.Background(), md),
+			ctx:    metadata.NewIncomingContext(ctx, md),
 			method: "/AMethod",
 			compare: &RPCAuthInput{
 				Method:   "/AMethod",
@@ -378,7 +381,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name:   "method and request",
-			ctx:    context.Background(),
+			ctx:    ctx,
 			method: "/AMethod",
 			req:    &emptypb.Empty{},
 			compare: &RPCAuthInput{
@@ -390,7 +393,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name:   "method and a peer context but no addr",
-			ctx:    peer.NewContext(context.Background(), &peer.Peer{}),
+			ctx:    peer.NewContext(ctx, &peer.Peer{}),
 			method: "/AMethod",
 			compare: &RPCAuthInput{
 				Method: "/AMethod",
@@ -399,7 +402,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name: "method and a peer context",
-			ctx: peer.NewContext(context.Background(), &peer.Peer{
+			ctx: peer.NewContext(ctx, &peer.Peer{
 				Addr: tcp,
 			}),
 			method: "/AMethod",
@@ -416,7 +419,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name: "method and a peer context with non tls auth",
-			ctx: peer.NewContext(context.Background(), &peer.Peer{
+			ctx: peer.NewContext(ctx, &peer.Peer{
 				Addr:     tcp,
 				AuthInfo: testAuthInfo{},
 			}),
@@ -435,7 +438,7 @@ func TestRpcAuthInput(t *testing.T) {
 		},
 		{
 			name: "method and a peer context with tls auth",
-			ctx: peer.NewContext(context.Background(), &peer.Peer{
+			ctx: peer.NewContext(ctx, &peer.Peer{
 				Addr: tcp,
 				AuthInfo: credentials.TLSInfo{
 					SPIFFEID: &url.URL{
@@ -478,34 +481,71 @@ func TestAuthorize(t *testing.T) {
 		FullMethod: "/Foo/Bar",
 	}
 	gotCalled := false
-	handler := func(ctx context.Context, req interface{}) (resp interface{}, err error) {
+	handler := func(context.Context, interface{}) (interface{}, error) {
 		gotCalled = true
-		return
+		return nil, nil
 	}
+	ctx := context.Background()
 
-	authorizer, err := NewWithPolicy(context.Background(), policyString)
+	authorizer, err := NewWithPolicy(ctx, policyString)
 	testutil.FatalOnErr("NewWithPolicy", err, t)
 
 	// Should fail on no proto.Message
-	_, err = authorizer.Authorize(context.Background(), nil, info, handler)
+	_, err = authorizer.Authorize(ctx, nil, info, handler)
 	testutil.FatalOnNoErr("not a proto message", err, t)
 
 	// Should function normally
-	_, err = authorizer.Authorize(context.Background(), req, info, handler)
+	_, err = authorizer.Authorize(ctx, req, info, handler)
 	testutil.FatalOnErr("Authorize", err, t)
 	if !gotCalled {
 		t.Fatal("never called handler")
 	}
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(context.Background(), policyString, RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+	authorizer, err = NewWithPolicy(ctx, policyString, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
 	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
 
 	// This time it should fail due to the hook.
-	_, err = authorizer.Authorize(context.Background(), req, info, handler)
+	_, err = authorizer.Authorize(ctx, req, info, handler)
 	testutil.FatalOnNoErr("Authorize with failing hook", err, t)
+}
+
+func TestAuthorizeClient(t *testing.T) {
+	req := &emptypb.Empty{}
+	method := "/Foo/Bar"
+
+	gotCalled := false
+	invoker := func(context.Context, string, interface{}, interface{}, *grpc.ClientConn, ...grpc.CallOption) error {
+		gotCalled = true
+		return nil
+	}
+	ctx := context.Background()
+
+	authorizer, err := NewWithPolicy(ctx, policyString)
+	testutil.FatalOnErr("NewWithPolicy", err, t)
+
+	// Should fail on no proto.Message
+	err = authorizer.AuthorizeClient(ctx, method, nil, nil, nil, invoker)
+	testutil.FatalOnNoErr("not a proto message", err, t)
+
+	// Should function normally
+	err = authorizer.AuthorizeClient(ctx, method, req, nil, nil, invoker)
+	testutil.FatalOnErr("AuthorizeClient", err, t)
+	if !gotCalled {
+		t.Fatal("never called invoker")
+	}
+
+	// Create one with a hook so we can fail.
+	authorizer, err = NewWithPolicy(ctx, policyString, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
+		return status.Error(codes.FailedPrecondition, "hook failed")
+	}))
+	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
+
+	// This time it should fail due to the hook.
+	err = authorizer.AuthorizeClient(ctx, method, req, nil, nil, invoker)
+	testutil.FatalOnNoErr("AuthorizeClient with failing hook", err, t)
 }
 
 type fakeServerStream struct {
@@ -521,26 +561,35 @@ func (f *fakeServerStream) Context() context.Context {
 	return f.Ctx
 }
 
+type fakeClientStream struct {
+	testutil.FakeClientStream
+}
+
+func (*fakeClientStream) SendMsg(req interface{}) error {
+	return nil
+}
+
 func TestAuthorizeStream(t *testing.T) {
 	req := &emptypb.Empty{}
 	info := &grpc.StreamServerInfo{
 		FullMethod: "/Foo/Bar",
 	}
+	ctx := context.Background()
 
 	handler := func(srv interface{}, stream grpc.ServerStream) error {
 		return stream.RecvMsg(srv)
 	}
 
-	fake := &fakeServerStream{Ctx: context.Background()}
+	fake := &fakeServerStream{Ctx: ctx}
 
-	authorizer, err := NewWithPolicy(context.Background(), policyString)
+	authorizer, err := NewWithPolicy(ctx, policyString)
 	testutil.FatalOnErr("NewWithPolicy", err, t)
 
 	err = authorizer.AuthorizeStream(req, fake, info, handler)
 	testutil.FatalOnErr("AuthorizeStream", err, t)
 
 	// Should fail with a normal fake server
-	err = authorizer.AuthorizeStream(req, &testutil.FakeServerStream{Ctx: context.Background()}, info, handler)
+	err = authorizer.AuthorizeStream(req, &testutil.FakeServerStream{Ctx: ctx}, info, handler)
 	testutil.FatalOnNoErr("AuthorizeStream failing RecvMsg", err, t)
 
 	// Should fail on a non proto.Message request
@@ -548,7 +597,7 @@ func TestAuthorizeStream(t *testing.T) {
 	testutil.FatalOnNoErr("AuthorizeStream non proto", err, t)
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(context.Background(), policyString, RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+	authorizer, err = NewWithPolicy(ctx, policyString, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
 	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
@@ -556,4 +605,52 @@ func TestAuthorizeStream(t *testing.T) {
 	// This time it should fail due to the hook.
 	err = authorizer.AuthorizeStream(req, fake, info, handler)
 	testutil.FatalOnNoErr("AuthorizeStream with failing hook", err, t)
+}
+
+func TestAuthorizeClientStream(t *testing.T) {
+	req := &emptypb.Empty{}
+	method := "/Foo/Bar"
+	desc := &grpc.StreamDesc{
+		StreamName: "/Bar",
+	}
+
+	ctx := context.Background()
+
+	streamer := func(context.Context, *grpc.StreamDesc, *grpc.ClientConn, string, ...grpc.CallOption) (grpc.ClientStream, error) {
+		return &fakeClientStream{}, nil
+	}
+
+	badStreamer := func(context.Context, *grpc.StreamDesc, *grpc.ClientConn, string, ...grpc.CallOption) (grpc.ClientStream, error) {
+		return nil, errors.New("error")
+	}
+
+	authorizer, err := NewWithPolicy(ctx, policyString)
+	testutil.FatalOnErr("NewWithPolicy", err, t)
+
+	// Test bad streamer returns error
+	_, err = authorizer.AuthorizeClientStream(ctx, desc, nil, method, badStreamer)
+	testutil.FatalOnNoErr("AuthorizeClientStream with bad streamer", err, t)
+
+	stream, err := authorizer.AuthorizeClientStream(ctx, desc, nil, method, streamer)
+	testutil.FatalOnErr("AuthorizeClientStream", err, t)
+
+	// Should fail on a non proto.Message request
+	err = stream.SendMsg(nil)
+	testutil.FatalOnNoErr("AuthorizeClientStream.SendMsg non proto", err, t)
+
+	// Should work with a basic msg
+	err = stream.SendMsg(req)
+	testutil.FatalOnErr("AuthorizeClientStream real request", err, t)
+
+	// Create one with a hook so we can fail.
+	authorizer, err = NewWithPolicy(ctx, policyString, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
+		return status.Error(codes.FailedPrecondition, "hook failed")
+	}))
+	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
+
+	// This time it should fail due to the hook.
+	stream, err = authorizer.AuthorizeClientStream(ctx, desc, nil, method, streamer)
+	testutil.FatalOnErr("AuthorizeClientStream with failing hook setup", err, t)
+	err = stream.SendMsg(req)
+	testutil.FatalOnNoErr("AuthorizeClientStream with failing hook", err, t)
 }

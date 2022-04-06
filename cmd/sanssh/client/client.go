@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -60,6 +61,8 @@ type RunState struct {
 	CredSource string
 	// Timeout is the duration to place on the context when making RPC calls.
 	Timeout time.Duration
+	// ClientPolicy is an optional OPA policy for determining outbound decisions.
+	ClientPolicy string
 }
 
 const (
@@ -129,8 +132,24 @@ func Run(ctx context.Context, rs RunState) {
 		os.Exit(1)
 	}
 
+	var clientAuthz *rpcauth.Authorizer
+	if rs.ClientPolicy != "" {
+		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.ClientPolicy)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not load policy: %v\n", err)
+		}
+	}
+
+	// We may need an option for doing client OPA checks.
+	ops := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+	}
+	if clientAuthz != nil {
+		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
+	}
+
 	// Set up a connection to the sansshell-server (possibly via proxy).
-	conn, err := proxy.Dial(rs.Proxy, rs.Targets, grpc.WithTransportCredentials(creds))
+	conn, err := proxy.Dial(rs.Proxy, rs.Targets, ops...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) %v: %v\n", rs.Proxy, rs.Targets, err)
 		os.Exit(1)
