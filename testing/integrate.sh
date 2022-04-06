@@ -540,6 +540,35 @@ if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
+cat > ${LOGS}/client-policy.rego <<EOF
+package sansshell.authz
+
+default allow = false
+
+allow {
+  some i
+  input.peer.cert.subject.organization[i] = "foo"
+}
+EOF
+${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
+if [ $? != 1 ]; then 
+  check_status 1 /dev/null policy check did not fail
+fi
+
+# Now use the real test cert org
+cat > ${LOGS}/client-policy.rego <<EOF
+package sansshell.authz
+
+default allow = false
+
+allow {
+  some i
+  input.peer.cert.subject.Organization[i] = "Acme Co"
+}
+EOF
+${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
+check_status $? policy check should succeed
+
 # Now set logging to v=1 and validate we saw that in the logs
 echo "Setting logging level higher"
 ${SANSSH_PROXY} ${MULTI_TARGETS} sansshell set-verbosity --verbosity=1

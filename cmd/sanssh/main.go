@@ -33,6 +33,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/google/subcommands"
 	"google.golang.org/grpc/metadata"
@@ -69,6 +70,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	targetsFile      = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
 	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
 	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
+	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -95,6 +97,9 @@ func init() {
 	subcommands.ImportantFlag("output-dir")
 	subcommands.ImportantFlag("targets-file")
 	subcommands.ImportantFlag("justification")
+	subcommands.ImportantFlag("client-policy")
+	subcommands.ImportantFlag("client-policy-file")
+	subcommands.ImportantFlag("v")
 }
 
 func main() {
@@ -134,9 +139,11 @@ func main() {
 			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
 		}
 	}
+	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
+
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanssh")
-	clientPolicy := cmdUtil.ChoosePolicy(logger, "", *clientPolicyFlag, *clientPolicyFile)
+	stdr.SetVerbosity(*verbosity)
 
 	rs := client.RunState{
 		Proxy:        *proxyAddr,
@@ -147,7 +154,8 @@ func main() {
 		Timeout:      *timeout,
 		ClientPolicy: clientPolicy,
 	}
-	ctx := context.Background()
+	ctx := logr.NewContext(context.Background(), logger)
+
 	if *justification != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, *justification)
 	}
