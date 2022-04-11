@@ -31,7 +31,10 @@ import (
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
+	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
 	"github.com/google/subcommands"
 	"google.golang.org/grpc/metadata"
 
@@ -60,11 +63,14 @@ var (
 %s in the environment can also be set instead of setting this flag. The flag will take precedence.
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
-	timeout       = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
-	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-	outputsDir    = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
-	justification = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
-	targetsFile   = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
+	timeout          = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
+	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	outputsDir       = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
+	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
+	targetsFile      = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
+	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
+	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
+	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -91,6 +97,9 @@ func init() {
 	subcommands.ImportantFlag("output-dir")
 	subcommands.ImportantFlag("targets-file")
 	subcommands.ImportantFlag("justification")
+	subcommands.ImportantFlag("client-policy")
+	subcommands.ImportantFlag("client-policy-file")
+	subcommands.ImportantFlag("v")
 }
 
 func main() {
@@ -130,16 +139,23 @@ func main() {
 			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
 		}
 	}
+	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
+
+	logOpts := log.Ldate | log.Ltime | log.Lshortfile
+	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanssh")
+	stdr.SetVerbosity(*verbosity)
 
 	rs := client.RunState{
-		Proxy:      *proxyAddr,
-		Targets:    *targetsFlag.Target,
-		Outputs:    *outputsFlag.Target,
-		OutputsDir: *outputsDir,
-		CredSource: *credSource,
-		Timeout:    *timeout,
+		Proxy:        *proxyAddr,
+		Targets:      *targetsFlag.Target,
+		Outputs:      *outputsFlag.Target,
+		OutputsDir:   *outputsDir,
+		CredSource:   *credSource,
+		Timeout:      *timeout,
+		ClientPolicy: clientPolicy,
 	}
-	ctx := context.Background()
+	ctx := logr.NewContext(context.Background(), logger)
+
 	if *justification != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, *justification)
 	}

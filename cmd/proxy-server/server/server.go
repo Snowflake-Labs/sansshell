@@ -42,6 +42,8 @@ type RunState struct {
 	Logger logr.Logger
 	// Policy is an OPA policy for determining authz decisions.
 	Policy string
+	// ClientPolicy is an optional OPA policy for determining outbound decisions.
+	ClientPolicy string
 	// CredSource is a registered credential source with the mtls package.
 	CredSource string
 	// Hostport is the host:port to run the server.
@@ -92,9 +94,23 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 		os.Exit(1)
 	}
 
+	var clientAuthz *rpcauth.Authorizer
+	if rs.ClientPolicy != "" {
+		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.ClientPolicy)
+		if err != nil {
+			rs.Logger.Error(err, "client rpcauth.NewWithPolicy")
+		}
+	}
+
+	// We always have the logger but might need to chain if we're also doing client OPA checks.
+	intOp := grpc.WithStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger))
+	if clientAuthz != nil {
+		intOp = grpc.WithChainStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger), clientAuthz.AuthorizeClientStream)
+	}
+
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
-		grpc.WithStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger)),
+		intOp,
 	}
 	targetDialer := server.NewDialer(dialOpts...)
 
