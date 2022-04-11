@@ -36,7 +36,7 @@ type RPCAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
 
-	// The request protocol buffer, serialized as JSON
+	// The request protocol buffer, serialized as JSON.
 	Message json.RawMessage `json:"message"`
 
 	// The message type as 'Package.Message'
@@ -45,11 +45,14 @@ type RPCAuthInput struct {
 	// Raw grpc metdata associated with this call.
 	Metadata metadata.MD `json:"metadata"`
 
-	// Information about the calling peer, if available
+	// Information about the calling peer, if available.
 	Peer *PeerAuthInput `json:"peer"`
 
 	// Information about the host serving the RPC.
 	Host *HostAuthInput `json:"host"`
+
+	// Implementation specific extensions.
+	Extensions json.RawMessage `json:"extensions"`
 }
 
 // PeerAuthInput contains policy-relevant information about an RPC peer.

@@ -71,7 +71,21 @@ allow {
   input.peer.principal.groups[i] = "admin_users"
 }
 
+allow {
+  some i, j
+  input.extensions[i].value = 12345
+  input.extensions[j].key = "key1"
+}
 `
+
+type KeyValExtension struct {
+	Key string `json:"key"`
+	Val string `json:"val"`
+}
+
+type IntExtension struct {
+	Value int `json:"value"`
+}
 
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
@@ -93,6 +107,17 @@ func TestAuthzHook(t *testing.T) {
 			}
 		}
 	}
+
+	extensions, err := json.Marshal([]interface{}{
+		&KeyValExtension{
+			Key: "key1",
+			Val: "val2",
+		},
+		&IntExtension{
+			Value: 12345,
+		},
+	})
+	testutil.FatalOnErr("json.Marshal extensions", err, t)
 
 	for _, tc := range []struct {
 		name    string
@@ -119,6 +144,17 @@ func TestAuthzHook(t *testing.T) {
 				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.MessageType = "Foo.BazRequest"
+					return nil
+				}),
+			},
+			errFunc: wantStatusCode(codes.OK),
+		},
+		{
+			name:  "extension hook",
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+					input.Extensions = extensions
 					return nil
 				}),
 			},
