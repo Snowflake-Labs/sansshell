@@ -34,7 +34,6 @@ func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.
 	}
 	wrapped := &WrappedTransportCredentials{
 		creds:      creds,
-		ctx:        ctx,
 		loaderName: loaderName,
 		loader:     internalLoadClientCredentials,
 	}
