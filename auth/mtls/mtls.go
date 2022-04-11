@@ -68,8 +68,8 @@ type CredentialsLoader interface {
 
 type WrappedTransportCredentials struct {
 	creds      credentials.TransportCredentials
-	ctx        context.Context
 	loaderName string
+	serverName string
 	loader     func(context.Context, string) (credentials.TransportCredentials, error)
 }
 
@@ -79,11 +79,14 @@ func (w *WrappedTransportCredentials) checkRefresh() error {
 		return err
 	}
 	if loader.CertsRefreshed() {
-		newCreds, err := w.loader(w.ctx, w.loaderName)
+		newCreds, err := w.loader(context.Background(), w.loaderName)
 		if err != nil {
 			return err
 		}
 		w.creds = newCreds
+		if w.serverName != "" {
+			return w.creds.OverrideServerName(w.serverName)
+		}
 	}
 	return nil
 }
@@ -113,7 +116,12 @@ func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 // Clone -- see credentials.Clone
 func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
 	w.checkRefresh()
-	return w.creds.Clone()
+	wrapped := &WrappedTransportCredentials{
+		creds:      w.creds.Clone(),
+		loaderName: w.loaderName,
+		loader:     w.loader,
+	}
+	return wrapped
 }
 
 // OverrideServerName -- see credentials.OverrideServerName
@@ -121,6 +129,7 @@ func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
 	if err := w.checkRefresh(); err != nil {
 		return err
 	}
+	w.serverName = s
 	return w.creds.OverrideServerName(s)
 }
 
