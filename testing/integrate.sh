@@ -665,6 +665,21 @@ run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 
 check_perms_mode ${LOGS}/test-file
 
+# Now do it with username/group args
+NOBODY_UID=$(id nobody | awk '{print $1}' | sed -e 's:uid=\([0-9][0-9]*\).*:\1:')
+NOBODY_GID=$(id nobody | awk '{print $2}' | sed -e 's:gid=\([0-9][0-9]*\).*:\1:')
+
+EXPECTED_NEW_UID=${NOBODY_UID}
+EXPECTED_NEW_GID=${NOBODY_GID}
+
+# Need to make this non-immutable again or we can't change the owner.
+run_a_test false 0 file immutable --state=false ${LOGS}/test-file
+
+run_a_test false 0 file chown --username=nobody ${LOGS}/test-file
+run_a_test false 0 file chgrp --group=nobody ${LOGS}/test-file
+run_a_test false 0 file immutable --state=true ${LOGS}/test-file
+check_perms_mode ${LOGS}/test-file
+
 # Now validate we can clear immutable too
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} file immutable --state=false ${LOGS}/test-file
 check_status $? /dev/null "setting immutable to false"
@@ -676,8 +691,17 @@ fi
 
 echo "uid, etc checks passed"
 
+EXPECTED_NEW_UID=$(($ORIG_UID + 1))
+EXPECTED_NEW_GID=$(($ORIG_GID + 1))
 run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
+
+# Now do it with username/group
+EXPECTED_NEW_UID=${NOBODY_UID}
+EXPECTED_NEW_GID=${NOBODY_GID}
+run_a_test false 0 file cp --overwrite --username=nobody --group=nobody --mode=${EXPECTED_NEW_MODE} ${LOGS}/hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
+
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
   echo cp test with bucket syntax
