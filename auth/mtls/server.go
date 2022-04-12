@@ -31,6 +31,10 @@ import (
 // as the TransportCredentials returned are a WrappedTransportCredentials which
 // will check at call time if new certificates are available.
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	mtlsLoader, err := Loader(loaderName)
+	if err != nil {
+		return nil, err
+	}
 	creds, err := internalLoadServerCredentials(ctx, loaderName)
 	if err != nil {
 		return nil, err
@@ -39,6 +43,7 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 		creds:      creds,
 		loaderName: loaderName,
 		loader:     internalLoadServerCredentials,
+		mtlsLoader: mtlsLoader,
 	}
 	return wrapped, nil
 }

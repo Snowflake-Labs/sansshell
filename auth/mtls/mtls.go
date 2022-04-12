@@ -70,15 +70,12 @@ type WrappedTransportCredentials struct {
 	creds      credentials.TransportCredentials
 	loaderName string
 	serverName string
+	mtlsLoader CredentialsLoader
 	loader     func(context.Context, string) (credentials.TransportCredentials, error)
 }
 
 func (w *WrappedTransportCredentials) checkRefresh() error {
-	loader, err := Loader(w.loaderName)
-	if err != nil {
-		return err
-	}
-	if loader.CertsRefreshed() {
+	if w.mtlsLoader.CertsRefreshed() {
 		newCreds, err := w.loader(context.Background(), w.loaderName)
 		if err != nil {
 			return err
@@ -120,6 +117,7 @@ func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
 		creds:      w.creds.Clone(),
 		loaderName: w.loaderName,
 		loader:     w.loader,
+		mtlsLoader: w.mtlsLoader,
 	}
 	return wrapped
 }

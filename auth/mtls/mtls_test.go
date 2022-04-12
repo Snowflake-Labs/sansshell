@@ -225,10 +225,16 @@ func TestLoadClientServerCredentials(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := LoadServerCredentials(context.Background(), tc.loader)
+			server, err := LoadServerCredentials(context.Background(), tc.loader)
 			testutil.WantErr("server", err, tc.wantErr, t)
-			_, err = LoadClientCredentials(context.Background(), tc.loader)
+			if !tc.wantErr {
+				server.OverrideServerName("server")
+			}
+			client, err := LoadClientCredentials(context.Background(), tc.loader)
 			testutil.WantErr("client", err, tc.wantErr, t)
+			if !tc.wantErr {
+				client.OverrideServerName("server")
+			}
 		})
 	}
 }
@@ -239,6 +245,7 @@ func TestHealthCheck(t *testing.T) {
 	unregisterAll()
 	Register("refresh", &simpleLoader{name: "refresh"})
 	creds, err := LoadClientCredentials(ctx, "refresh")
+	creds.OverrideServerName("bufnet")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	for _, tc := range []struct {
 		name   string
