@@ -243,6 +243,10 @@ if [ -n "${GITHUB_ACTION:-}" ]; then
   sudo sysctl kernel.yama.ptrace_scope
   sudo cp testing/gdb-pstack /usr/bin/pstack
   sudo chmod +x /usr/bin/pstack
+
+  # Tests expect a nobody user to exist
+  useradd nobody
+  groupadd nobody
 fi
 
 OS=$(uname -s)
