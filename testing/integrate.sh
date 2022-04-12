@@ -244,8 +244,7 @@ if [ -n "${GITHUB_ACTION:-}" ]; then
   sudo cp testing/gdb-pstack /usr/bin/pstack
   sudo chmod +x /usr/bin/pstack
 
-  # Tests expect a nobody user/group to exist
-  sudo useradd nobody
+  # Tests expect a nobody group to exist
   sudo groupadd nobody
 fi
 
