@@ -31,9 +31,12 @@ func TestRunCommand(t *testing.T) {
 		args              []string
 		wantErr           bool
 		returnCodeNonZero bool
+		uid               uint32
+		gid               uint32
 		stdout            string
 		stderr            string
 		stderrIsError     bool
+		env               []string
 	}{
 		{
 			name:    "Not absolute path",
@@ -72,8 +75,26 @@ func TestRunCommand(t *testing.T) {
 			stdout: "",
 		},
 		{
+			name:   "verify env vars",
+			bin:    testutil.ResolvePath(t, "env"),
+			stdout: "FOO=bar\nBAZ=e\n",
+			env:    []string{"FOO=bar", "BAZ=e"},
+		},
+		{
 			name:              "error codes",
 			bin:               testutil.ResolvePath(t, "false"),
+			returnCodeNonZero: true,
+		},
+		{
+			name:              "set uid (will fail)",
+			bin:               testutil.ResolvePath(t, "env"),
+			uid:               99,
+			returnCodeNonZero: true,
+		},
+		{
+			name:              "set gid (will fail)",
+			bin:               testutil.ResolvePath(t, "env"),
+			gid:               99,
 			returnCodeNonZero: true,
 		},
 	} {
@@ -86,7 +107,15 @@ func TestRunCommand(t *testing.T) {
 			if tc.stderrIsError {
 				opts = append(opts, FailOnStderr())
 			}
-
+			for _, e := range tc.env {
+				opts = append(opts, EnvVar(e))
+			}
+			if tc.uid != 0 {
+				opts = append(opts, CommandUser(tc.uid))
+			}
+			if tc.gid != 0 {
+				opts = append(opts, CommandGroup(tc.gid))
+			}
 			run, err := RunCommand(context.Background(), tc.bin, tc.args, opts...)
 			t.Logf("%s: response: %+v", tc.name, run)
 			t.Logf("%s: error: %v", tc.name, err)

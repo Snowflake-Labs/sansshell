@@ -22,10 +22,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/go-logr/logr"
@@ -53,12 +55,14 @@ type CommandRun struct {
 	ExitCode int
 }
 
-// There's only one now but compose into a builder pattern for Options so
-// it's easy to add more (such as dropping permissions, etc).
+// A builder pattern for Options so it's easy to add various ones (such as dropping permissions, etc).
 type cmdOptions struct {
 	failOnStderr bool
 	stdoutMax    uint
 	stderrMax    uint
+	env          []string
+	uid          uint32
+	gid          uint32
 }
 
 // Option will run the apply operation to change required checking/state
@@ -98,6 +102,28 @@ func StdoutMax(max uint) Option {
 func StderrMax(max uint) Option {
 	return optionfunc(func(o *cmdOptions) {
 		o.stderrMax = max
+	})
+}
+
+// CommandUser is an option which sets the uid for the Command to run as.
+func CommandUser(uid uint32) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.uid = uid
+	})
+}
+
+// CommandGroup is an option which sets the gid for the Command to run as.
+func CommandGroup(gid uint32) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.gid = gid
+	})
+}
+
+// EnvVar is an option which sets an environment variable for the sub-processes.
+// evar should be of the form foo=bar
+func EnvVar(evar string) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.env = append(o.env, evar)
 	})
 }
 
@@ -182,9 +208,13 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a clean path", bin)
 	}
 
+	euid := uint32(os.Geteuid())
+	gid := uint32(os.Getgid())
 	options := &cmdOptions{
 		stdoutMax: DefRunBufLimit,
 		stderrMax: DefRunBufLimit,
+		uid:       euid,
+		gid:       gid,
 	}
 	for _, opt := range opts {
 		opt.apply(options)
@@ -202,7 +232,19 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	cmd.Stdin = nil
 	// Set to an empty slice to get an empty environment. Nil means inherit.
 	cmd.Env = []string{}
+	// Now append any we received.
+	cmd.Env = append(cmd.Env, options.env...)
 
+	// Set uid/gid if needed for the sub-process to run under.
+	// Only do this if it's different than our current ones since
+	// attempting to setuid/gid() to even your current values is EPERM.
+	if options.uid != euid || options.gid != gid {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Credential: &syscall.Credential{},
+		}
+		cmd.SysProcAttr.Credential.Uid = options.uid
+		cmd.SysProcAttr.Credential.Gid = options.gid
+	}
 	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
