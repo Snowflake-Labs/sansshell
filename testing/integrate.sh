@@ -246,6 +246,8 @@ if [ -n "${GITHUB_ACTION:-}" ]; then
 
   # Tests expect a nobody group to exist
   sudo groupadd nobody
+  sudo usermod -g nobody nobody
+  cat /etc/passwd
 fi
 
 OS=$(uname -s)
