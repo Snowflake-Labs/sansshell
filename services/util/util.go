@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -60,8 +61,8 @@ type cmdOptions struct {
 	stdoutMax    uint
 	stderrMax    uint
 	env          []string
-	uid          *uint32 // Pointers so we can distinguish if it's been set.
-	gid          *uint32
+	uid          uint32
+	gid          uint32
 }
 
 // Option will run the apply operation to change required checking/state
@@ -107,14 +108,14 @@ func StderrMax(max uint) Option {
 // CommandUser is an option which sets the uid for the Command to run as.
 func CommandUser(uid uint32) Option {
 	return optionfunc(func(o *cmdOptions) {
-		o.uid = &uid
+		o.uid = uid
 	})
 }
 
 // CommandGroup is an option which sets the gid for the Command to run as.
 func CommandGroup(gid uint32) Option {
 	return optionfunc(func(o *cmdOptions) {
-		o.gid = &gid
+		o.gid = gid
 	})
 }
 
@@ -207,9 +208,13 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a clean path", bin)
 	}
 
+	euid := uint32(os.Geteuid())
+	gid := uint32(os.Getgid())
 	options := &cmdOptions{
 		stdoutMax: DefRunBufLimit,
 		stderrMax: DefRunBufLimit,
+		uid:       euid,
+		gid:       gid,
 	}
 	for _, opt := range opts {
 		opt.apply(options)
@@ -231,18 +236,15 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	cmd.Env = append(cmd.Env, options.env...)
 
 	// Set uid/gid if needed for the sub-process to run under.
-	if options.uid != nil || options.gid != nil {
+	// Only do this if it's different than our current ones since
+	// attempting to setuid/gid() to even your current values is EPERM.
+	if options.uid != euid || options.gid != gid {
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			Credential: &syscall.Credential{},
 		}
-		if options.uid != nil {
-			cmd.SysProcAttr.Credential.Uid = *options.uid
-		}
-		if options.gid != nil {
-			cmd.SysProcAttr.Credential.Gid = *options.gid
-		}
+		cmd.SysProcAttr.Credential.Uid = options.uid
+		cmd.SysProcAttr.Credential.Gid = options.gid
 	}
-
 	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
