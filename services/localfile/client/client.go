@@ -419,19 +419,21 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 }
 
 type chownCmd struct {
-	uid int
+	uid      int
+	username string
 }
 
 func (*chownCmd) Name() string     { return "chown" }
 func (*chownCmd) Synopsis() string { return "Change ownership on file/directory" }
 func (*chownCmd) Usage() string {
-	return `chown --uid=X <path>:
+	return `chown --uid=X|username=Y <path>:
   Change ownership on a file/directory.
   `
 }
 
 func (c *chownCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&c.uid, "uid", -1, "Sets the file/directory to be owned by this uid")
+	f.StringVar(&c.username, "username", "", "Sets the file/directory to be owned by this username")
 }
 
 func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -440,22 +442,32 @@ func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "please specify a filename to chown")
 		return subcommands.ExitUsageError
 	}
-	if c.uid < 0 {
-		fmt.Fprintln(os.Stderr, "--uid must be set to a positive number")
+	if c.uid < 0 && c.username == "" {
+		fmt.Fprintln(os.Stderr, "one of --uid or --username must be set (uid must be a positive number if used)")
 		return subcommands.ExitFailure
 	}
-
+	if c.uid >= 0 && c.username != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --uid and --username")
+		return subcommands.ExitFailure
+	}
 	req := &pb.SetFileAttributesRequest{
 		Attrs: &pb.FileAttributes{
 			Filename: f.Args()[0],
-			Attributes: []*pb.FileAttribute{
-				{
-					Value: &pb.FileAttribute_Uid{
-						Uid: uint32(c.uid),
-					},
-				},
-			},
 		},
+	}
+	if c.uid >= 0 {
+		req.Attrs.Attributes = append(req.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(c.uid),
+			},
+		})
+	}
+	if c.username != "" {
+		req.Attrs.Attributes = append(req.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: c.username,
+			},
+		})
 	}
 
 	client := pb.NewLocalFileClientProxy(state.Conn)
@@ -479,20 +491,21 @@ func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 }
 
 type chgrpCmd struct {
-	gid int
+	gid   int
+	group string
 }
 
 func (*chgrpCmd) Name() string     { return "chgrp" }
 func (*chgrpCmd) Synopsis() string { return "Change group membership on a file/directory" }
 func (*chgrpCmd) Usage() string {
-	return `chgrp --gid=X <path>:
+	return `chgrp --gid=X|group==Y <path>:
   Change group membership on a file/directory.
   `
 }
 
 func (c *chgrpCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&c.gid, "gid", -1, "Sets the file/directory group membership specified by this gid")
-
+	f.StringVar(&c.group, "group", "", "Sets the file/directory group membership specified by this name")
 }
 
 func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -501,22 +514,33 @@ func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "please specify a filename to chgrp")
 		return subcommands.ExitUsageError
 	}
-	if c.gid < 0 {
-		fmt.Fprintln(os.Stderr, "--gid must be set to a positive number")
+	if c.gid < 0 && c.group == "" {
+		fmt.Fprintln(os.Stderr, "one of --gid or --group must be set (gid must be a positive number if used)")
+		return subcommands.ExitFailure
+	}
+	if c.gid >= 0 && c.group != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --gid and --group")
 		return subcommands.ExitFailure
 	}
 
 	req := &pb.SetFileAttributesRequest{
 		Attrs: &pb.FileAttributes{
 			Filename: f.Args()[0],
-			Attributes: []*pb.FileAttribute{
-				{
-					Value: &pb.FileAttribute_Gid{
-						Gid: uint32(c.gid),
-					},
-				},
-			},
 		},
+	}
+	if c.gid >= 0 {
+		req.Attrs.Attributes = append(req.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(c.gid),
+			},
+		})
+	}
+	if c.group != "" {
+		req.Attrs.Attributes = append(req.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: c.group,
+			},
+		})
 	}
 
 	client := pb.NewLocalFileClientProxy(state.Conn)
@@ -766,7 +790,9 @@ type cpCmd struct {
 	bucket    string
 	overwrite bool
 	uid       int
+	username  string
 	gid       int
+	group     string
 	mode      int
 	immutable bool
 }
@@ -774,7 +800,7 @@ type cpCmd struct {
 func (*cpCmd) Name() string     { return "cp" }
 func (*cpCmd) Synopsis() string { return "Copy a file onto a remote machine." }
 func (*cpCmd) Usage() string {
-	return `cp [--bucket=XXX] [--overwrite] --uid=X --gid=X --mode=X [--immutable] <source> <remote destination>
+	return `cp [--bucket=XXX] [--overwrite] --uid=X|username=Y --gid=X|group=Y --mode=X [--immutable] <source> <remote destination>
   Copy the source file (which can be local or a URL such as s3://bucket/source) to the target(s)
   placing it into the remote destination.
 `
@@ -787,6 +813,8 @@ func (p *cpCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
 	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
 	f.BoolVar(&p.immutable, "immutable", false, "If true sets the remote file to immutable after being written.")
+	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
+	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
 }
 
 var validOutputPrefixes = []string{
@@ -801,9 +829,17 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		fmt.Fprintln(os.Stderr, "Please specify a source to copy and destination filename to write the contents into.")
 		return subcommands.ExitUsageError
 	}
-	if p.uid == -1 || p.gid == -1 || p.mode == -1 {
-		fmt.Fprintln(os.Stderr, "Must set --uid, --gid and --mode")
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
 		return subcommands.ExitUsageError
+	}
+	if p.uid >= 0 && p.username != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --uid and --username")
+		return subcommands.ExitFailure
+	}
+	if p.gid >= 0 && p.group != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --gid and --group")
+		return subcommands.ExitFailure
 	}
 
 	c := pb.NewLocalFileClientProxy(state.Conn)
@@ -832,16 +868,6 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			Filename: dest,
 			Attributes: []*pb.FileAttribute{
 				{
-					Value: &pb.FileAttribute_Uid{
-						Uid: uint32(p.uid),
-					},
-				},
-				{
-					Value: &pb.FileAttribute_Gid{
-						Gid: uint32(p.gid),
-					},
-				},
-				{
 					Value: &pb.FileAttribute_Mode{
 						Mode: uint32(p.mode),
 					},
@@ -855,7 +881,34 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		},
 		Overwrite: p.overwrite,
 	}
-
+	if p.uid >= 0 {
+		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(p.uid),
+			},
+		})
+	}
+	if p.username != "" {
+		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: p.username,
+			},
+		})
+	}
+	if p.gid >= 0 {
+		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(p.gid),
+			},
+		})
+	}
+	if p.group != "" {
+		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: p.group,
+			},
+		})
+	}
 	// Copy case (simpler)
 	if p.bucket != "" {
 		req := &pb.CopyRequest{

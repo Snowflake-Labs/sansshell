@@ -152,7 +152,9 @@ message SumReply {
 message FileAttribute {
   oneof value {
     uint32 uid = 1;
+    string username = 5; // Use in place of uid and server will lookup.
     uint32 gid = 2;
+    string group = 6; // Use in place of gid and server will lookup.
     // Only the lower 12 bits are used per unix conventions.
     uint32 mode = 3;
     bool immutable = 4;
