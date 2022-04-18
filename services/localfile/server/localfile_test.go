@@ -26,7 +26,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -562,6 +564,15 @@ func TestSetFileAttributes(t *testing.T) {
 		unix.Chmod(badDir, uint32(fs.ModePerm))
 	})
 
+	nobody, err := user.Lookup("nobody")
+	testutil.FatalOnErr("nobody uid", err, t)
+	nobodyUid, err := strconv.Atoi(nobody.Uid)
+	testutil.FatalOnErr("nobody uid conv", err, t)
+	nobodyGroup, err := user.LookupGroup("nobody")
+	testutil.FatalOnErr("nobody gid", err, t)
+	nobodyGid, err := strconv.Atoi(nobodyGroup.Gid)
+	testutil.FatalOnErr("nobody uid conv", err, t)
+
 	for _, tc := range []struct {
 		name              string
 		input             *pb.SetFileAttributesRequest
@@ -759,6 +770,30 @@ func TestSetFileAttributes(t *testing.T) {
 			expectedMode:      f1Stat.Mode + 1,
 			setImmutable:      true,
 			expectedImmutable: true,
+		},
+		{
+			name: "Expected uid, gid from username, group",
+			input: &pb.SetFileAttributesRequest{
+				Attrs: &pb.FileAttributes{
+					Filename: f1.Name(),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Username{
+								Username: "nobody",
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Group{
+								Group: "nobody",
+							},
+						},
+					},
+				},
+			},
+			setUID:      true,
+			expectedUID: nobodyUid,
+			setGID:      true,
+			expectedGID: nobodyGid,
 		},
 		{
 			name: "Chmod fails (path not accessible)",

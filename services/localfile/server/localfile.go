@@ -30,7 +30,9 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"gocloud.dev/blob"
@@ -496,14 +498,40 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 		switch a := attr.Value.(type) {
 		case *pb.FileAttribute_Uid:
 			if uid != -1 {
-				return nil, status.Error(codes.InvalidArgument, "cannot set uid more than once")
+				return nil, status.Error(codes.InvalidArgument, "cannot set uid/username more than once")
 			}
 			uid = int(a.Uid)
+		case *pb.FileAttribute_Username:
+			if uid != -1 {
+				return nil, status.Error(codes.InvalidArgument, "cannot set uid/username more than once")
+			}
+			u, err := user.Lookup(a.Username)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "unknown username %s: %v", a.Username, err)
+			}
+			id, err := strconv.Atoi(u.Uid)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "can't parse uid %s from lookup: %v", u.Uid, err)
+			}
+			uid = id
 		case *pb.FileAttribute_Gid:
 			if gid != -1 {
-				return nil, status.Error(codes.InvalidArgument, "cannot set gid more than once")
+				return nil, status.Error(codes.InvalidArgument, "cannot set gid/group more than once")
 			}
 			gid = int(a.Gid)
+		case *pb.FileAttribute_Group:
+			if gid != -1 {
+				return nil, status.Error(codes.InvalidArgument, "cannot set gid/group more than once")
+			}
+			g, err := user.LookupGroup(a.Group)
+			if err != nil {
+				return nil, status.Errorf(codes.InvalidArgument, "unknown group %s: %v", a.Group, err)
+			}
+			id, err := strconv.Atoi(g.Gid)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "can't parse gid %s from lookup: %v", g.Gid, err)
+			}
+			gid = id
 		case *pb.FileAttribute_Mode:
 			if setMode {
 				return nil, status.Error(codes.InvalidArgument, "cannot set mode more than once")
