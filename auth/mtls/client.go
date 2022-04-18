@@ -28,6 +28,24 @@ import (
 // LoadClientCredentials returns transport credentials for SansShell clients,
 // based on the provided `loaderName`
 func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	mtlsLoader, err := Loader(loaderName)
+	if err != nil {
+		return nil, err
+	}
+	creds, err := internalLoadClientCredentials(ctx, loaderName)
+	if err != nil {
+		return nil, err
+	}
+	wrapped := &WrappedTransportCredentials{
+		creds:      creds,
+		loaderName: loaderName,
+		loader:     internalLoadClientCredentials,
+		mtlsLoader: mtlsLoader,
+	}
+	return wrapped, nil
+}
+
+func internalLoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	loader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
