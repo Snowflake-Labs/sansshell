@@ -58,11 +58,11 @@ function shutdown {
   if [ -z "${ON_GITHUB}" ]; then
     aws s3 rm s3://${USER}-dev/hosts
   fi
-  sudo killall sansshell-server >& /dev/null
+  sudo killall sansshell-server >&/dev/null
 }
 
 # check_logs takes 3 args:
-# 
+#
 # Minimum number of lines log must contain
 # The log suffix
 # Text to display on error (all remaining args).
@@ -93,14 +93,14 @@ function check_logs {
 }
 
 function copy_logs {
-    SUFFIX=$1
-    shift
-    PURPOSE=$1
+  SUFFIX=$1
+  shift
+  PURPOSE=$1
 
-    mv ${LOGS}/1.${SUFFIX} ${LOGS}/1.${SUFFIX}-${PURPOSE}
-    if [ -f "${LOGS}/2.${SUFFIX}" ]; then
-      mv ${LOGS}/2.${SUFFIX} ${LOGS}/2.${SUFFIX}-${PURPOSE}
-    fi
+  mv ${LOGS}/1.${SUFFIX} ${LOGS}/1.${SUFFIX}-${PURPOSE}
+  if [ -f "${LOGS}/2.${SUFFIX}" ]; then
+    mv ${LOGS}/2.${SUFFIX} ${LOGS}/2.${SUFFIX}-${PURPOSE}
+  fi
 }
 
 function print_logs {
@@ -114,73 +114,73 @@ function print_logs {
 
 # run_a_test takes 4 args:
 #
-# A boolean (i.e. true or false string) indicating one run for 2 hosts can error. 
+# A boolean (i.e. true or false string) indicating one run for 2 hosts can error.
 # This can happen for ptrace related commands since 2 cannot act on the same process at once.
 # Minimum number of lines log must contain
-# The top level command to pass to the sanssh CLI. 
+# The top level command to pass to the sanssh CLI.
 # The subcommand to pass to the sanssh CLI.  NOTE: This is also used as the logfile suffix along with command.
 # Args to pass to sanssh after the command (all remaining args)
 function run_a_test {
-    ONE_WILL_ERROR=$1
-    shift
-    LINE_MIN=$1
-    shift
-    CMD=$1
-    shift
-    SUBCMD=$1
-    shift
-    ARGS=$*
+  ONE_WILL_ERROR=$1
+  shift
+  LINE_MIN=$1
+  shift
+  CMD=$1
+  shift
+  SUBCMD=$1
+  shift
+  ARGS=$*
 
-    echo "${CMD} ${SUBCMD} checks"
+  echo "${CMD} ${SUBCMD} checks"
 
-    CHECK="${CMD} ${SUBCMD} proxy to 2 hosts"    
-    echo ${CHECK}
-    ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD}-${SUBCMD},${LOGS}/2.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
-    STATUS=$? 
-    if [ "${ONE_WILL_ERROR}" = "false" ]; then
-      if [ "${STATUS}" != 0 ]; then
-        print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
-        print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
-        check_status ${STATUS} /dev/null ${CHECK}
-      fi
-    else
-      # If one of these is expected to error then one log is larger than the other.
-      # Take the larger file and copy it so log checking will pass.
-      SIZE1=$(du -b ${LOGS}/1.${CMD}-${SUBCMD} | cut -f1)
-      SIZE2=$(du -b ${LOGS}/2.${CMD}-${SUBCMD} | cut -f1)
-      if (( ${SIZE1} == ${SIZE2} )); then
-        echo "FAIL - logs identical $*"
-        print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
-        print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
-        check_status 1 /dev/null logs identical
-      fi
-      if (( ${SIZE1} > ${SIZE2} )); then
-        cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
-      else
-        cp ${LOGS}/2.${CMD}-${SUBCMD} ${LOGS}/1.${CMD}-${SUBCMD}
-      fi
+  CHECK="${CMD} ${SUBCMD} proxy to 2 hosts"
+  echo ${CHECK}
+  ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.${CMD}-${SUBCMD},${LOGS}/2.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
+  STATUS=$?
+  if [ "${ONE_WILL_ERROR}" = "false" ]; then
+    if [ "${STATUS}" != 0 ]; then
+      print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
+      print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
+      check_status ${STATUS} /dev/null ${CHECK}
     fi
-    copy_logs ${CMD}-${SUBCMD} proxy-2-hosts
-        
-    CHECK="${CMD} ${SUBCMD} proxy to 1 host"
-    echo ${CHECK}
-    ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS} 
-    check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
-    # This way they pass the identical test
-    cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
-    check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
-    copy_logs ${CMD}-${SUBCMD} proxy-1-host
+  else
+    # If one of these is expected to error then one log is larger than the other.
+    # Take the larger file and copy it so log checking will pass.
+    SIZE1=$(du -b ${LOGS}/1.${CMD}-${SUBCMD} | cut -f1)
+    SIZE2=$(du -b ${LOGS}/2.${CMD}-${SUBCMD} | cut -f1)
+    if ((${SIZE1} == ${SIZE2})); then
+      echo "FAIL - logs identical $*"
+      print_logs ${LOGS}/1.${CMD}-${SUBCMD} log 1
+      print_logs ${LOGS}/2.${CMD}-${SUBCMD} log 2
+      check_status 1 /dev/null logs identical
+    fi
+    if ((${SIZE1} > ${SIZE2})); then
+      cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
+    else
+      cp ${LOGS}/2.${CMD}-${SUBCMD} ${LOGS}/1.${CMD}-${SUBCMD}
+    fi
+  fi
+  copy_logs ${CMD}-${SUBCMD} proxy-2-hosts
 
-    CHECK="${CMD} ${SUBCMD} with no proxy"
-    echo ${CHECK}
-    ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
-    check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
-    # This way they pass the identical test
-    cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
-    check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
-    copy_logs ${CMD}-${SUBCMD} no-proxy
+  CHECK="${CMD} ${SUBCMD} proxy to 1 host"
+  echo ${CHECK}
+  ${SANSSH_PROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
+  check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
+  # This way they pass the identical test
+  cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
+  check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
+  copy_logs ${CMD}-${SUBCMD} proxy-1-host
 
-    echo "${CMD} ${SUBCMD} passed"
+  CHECK="${CMD} ${SUBCMD} with no proxy"
+  echo ${CHECK}
+  ${SANSSH_NOPROXY} ${SINGLE_TARGET} --outputs=${LOGS}/1.${CMD}-${SUBCMD} ${CMD} ${SUBCMD} ${ARGS}
+  check_status $? ${LOGS}/1.${CMD}-${SUBCMD} ${CHECK}
+  # This way they pass the identical test
+  cp ${LOGS}/1.${CMD}-${SUBCMD} ${LOGS}/2.${CMD}-${SUBCMD}
+  check_logs ${LINE_MIN} ${CMD}-${SUBCMD} ${CHECK}
+  copy_logs ${CMD}-${SUBCMD} no-proxy
+
+  echo "${CMD} ${SUBCMD} passed"
 }
 
 # Takes 1 arg:
@@ -190,7 +190,7 @@ function tail_execute {
   CLIENT_PID=$1
   shift
   sleep 2
-  cat /etc/hosts >> ${LOGS}/hosts
+  cat /etc/hosts >>${LOGS}/hosts
   sleep 2
   disown %%
   kill -KILL ${CLIENT_PID}
@@ -200,7 +200,7 @@ function tail_execute {
 #
 # Suffix for copied log files
 function tail_check {
-  diff ${LOGS}/1.tail ${LOGS}/hosts > ${LOGS}/tail.diff
+  diff ${LOGS}/1.tail ${LOGS}/hosts >${LOGS}/tail.diff
   check_status $? ${LOGS}/tail.diff "tail: output differs from source"
   copy_logs tail $*
 }
@@ -256,8 +256,8 @@ if [ "${OS}" != "Linux" ]; then
   exit 1
 fi
 
-trap shutdown EXIT INT TERM HUP 
-  
+trap shutdown EXIT INT TERM HUP
+
 LOGS=/tmp/test-logs-$$
 mkdir -p ${LOGS}
 
@@ -265,11 +265,11 @@ mkdir -p ${LOGS}
 cd $(dirname $PWD/$BASH_SOURCE)/..
 
 # Open up policy for testing
-echo "package sansshell.authz" > ${LOGS}/policy
-echo "default allow = true" >> ${LOGS}/policy
+echo "package sansshell.authz" >${LOGS}/policy
+echo "default allow = true" >>${LOGS}/policy
 
 # Check licensing
-cat > ${LOGS}/required-license << EOF
+cat >${LOGS}/required-license <<EOF
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the
@@ -287,7 +287,7 @@ cat > ${LOGS}/required-license << EOF
 */
 
 EOF
-cat > ${LOGS}/required-license.sh << EOF
+cat >${LOGS}/required-license.sh <<EOF
 # Copyright (c) 2019 Snowflake Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the
@@ -306,29 +306,29 @@ cat > ${LOGS}/required-license.sh << EOF
 EOF
 
 # For Go we can ignore generate protobuf files.
-find . -type f -name \*.go ! -name \*.pb.go > ${LOGS}/license-go
-find . -type f -name \*.sh > ${LOGS}/license-sh
-find . -type f -name \*.proto > ${LOGS}/license-proto
+find . -type f -name \*.go ! -name \*.pb.go >${LOGS}/license-go
+find . -type f -name \*.sh >${LOGS}/license-sh
+find . -type f -name \*.proto >${LOGS}/license-proto
 
 broke=""
 for i in $(cat ${LOGS}/license-go ${LOGS}/license-proto); do
   LIC="${LOGS}/required-license"
   SUF=${i##*.}
   if [ "${SUF}" == "go" -o "${SUF}" == "proto" ]; then
-    head -16 $i > ${LOGS}/diff
+    head -16 $i >${LOGS}/diff
 
     # If this has a go directive it has to be the first line
     # so skip forward to where the block should be right after that.
     one=$(head -1 ${LOGS}/diff | cut -c1-5)
     if [ "${one}" == "//go:" ]; then
-      printf "4,19p\n" | ed -s $i > ${LOGS}/diff 2> /dev/null
+      printf "4,19p\n" | ed -s $i >${LOGS}/diff 2>/dev/null
     fi
   fi
   if [ "${SUF}" == "sh" ]; then
-    printf "3,17p\n" | ed -s $i > ${LOGS}/diff 2> /dev/null
+    printf "3,17p\n" | ed -s $i >${LOGS}/diff 2>/dev/null
     LIC="${LOGS}/required-license.sh"
   fi
-  diff ${LIC} ${LOGS}/diff > /dev/null
+  diff ${LIC} ${LOGS}/diff >/dev/null
   if [ $? != 0 ]; then
     echo $i is missing required license.
     broke=true
@@ -342,7 +342,7 @@ fi
 echo
 echo "Checking formatting"
 echo
-find . -type f -name \*.go | xargs gofmt -l > ${LOGS}/gofmt
+find . -type f -name \*.go | xargs gofmt -l >${LOGS}/gofmt
 check_status $? /dev/null gofmt
 if [ -s ${LOGS}/gofmt ]; then
   cat ${LOGS}/gofmt
@@ -369,17 +369,17 @@ check_status $? /dev/null build binaries
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=10 -race -timeout 5m  -v ./... >& ${LOGS}/test.log
+go test -count=10 -race -timeout 5m -v ./... >&${LOGS}/test.log
 check_status $? ${LOGS}/test.log test
 
 echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
-go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >& ${LOGS}/cover.log
+go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >&${LOGS}/cover.log
 check_status $? ${LOGS}/cover.log coverage
 
 # Print out coverage stats
-egrep "^ok.*coverage:.*of.statements|no test files" ${LOGS}/cover.log > ${LOGS}/cover-filtered.log
+egrep "^ok.*coverage:.*of.statements|no test files" ${LOGS}/cover.log >${LOGS}/cover-filtered.log
 echo
 echo
 echo
@@ -420,8 +420,8 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/service \
   github.com/Snowflake-Labs/sansshell/services/service/client \
   github.com/Snowflake-Labs/sansshell/testing/testutil; do
-  
-  egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log > ${LOGS}/cover-filtered2.log
+
+  egrep -E -v "$i[[:space:]]+.no test file" ${LOGS}/cover-filtered.log >${LOGS}/cover-filtered2.log
   cp ${LOGS}/cover-filtered2.log ${LOGS}/cover-filtered.log
 done
 echo
@@ -465,28 +465,28 @@ if [ -z "${ON_GITHUB}" ]; then
   # Remove zziplib so we can reinstall it
   echo "Removing zziplib package so install can put it back"
   sudo yum remove -y zziplib
-else 
+else
   echo "Skipping package setup on Github"
 fi
 
-echo 
+echo
 echo "Testing policy validation for proxy"
 ./bin/proxy-server --policy-file=${LOGS}/policy --validate
 check_status $? /dev/null policy check failed for proxy
-echo 
+echo
 echo "Testing policy validation for server"
 ./bin/sansshell-server --policy-file=${LOGS}/policy --validate
 check_status $? /dev/null policy check failed for server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >&${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >&${LOGS}/server.log
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
@@ -495,7 +495,7 @@ if [ -z "${ON_GITHUB}" ]; then
 
   # Check if the bucket exists and is in the right region. If it doesn't exist we'll
   # make it but otherwise abort.
-  aws s3api get-bucket-location --bucket=${USER}-dev > ${LOGS}/s3.data 2> /dev/null
+  aws s3api get-bucket-location --bucket=${USER}-dev >${LOGS}/s3.data 2>/dev/null
   RC=$?
   if [ "$RC" = 0 ]; then
     if [ "$(egrep LocationConstraint ${LOGS}/s3.data | awk '{print $2}')" != '"us-west-2"' ]; then
@@ -505,7 +505,7 @@ if [ -z "${ON_GITHUB}" ]; then
     aws s3 mb s3://${USER}-dev --region us-west-2
     check_status $? /dev/null Making s3 bucket
   fi
-else 
+else
   echo "Skipping remote cloud setup on Github"
 fi
 
@@ -541,11 +541,11 @@ echo "Servers healthy"
 # and are passing along from proxy->clients
 echo "Expect a failure here about a lack of justification"
 ${SANSSH_NOPROXY_NO_JUSTIFY} --proxy=localhost:50043 ${MULTI_TARGETS} healthcheck validate
-if [ $? != 1 ]; then 
+if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
-cat > ${LOGS}/client-policy.rego <<EOF
+cat >${LOGS}/client-policy.rego <<EOF
 package sansshell.authz
 
 default allow = false
@@ -556,12 +556,12 @@ allow {
 }
 EOF
 ${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
-if [ $? != 1 ]; then 
+if [ $? != 1 ]; then
   check_status 1 /dev/null policy check did not fail
 fi
 
 # Now use the real test cert org
-cat > ${LOGS}/client-policy.rego <<EOF
+cat >${LOGS}/client-policy.rego <<EOF
 package sansshell.authz
 
 default allow = false
@@ -615,7 +615,7 @@ echo "tail checks"
 echo "tail proxy to 2 hosts"
 ${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail file tail ${LOGS}/hosts &
 tail_execute $!
-diff ${LOGS}/1.tail ${LOGS}/2.tail > ${LOGS}/tail.diff
+diff ${LOGS}/1.tail ${LOGS}/2.tail >${LOGS}/tail.diff
 check_status $? ${LOGS}/tail.diff "tail: output files differ"
 tail_check proxy-2-hosts
 
@@ -714,7 +714,7 @@ if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
   check_perms_mode ${LOGS}/cp-hosts
   aws s3 rm s3://${USER}-dev/hosts
-else 
+else
   echo "Skipping cp with s3 on Github"
 fi
 
@@ -739,10 +739,10 @@ sudo chattr -i ${LOGS}/cp-hosts
 
 mkdir ${LOGS}/test
 touch ${LOGS}/test/file
-echo "${LOGS}/test/file" >> ${LOGS}/ls.expected
+echo "${LOGS}/test/file" >>${LOGS}/ls.expected
 
 run_a_test false 1 file ls ${LOGS}/test
-diff -u ${LOGS}/1.file-ls-proxy-1-host ${LOGS}/ls.expected > ${LOGS}/ls.diff
+diff -u ${LOGS}/1.file-ls-proxy-1-host ${LOGS}/ls.expected >${LOGS}/ls.diff
 check_status $? ${LOGS}/ls.diff diff check ls wrong. See ${LOGS}/1.file-ls-proxy-1-host and ${LOGS}/ls.expected
 
 run_a_test false 1 file ls --long ${LOGS}/test
@@ -767,11 +767,12 @@ if [ -z "${ON_GITHUB}" ]; then
   run_a_test false 10 packages update --name=ansible --old_version=0:2.9.27-1.el7.noarch --new_version=0:2.9.27-1.el7.noarch
   run_a_test false 50 packages list
   run_a_test false 50 packages repolist --verbose
-else 
+else
   echo "Skipping package tests on Github"
 fi
 
 run_a_test false 50 process ps
+run_a_test false 0 process kill --pid=$$ --signal=0
 
 # Skip if on github (pstack randomly fails)
 if [ -z "${ON_GITHUB}" ]; then
@@ -799,7 +800,7 @@ if [ -z "${ON_GITHUB}" ]; then
   ${SANSSH_PROXY} ${SINGLE_TARGET} process dump --output=s3://${USER}-dev?region=us-west-2 --pid=$$ --dump-type=GCORE
   check_status $? /dev/null Remote dump to s3
   echo Dumping bucket
-  aws s3 ls s3://${USER}-dev > ${LOGS}/s3-ls
+  aws s3 ls s3://${USER}-dev >${LOGS}/s3-ls
   cat ${LOGS}/s3-ls
   egrep -q "127.0.0.1:[0-9]+-core.$$" ${LOGS}/s3-ls
   check_status $? ${LOGS}/s3-ls cant find core in bucket
@@ -890,6 +891,6 @@ if [ $? != 1 ]; then
 fi
 
 # TODO(jchacon): Provide a java binary for test{s
-echo 
+echo
 echo "All tests pass."
 echo
