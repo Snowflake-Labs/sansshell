@@ -9,6 +9,7 @@ import (
 	context "context"
 	proxy "github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	grpc "google.golang.org/grpc"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 import (
@@ -20,6 +21,7 @@ import (
 type ProcessClientProxy interface {
 	ProcessClient
 	ListOneMany(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (<-chan *ListManyResponse, error)
+	KillOneMany(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (<-chan *KillManyResponse, error)
 	GetStacksOneMany(ctx context.Context, in *GetStacksRequest, opts ...grpc.CallOption) (<-chan *GetStacksManyResponse, error)
 	GetJavaStacksOneMany(ctx context.Context, in *GetJavaStacksRequest, opts ...grpc.CallOption) (<-chan *GetJavaStacksManyResponse, error)
 	GetMemoryDumpOneMany(ctx context.Context, in *GetMemoryDumpRequest, opts ...grpc.CallOption) (Process_GetMemoryDumpClientProxy, error)
@@ -80,6 +82,73 @@ func (c *processClientProxy) ListOneMany(ctx context.Context, in *ListRequest, o
 		for {
 			typedResp := &ListManyResponse{
 				Resp: &ListReply{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// KillManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type KillManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *emptypb.Empty
+	Error error
+}
+
+// KillOneMany provides the same API as Kill but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *processClientProxy) KillOneMany(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (<-chan *KillManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *KillManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &KillManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &emptypb.Empty{},
+			}
+			err := conn.Invoke(ctx, "/Process.Process/Kill", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Process.Process/Kill", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &KillManyResponse{
+				Resp: &emptypb.Empty{},
 			}
 
 			resp, ok := <-manyRet
