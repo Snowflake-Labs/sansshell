@@ -511,8 +511,10 @@ fi
 
 SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
 SANSSH_NOPROXY="${SANSSH_NOPROXY_NO_JUSTIFY} --justification=yes"
-SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
-SINGLE_TARGET="--targets=localhost:50042"
+SANSSH_PROXY_NOPORT="${SANSSH_NOPROXY} --proxy=localhost"
+SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043"
+SINGLE_TARGET_NOPORT="--targets=localhost"
+SINGLE_TARGET="${SINGLE_TARGET_NOPORT}:50042"
 MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
 
 # The first test is server health which also means we're validating
@@ -573,6 +575,9 @@ allow {
 EOF
 ${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
 check_status $? policy check should succeed
+
+${SANSSH_NOPROXY_NOPORT} ${SINGLE_TARGET_NOPORT} healthcheck validate
+check_status $? default ports have been appended
 
 # Now set logging to v=1 and validate we saw that in the logs
 echo "Setting logging level higher"
