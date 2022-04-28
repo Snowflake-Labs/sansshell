@@ -84,6 +84,7 @@ func Run(ctx context.Context, rs RunState) {
 
 	// Process combinations of outputs/output-dir that are valid and in the end
 	// make sure outputsFlag has the correct relevant entries.
+	var dir string
 	if rs.OutputsDir != "" {
 		if len(rs.Outputs) > 0 {
 			fmt.Fprintln(os.Stderr, "Can't set outputs and output-dir at the same time.")
@@ -102,6 +103,7 @@ func Run(ctx context.Context, rs RunState) {
 		for i := range rs.Targets {
 			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d", i)))
 		}
+		dir = rs.OutputsDir
 	} else {
 		// No outputs or outputs-dir so we default to -. It'll process below.
 		if len(rs.Outputs) == 0 {
@@ -124,6 +126,12 @@ func Run(ctx context.Context, rs RunState) {
 					rs.Outputs = append(rs.Outputs, defaultOutput)
 				}
 			}
+		}
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't determine current directory: %v", err)
+			os.Exit(1)
 		}
 	}
 	creds, err := mtls.LoadClientCredentials(ctx, rs.CredSource)
@@ -162,6 +170,7 @@ func Run(ctx context.Context, rs RunState) {
 
 	state := &util.ExecuteState{
 		Conn: conn,
+		Dir:  dir,
 	}
 	for _, out := range rs.Outputs {
 		if out == "-" {
