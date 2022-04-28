@@ -515,7 +515,7 @@ SANSSH_PROXY_NOPORT="${SANSSH_NOPROXY} --proxy=localhost"
 SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043"
 SINGLE_TARGET_NOPORT="--targets=localhost"
 SINGLE_TARGET="${SINGLE_TARGET_NOPORT}:50042"
-MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
+MULTI_TARGETS="--targets=localhost,localhost:50042"
 
 # The first test is server health which also means we're validating
 # things came up ok.
