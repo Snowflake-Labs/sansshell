@@ -576,7 +576,7 @@ EOF
 ${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
 check_status $? policy check should succeed
 
-${SANSSH_NOPROXY_NOPORT} ${SINGLE_TARGET_NOPORT} healthcheck validate
+${SANSSH_PROXY_NOPORT} ${SINGLE_TARGET_NOPORT} healthcheck validate
 check_status $? default ports have been appended
 
 # Now set logging to v=1 and validate we saw that in the logs
