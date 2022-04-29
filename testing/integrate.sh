@@ -480,13 +480,13 @@ check_status $? /dev/null policy check failed for server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy --hostport=localhost:50043 >& ${LOGS}/proxy.log &
+./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy >& ${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
 
 # The server needs to be root in order for package installation tests (and the nodes run this as root).
-sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy --hostport=localhost:50042 >& ${LOGS}/server.log
+sudo --preserve-env=AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY -b ./bin/sansshell-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --policy-file=${LOGS}/policy >& ${LOGS}/server.log
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
@@ -511,9 +511,11 @@ fi
 
 SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
 SANSSH_NOPROXY="${SANSSH_NOPROXY_NO_JUSTIFY} --justification=yes"
-SANSSH_PROXY="${SANSSH_NOPROXY} --proxy=localhost:50043"
-SINGLE_TARGET="--targets=localhost:50042"
-MULTI_TARGETS="--targets=localhost:50042,localhost:50042"
+SANSSH_PROXY_NOPORT="${SANSSH_NOPROXY} --proxy=localhost"
+SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043"
+SINGLE_TARGET_NOPORT="--targets=localhost"
+SINGLE_TARGET="${SINGLE_TARGET_NOPORT}:50042"
+MULTI_TARGETS="--targets=localhost,localhost:50042"
 
 # The first test is server health which also means we're validating
 # things came up ok.
@@ -573,6 +575,9 @@ allow {
 EOF
 ${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
 check_status $? policy check should succeed
+
+${SANSSH_PROXY_NOPORT} ${SINGLE_TARGET_NOPORT} healthcheck validate
+check_status $? default ports have been appended
 
 # Now set logging to v=1 and validate we saw that in the logs
 echo "Setting logging level higher"
