@@ -39,8 +39,10 @@ import (
 // relevant state down to subcommands.
 type ExecuteState struct {
 	Conn *proxy.Conn
-	Out  []io.Writer
-	Err  []io.Writer
+	// Dir is a directory where additional files per target can be written.
+	Dir string
+	Out []io.Writer
+	Err []io.Writer
 }
 
 // StreamingChunkSize is the chunk size we use when sending replies on a stream.
