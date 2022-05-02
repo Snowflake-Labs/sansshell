@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
@@ -225,6 +226,47 @@ func TestList(t *testing.T) {
 	}
 	resp, err = client.List(ctx, &pb.ListRequest{})
 	testutil.FatalOnNoErr(fmt.Sprintf("stderr output - resp %v", resp), err, t)
+}
+
+func TestKill(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	for _, tc := range []struct {
+		name    string
+		pid     uint64
+		signal  uint32
+		wantErr bool
+	}{
+		{
+			name:    "bad pid",
+			wantErr: true,
+		},
+		{
+			name:    "signal init should fail",
+			pid:     1,
+			signal:  9,
+			wantErr: true,
+		},
+		{
+			name: "signal 0 to our pid",
+			pid:  uint64(syscall.Getpid()),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewProcessClient(conn)
+			req := &pb.KillRequest{
+				Pid:    tc.pid,
+				Signal: tc.signal,
+			}
+			_, err = client.Kill(ctx, req)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+			t.Log(err)
+		})
+	}
 }
 
 func TestPstackNative(t *testing.T) {

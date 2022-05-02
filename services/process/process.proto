@@ -20,12 +20,17 @@ option go_package = "github.com/Snowflake-Labs/sansshell/services/process";
 
 package Process;
 
+import "google/protobuf/empty.proto";
+
 // The Process service definition.
 service Process {
   // List returns the output from the ps command.
   // NOTE: Since this contains the command line this can
   // contain sensitive data.
   rpc List(ListRequest) returns (ListReply) {}
+  // Kill will send a signal to the given process id and return its status via
+  // error handling.
+  rpc Kill(KillRequest) returns (google.protobuf.Empty) {}
   // GetStacks will return the output from pstack which generally has nothing
   // sensitive in it but depending on function names could have internal details
   // so be careful.
@@ -131,6 +136,12 @@ message ProcessEntry {
 message ListReply {
   // A list of process details which may be limited to only the pids requested.
   repeated ProcessEntry process_entries = 1;
+}
+
+message KillRequest {
+  // Pid must be positive and non-zero (we don't support wildcard kill)
+  uint64 pid = 1;
+  uint32 signal = 2;
 }
 
 message GetStacksRequest { int64 pid = 1; }

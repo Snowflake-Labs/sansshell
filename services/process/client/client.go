@@ -43,6 +43,7 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&dumpCmd{}, "")
 	c.Register(&jstackCmd{}, "")
+	c.Register(&killCmd{}, "")
 	c.Register(&psCmd{}, "")
 	c.Register(&pstackCmd{}, "")
 	return c
@@ -193,6 +194,48 @@ func parseState(processState pb.ProcessState, codes []pb.ProcessStateCode) strin
 		}
 	}
 	return state
+}
+
+type killCmd struct {
+	pid    uint64
+	signal uint
+}
+
+func (*killCmd) Name() string     { return "kill" }
+func (*killCmd) Synopsis() string { return "Send a signal to a process id." }
+func (*killCmd) Usage() string {
+	return "kill: Send a signal to a process id.\n"
+}
+
+func (p *killCmd) SetFlags(f *flag.FlagSet) {
+	f.Uint64Var(&p.pid, "pid", 0, "Process ID to send signal")
+	f.UintVar(&p.signal, "signal", 0, "Signal to send process ID")
+}
+
+func (p *killCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+
+	c := pb.NewProcessClientProxy(state.Conn)
+	req := &pb.KillRequest{
+		Pid:    p.pid,
+		Signal: uint32(p.signal),
+	}
+
+	respChan, err := c.KillOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "KillOneMany returned error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+	for resp := range respChan {
+		if resp.Error != nil {
+			fmt.Fprintf(state.Err[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
+			continue
+		}
+	}
+	return subcommands.ExitSuccess
 }
 
 type pstackCmd struct {
