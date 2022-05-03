@@ -21,7 +21,10 @@ package server
 
 import (
 	"context"
+	"errors"
+	"math/rand"
 	"os"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
@@ -45,14 +48,32 @@ type RunState struct {
 	// entry is found. The supplied function can then do any validation it wants
 	// in order to ensure it's compliant.
 	JustificationFunc func(string) error
+	// If non-zero don't exit immediately but instead sleep for 1..N random time.Duration
+	// before bailing. This allows for credential loaders which may have temporary
+	// problems to not cause a thundering herd of requests on mass death/restart
+	// loops.
+	JitterSleepOnError time.Duration
 }
 
 // Run takes the given context and RunState and starts up a sansshell server.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
+	jitter := func() {
+		var sleep time.Duration
+		if rs.JitterSleepOnError > 0 {
+			sleep = time.Duration(rand.Int63n(int64(rs.JitterSleepOnError))) + 1
+			if sleep > rs.JitterSleepOnError {
+				sleep = rs.JitterSleepOnError
+			}
+			rs.Logger.Error(errors.New("sleeping before exit"), "jitter", "sleep", sleep)
+			time.Sleep(sleep)
+		}
+	}
+
 	creds, err := mtls.LoadServerCredentials(ctx, rs.CredSource)
 	if err != nil {
 		rs.Logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.CredSource)
+		jitter()
 		os.Exit(1)
 	}
 
@@ -61,6 +82,7 @@ func Run(ctx context.Context, rs RunState) {
 	})
 	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger, justificationHook); err != nil {
 		rs.Logger.Error(err, "server.Serve", "hostport", rs.Hostport)
+		jitter()
 		os.Exit(1)
 	}
 }

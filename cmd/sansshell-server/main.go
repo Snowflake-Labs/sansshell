@@ -61,6 +61,7 @@ var (
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	jitter        = flag.Duration("jitter", 0, "If non-zero wait 1..N Duration before exiting on startup failure during server.Run. Allows for jitter on restart to avoid cascading failure.")
 )
 
 func main() {
@@ -83,11 +84,12 @@ func main() {
 	}
 
 	rs := server.RunState{
-		Logger:        logger,
-		CredSource:    *credSource,
-		Hostport:      *hostport,
-		Policy:        policy,
-		Justification: *justification,
+		Logger:             logger,
+		CredSource:         *credSource,
+		Hostport:           *hostport,
+		Policy:             policy,
+		Justification:      *justification,
+		JitterSleepOnError: *jitter,
 	}
 	server.Run(ctx, rs)
 }

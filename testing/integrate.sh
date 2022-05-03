@@ -479,6 +479,12 @@ echo "Testing policy validation for server"
 check_status $? /dev/null policy check failed for server
 
 echo
+echo "Testing jitter on failure for startup"
+./bin/sansshell-server --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.pem --policy-file=${LOGS}/policy --jitter=5s >&${LOGS}/server-jitter.log
+grep -E -q -e '"msg"="jitter" "error"="sleeping before exit" "sleep"="' ${LOGS}/server-jitter.log
+check_status $? /dev/null cant find log entry for jitter
+
+echo
 echo "Starting servers. Logs in ${LOGS}"
 ./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy >&${LOGS}/proxy.log &
 PROXY_PID=$!
