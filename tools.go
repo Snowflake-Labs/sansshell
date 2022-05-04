@@ -42,4 +42,5 @@ import (
 //go:generate go generate ./services/localfile
 //go:generate go generate ./services/packages
 //go:generate go generate ./services/process
+//go:generate go generate ./services/sansshell
 //go:generate go generate ./services/service

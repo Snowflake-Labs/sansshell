@@ -44,6 +44,9 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&getVerbosityCmd{}, "")
 	c.Register(&setProxyVerbosityCmd{}, "")
 	c.Register(&getProxyVerbosityCmd{}, "")
+	c.Register(&versionCmd{}, "")
+	c.Register(&proxyVersionCmd{}, "")
+
 	return c
 }
 
@@ -210,5 +213,71 @@ func (g *getProxyVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 		return subcommands.ExitFailure
 	}
 	fmt.Fprintf(state.Out[0], "Proxy current logging level %d\n", resp.Level)
+	return subcommands.ExitSuccess
+}
+
+type versionCmd struct{}
+
+func (*versionCmd) Name() string     { return "version" }
+func (*versionCmd) Synopsis() string { return "Get the server version." }
+func (*versionCmd) Usage() string {
+	return "version"
+}
+
+func (s *versionCmd) SetFlags(f *flag.FlagSet) {}
+
+func (s *versionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewStateClientProxy(state.Conn)
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	resp, err := c.VersionOneMany(ctx, &emptypb.Empty{})
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "Could not get version: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Getting version for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Target: %s (%d) Version %s\n", r.Target, r.Index, r.Resp.Version)
+	}
+	return retCode
+}
+
+type proxyVersionCmd struct{}
+
+func (*proxyVersionCmd) Name() string     { return "proxy-version" }
+func (*proxyVersionCmd) Synopsis() string { return "Get the proxy version" }
+func (*proxyVersionCmd) Usage() string {
+	return "proxy-version"
+}
+
+func (*proxyVersionCmd) SetFlags(f *flag.FlagSet) {}
+
+func (g *proxyVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if len(state.Out) > 1 {
+		fmt.Fprintf(os.Stderr, "can't call proxy version with multiple targets")
+	}
+	// Get a real connection to the proxy
+	c := pb.NewStateClient(state.Conn.Proxy())
+
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	resp, err := c.Version(ctx, &emptypb.Empty{})
+	if err != nil {
+		fmt.Fprintf(state.Err[0], "Could not get proxy version: %v\n", err)
+		return subcommands.ExitFailure
+	}
+	fmt.Fprintf(state.Out[0], "Proxy version %s\n", resp.Version)
 	return subcommands.ExitSuccess
 }

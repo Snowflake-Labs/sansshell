@@ -362,8 +362,12 @@ echo "Running builds"
 echo
 go build -v ./...
 check_status $? /dev/null build
-go generate build.go
-check_status $? /dev/null build binaries
+go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2p" -o bin/proxy-server ./cmd/proxy-server
+check_status $? /dev/null build proxy
+go build -o bin/sanssh ./cmd/sanssh
+check_status $? /dev/null build sanssh
+go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2s" -o bin/sansshell-server ./cmd/sansshell-server
+check_status $? /dev/null build server
 
 # Test everything
 echo
@@ -479,6 +483,16 @@ echo "Testing policy validation for server"
 check_status $? /dev/null policy check failed for server
 
 echo
+echo "Testing --version"
+./bin/proxy-server --version >&${LOGS}/proxy-version-cli.log
+grep -E -q -e "Version: 2p" ${LOGS}/proxy-version-cli.log
+check_status $? /dev/null cant find --version for proxy-server
+
+./bin/sansshell-server --version >&${LOGS}/server-version-cli.log
+grep -E -q -e "Version: 2s" ${LOGS}/server-version-cli.log
+check_status $? /dev/null cant find --version for sansshell-server
+
+echo
 echo "Starting servers. Logs in ${LOGS}"
 ./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy >&${LOGS}/proxy.log &
 PROXY_PID=$!
@@ -592,6 +606,14 @@ check_status $? /dev/null cant find log entry in proxy for changing levels
 
 ${SANSSH_PROXY} sansshell get-proxy-verbosity
 check_status $? /dev/null cant get proxy verbosity
+
+${SANSSH_PROXY} ${MULTI_TARGETS} sansshell version >${LOGS}/version-server.log
+grep -E -q -e "Version.*2s" ${LOGS}/version-server.log
+check_status $? /dev/null cant find server version in logs
+
+${SANSSH_PROXY} sansshell proxy-version >${LOGS}/version-proxy.log
+grep -E -q -e "Proxy version 2p" ${LOGS}/version-proxy.log
+check_status $? /dev/null cant find proxy version in logs
 
 run_a_test false 1 sansshell get-verbosity
 
