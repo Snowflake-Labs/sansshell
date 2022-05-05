@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gocloud.dev/blob"
 
@@ -37,6 +38,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // server is used to implement the gRPC server
@@ -136,6 +138,17 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 		reply.ProcessEntries = append(reply.ProcessEntries, e)
 	}
 	return reply, nil
+}
+
+func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty, error) {
+	if req.Pid == 0 {
+		return nil, status.Error(codes.InvalidArgument, "pid must be positive and non-zero")
+	}
+	err := syscall.Kill(int(req.Pid), syscall.Signal(req.Signal))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "kill returned error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.GetStacksReply, error) {

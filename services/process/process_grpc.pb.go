@@ -7,6 +7,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -22,6 +23,9 @@ type ProcessClient interface {
 	// NOTE: Since this contains the command line this can
 	// contain sensitive data.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListReply, error)
+	// Kill will send a signal to the given process id and return its status via
+	// error handling.
+	Kill(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetStacks will return the output from pstack which generally has nothing
 	// sensitive in it but depending on function names could have internal details
 	// so be careful.
@@ -49,6 +53,15 @@ func NewProcessClient(cc grpc.ClientConnInterface) ProcessClient {
 func (c *processClient) List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListReply, error) {
 	out := new(ListReply)
 	err := c.cc.Invoke(ctx, "/Process.Process/List", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *processClient) Kill(ctx context.Context, in *KillRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/Process.Process/Kill", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +126,9 @@ type ProcessServer interface {
 	// NOTE: Since this contains the command line this can
 	// contain sensitive data.
 	List(context.Context, *ListRequest) (*ListReply, error)
+	// Kill will send a signal to the given process id and return its status via
+	// error handling.
+	Kill(context.Context, *KillRequest) (*emptypb.Empty, error)
 	// GetStacks will return the output from pstack which generally has nothing
 	// sensitive in it but depending on function names could have internal details
 	// so be careful.
@@ -135,6 +151,9 @@ type UnimplementedProcessServer struct {
 
 func (UnimplementedProcessServer) List(context.Context, *ListRequest) (*ListReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method List not implemented")
+}
+func (UnimplementedProcessServer) Kill(context.Context, *KillRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Kill not implemented")
 }
 func (UnimplementedProcessServer) GetStacks(context.Context, *GetStacksRequest) (*GetStacksReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetStacks not implemented")
@@ -171,6 +190,24 @@ func _Process_List_Handler(srv interface{}, ctx context.Context, dec func(interf
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ProcessServer).List(ctx, req.(*ListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Process_Kill_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KillRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProcessServer).Kill(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Process.Process/Kill",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProcessServer).Kill(ctx, req.(*KillRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -242,6 +279,10 @@ var Process_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "List",
 			Handler:    _Process_List_Handler,
+		},
+		{
+			MethodName: "Kill",
+			Handler:    _Process_Kill_Handler,
 		},
 		{
 			MethodName: "GetStacks",

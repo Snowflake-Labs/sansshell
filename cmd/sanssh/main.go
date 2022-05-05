@@ -102,6 +102,11 @@ func init() {
 	subcommands.ImportantFlag("v")
 }
 
+func hasPort(s string) bool {
+	// Returns true if the provided address does not include a port number.
+	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
+}
+
 func main() {
 	// If this is blank it'll remain blank which is fine
 	// as that means just talk to --targets[0] instead.
@@ -130,12 +135,13 @@ func main() {
 		}
 	}
 
-	// Fixup proxy and targets flags if needed.
-	if !strings.Contains(*proxyAddr, ":") {
+	// Add the default proxy port (if needed).
+	if *proxyAddr != "" && !hasPort(*proxyAddr) {
 		*proxyAddr = fmt.Sprintf("%s:%d", *proxyAddr, defaultProxyPort)
 	}
+	// Add default target port (if needed).
 	for i, t := range *targetsFlag.Target {
-		if !strings.Contains(t, ":") {
+		if !hasPort(t) {
 			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
 		}
 	}
