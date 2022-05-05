@@ -33,6 +33,14 @@ service Logging {
   rpc GetVerbosity(google.protobuf.Empty) returns (VerbosityReply) {}
 }
 
+service State {
+  // Version will return the build version as embedded in the running
+  // server.option
+  rpc Version(google.protobuf.Empty) returns (VersionResponse) {}
+}
+
 message SetVerbosityRequest { int32 Level = 1; }
 
 message VerbosityReply { int32 Level = 1; }
+
+message VersionResponse { string version = 1; }

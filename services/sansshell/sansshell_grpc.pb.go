@@ -146,3 +146,91 @@ var Logging_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "sansshell.proto",
 }
+
+// StateClient is the client API for State service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type StateClient interface {
+	// Version will return the build version as embedded in the running
+	// server.option
+	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionResponse, error)
+}
+
+type stateClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewStateClient(cc grpc.ClientConnInterface) StateClient {
+	return &stateClient{cc}
+}
+
+func (c *stateClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*VersionResponse, error) {
+	out := new(VersionResponse)
+	err := c.cc.Invoke(ctx, "/Sansshell.State/Version", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// StateServer is the server API for State service.
+// All implementations should embed UnimplementedStateServer
+// for forward compatibility
+type StateServer interface {
+	// Version will return the build version as embedded in the running
+	// server.option
+	Version(context.Context, *emptypb.Empty) (*VersionResponse, error)
+}
+
+// UnimplementedStateServer should be embedded to have forward compatible implementations.
+type UnimplementedStateServer struct {
+}
+
+func (UnimplementedStateServer) Version(context.Context, *emptypb.Empty) (*VersionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
+}
+
+// UnsafeStateServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to StateServer will
+// result in compilation errors.
+type UnsafeStateServer interface {
+	mustEmbedUnimplementedStateServer()
+}
+
+func RegisterStateServer(s grpc.ServiceRegistrar, srv StateServer) {
+	s.RegisterService(&State_ServiceDesc, srv)
+}
+
+func _State_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(StateServer).Version(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Sansshell.State/Version",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(StateServer).Version(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// State_ServiceDesc is the grpc.ServiceDesc for State service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var State_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Sansshell.State",
+	HandlerType: (*StateServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Version",
+			Handler:    _State_Version_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "sansshell.proto",
+}
