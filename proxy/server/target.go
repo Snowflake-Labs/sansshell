@@ -237,19 +237,18 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
+// NOTE: This should be called within it's own Go routine to avoid blocking on a stalled target.
 func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
-	ctx, cancel := context.WithCancel(ctx)
 	conn, err := dialer.DialContext(ctx, target)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 	clientStream, err := conn.NewStream(ctx, method.StreamDesc(), method.FullName())
 	if err != nil {
-		cancel()
 		return nil, err
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	ts := &TargetStream{
 		streamID:      rand.Uint64(),
 		target:        target,
@@ -348,33 +347,40 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		sendReply(reply)
 		return nil
 	}
-	// TODO(jallie): authorization check for opening new stream goes here
-	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, serviceMethod)
-	if err != nil {
-		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
-			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
-		}
-		sendReply(reply)
-		return nil
-	}
-	streamID := stream.StreamID()
-	t.streams[streamID] = stream
-	reply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
-		StreamId: streamID,
-	}
-	t.noncePairs[targetNonce] = true
-	t.wg.Add(1)
+	// Setup the actual new stream inside of an go routine. This way processing a set of
+	// stream additions doesn't serialize and potentially fall apart on an error.
+	// For instance a low timeout which is below the default Dial timeout (20s)
+	// would mean a target hanging would end up timing out the overall RPC context
+	// for new stream setup for N targets instead of simply the one target which times out.
 	go func() {
-		stream.Run(replyChan)
-		select {
-		case doneChan <- streamID:
-			// we notified caller of our status
-		case <-ctx.Done():
-			// or calling context is done
+		// TODO(jallie): authorization check for opening new stream goes here
+		stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, serviceMethod)
+		if err != nil {
+			reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
+				ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
+			}
+			sendReply(reply)
+			return
 		}
-		t.wg.Done()
+		streamID := stream.StreamID()
+		t.streams[streamID] = stream
+		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
+			StreamId: streamID,
+		}
+		t.noncePairs[targetNonce] = true
+		t.wg.Add(1)
+		go func() {
+			stream.Run(replyChan)
+			select {
+			case doneChan <- streamID:
+				// we notified caller of our status
+			case <-ctx.Done():
+				// or calling context is done
+			}
+			t.wg.Done()
+		}()
+		sendReply(reply)
 	}()
-	sendReply(reply)
 	return nil
 }
 
