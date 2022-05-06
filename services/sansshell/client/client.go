@@ -22,7 +22,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -86,8 +85,6 @@ func (s *setVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewLoggingClientProxy(state.Conn)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.SetVerbosityOneMany(ctx, &pb.SetVerbosityRequest{Level: int32(s.level)})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -126,8 +123,6 @@ func (g *getVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewLoggingClientProxy(state.Conn)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.GetVerbosityOneMany(ctx, &emptypb.Empty{})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -173,8 +168,6 @@ func (s *setProxyVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 	// Get a real connection to the proxy
 	c := pb.NewLoggingClient(state.Conn.Proxy())
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.SetVerbosity(ctx, &pb.SetVerbosityRequest{Level: int32(s.level)})
 	if err != nil {
 		fmt.Fprintf(state.Err[0], "Could not set proxy logging: %v\n", err)
@@ -205,8 +198,6 @@ func (g *getProxyVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 	// Get a real connection to the proxy
 	c := pb.NewLoggingClient(state.Conn.Proxy())
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.GetVerbosity(ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Fprintf(state.Err[0], "Could not get proxy logging: %v\n", err)
@@ -230,8 +221,6 @@ func (s *versionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewStateClientProxy(state.Conn)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.VersionOneMany(ctx, &emptypb.Empty{})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -271,8 +260,6 @@ func (g *proxyVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	// Get a real connection to the proxy
 	c := pb.NewStateClient(state.Conn.Proxy())
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.Version(ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Fprintf(state.Err[0], "Could not get proxy version: %v\n", err)
