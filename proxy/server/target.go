@@ -240,15 +240,17 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 // NOTE: This should be called within it's own Go routine to avoid blocking on a stalled target.
 func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 	conn, err := dialer.DialContext(ctx, target)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	clientStream, err := conn.NewStream(ctx, method.StreamDesc(), method.FullName())
 	if err != nil {
+		cancel()
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(ctx)
 	ts := &TargetStream{
 		streamID:      rand.Uint64(),
 		target:        target,
