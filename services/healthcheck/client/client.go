@@ -21,7 +21,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -75,8 +74,6 @@ func (p *validateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewHealthCheckClientProxy(state.Conn)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	resp, err := c.OkOneMany(ctx, &emptypb.Empty{})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
