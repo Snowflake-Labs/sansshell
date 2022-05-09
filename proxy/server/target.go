@@ -243,10 +243,12 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 	ctx, cancel := context.WithCancel(ctx)
 	conn, err := dialer.DialContext(ctx, target)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	clientStream, err := conn.NewStream(ctx, method.StreamDesc(), method.FullName())
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	ts := &TargetStream{
