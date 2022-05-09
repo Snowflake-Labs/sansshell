@@ -736,7 +736,7 @@ check_perms_mode ${LOGS}/cp-hosts
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
-  echo cp test with bucket syntax
+  echo cp test with s3 bucket syntax
   aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
   run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
   check_perms_mode ${LOGS}/cp-hosts
@@ -744,6 +744,11 @@ if [ -z "${ON_GITHUB}" ]; then
 else
   echo "Skipping cp with s3 on Github"
 fi
+
+# Always test file syntax
+echo "Now we use file:// format"
+run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=file:///etc hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
 
 # Trying without --overwrite to validate
 echo "This can emit an error message about overwrite"
