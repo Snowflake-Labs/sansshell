@@ -50,7 +50,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 )
 
@@ -65,10 +65,20 @@ var (
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	version       bool
 )
+
+func init() {
+	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
+}
 
 func main() {
 	flag.Parse()
+
+	if version {
+		fmt.Printf("Version: %s\n", ssserver.Version)
+		os.Exit(0)
+	}
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")

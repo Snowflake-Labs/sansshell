@@ -29,6 +29,16 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+var (
+	// Version is the value returned by the Version RPC service.
+	// This should likely be set as a linker option from external
+	// input such as a git SHA or RPM version number.
+	// go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=..."
+	//
+	// NOTE: This is a var so the linker can set it but in reality it's a const so treat as such.
+	Version string
+)
+
 // Server is used to implement the gRPC Server
 type Server struct {
 	mu      sync.RWMutex
@@ -59,6 +69,7 @@ func (s *Server) GetVerbosity(ctx context.Context, req *emptypb.Empty) (*pb.Verb
 // Register is called to expose this handler to the gRPC server
 func (s *Server) Register(gs *grpc.Server) {
 	pb.RegisterLoggingServer(gs, s)
+	pb.RegisterStateServer(gs, s)
 }
 
 func init() {
