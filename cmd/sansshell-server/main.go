@@ -32,6 +32,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 
+	_ "gocloud.dev/blob/azureblob" // Pull in Azure blob support
+	_ "gocloud.dev/blob/gcsblob"   // Pull in GCS blob support
+	_ "gocloud.dev/blob/s3blob"    // Pull in S3 blob support
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
