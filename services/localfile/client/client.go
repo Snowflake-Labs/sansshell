@@ -798,11 +798,14 @@ type cpCmd struct {
 }
 
 func (*cpCmd) Name() string     { return "cp" }
-func (*cpCmd) Synopsis() string { return "Copy a file onto a remote machine." }
+func (*cpCmd) Synopsis() string { return "Copy a file on/onto a remote machine." }
 func (*cpCmd) Usage() string {
 	return `cp [--bucket=XXX] [--overwrite] --uid=X|username=Y --gid=X|group=Y --mode=X [--immutable] <source> <remote destination>
-  Copy the source file (which can be local or a URL such as s3://bucket/source) to the target(s)
+  Copy the source file (which can be local or a URL such as --bucket=s3://bucket <source> or --bucket=file://directory <source>) to the target(s)
   placing it into the remote destination.
+
+NOTE: Using file:// means the file must be in that location on each remote target in turn as no data is transferred in that case. Also make
+sure to use a fully formed directory. i.e. copying /etc/hosts would be --bucket=file:///etc hosts <destination>
 `
 }
 
@@ -821,6 +824,7 @@ var validOutputPrefixes = []string{
 	"s3://",
 	"azblob://",
 	"gs://",
+	"file://",
 }
 
 func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
