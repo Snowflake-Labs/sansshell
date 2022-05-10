@@ -53,7 +53,7 @@ type sansshellCmd struct{}
 
 func (*sansshellCmd) Name() string { return subPackage }
 func (p *sansshellCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *sansshellCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
