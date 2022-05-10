@@ -51,7 +51,7 @@ type packagesCmd struct{}
 
 func (*packagesCmd) Name() string { return subPackage }
 func (p *packagesCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *packagesCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
