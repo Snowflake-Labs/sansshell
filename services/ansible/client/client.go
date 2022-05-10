@@ -46,7 +46,7 @@ type ansibleCmd struct{}
 
 func (*ansibleCmd) Name() string { return subPackage }
 func (p *ansibleCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *ansibleCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())

@@ -53,7 +53,7 @@ type processCmd struct{}
 
 func (*processCmd) Name() string { return subPackage }
 func (p *processCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *processCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
