@@ -62,7 +62,7 @@ type fileCmd struct{}
 
 func (*fileCmd) Name() string { return subPackage }
 func (p *fileCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *fileCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())

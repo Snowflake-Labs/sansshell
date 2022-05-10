@@ -46,7 +46,7 @@ type healthcheckCmd struct{}
 
 func (*healthcheckCmd) Name() string { return subPackage }
 func (p *healthcheckCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *healthcheckCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
