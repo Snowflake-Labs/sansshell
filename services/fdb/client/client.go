@@ -95,7 +95,7 @@ type fdbCmd struct{}
 func (*fdbCmd) Name() string             { return subPackage }
 func (*fdbCmd) SetFlags(_ *flag.FlagSet) {}
 func (*fdbCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *fdbCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -156,7 +156,7 @@ type fdbCLICmd struct {
 
 func (*fdbCLICmd) Name() string { return fdbCLIPackage }
 func (*fdbCLICmd) Synopsis() string {
-	return "Run a fdbcli command on the given host.\n" + client.GenerateSynopsis(setupFDBCLI(flag.NewFlagSet("", flag.ContinueOnError)))
+	return "Run a fdbcli command on the given host.\n" + client.GenerateSynopsis(setupFDBCLI(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
 func (p *fdbCLICmd) Usage() string {
 	return `fdbcli [--cluster-file|-C=X] [--log] [--trace-format=X] [–-tls_certificate_file=X] [–-tls_ca_file=X] [–-tls_key_file=X] [–-tls_password=X] [--tls_verify_peers=X] [--debug-tls] [--version|-v] [--log-group=X] [--no-status] [--memory=X] [--build-flags] [--timeout=N] [--status-from-json] --exec "<command> <options>"
