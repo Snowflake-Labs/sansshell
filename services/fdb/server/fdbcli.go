@@ -37,25 +37,9 @@ import (
 )
 
 var (
-	// FDBCLiLocation is the default flag value for --fdbcli. Bind in package main
-	// when importing to set the default for your specific setup/configuration.
-	FDBCLiLocation string
-
-	// FDBCliUser is the default flag value for --fdbcli-user. Bind in package main
-	// when importing to set the default for your specific setup/configuration.
-	FDBCliUser string
-
-	// FDBCliGroup is the default flag value for --fdbcli-group. Bind in package main
-	// when importing to set the default for your specific setup/configuration.
-	FDBCliGroup string
-
-	// FDBCliGroup is the default flag value for--fdbcli-env-list. Bind in package main
-	// when importing to set the default for your specific setup/configuration.
-	FDBCLIEnvironment []string
-
-	fdbCLI      = flag.String("fdbcli", FDBCLiLocation, "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
-	fdbCLIUser  = flag.String("fdbcli-user", FDBCliUser, "User to change to when running fdbcli")
-	fdbCLIGroup = flag.String("fdbcli-group", FDBCliGroup, "Group to change to when running fdbcli")
+	fdbCLI      = flag.String("fdbcli", "", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
+	fdbCLIUser  = flag.String("fdbcli-user", "", "User to change to when running fdbcli")
+	fdbCLIGroup = flag.String("fdbcli-group", "", "Group to change to when running fdbcli")
 
 	// fdbCLIEnvList will be bound to --fdb-cli-env-list to list environment variables to retain before running fdbcli.
 	fdbCLIEnvList util.StringSliceFlag
@@ -66,7 +50,7 @@ var (
 
 func init() {
 	// Setup defaults to for --fdbcli-env-list
-	fdbCLIEnvList.Target = &FDBCLIEnvironment
+	fdbCLIEnvList.Target = &[]string{}
 	flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
 }
 
