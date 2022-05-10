@@ -172,6 +172,19 @@ func TestFDBCLI(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "invalid group",
+			req: &pb.FDBCLIRequest{
+				Request: &pb.FDBCLIRequest_Command{
+					Command: &pb.FDBCLICommand{
+						Command: &pb.FDBCLICommand_Defaulttenant{},
+					},
+				},
+			},
+			bin:     testutil.ResolvePath(t, "echo"),
+			group:   "nobody2",
+			wantErr: true,
+		},
+		{
 			name: "transaction with bad command",
 			req: &pb.FDBCLIRequest{
 				Request: &pb.FDBCLIRequest_Transaction{
@@ -239,6 +252,21 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "can't read log file",
+			req: &pb.FDBCLIRequest{
+				Log: &wrapperspb.BoolValue{
+					Value: true,
+				},
+				Request: &pb.FDBCLIRequest_Command{
+					Command: &pb.FDBCLICommand{
+						Command: &pb.FDBCLICommand_Status{},
+					},
+				},
+			},
+			bin:     testutil.ResolvePath(t, "true"),
+			wantErr: true,
+		},
+		{
 			name: "can't read log dir",
 			req: &pb.FDBCLIRequest{
 				Log: &wrapperspb.BoolValue{
@@ -250,6 +278,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
+			subdir:  "subdir",
 			bin:     testutil.ResolvePath(t, "true"),
 			wantErr: true,
 		},
@@ -350,7 +379,7 @@ func TestFDBCLI(t *testing.T) {
 			},
 			subPath: true,
 			subdir:  "subdir",
-			perms:   0644,
+			perms:   0755,
 		},
 		{
 			name: "advanceversion",
@@ -2330,7 +2359,7 @@ func TestFDBCLI(t *testing.T) {
 			var logs []captureLogs
 
 			temp := t.TempDir()
-			err = os.Mkdir(path.Join(temp, "subdir"), 0755)
+			err = os.Mkdir(path.Join(temp, "subdir"), tc.perms)
 			testutil.FatalOnErr("mkdir", err, t)
 
 			generateFDBCLIArgs = func(req *pb.FDBCLIRequest) ([]string, []captureLogs, error) {
