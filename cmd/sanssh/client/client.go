@@ -76,7 +76,7 @@ func Run(ctx context.Context, rs RunState) {
 	// If we're running internal commands we don't need anything else.
 	for _, f := range flag.Args() {
 		switch f {
-		case "help", "flags":
+		case "help", "flags", "commands":
 			os.Exit(int(subcommands.Execute(ctx)))
 		}
 	}
