@@ -53,7 +53,7 @@ type serviceCmd struct{}
 
 func (*serviceCmd) Name() string { return subPackage }
 func (p *serviceCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *serviceCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
