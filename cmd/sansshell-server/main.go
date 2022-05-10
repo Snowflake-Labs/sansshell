@@ -71,6 +71,10 @@ var (
 
 func init() {
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
+
+	// An example of how to override the flag default for a specific implementation
+	//f := flag.Lookup("ansible_playbook_bin")
+	//f.DefValue = "/foo/ansible"
 }
 
 func main() {
