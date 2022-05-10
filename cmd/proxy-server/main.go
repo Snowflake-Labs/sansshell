@@ -43,6 +43,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
+	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 )
 
 var (

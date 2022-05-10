@@ -47,6 +47,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
+	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/client" // To get FDB modules uncomment this line.
 )
 
 const (

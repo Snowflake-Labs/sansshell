@@ -53,6 +53,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
+	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 )
 
 var (
@@ -70,6 +71,11 @@ var (
 )
 
 func init() {
+	// Uncomment below to set flag defaults.
+	//fdbserver.FDBCliUser = "fdbuser"
+	//fdbserver.FDBCliGroup = "fdbgroup"
+	//fdbserver.FDBCLiLocation = "/some/path/fdbcli"
+	//fdbserver.FDBCLIEnvironment = []string{"SOME_ENV_VAR"}
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
 }
 
