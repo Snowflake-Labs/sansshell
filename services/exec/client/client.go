@@ -45,7 +45,7 @@ type execCmd struct{}
 
 func (*execCmd) Name() string { return subPackage }
 func (p *execCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)))
+	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *execCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
