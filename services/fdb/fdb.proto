@@ -1,0 +1,400 @@
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/services/fdb";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+package Fdb;
+
+// The fdb configuration service definition.
+service Conf {
+  // Read a configuration value from a section in FDB config file.
+  rpc Read(ReadRequest) returns (FdbConfResponse) {}
+  // Write updates a configuration value in a section of FDB config file.
+  rpc Write(WriteRequest) returns (google.protobuf.Empty) {}
+  // Delete a section value based on a key
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty) {}
+}
+
+message Location {
+  string file = 1;
+  string section = 2;
+  string key = 3;
+}
+
+message ReadRequest { Location location = 1; }
+
+message WriteRequest {
+  Location location = 1;
+  string value = 2;
+}
+
+message DeleteRequest { Location location = 1; }
+
+message FdbConfResponse { string value = 1; }
+
+service CLI {
+  rpc FDBCLI(FDBCLIRequest) returns (FDBCLIResponse) {}
+}
+
+message FDBCLIAdvanceversion { int64 version = 1; }
+
+message FDBCLIClear { string key = 1; }
+
+message FDBCLIClearrange {
+  string begin_key = 1;
+  string end_key = 2;
+}
+
+// See
+// https://apple.github.io/foundationdb/command-line-interface.html#configure
+// for possible values for options.
+message FDBCLIConfigure {
+  google.protobuf.StringValue new_or_tss = 1;
+  google.protobuf.StringValue redundancy_mode = 2;
+  google.protobuf.StringValue storage_engine = 3;
+  google.protobuf.UInt32Value grv_proxies = 4;
+  google.protobuf.UInt32Value commit_proxies = 5;
+  google.protobuf.UInt32Value resolvers = 6;
+  google.protobuf.UInt32Value logs = 7;
+  google.protobuf.UInt32Value count = 8;
+  google.protobuf.UInt32Value perpetual_storage_wiggle = 9;
+  google.protobuf.StringValue perpetual_storage_wiggle_locality = 10;
+  google.protobuf.StringValue storage_migration_type = 11;
+  google.protobuf.StringValue tenant_mode = 12;
+}
+
+message FDBCLIConsistencycheck { google.protobuf.BoolValue mode = 1; }
+
+message FDBCLICoordinatorsAuto {}
+message FDBCLICoordinatorsAddresses { repeated string addresses = 1; }
+
+message FDBCLICoordinators {
+  oneof request {
+    FDBCLICoordinatorsAuto auto = 1;
+    FDBCLICoordinatorsAddresses addresses = 2;
+  }
+  google.protobuf.StringValue description = 3;
+}
+
+message FDBCLICreatetenant { string name = 1; }
+
+message FDBCLIDefaulttenant {}
+
+message FDBCLIDeletetenant { string name = 1; }
+
+message FDBCLIExclude {
+  google.protobuf.BoolValue failed = 1;
+  repeated string addresses = 2;
+}
+
+message FDBCLIFileconfigure {
+  google.protobuf.BoolValue new = 1;
+  string file = 2;
+}
+
+message FDBCLIForceRecoveryWithDataLoss { string dcid = 1; }
+
+message FDBCLIGet { string key = 1; }
+
+message FDBCLIGetrange {
+  string begin_key = 1;
+  google.protobuf.StringValue end_key = 2;
+  google.protobuf.UInt32Value limit = 3;
+}
+
+message FDBCLIGetrangekeys {
+  string begin_key = 1;
+  google.protobuf.StringValue end_key = 2;
+  google.protobuf.UInt32Value limit = 3;
+}
+
+message FDBCLIGettenant { string name = 1; }
+
+message FDBCLIGetversion {}
+
+message FDBCLIHelp { repeated string options = 1; }
+
+message FDBCLIIncludeAddresses { repeated string addresses = 1; }
+
+message FDBCLIInclude {
+  google.protobuf.BoolValue failed = 1;
+  oneof request {
+    bool all = 2;
+    FDBCLIIncludeAddresses addresses = 3;
+  }
+}
+
+message FDBCLIKill {
+  // Will convert to –exec “kill; kill address...” internally.
+  repeated string addresses = 1;
+}
+
+message FDBCLIListtenants {
+  google.protobuf.StringValue begin = 1;
+  google.protobuf.StringValue end = 2;
+  google.protobuf.UInt32Value limit = 3;
+}
+
+message FDBCLILock {}
+
+message FDBCLIMaintenanceStatus {}
+
+message FDBCLIMaintenanceOn {
+  string zoneid = 1;
+  uint32 seconds = 2;
+}
+
+message FDBCLIMaintenanceOff {}
+
+message FDBCLIMaintenance {
+  oneof request {
+    FDBCLIMaintenanceStatus status = 1;
+    FDBCLIMaintenanceOn on = 2;
+    FDBCLIMaintenanceOff off = 3;
+  }
+}
+
+message FDBCLIOptionBlank {}
+
+message FDBCLIOptionArg {
+  string state = 1;
+  string option = 2;
+  google.protobuf.StringValue arg = 3;
+}
+
+message FDBCLIOption {
+  oneof request {
+    FDBCLIOptionBlank blank = 1;
+    FDBCLIOptionArg arg = 2;
+  }
+}
+
+message FDBCLIProfileActionClientDefault {}
+
+message FDBCLIProfileActionClientGet {}
+
+message FDBCLIProfileActionClientSet {
+  oneof rate {
+    FDBCLIProfileActionClientDefault default_rate = 1;
+    double value_rate = 2;
+  }
+  oneof size {
+    FDBCLIProfileActionClientDefault default_size = 3;
+    uint64 value_size = 4;
+  }
+}
+
+message FDBCLIProfileActionClient {
+  oneof request {
+    FDBCLIProfileActionClientGet get = 1;
+    FDBCLIProfileActionClientSet set = 2;
+  }
+}
+
+message FDBCLIProfileActionList {}
+
+message FDBCLIProfileActionFlow {
+  uint32 duration = 1;
+  // Client should simulate file. Internally
+  // handled and returned in a Log below.
+  repeated string processes = 2;
+}
+
+message FDBCLIProfileActionHeap { string process = 1; }
+
+message FDBCLIProfile {
+  oneof request {
+    FDBCLIProfileActionClient client = 1;
+    FDBCLIProfileActionList list = 2;
+    FDBCLIProfileActionFlow flow = 3;
+    FDBCLIProfileActionHeap heap = 4;
+  }
+}
+
+message FDBCLISet {
+  string key = 1;
+  string value = 2;
+}
+
+message FDBCLISetclassArg {
+  string address = 1;
+  string class = 2;
+}
+
+// Use this message to indicate no arguments to setclass
+message FDBCLISetclassList {}
+
+message FDBCLISetclass {
+  oneof request {
+    FDBCLISetclassList list = 1;
+    FDBCLISetclassArg arg = 2;
+  }
+}
+
+message FDBCLISleep { uint32 seconds = 1; }
+
+message FDBCLIStatus { google.protobuf.StringValue style = 1; }
+
+message FDBCLIThrottleActionOn {
+  string tag = 1;
+  google.protobuf.UInt32Value rate = 2;
+  google.protobuf.StringValue duration = 3;
+  google.protobuf.StringValue priority = 4;
+}
+
+message FDBCLIThrottleActionOff {
+  google.protobuf.StringValue type = 1;
+  google.protobuf.StringValue tag = 2;
+  google.protobuf.StringValue priority = 3;
+}
+
+message FDBCLIThrottleActionEnable {}
+
+message FDBCLIThrottleActionDisable {}
+
+message FDBCLIThrottleActionList {
+  google.protobuf.StringValue type = 1;
+  google.protobuf.UInt32Value limit = 2;
+}
+
+message FDBCLIThrottle {
+  oneof request {
+    FDBCLIThrottleActionOn on = 1;
+    FDBCLIThrottleActionOff off = 2;
+    FDBCLIThrottleActionEnable enable = 3;
+    FDBCLIThrottleActionDisable disable = 4;
+    FDBCLIThrottleActionList list = 5;
+  }
+}
+
+message FDBCLITriggerddteaminfolog {}
+
+message FDBCLIUnlock { string uid = 1; }
+
+message FDBCLIUsetenant { string name = 1; }
+
+message FDBCLIWritemode { string mode = 1; }
+
+message FDBCLITssqStart { string storage_uid = 1; }
+
+message FDBCLITssqStop { string storage_uid = 1; }
+
+message FDBCLITssqList {}
+
+message FDBCLITssq {
+  oneof request {
+    FDBCLITssqStart start = 1;
+    FDBCLITssqStop stop = 2;
+    FDBCLITssqList list = 3;
+  }
+}
+
+// This is a top level message so it can be used for potential transaction
+// support later.
+message FDBCLICommand {
+  oneof command {
+    // Does not include begin, commit, exit, help, reset, or rollback.
+    FDBCLIAdvanceversion advanceversion = 1;
+    FDBCLIClear clear = 2;
+    FDBCLIClearrange clearrange = 3;
+    FDBCLIConfigure configure = 4;
+    FDBCLIConsistencycheck consistencycheck = 5;
+    FDBCLICoordinators coordinators = 6;
+    FDBCLICreatetenant createtenant = 29;
+    FDBCLIDefaulttenant defaulttenant = 30;
+    FDBCLIDeletetenant deletetenant = 31;
+    FDBCLIExclude exclude = 7;
+    FDBCLIFileconfigure fileconfigure = 8;
+    FDBCLIForceRecoveryWithDataLoss force_recovery_with_data_loss = 9;
+    FDBCLIGet get = 10;
+    FDBCLIGetrange getrange = 11;
+    FDBCLIGetrangekeys getrangekeys = 12;
+    FDBCLIGettenant gettenant = 33;
+    FDBCLIGetversion getversion = 13;
+    FDBCLIHelp help = 32;
+    FDBCLIInclude include = 14;
+    FDBCLIKill kill = 15;
+    FDBCLIListtenants listtenants = 36;
+    FDBCLILock lock = 16;
+    FDBCLIMaintenance maintenance = 17;
+    FDBCLIOption option = 18;
+    FDBCLIProfile profile = 19;
+    FDBCLISet set = 20;
+    FDBCLISetclass setclass = 21;
+    FDBCLISleep sleep = 22;
+    FDBCLIStatus status = 23;
+    FDBCLIThrottle throttle = 24;
+    FDBCLITriggerddteaminfolog triggerddteaminfolog = 25;
+    FDBCLIUnlock unlock = 26;
+    FDBCLIUsetenant usetenant = 34;
+    FDBCLIWritemode writemode = 27;
+    FDBCLITssq tssq = 35;
+    // This one isn't used but defined so tests can trigger the unknown type
+    // check.
+    FDBCLIUnknownAction unknown = 28;
+  }
+}
+
+message FDBCLITransaction {
+  // Has an implied begin prepended and commit appended.
+  repeated FDBCLICommand commands = 1;
+}
+
+message FDBCLIUnknownAction {}
+
+message FDBCLIRequest {
+  // NOTE: Doesn't include status-from-json as that just prints a status
+  //       from a given json file which would require uploading and seems
+  //       unneeded today.
+  // Maps to -C|--cluster-file
+  google.protobuf.StringValue config = 1;
+  // Maps to –-log (if set implies --log-dir which is handled automatically)
+  google.protobuf.BoolValue log = 2;
+  // Maps to –-trace-format
+  google.protobuf.StringValue trace_format = 3;
+  // Maps to –-tls_certificate_file
+  google.protobuf.StringValue tls_certificate_file = 4;
+  // Maps to –-tls_ca_file
+  google.protobuf.StringValue tls_ca_file = 5;
+  // Maps to –-tls_key_file
+  google.protobuf.StringValue tls_key_file = 6;
+  // Maps to –-tls_password
+  google.protobuf.StringValue tls_password = 7;
+  // Maps to –-tls_verify_peers
+  google.protobuf.StringValue tls_verify_peers = 8;
+  // Maps to –-debug-tls
+  google.protobuf.BoolValue debug_tls = 9;
+  // Maps to -v|--version
+  google.protobuf.BoolValue version = 10;
+  // Maps to --log-group
+  google.protobuf.StringValue log_group = 14;
+  // Maps to --no-status
+  google.protobuf.BoolValue no_status = 15;
+  // Maps to --memory
+  google.protobuf.StringValue memory = 16;
+  // Maps to --build-flags
+  google.protobuf.BoolValue build_flags = 17;
+  // Maps to --timeout
+  google.protobuf.Int32Value timeout = 18;
+  oneof request {
+    FDBCLICommand command = 11;
+    FDBCLITransaction transaction = 12;
+    // This one isn't used but defined so tests can trigger the unknown type
+    // check.
+    FDBCLIUnknownAction unknown = 13;
+  }
+}
+
+message Log {
+  string filename = 1;
+  bytes contents = 2;
+}
+
+message FDBCLIResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
+  repeated Log logs = 4;
+}
