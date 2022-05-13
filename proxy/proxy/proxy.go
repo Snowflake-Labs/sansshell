@@ -343,6 +343,7 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 
 	// For every target we have to send a separate StartStream (with a nonce which in our case is the target index so clients can map too).
 	// We then validate the nonce matches and record the stream ID so later processing can match responses to the right targets.
+	// This needs to be 2 loops as we want the server to process N StartStreams in parallel and then we'll loop getting responses.
 	for i, t := range p.Targets {
 		req := &proxypb.ProxyRequest{
 			Request: &proxypb.ProxyRequest_StartStream{
@@ -353,8 +354,8 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 				},
 			},
 		}
-
 		err = stream.Send(req)
+
 		// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
 		// for SendMsg. However it appears SendMsg will return actual errors "sometimes" when it's the first stream
 		// a server has ever handled so account for that here.
@@ -365,12 +366,19 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			_, err := stream.Recv()
 			return nil, nil, errors, status.Errorf(codes.Internal, "remote error from Send for %s - %v", method, err)
 		}
+	}
+
+	// We sent len(p.Targets) requests so loop for that many replies. If the server doesn't we'll have to wait until
+	// our context times out then. If the server attempts something invalid we'll catch and just abort (i.e, duplicate
+	// responses and/or out of range).
+	for range p.Targets {
 		resp, err := stream.Recv()
 		if err != nil {
 			return nil, nil, errors, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
 		}
 
 		// Validate we got an answer and it has expected reflected values.
+
 		// These are all sanity checks for the entire session so an overall error is appropriate since we're likely
 		// dealing with a broken proxy of some sort.
 		r := resp.GetStartStreamReply()
@@ -378,8 +386,17 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
 		}
 
-		if gotTarget, wantTarget, gotNonce, wantNonce := r.Target, req.GetStartStream().Target, r.Nonce, req.GetStartStream().Nonce; gotTarget != wantTarget || gotNonce != wantNonce {
-			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get matching target/nonce from stream reply. got %s/%d want %s/%d", gotTarget, gotNonce, wantTarget, wantNonce)
+		// We want the returned Target+nonce to match what we sent and that it's one we know about.
+		if r.Nonce >= uint32(len(p.Targets)) {
+			return nil, nil, errors, status.Errorf(codes.Internal, "got back invalid nonce (out of range): %+v", r)
+		}
+		if p.Targets[r.Nonce] != r.Target {
+			return nil, nil, errors, status.Errorf(codes.Internal, "Target/nonce don't match. target %s(%d) is not %s: %+v", p.Targets[r.Nonce], r.Nonce, r.Target, r)
+		}
+
+		id := r.GetStreamId()
+		if streamIds[id] != nil {
+			return nil, nil, errors, status.Errorf(codes.Internal, "Duplicate response for target %s. Already have %+v for response %+v", r.Target, streamIds[id], r)
 		}
 
 		ret := &Ret{
@@ -403,7 +420,14 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 // This returns ProxyRet objects from the channel which contain anypb.Any so the caller (generally generated code)
 // will need to convert those to the proper expected specific types.
 //
+// As we're attempting to invoke N RPC's together we do have an implicit blocking timeout for the remote server to
+// get connections (or not) to the N targets. This is done in parallel but does mean there's a bound where the RPC
+// may take up to a Dial timeout (usually 20s) if any target is unavailable. Therefore it's suggested this never be
+// invoked with a context timeout lower than the remote server Dial timeout.
+//
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+//
+// TODO(jchacon): Should add the ability to specify remote dial timeout in the connection to the proxy.
 func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *Ret, error) {
 	requestMsg, ok := args.(proto.Message)
 	if !ok {
