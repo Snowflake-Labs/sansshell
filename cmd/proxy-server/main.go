@@ -44,6 +44,8 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
 
+	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+
 	// Import the sansshell server code so we can use Version.
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 )

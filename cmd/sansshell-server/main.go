@@ -49,6 +49,8 @@ import (
 	// Ansible needs a real import to bind flags.
 	ansible "github.com/Snowflake-Labs/sansshell/services/ansible/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
+
+	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 
@@ -73,9 +75,19 @@ var (
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 	version       bool
+
+	//fdbCLIEnvList ssutil.StringSliceFlag
 )
 
 func init() {
+	// Uncomment below to bind FDB flags.
+	//flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/some/path/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
+	//flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "fdbuser", "User to change to when running fdbcli")
+	//flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "fdbgroup", "Group to change to when running fdbcli")
+	//fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
+	//*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "SOME_ENV_VAR") // To set a default
+	//flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
+
 	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
 	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
 	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")

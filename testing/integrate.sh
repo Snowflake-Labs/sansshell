@@ -412,6 +412,7 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/exec \
   github.com/Snowflake-Labs/sansshell/services/exec/client \
   github.com/Snowflake-Labs/sansshell/services/fdb \
+  github.com/Snowflake-Labs/sansshell/services/fdb/client \
   github.com/Snowflake-Labs/sansshell/services/healthcheck \
   github.com/Snowflake-Labs/sansshell/services/healthcheck/client \
   github.com/Snowflake-Labs/sansshell/services/localfile \
