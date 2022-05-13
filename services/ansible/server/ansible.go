@@ -19,7 +19,6 @@ package server
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"regexp"
@@ -32,12 +31,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var ansiblePlaybookBin = flag.String("ansible_playbook_bin", "/usr/bin/ansible-playbook", "Path to ansible-playbook binary")
+var (
+	// AnsiblePlaybookBin is the location to the ansible binary. Binding this to a flag is often useful.
+	AnsiblePlaybookBin = "/usr/bin/ansible-playbook"
 
-// A test hook so we can take the args passed and transform them as needed.
-var cmdArgsTransform = func(input []string) []string {
-	return input
-}
+	// A test hook so we can take the args passed and transform them as needed.
+	cmdArgsTransform = func(input []string) []string {
+		return input
+	}
+)
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -46,6 +48,10 @@ var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
 	// Basic sanity checking up front.
+	if AnsiblePlaybookBin == "" {
+		return nil, status.Error(codes.Unimplemented, "not implemented")
+	}
+
 	if req.Playbook == "" {
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
 	}
@@ -98,7 +104,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	cmdArgs = cmdArgsTransform(cmdArgs)
 
-	run, err := util.RunCommand(ctx, *ansiblePlaybookBin, cmdArgs)
+	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs)
 	if err != nil {
 		return nil, err
 	}

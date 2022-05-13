@@ -134,3 +134,51 @@ func TestStreamSetAddErrors(t *testing.T) {
 		})
 	}
 }
+
+// a clientClonn that blocks until the calling context
+// is cancelled.
+type blockingClientConn struct{}
+
+// see: grpc.ClientConnInterface.Invoke
+func (b blockingClientConn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// see: grpc.ClientConnInterface.NewStream
+func (b blockingClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// a context dialer that returns blockingClientConn
+type blockingClientDialer struct{}
+
+func (b blockingClientDialer) DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error) {
+	return blockingClientConn{}, nil
+}
+
+func TestTargetStreamAddNonBlocking(t *testing.T) {
+	// Adding a target to a stream set should not block.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serviceMap := LoadGlobalServiceMap()
+	ss := NewTargetStreamSet(serviceMap, blockingClientDialer{}, nil)
+	replyChan := make(chan *pb.ProxyReply, 1)
+	doneChan := make(chan struct{})
+	req := &pb.StartStream{
+		Target:     "nosuchhost:000",
+		MethodName: "/Testdata.TestService/TestUnary",
+	}
+	go func() {
+		ss.Add(ctx, req, replyChan, nil)
+		close(doneChan)
+	}()
+	select {
+	case <-time.After(1 * time.Second):
+		// we're blocked.
+		t.Fatal("TargetStreamSet.Add blocked")
+	case <-doneChan:
+		// return
+	}
+}

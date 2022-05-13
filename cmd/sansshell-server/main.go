@@ -45,12 +45,18 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 
 	// Import the server modules you want to expose, they automatically register
-	_ "github.com/Snowflake-Labs/sansshell/services/ansible/server"
+
+	// Ansible needs a real import to bind flags.
+	ansible "github.com/Snowflake-Labs/sansshell/services/ansible/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/packages/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
+
+	// Packages needs a real import to bind flags.
+	packages "github.com/Snowflake-Labs/sansshell/services/packages/server"
+	// Process needs a real import to bind flags.
+	process "github.com/Snowflake-Labs/sansshell/services/process/server"
+	// Sansshell server needs a real import to get at Version
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
@@ -76,6 +82,23 @@ func init() {
 	//fdbserver.FDBCliGroup = "fdbgroup"
 	//fdbserver.FDBCLiLocation = "/some/path/fdbcli"
 	//fdbserver.FDBCLIEnvironment = []string{"SOME_ENV_VAR"}
+
+	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
+	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
+	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&mtlsFlags.ServerKeyFile, "server-key", mtlsFlags.ServerKeyFile, "Path to the server's TLS key")
+	flag.StringVar(&mtlsFlags.RootCAFile, "root-ca", mtlsFlags.RootCAFile, "The root of trust for remote identities, PEM format")
+
+	flag.StringVar(&ansible.AnsiblePlaybookBin, "ansible_playbook_bin", ansible.AnsiblePlaybookBin, "Path to ansible-playbook binary")
+
+	flag.StringVar(&packages.YumBin, "yum-bin", packages.YumBin, "Path to yum binary")
+
+	flag.StringVar(&process.JstackBin, "jstack-bin", process.JstackBin, "Path to the jstack binary")
+	flag.StringVar(&process.JmapBin, "jmap-bin", process.JmapBin, "Path to the jmap binary")
+	flag.StringVar(&process.PsBin, "ps-bin", process.PsBin, "Path to the ps binary")
+	flag.StringVar(&process.PstackBin, "pstack-bin", process.PstackBin, "Path to the pstack binary")
+	flag.StringVar(&process.GcoreBin, "gcore-bin", process.GcoreBin, "Path to the gcore binary")
+
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
 }
 

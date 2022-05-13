@@ -41,9 +41,13 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
-	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
+
 	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+
+	// Import the sansshell server code so we can use Version.
+	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 )
 
 var (
@@ -63,6 +67,12 @@ var (
 )
 
 func init() {
+	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
+	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
+	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&mtlsFlags.ServerKeyFile, "server-key", mtlsFlags.ServerKeyFile, "Path to the server's TLS key")
+	flag.StringVar(&mtlsFlags.RootCAFile, "root-ca", mtlsFlags.RootCAFile, "The root of trust for remote identities, PEM format")
+
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
 }
 
