@@ -72,7 +72,7 @@ func TestRun(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedAnsiblePlaybookBin := *ansiblePlaybookBin
+	savedAnsiblePlaybookBin := AnsiblePlaybookBin
 
 	savedCmdArgsTransform := cmdArgsTransform
 	cmdArgsTransform = func(input []string) []string {
@@ -81,7 +81,7 @@ func TestRun(t *testing.T) {
 		return []string{"/dev/null"}
 	}
 	t.Cleanup(func() {
-		*ansiblePlaybookBin = savedAnsiblePlaybookBin
+		AnsiblePlaybookBin = savedAnsiblePlaybookBin
 		cmdArgsTransform = savedCmdArgsTransform
 	})
 
@@ -108,6 +108,10 @@ func TestRun(t *testing.T) {
 			name:    "A non-absolute bin path",
 			bin:     "something",
 			path:    path,
+			wantErr: true,
+		},
+		{
+			name:    "no ansible binary",
 			wantErr: true,
 		},
 		{
@@ -186,7 +190,7 @@ func TestRun(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			*ansiblePlaybookBin = tc.bin
+			AnsiblePlaybookBin = tc.bin
 			cmdArgsTransform = func(input []string) []string {
 				return tc.args
 			}

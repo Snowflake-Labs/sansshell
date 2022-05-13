@@ -150,10 +150,20 @@ func TestInstall(t *testing.T) {
 		Repo:    "somerepo",
 	}
 
-	// Test 1: A clean install. Validate we got expected output back.
+	savedYumBin := YumBin
+	t.Cleanup(func() {
+		YumBin = savedYumBin
+	})
 
+	// Test 1: Should fail on a blank yum
+	YumBin = ""
+	_, err = client.Install(ctx, req)
+	testutil.FatalOnNoErr("clean install request", err, t)
+
+	// Test 2: A clean install. Validate we got expected output back.
 	// This is assuming yum based installs for testing command builder.
-	wantCmdLine := fmt.Sprintf("%s install-nevra -y --enablerepo=somerepo package-1.2.3", *yumBin)
+	YumBin = "yum"
+	wantCmdLine := fmt.Sprintf("%s install-nevra -y --enablerepo=somerepo package-1.2.3", YumBin)
 
 	resp, err := client.Install(ctx, req)
 	testutil.FatalOnErr("clean install request", err, t)
@@ -165,7 +175,7 @@ func TestInstall(t *testing.T) {
 	}
 	t.Logf("clean install response: %+v", resp)
 
-	// Test 2: Permutations on bad commands/output.
+	// Test 3: Permutations on bad commands/output.
 	for _, tc := range []struct {
 		name     string
 		generate func(*pb.InstallRequest) ([]string, error)
@@ -364,11 +374,16 @@ func TestUpdate(t *testing.T) {
 		Repo:       "somerepo",
 	}
 
+	savedYumBin := YumBin
+	t.Cleanup(func() {
+		YumBin = savedYumBin
+	})
 	// Test 1: A clean install. Validate we got expected output back.
 
 	// This is assuming yum based installs for testing command builder.
-	wantValidateCmdLine := fmt.Sprintf("%s list installed package-0:1-1.2.3", *yumBin)
-	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo package-0:1-4.5.6", *yumBin)
+	YumBin = "yum"
+	wantValidateCmdLine := fmt.Sprintf("%s list installed package-0:1-1.2.3", YumBin)
+	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo package-0:1-4.5.6", YumBin)
 
 	resp, err := client.Update(ctx, req)
 	testutil.FatalOnErr("clean update request", err, t)
@@ -492,10 +507,15 @@ func TestListInstalled(t *testing.T) {
 	}
 	t.Log(err)
 
+	savedYumBin := YumBin
+	t.Cleanup(func() {
+		YumBin = savedYumBin
+	})
 	// Test 1: No options. Should pick yum w/o error and give back our list.
 
 	// This is assuming yum based installs for testing command builder.
-	wantCmdLine := fmt.Sprintf("%s list installed", *yumBin)
+	YumBin = "yum"
+	wantCmdLine := fmt.Sprintf("%s list installed", YumBin)
 
 	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
 	testutil.FatalOnErr("basic package list request", err, t)
@@ -607,10 +627,15 @@ func TestRepoList(t *testing.T) {
 	testutil.FatalOnNoErr(fmt.Sprintf("bad package enum - resp %v", resp), err, t)
 	t.Log(err)
 
+	savedYumBin := YumBin
+	t.Cleanup(func() {
+		YumBin = savedYumBin
+	})
 	// Test 1: No options. Should pick yum w/o error and give back our list.
 
 	// This is assuming yum based installs for testing command builder.
-	wantCmdLine := fmt.Sprintf("%s repoinfo all", *yumBin)
+	YumBin = "yum"
+	wantCmdLine := fmt.Sprintf("%s repoinfo all", YumBin)
 
 	resp, err = client.RepoList(ctx, &pb.RepoListRequest{})
 	testutil.FatalOnErr("basic repo list request", err, t)
