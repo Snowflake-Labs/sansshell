@@ -38,7 +38,10 @@ func genCmd(p pb.PackageSystem, m map[pb.PackageSystem][]string) ([]string, erro
 	var out []string
 	switch p {
 	case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
-		out = append(out, *yumBin)
+		if YumBin == "" {
+			return nil, status.Errorf(codes.Unimplemented, "no support for yum")
+		}
+		out = append(out, YumBin)
 		out = append(out, m[p]...)
 	default:
 		return nil, status.Errorf(codes.Unimplemented, "no support for package system enum %d", p)
