@@ -20,7 +20,6 @@ package server
 import (
 	"bufio"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -47,8 +46,13 @@ type server struct {
 
 var (
 	// These are effectively platform agnostic so they can here vs the architecture specific files.
-	jstackBin = flag.String("jstack-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jstack", "Path to the jstack binary")
-	jmapBin   = flag.String("jmap-bin", "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jmap", "Path to the jmap binary")
+	// Picked a command JVM package for defaults.
+
+	// JstackBin is the location of the jstack binary. Binding this to a flag is often useful.
+	JstackBin = "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jstack"
+
+	// JmapBin is the location of the jmap binary. Binding this to a flag is often useful.
+	JmapBin = "/usr/lib/jvm/adoptopenjdk-11-hotspot/bin/jmap"
 )
 
 // Vars so we can replace for testing.
@@ -102,7 +106,11 @@ var (
 )
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
-	cmdName := *psBin
+	if PsBin == "" {
+		return nil, status.Error(codes.Unimplemented, "not implemented")
+	}
+
+	cmdName := PsBin
 	options := psOptions()
 
 	// We gather all the processes up and then filter by pid if needed at the end.
@@ -153,7 +161,7 @@ func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty,
 
 func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.GetStacksReply, error) {
 	// This is tied to pstack so either an OS provides it or it doesn't.
-	if *pstackBin == "" {
+	if PstackBin == "" {
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
@@ -161,7 +169,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	cmdName := *pstackBin
+	cmdName := PstackBin
 	options := pstackOptions(req)
 
 	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
@@ -223,8 +231,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 }
 
 func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest) (*pb.GetJavaStacksReply, error) {
-	// This is tied to pstack so either an OS provides it or it doesn't.
-	if *jstackBin == "" {
+	if JstackBin == "" {
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
@@ -232,7 +239,7 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
-	cmdName := *jstackBin
+	cmdName := JstackBin
 	options := jstackOptions(req)
 
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
@@ -377,18 +384,18 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	switch req.DumpType {
 	case pb.DumpType_DUMP_TYPE_GCORE:
 		// This is tied to gcore so either an OS provides it or it doesn't.
-		if *gcoreBin == "" {
+		if GcoreBin == "" {
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
-		cmdName = *gcoreBin
+		cmdName = GcoreBin
 		options, file, err = gcoreOptionsAndLocation(req)
 		bucketFile = fmt.Sprintf("%s-core.%d", p.Addr.String(), req.Pid)
 	case pb.DumpType_DUMP_TYPE_JMAP:
 		// This is tied to jmap so either an OS provides it or it doesn't.
-		if *jmapBin == "" {
+		if JmapBin == "" {
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
-		cmdName = *jmapBin
+		cmdName = JmapBin
 		options, file, err = jmapOptionsAndLocation(req)
 		bucketFile = fmt.Sprintf("%s-heapdump.%d", p.Addr.String(), req.Pid)
 	default:

@@ -19,8 +19,7 @@
 
 package server
 
-import (
-	"flag"
+var (
+	// YumBin is the location of the yum binary. On non-linux this is blank as it's likely unsupported.
+	YumBin string
 )
-
-var yumBin = flag.String("yum-bin", "false", "Path to yum binary (NOTE: no support on this platform)")

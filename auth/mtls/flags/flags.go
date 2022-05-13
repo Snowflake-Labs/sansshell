@@ -21,8 +21,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"flag"
-	"log"
 	"os"
 	"path"
 
@@ -31,18 +29,23 @@ import (
 
 const (
 	loaderName = "flags"
-
-	defaultClientCertPath = ".sansshell/client.pem"
-	defaultClientKeyPath  = ".sansshell/client.key"
-	defaultServerCertPath = ".sansshell/leaf.pem"
-	defaultServerKeyPath  = ".sansshell/leaf.key"
-	defaultRootCAPath     = ".sansshell/root.pem"
 )
 
 var (
-	clientCertFile, clientKeyFile string
-	serverCertFile, serverKeyFile string
-	rootCAFile                    string
+	// ClientCertFile is the location to load the client cert. Binding this to a flag is often useful.
+	ClientCertFile = path.Join(os.Getenv("HOME"), ".sansshell/client.pem")
+
+	// ClientKeyFile is the location to load the client cert key. Binding this to a flag is often useful.
+	ClientKeyFile = path.Join(os.Getenv("HOME"), ".sansshell/client.key")
+
+	// ServerCertFile is the location to load the server cert. Binding this to a flag is often useful.
+	ServerCertFile = path.Join(os.Getenv("HOME"), ".sansshell/leaf.pem")
+
+	// ServerKeyFile is the location to load the server cert key. Binding this to a flag is often useful.
+	ServerKeyFile = path.Join(os.Getenv("HOME"), ".sansshell/leaf.key")
+
+	// RootCAFile is the location to load the root CA store. Binding this to a flag is often useful.
+	RootCAFile = path.Join(os.Getenv("HOME"), ".sansshell/root.pem")
 )
 
 // Name returns the loader to use to set mtls params via flags.
@@ -53,19 +56,19 @@ func Name() string { return loaderName }
 type flagLoader struct{}
 
 func (flagLoader) LoadClientCA(context.Context) (*x509.CertPool, error) {
-	return mtls.LoadRootOfTrust(rootCAFile)
+	return mtls.LoadRootOfTrust(RootCAFile)
 }
 
 func (flagLoader) LoadRootCA(context.Context) (*x509.CertPool, error) {
-	return mtls.LoadRootOfTrust(rootCAFile)
+	return mtls.LoadRootOfTrust(RootCAFile)
 }
 
 func (flagLoader) LoadClientCertificate(context.Context) (tls.Certificate, error) {
-	return tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+	return tls.LoadX509KeyPair(ClientCertFile, ClientKeyFile)
 }
 
 func (flagLoader) LoadServerCertificate(context.Context) (tls.Certificate, error) {
-	return tls.LoadX509KeyPair(serverCertFile, serverKeyFile)
+	return tls.LoadX509KeyPair(ServerCertFile, ServerKeyFile)
 }
 
 func (flagLoader) CertsRefreshed() bool {
@@ -73,23 +76,6 @@ func (flagLoader) CertsRefreshed() bool {
 }
 
 func init() {
-	cd, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	clientCertFile = path.Join(cd, defaultClientCertPath)
-	clientKeyFile = path.Join(cd, defaultClientKeyPath)
-	serverCertFile = path.Join(cd, defaultServerCertPath)
-	serverKeyFile = path.Join(cd, defaultServerKeyPath)
-	rootCAFile = path.Join(cd, defaultRootCAPath)
-
-	flag.StringVar(&clientCertFile, "client-cert", clientCertFile, "Path to this client's x509 cert, PEM format")
-	flag.StringVar(&clientKeyFile, "client-key", clientKeyFile, "Path to this client's key")
-	flag.StringVar(&serverCertFile, "server-cert", serverCertFile, "Path to an x509 server cert, PEM format")
-	flag.StringVar(&serverKeyFile, "server-key", serverKeyFile, "Path to the server's TLS key")
-	flag.StringVar(&rootCAFile, "root-ca", rootCAFile, "The root of trust for remote identities, PEM format")
-
 	if err := mtls.Register(loaderName, flagLoader{}); err != nil {
 		panic(err)
 	}
