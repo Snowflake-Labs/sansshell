@@ -29,9 +29,6 @@ import (
 	"syscall"
 
 	"gocloud.dev/blob"
-	_ "gocloud.dev/blob/azureblob" // Bring Azure blob support in.
-	_ "gocloud.dev/blob/gcsblob"   // Bring GCS blob support in.
-	_ "gocloud.dev/blob/s3blob"    // Bring S3 blob support in.
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
