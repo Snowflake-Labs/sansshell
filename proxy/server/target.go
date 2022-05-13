@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -28,6 +29,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -39,6 +41,9 @@ import (
 // A TargetStream is a single bidirectional stream between
 // the proxy and a target sansshell server
 type TargetStream struct {
+	// The parent context that owns this stream.
+	ctx context.Context
+
 	// The unique indentifier of this stream
 	streamID uint64
 
@@ -48,8 +53,14 @@ type TargetStream struct {
 	// The ServiceMethod spec
 	serviceMethod *ServiceMethod
 
-	// The underlying grpc.ClientStream to the target server
+	// The underlying grpc.ClientConnInterface to the target server
+	grpcConn grpc.ClientConnInterface
+
+	// The underlying grpc.ClientStream to the target server.
 	grpcStream grpc.ClientStream
+
+	// streamMu guards access to grpcStream.
+	streamMu sync.RWMutex
 
 	// A cancel function that can be used to request early cancellation
 	// of the stream context
@@ -66,6 +77,18 @@ type TargetStream struct {
 
 	// a logger used to log additional information
 	logger logr.Logger
+}
+
+func (s *TargetStream) getStream() grpc.ClientStream {
+	s.streamMu.RLock()
+	defer s.streamMu.RUnlock()
+	return s.grpcStream
+}
+
+func (s *TargetStream) setStream(stream grpc.ClientStream) {
+	s.streamMu.Lock()
+	s.grpcStream = stream
+	s.streamMu.Unlock()
 }
 
 func (s *TargetStream) String() string {
@@ -90,7 +113,7 @@ func (s *TargetStream) Target() string {
 
 // PeerAuthInfo returns authz-relevant information about the stream peer
 func (s *TargetStream) PeerAuthInfo() *rpcauth.PeerAuthInput {
-	return rpcauth.PeerInputFromContext(s.grpcStream.Context())
+	return rpcauth.PeerInputFromContext(s.getStream().Context())
 }
 
 // NewRequest returns a new, empty request message for this target stream.
@@ -128,7 +151,7 @@ func (s *TargetStream) CloseWith(err error) {
 // Send the supplied request to the target stream, returning
 // an error if the context has already been cancelled.
 func (s *TargetStream) Send(req proto.Message) error {
-	ctx := s.grpcStream.Context()
+	ctx := s.getStream().Context()
 	select {
 	case s.reqChan <- req:
 		return nil
@@ -141,8 +164,39 @@ func (s *TargetStream) Send(req proto.Message) error {
 // All data received from target will be converted into ProxyReply
 // messages for sending to a proxy client, including the final
 // status of the target stream
-func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
-	group, ctx := errgroup.WithContext(s.grpcStream.Context())
+func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
+	startStreamReply := &pb.ProxyReply{
+		Reply: &pb.ProxyReply_StartStreamReply{
+			StartStreamReply: &pb.StartStreamReply{
+				Target: s.target,
+				Nonce:  nonce,
+			},
+		},
+	}
+
+	grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
+	if err != nil {
+		// We cannot create a new stream to the target. In this case, we want
+		// to send back a start stream error
+		s.logger.Info("unable to create stream", "status", err)
+		startStreamReply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
+			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
+		}
+		replyChan <- startStreamReply
+		s.cancelFunc()
+		return
+	}
+
+	// We've successfully connected, and can return the stream id to the
+	// client, and replace the intial unconnected stream with the target
+	// stream.
+	s.setStream(grpcStream)
+	startStreamReply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
+		StreamId: s.streamID,
+	}
+	replyChan <- startStreamReply
+
+	group, ctx := errgroup.WithContext(grpcStream.Context())
 	group.Go(func() error {
 		// read from the incoming request channel, and write
 		// to the stream
@@ -157,13 +211,13 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 					// reqChan was closed, meaning no more messages are incoming
 					// if this was a client stream, we issue a half-close
 					if s.serviceMethod.ClientStreams() {
-						return s.grpcStream.CloseSend()
+						return grpcStream.CloseSend()
 					}
 					// otherwise, we're done
 					return nil
 				}
 			}
-			err := s.grpcStream.SendMsg(req)
+			err := grpcStream.SendMsg(req)
 			// if this returns an EOF, then the final status
 			// will be returned via a call to RecvMsg, and we
 			// should not return an error here, since that
@@ -191,7 +245,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	group.Go(func() error {
 		for {
 			msg := s.serviceMethod.NewReply()
-			err := s.grpcStream.RecvMsg(msg)
+			err := grpcStream.RecvMsg(msg)
 			if err == io.EOF {
 				return nil
 			}
@@ -216,7 +270,7 @@ func (s *TargetStream) Run(replyChan chan *pb.ProxyReply) {
 	})
 	// Wait for final status from the errgroup, and translate it into
 	// a server-close call
-	err := group.Wait()
+	err = group.Wait()
 
 	// The error status may by set/overidden if CloseWith was used to
 	// terminate the stream.
@@ -245,16 +299,13 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, me
 		cancel()
 		return nil, err
 	}
-	clientStream, err := conn.NewStream(ctx, method.StreamDesc(), method.FullName())
-	if err != nil {
-		cancel()
-		return nil, err
-	}
 	ts := &TargetStream{
+		ctx:           ctx,
 		streamID:      rand.Uint64(),
 		target:        target,
 		serviceMethod: method,
-		grpcStream:    clientStream,
+		grpcConn:      conn,
+		grpcStream:    &unconnectedClientStream{ctx: ctx},
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message),
 		errChan:       make(chan error, 1),
@@ -359,13 +410,14 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 	}
 	streamID := stream.StreamID()
 	t.streams[streamID] = stream
-	reply.GetStartStreamReply().Reply = &pb.StartStreamReply_StreamId{
-		StreamId: streamID,
-	}
 	t.noncePairs[targetNonce] = true
 	t.wg.Add(1)
+	// Create a new go-routine to execute the stream, which
+	// including making the initial connection to the target
+	// (which is blocking, and cannot be done here without
+	// blocking other incoming requests from the client).
 	go func() {
-		stream.Run(replyChan)
+		stream.Run(req.GetNonce(), replyChan)
 		select {
 		case doneChan <- streamID:
 			// we notified caller of our status
@@ -374,7 +426,6 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		}
 		t.wg.Done()
 	}()
-	sendReply(reply)
 	return nil
 }
 
@@ -510,6 +561,49 @@ func convertStatus(s *status.Status) *pb.Status {
 		Message: p.Message,
 		Details: p.Details,
 	}
+}
+
+// An unconnected client stream is a grpc.ClientStream
+// which is associated with a TargetStream prior to the
+// successful establishment of a connection with the target.
+// This removes the need for TargetStream code to handle possibly
+// nil stream values prior to connection in Run.
+type unconnectedClientStream struct {
+	ctx context.Context
+}
+
+var (
+	unconnectedClientError = errors.New("unconnected stream")
+)
+
+// see: grpc.ClientStream.Header()
+func (u *unconnectedClientStream) Header() (metadata.MD, error) {
+	return nil, unconnectedClientError
+}
+
+// see: grpc.ClientStream.Trailer()
+func (u *unconnectedClientStream) Trailer() metadata.MD {
+	return nil
+}
+
+// see: grpc.ClientStream.CloseSend()
+func (u *unconnectedClientStream) CloseSend() error {
+	return fmt.Errorf("%w: CloseSend", unconnectedClientError)
+}
+
+// see: grpc.ClientStream.Context()
+func (u *unconnectedClientStream) Context() context.Context {
+	return u.ctx
+}
+
+// see: grpc.ClientStream.SendMsg()
+func (u *unconnectedClientStream) SendMsg(interface{}) error {
+	return fmt.Errorf("%w: SendMsg", unconnectedClientError)
+}
+
+// see: grpc.ClientStream.RecvMsg()
+func (u *unconnectedClientStream) RecvMsg(interface{}) error {
+	return fmt.Errorf("%w: RecvMsg", unconnectedClientError)
 }
 
 func init() {

@@ -45,12 +45,20 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 
 	// Import the server modules you want to expose, they automatically register
-	_ "github.com/Snowflake-Labs/sansshell/services/ansible/server"
+
+	// Ansible needs a real import to bind flags.
+	ansible "github.com/Snowflake-Labs/sansshell/services/ansible/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
+
+	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/packages/server"
-	_ "github.com/Snowflake-Labs/sansshell/services/process/server"
+
+	// Packages needs a real import to bind flags.
+	packages "github.com/Snowflake-Labs/sansshell/services/packages/server"
+	// Process needs a real import to bind flags.
+	process "github.com/Snowflake-Labs/sansshell/services/process/server"
+	// Sansshell server needs a real import to get at Version
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 )
@@ -67,9 +75,35 @@ var (
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 	version       bool
+
+	//fdbCLIEnvList ssutil.StringSliceFlag
 )
 
 func init() {
+	// Uncomment below to bind FDB flags.
+	//flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/some/path/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
+	//flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "fdbuser", "User to change to when running fdbcli")
+	//flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "fdbgroup", "Group to change to when running fdbcli")
+	//fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
+	//*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "SOME_ENV_VAR") // To set a default
+	//flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
+
+	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
+	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
+	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&mtlsFlags.ServerKeyFile, "server-key", mtlsFlags.ServerKeyFile, "Path to the server's TLS key")
+	flag.StringVar(&mtlsFlags.RootCAFile, "root-ca", mtlsFlags.RootCAFile, "The root of trust for remote identities, PEM format")
+
+	flag.StringVar(&ansible.AnsiblePlaybookBin, "ansible_playbook_bin", ansible.AnsiblePlaybookBin, "Path to ansible-playbook binary")
+
+	flag.StringVar(&packages.YumBin, "yum-bin", packages.YumBin, "Path to yum binary")
+
+	flag.StringVar(&process.JstackBin, "jstack-bin", process.JstackBin, "Path to the jstack binary")
+	flag.StringVar(&process.JmapBin, "jmap-bin", process.JmapBin, "Path to the jmap binary")
+	flag.StringVar(&process.PsBin, "ps-bin", process.PsBin, "Path to the ps binary")
+	flag.StringVar(&process.PstackBin, "pstack-bin", process.PstackBin, "Path to the pstack binary")
+	flag.StringVar(&process.GcoreBin, "gcore-bin", process.GcoreBin, "Path to the gcore binary")
+
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
 }
 

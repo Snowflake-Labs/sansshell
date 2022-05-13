@@ -47,6 +47,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
+	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/client" // To get FDB modules uncomment this line.
 )
 
 const (
@@ -80,6 +81,12 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 )
 
 func init() {
+	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
+	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
+	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&mtlsFlags.ServerKeyFile, "server-key", mtlsFlags.ServerKeyFile, "Path to the server's TLS key")
+	flag.StringVar(&mtlsFlags.RootCAFile, "root-ca", mtlsFlags.RootCAFile, "The root of trust for remote identities, PEM format")
+
 	// Setup an empty slice so it can be deref'd below regardless of user input.
 	outputsFlag.Target = &[]string{}
 	targetsFlag.Target = &[]string{}
