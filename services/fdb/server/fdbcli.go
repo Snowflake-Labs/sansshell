@@ -18,7 +18,6 @@ package server
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/user"
@@ -37,22 +36,21 @@ import (
 )
 
 var (
-	fdbCLI      = flag.String("fdbcli", "", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
-	fdbCLIUser  = flag.String("fdbcli-user", "", "User to change to when running fdbcli")
-	fdbCLIGroup = flag.String("fdbcli-group", "", "Group to change to when running fdbcli")
+	// FDBCLI is the location of the fdbcli binary. Binding this to a flag is often useful.
+	FDBCLI string
 
-	// fdbCLIEnvList will be bound to --fdb-cli-env-list to list environment variables to retain before running fdbcli.
-	fdbCLIEnvList util.StringSliceFlag
+	// FDBCLIUser is the user to become before running fdbcli (if non blank). Binding this to a flag is often useful.
+	FDBCLIUser string
+
+	// FDBCLIGroup is the group to become before running fdbcli (if non blank). Binding this to a flag is often useful.
+	FDBCLIGroup string
+
+	// FDBCLIEnvList ia a list of environment variables to retain before running fdbcli (such as TLS). Binding this to a flag is often useful.
+	FDBCLIEnvList []string
 
 	// generateFDBCLIArgs exists as a var for testing purposes
 	generateFDBCLIArgs = generateFDBCLIArgsImpl
 )
-
-func init() {
-	// Setup defaults to for --fdbcli-env-list
-	fdbCLIEnvList.Target = &[]string{}
-	flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
-}
 
 // server is used to implement the gRPC server
 type server struct {
@@ -73,11 +71,11 @@ func (s *server) processCreds() (*creds, error) {
 	defer s.mu.Unlock()
 
 	var usr, grp string
-	if s.fdbCLIUid == -1 && *fdbCLIUser != "" {
-		usr = *fdbCLIUser
+	if s.fdbCLIUid == -1 && FDBCLIUser != "" {
+		usr = FDBCLIUser
 	}
-	if s.fdbCLIGid == -1 && *fdbCLIGroup != "" {
-		grp = *fdbCLIGroup
+	if s.fdbCLIGid == -1 && FDBCLIGroup != "" {
+		grp = FDBCLIGroup
 	}
 
 	if usr != "" {
@@ -235,7 +233,7 @@ func (s *server) FDBCLI(ctx context.Context, req *pb.FDBCLIRequest) (*pb.FDBCLIR
 		return nil, err
 	}
 	// Add env vars from flag
-	for _, e := range *fdbCLIEnvList.Target {
+	for _, e := range FDBCLIEnvList {
 		opts = append(opts, util.EnvVar(e))
 	}
 
@@ -299,7 +297,7 @@ func generateFDBCLIArgsImpl(req *pb.FDBCLIRequest) ([]string, []captureLogs, err
 	final := strings.Join(args, " ")
 	args = []string{"--exec", final}
 
-	command := []string{*fdbCLI}
+	command := []string{FDBCLI}
 	command = append(command, topLevelArgs...)
 	command = append(command, args...)
 	return command, logs, nil

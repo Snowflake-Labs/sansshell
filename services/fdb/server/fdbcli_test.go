@@ -231,7 +231,7 @@ func TestFDBCLI(t *testing.T) {
 			resp: &pb.FDBCLIResponse{},
 			bin:  testutil.ResolvePath(t, "true"),
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"begin ; defaulttenant ; commit",
 			},
@@ -262,7 +262,7 @@ func TestFDBCLI(t *testing.T) {
 			resp: &pb.FDBCLIResponse{},
 			bin:  testutil.ResolvePath(t, "true"),
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"begin ; status ; sleep 4 ; status ; commit",
 			},
@@ -362,7 +362,7 @@ func TestFDBCLI(t *testing.T) {
 			},
 			bin: testutil.ResolvePath(t, "true"),
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--cluster-file",
 				"config",
 				"--log",
@@ -413,7 +413,7 @@ func TestFDBCLI(t *testing.T) {
 			resp: &pb.FDBCLIResponse{},
 			bin:  testutil.ResolvePath(t, "true"),
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"advanceversion 12345",
 			},
@@ -448,7 +448,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"clear key",
 			},
@@ -500,7 +500,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"clearrange begin end",
 			},
@@ -556,7 +556,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"configure new triple ssd grv_proxies=3 commit_proxies=4 resolvers=5 logs=6 count=7 perpetual_storage_wiggle=1 perpetual_storage_wiggle_locality=locality storage_migration_type=aggressive tenant_mode=disabled",
 			},
@@ -575,7 +575,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"consistencycheck",
 			},
@@ -596,7 +596,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"consistencycheck off",
 			},
@@ -619,7 +619,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"consistencycheck on",
 			},
@@ -656,7 +656,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"coordinators auto description=descr",
 			},
@@ -687,7 +687,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"coordinators address1 address2 description=descr",
 			},
@@ -721,7 +721,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"createtenant name",
 			},
@@ -740,7 +740,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"defaulttenant",
 			},
@@ -774,7 +774,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"deletetenant name",
 			},
@@ -801,7 +801,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"exclude failed address1 address2",
 			},
@@ -853,7 +853,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"fileconfigure new /some/path",
 			},
@@ -887,7 +887,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"force_recovery_with_data_loss dcid",
 			},
@@ -921,7 +921,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"get key",
 			},
@@ -961,7 +961,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"getrange key end 123",
 			},
@@ -1001,7 +1001,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"getrangekeys key end 123",
 			},
@@ -1035,7 +1035,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"gettenant tenant",
 			},
@@ -1054,7 +1054,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"getversion",
 			},
@@ -1078,7 +1078,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"help option1 option2",
 			},
@@ -1132,7 +1132,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"include failed all",
 			},
@@ -1163,7 +1163,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"include failed address1 address2",
 			},
@@ -1182,7 +1182,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"kill",
 			},
@@ -1206,7 +1206,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"kill ; kill address ; kill address2",
 			},
@@ -1225,7 +1225,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"lock",
 			},
@@ -1254,7 +1254,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"listtenants begin end 123",
 			},
@@ -1288,7 +1288,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"maintenance",
 			},
@@ -1331,7 +1331,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"maintenance on zone 123",
 			},
@@ -1354,7 +1354,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"maintenance off",
 			},
@@ -1388,7 +1388,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"option",
 			},
@@ -1453,7 +1453,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"option on option arg",
 			},
@@ -1510,7 +1510,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile client get",
 			},
@@ -1590,7 +1590,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile client set rate default size default",
 			},
@@ -1624,7 +1624,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile client set rate 1.2345 size 23456",
 			},
@@ -1647,7 +1647,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile list",
 			},
@@ -1700,7 +1700,7 @@ func TestFDBCLI(t *testing.T) {
 				},
 			},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile flow run 12345 PATH/profile.out process1 process2",
 			},
@@ -1744,7 +1744,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"profile heap process",
 			},
@@ -1794,7 +1794,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"set key value",
 			},
@@ -1830,7 +1830,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"setclass",
 			},
@@ -1892,7 +1892,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"setclass address class",
 			},
@@ -1913,7 +1913,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"sleep 123",
 			},
@@ -1936,7 +1936,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"status json",
 			},
@@ -2000,7 +2000,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"throttle on tag tag1 123 32h high",
 			},
@@ -2033,7 +2033,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"throttle off all tag tag1 high",
 			},
@@ -2056,7 +2056,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"throttle enable auto",
 			},
@@ -2079,7 +2079,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"throttle disable auto",
 			},
@@ -2109,7 +2109,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"throttle list all 123",
 			},
@@ -2128,7 +2128,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"triggerddteaminfolog",
 			},
@@ -2162,7 +2162,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"unlock uid",
 			},
@@ -2196,7 +2196,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"usetenant name",
 			},
@@ -2230,7 +2230,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"writemode on",
 			},
@@ -2285,7 +2285,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"tssq start uuid",
 			},
@@ -2327,7 +2327,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"tssq stop uuid",
 			},
@@ -2350,7 +2350,7 @@ func TestFDBCLI(t *testing.T) {
 			bin:  testutil.ResolvePath(t, "true"),
 			resp: &pb.FDBCLIResponse{},
 			command: []string{
-				*fdbCLI,
+				FDBCLI,
 				"--exec",
 				"tssq list",
 			},
@@ -2359,18 +2359,18 @@ func TestFDBCLI(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			origGen := generateFDBCLIArgs
-			origUser := *fdbCLIUser
-			origGroup := *fdbCLIGroup
+			origUser := FDBCLIUser
+			origGroup := FDBCLIGroup
 			t.Cleanup(func() {
 				generateFDBCLIArgs = origGen
-				*fdbCLIUser = origUser
-				*fdbCLIGroup = origGroup
+				FDBCLIUser = origUser
+				FDBCLIGroup = origGroup
 				// Reset these so each test starts fresh.
 				lfs.fdbCLIUid = -1
 				lfs.fdbCLIGid = -1
 			})
-			*fdbCLIUser = tc.user
-			*fdbCLIGroup = tc.group
+			FDBCLIUser = tc.user
+			FDBCLIGroup = tc.group
 			var generatedOpts []string
 			var logs []captureLogs
 
