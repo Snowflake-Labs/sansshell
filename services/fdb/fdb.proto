@@ -51,7 +51,7 @@ message DeleteRequest { Location location = 1; }
 message FdbConfResponse { string value = 1; }
 
 service CLI {
-  rpc FDBCLI(FDBCLIRequest) returns (FDBCLIResponse) {}
+  rpc FDBCLI(FDBCLIRequest) returns (stream FDBCLIResponse) {}
 }
 
 message FDBCLIAdvanceversion { int64 version = 1; }
@@ -408,9 +408,17 @@ message Log {
   bytes contents = 2;
 }
 
-message FDBCLIResponse {
+message FDBCLIResponseOutput {
   bytes stdout = 1;
   bytes stderr = 2;
   int32 retCode = 3;
-  repeated Log logs = 4;
+}
+
+message FDBCLIResponse {
+  oneof response {
+    FDBCLIResponseOutput output = 1;
+    // Log will steam back any logfiles generated sequentially.
+    // When filename changes a new log has begun and the previous completed.
+    Log log = 2;
+  }
 }
