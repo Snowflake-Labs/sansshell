@@ -375,6 +375,24 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		})
 		return nil
 	}
+	replyWithBadNonce := func(stream proxypb.Proxy_ProxyServer) error {
+		req, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StartStreamReply{
+				StartStreamReply: &proxypb.StartStreamReply{
+					Target: req.GetStartStream().Target,
+					Nonce:  req.GetStartStream().Nonce + 9999,
+					Reply: &proxypb.StartStreamReply_StreamId{
+						StreamId: 0,
+					},
+				},
+			},
+		})
+		return nil
+	}
 	setupThenError := func(stream proxypb.Proxy_ProxyServer) error {
 		channelSetup(stream)
 		_, err := stream.Recv()
@@ -516,6 +534,14 @@ func TestWithFakeServerForErrors(t *testing.T) {
 			input:   &emptypb.Empty{},
 			output:  &emptypb.Empty{},
 			wantErr: true,
+		},
+		{
+			name:          "bad nonce",
+			action:        replyWithBadNonce,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
 		},
 		{
 			name:          "invalid reply",
