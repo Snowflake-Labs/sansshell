@@ -20,16 +20,20 @@
 package server
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"runtime"
 )
 
 var (
-	psBin     = flag.String("ps-bin", "", "Path to the ps binary")
-	pstackBin = flag.String("pstack-bin", "", "Path to the pstack binary")
-	gcoreBin  = flag.String("gcore-bin", "", "Path to the gcore binary")
+	// PsBin is the location of the ps binary. On non linux/OS/X this isn't supported.
+	PsBin = ""
+
+	// PstackBin is the location of the pstack binary. On non linux/OS/X this isn't supported.
+	PstackBin = ""
+
+	// GcoreBin is the location of the gcore binary. On non linux/OS/X this isn't supported.
+	GcoreBin = ""
 
 	psOptions = func() ([]string, error) {
 		return nil, fmt.Errorf("No support for OS %s", runtime.GOOS)

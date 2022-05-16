@@ -72,7 +72,7 @@ func TestMain(m *testing.M) {
 
 func TestListNative(t *testing.T) {
 	// We're on a platform which doesn't support this so we can't test.
-	if *psBin == "" {
+	if PsBin == "" {
 		t.Skip("OS not supported")
 	}
 
@@ -122,8 +122,7 @@ func TestList(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedPsBin := *psBin
-	*psBin = testutil.ResolvePath(t, "cat")
+	savedPsBin := PsBin
 	savedFunc := psOptions
 	psOptions = func() []string {
 		return []string{
@@ -131,7 +130,7 @@ func TestList(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		*psBin = savedPsBin
+		PsBin = savedPsBin
 		psOptions = savedFunc
 	})
 
@@ -156,7 +155,13 @@ func TestList(t *testing.T) {
 
 	client := pb.NewProcessClient(conn)
 
+	// Pre test that a blank ps binary returns an error.
+	PsBin = ""
+	_, err = client.List(ctx, &pb.ListRequest{})
+	testutil.FatalOnNoErr("no error for missing ps binary", err, t)
+
 	// Test 1: Ask for all processes
+	PsBin = testutil.ResolvePath(t, "cat")
 	resp, err := client.List(ctx, &pb.ListRequest{})
 	testutil.FatalOnErr("unexpected error for basic list", err, t)
 
@@ -208,17 +213,17 @@ func TestList(t *testing.T) {
 	}
 
 	// Test 5: Break the command which means we should error out.
-	*psBin = testutil.ResolvePath(t, "false")
+	PsBin = testutil.ResolvePath(t, "false")
 	resp, err = client.List(ctx, &pb.ListRequest{})
 	testutil.FatalOnNoErr(fmt.Sprintf("cmd returned non-zero - resp %v", resp), err, t)
 
 	// Test 6: Run an invalid command all-together.
-	*psBin = "/a/non-existant/command"
+	PsBin = "/a/non-existant/command"
 	resp, err = client.List(ctx, &pb.ListRequest{})
 	testutil.FatalOnNoErr(fmt.Sprintf("non existant cmd - resp %v", resp), err, t)
 
 	// Test 7: Command with stderr output.
-	*psBin = testutil.ResolvePath(t, "sh")
+	PsBin = testutil.ResolvePath(t, "sh")
 	psOptions = func() []string {
 		return []string{"-c",
 			"echo boo 1>&2",
@@ -270,8 +275,8 @@ func TestKill(t *testing.T) {
 }
 
 func TestPstackNative(t *testing.T) {
-	_, err := os.Stat(*pstackBin)
-	if *pstackBin == "" || err != nil {
+	_, err := os.Stat(PstackBin)
+	if PstackBin == "" || err != nil {
 		t.Skip("OS not supported")
 	}
 
@@ -324,8 +329,8 @@ func TestPstack(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedPstackBin := *pstackBin
-	*pstackBin = testutil.ResolvePath(t, "cat")
+	savedPstackBin := PstackBin
+	PstackBin = testutil.ResolvePath(t, "cat")
 	savedFunc := pstackOptions
 	var testInput string
 	pstackOptions = func(req *pb.GetStacksRequest) []string {
@@ -335,7 +340,7 @@ func TestPstack(t *testing.T) {
 		return []string{testInput}
 	}
 	t.Cleanup(func() {
-		*pstackBin = savedPstackBin
+		PstackBin = savedPstackBin
 		pstackOptions = savedFunc
 	})
 
@@ -431,7 +436,7 @@ func TestPstack(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			*pstackBin = tc.command
+			PstackBin = tc.command
 
 			pstackOptions = goodPstackOptions
 			testInput = tc.input
@@ -472,7 +477,7 @@ func TestJstack(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedJstackBin := *jstackBin
+	savedJstackBin := JstackBin
 	savedFunc := jstackOptions
 	var testInput string
 	jstackOptions = func(req *pb.GetJavaStacksRequest) []string {
@@ -484,7 +489,7 @@ func TestJstack(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() {
-		*jstackBin = savedJstackBin
+		JstackBin = savedJstackBin
 		jstackOptions = savedFunc
 	})
 
@@ -555,7 +560,7 @@ func TestJstack(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			*jstackBin = tc.command
+			JstackBin = tc.command
 
 			jstackOptions = goodJstackOptions
 			testInput = tc.input
@@ -588,9 +593,9 @@ func TestMemoryDump(t *testing.T) {
 
 	// Setup for tests where we use cat and pre-canned data
 	// to submit into the server.
-	savedGcoreBin := *gcoreBin
+	savedGcoreBin := GcoreBin
 	savedGcoreFunc := gcoreOptionsAndLocation
-	savedJmapBin := *jmapBin
+	savedJmapBin := JmapBin
 	savedJmapFunc := jmapOptionsAndLocation
 
 	// The default one assumes we're just echoing file contents with cat.
@@ -620,8 +625,8 @@ func TestMemoryDump(t *testing.T) {
 		}, testInput, nil
 	}
 	t.Cleanup(func() {
-		*gcoreBin = savedGcoreBin
-		*jmapBin = savedJmapBin
+		GcoreBin = savedGcoreBin
+		JmapBin = savedJmapBin
 		gcoreOptionsAndLocation = savedGcoreFunc
 		jmapOptionsAndLocation = savedJmapFunc
 	})
@@ -805,9 +810,9 @@ func TestMemoryDump(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			*gcoreBin = tc.command
+			GcoreBin = tc.command
 			gcoreOptionsAndLocation = tc.options
-			*jmapBin = tc.command
+			JmapBin = tc.command
 			jmapOptionsAndLocation = tc.options
 
 			// Need a tmp dir and a copy of the test input since the options

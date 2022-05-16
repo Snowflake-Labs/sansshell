@@ -1,6 +1,3 @@
-//go:build !linux
-// +build !linux
-
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the
@@ -19,7 +16,15 @@
 
 package server
 
-var (
-	// YumBin is the location of the yum binary. On non-linux this is blank as it's likely unsupported.
-	YumBin string
+import (
+	"context"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+func (s *Server) Version(ctx context.Context, req *emptypb.Empty) (*pb.VersionResponse, error) {
+	return &pb.VersionResponse{
+		Version: Version,
+	}, nil
+}

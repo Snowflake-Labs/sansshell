@@ -362,8 +362,12 @@ echo "Running builds"
 echo
 go build -v ./...
 check_status $? /dev/null build
-go generate build.go
-check_status $? /dev/null build binaries
+go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2p" -o bin/proxy-server ./cmd/proxy-server
+check_status $? /dev/null build proxy
+go build -o bin/sanssh ./cmd/sanssh
+check_status $? /dev/null build sanssh
+go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2s" -o bin/sansshell-server ./cmd/sansshell-server
+check_status $? /dev/null build server
 
 # Test everything
 echo
@@ -407,6 +411,8 @@ for i in \
   github.com/Snowflake-Labs/sansshell/services/ansible/client \
   github.com/Snowflake-Labs/sansshell/services/exec \
   github.com/Snowflake-Labs/sansshell/services/exec/client \
+  github.com/Snowflake-Labs/sansshell/services/fdb \
+  github.com/Snowflake-Labs/sansshell/services/fdb/client \
   github.com/Snowflake-Labs/sansshell/services/healthcheck \
   github.com/Snowflake-Labs/sansshell/services/healthcheck/client \
   github.com/Snowflake-Labs/sansshell/services/localfile \
@@ -477,6 +483,16 @@ echo
 echo "Testing policy validation for server"
 ./bin/sansshell-server --policy-file=${LOGS}/policy --validate
 check_status $? /dev/null policy check failed for server
+
+echo
+echo "Testing --version"
+./bin/proxy-server --version >&${LOGS}/proxy-version-cli.log
+grep -E -q -e "Version: 2p" ${LOGS}/proxy-version-cli.log
+check_status $? /dev/null cant find --version for proxy-server
+
+./bin/sansshell-server --version >&${LOGS}/server-version-cli.log
+grep -E -q -e "Version: 2s" ${LOGS}/server-version-cli.log
+check_status $? /dev/null cant find --version for sansshell-server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
@@ -592,6 +608,14 @@ check_status $? /dev/null cant find log entry in proxy for changing levels
 
 ${SANSSH_PROXY} sansshell get-proxy-verbosity
 check_status $? /dev/null cant get proxy verbosity
+
+${SANSSH_PROXY} ${MULTI_TARGETS} sansshell version >${LOGS}/version-server.log
+grep -E -q -e "Version.*2s" ${LOGS}/version-server.log
+check_status $? /dev/null cant find server version in logs
+
+${SANSSH_PROXY} sansshell proxy-version >${LOGS}/version-proxy.log
+grep -E -q -e "Proxy version 2p" ${LOGS}/version-proxy.log
+check_status $? /dev/null cant find proxy version in logs
 
 run_a_test false 1 sansshell get-verbosity
 
@@ -714,7 +738,7 @@ check_perms_mode ${LOGS}/cp-hosts
 
 # Skip if on github
 if [ -z "${ON_GITHUB}" ]; then
-  echo cp test with bucket syntax
+  echo cp test with s3 bucket syntax
   aws s3 cp ${LOGS}/hosts s3://${USER}-dev/hosts
   run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=s3://${USER}-dev?region=us-west-2 hosts ${LOGS}/cp-hosts
   check_perms_mode ${LOGS}/cp-hosts
@@ -722,6 +746,11 @@ if [ -z "${ON_GITHUB}" ]; then
 else
   echo "Skipping cp with s3 on Github"
 fi
+
+# Always test file syntax
+echo "Now we use file:// format"
+run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode=${EXPECTED_NEW_MODE} --bucket=file:///etc hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
 
 # Trying without --overwrite to validate
 echo "This can emit an error message about overwrite"

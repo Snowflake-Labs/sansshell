@@ -19,8 +19,7 @@
 
 package server
 
-import (
-	"flag"
+var (
+	// YumBin is the location of the yum binary. Binding this to a flag is often useful.
+	YumBin = "/usr/bin/yum"
 )
-
-var yumBin = flag.String("yum-bin", "/usr/bin/yum", "Path to yum binary")

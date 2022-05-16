@@ -25,7 +25,6 @@ package server
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"io"
 	"strings"
@@ -36,9 +35,14 @@ import (
 )
 
 var (
-	psBin     = flag.String("ps-bin", "/bin/ps", "Path to the ps binary")
-	pstackBin = flag.String("pstack-bin", "", "Path to the pstack binary")
-	gcoreBin  = flag.String("gcore-bin", "", "Path to the gcore binary")
+	// PsBin is the location of the ps binary. Binding this to a flag is often useful.
+	PsBin = "/bin/ps"
+
+	// PstackBin is the location of the pstack binary. On OS/X this isn't supported.
+	PstackBin = ""
+
+	// GcoreBin is the location of the gcore binary. On OS/X this isn't supported.
+	GcoreBin = ""
 
 	// This is a var so we can replace for testing.
 	psOptions = func() []string {

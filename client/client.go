@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"text/tabwriter"
 
 	"github.com/google/subcommands"
 )
@@ -38,19 +39,26 @@ func SetupSubpackage(name string, f *flag.FlagSet) *subcommands.Commander {
 }
 
 // GenerateSynopsis will generate a consistent snnopysis for a top level command
-// with N sub-commands contained within it.
-func GenerateSynopsis(c *subcommands.Commander) string {
+// with N sub-commands contained within it. The leading param indicates the number
+// of leading tabs to generate before the name and synopsis. Generally this is 2
+// unless you're a subcommand of a subcommand and then you'll want more.
+func GenerateSynopsis(c *subcommands.Commander, leading int) string {
 	b := &bytes.Buffer{}
-	b.WriteString("\n")
+	w := tabwriter.NewWriter(b, 2, 8, 2, '\t', 0)
+	w.Write([]byte("\n"))
 	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
 		switch comm.Name() {
 		case "help", "flags", "commands":
 			break
 		default:
-			fmt.Fprintf(b, "\t\t%s\t- %s\n", comm.Name(), comm.Synopsis())
+			for i := 0; i < leading; i++ {
+				fmt.Fprintf(w, "\t")
+			}
+			fmt.Fprintf(w, "%s\t%s\t\n", comm.Name(), comm.Synopsis())
 		}
 	}
 	c.VisitCommands(fn)
+	w.Flush()
 	return b.String()
 }
 

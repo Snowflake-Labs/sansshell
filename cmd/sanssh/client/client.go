@@ -21,6 +21,7 @@ package client
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,6 +73,14 @@ const (
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
+	// If we're running internal commands we don't need anything else.
+	for _, f := range flag.Args() {
+		switch f {
+		case "help", "flags", "commands":
+			os.Exit(int(subcommands.Execute(ctx)))
+		}
+	}
+
 	// Bunch of flag sanity checking
 	if len(rs.Targets) == 0 && rs.Proxy == "" {
 		fmt.Fprintln(os.Stderr, "Must set a target or a proxy")
@@ -200,6 +209,5 @@ func Run(ctx context.Context, rs RunState) {
 	defer cancel()
 
 	// Invoke the subcommand, passing the dialed connection object
-	// TODO(jchacon): Pass a struct instead of 3 args.
 	os.Exit(int(subcommands.Execute(ctx, state)))
 }

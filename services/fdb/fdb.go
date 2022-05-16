@@ -1,6 +1,3 @@
-//go:build !linux
-// +build !linux
-
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the
@@ -17,9 +14,9 @@
    under the License.
 */
 
-package server
+// Package fdb defines the RPC interface for the sansshell FDB actions.
+package fdb
 
-var (
-	// YumBin is the location of the yum binary. On non-linux this is blank as it's likely unsupported.
-	YumBin string
-)
+// To regenerate the proto headers if the .proto changes, just run go generate
+// and this encodes the necessary magic:
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative --go-grpcproxy_out=. --go-grpcproxy_opt=paths=source_relative fdb.proto

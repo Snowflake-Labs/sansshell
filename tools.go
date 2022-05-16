@@ -38,8 +38,10 @@ import (
 //go:generate go generate ./proxy/testdata
 //go:generate go generate ./services/ansible
 //go:generate go generate ./services/exec
+//go:generate go generate ./services/fdb
 //go:generate go generate ./services/healthcheck
 //go:generate go generate ./services/localfile
 //go:generate go generate ./services/packages
 //go:generate go generate ./services/process
+//go:generate go generate ./services/sansshell
 //go:generate go generate ./services/service

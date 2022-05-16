@@ -41,8 +41,13 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
-	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
+
+	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+
+	// Import the sansshell server code so we can use Version.
+	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 )
 
 var (
@@ -58,10 +63,26 @@ var (
 	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate         = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification    = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	version          bool
 )
+
+func init() {
+	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
+	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
+	flag.StringVar(&mtlsFlags.ServerCertFile, "server-cert", mtlsFlags.ServerCertFile, "Path to an x509 server cert, PEM format")
+	flag.StringVar(&mtlsFlags.ServerKeyFile, "server-key", mtlsFlags.ServerKeyFile, "Path to the server's TLS key")
+	flag.StringVar(&mtlsFlags.RootCAFile, "root-ca", mtlsFlags.RootCAFile, "The root of trust for remote identities, PEM format")
+
+	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
+}
 
 func main() {
 	flag.Parse()
+
+	if version {
+		fmt.Printf("Version: %s\n", ssserver.Version)
+		os.Exit(0)
+	}
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-proxy")
