@@ -12,7 +12,7 @@ It is designed to enable larger deployments of Sansshell by providing:
  - a centralized 'choke point' for logging and enforcement of fine-grained
   policy that may need to change rapidly.
  - a mechanism for fanning-out identical requests from a single client to
-  multiple Sansshell instances, to simplify 'batch' operations.
+  multiple Sansshell instances, to simplify and accelerate 'batch' operations.
 
 Like Sansshell itself, it is a policy-enforcing gRPC server written in Go.
 
@@ -75,7 +75,7 @@ to the stream ID. Fan-out is provided by the ability to specify multiple
 stream IDs in each StreamData request, which causes the request to be delivered
 to each of the specified streams.
 
-Clients receive from the proxy stream to obtain any reponses (whether data 
+Clients receive from the proxy stream to obtain any responses (whether data 
 or errors), each of which is identified by a previously returned stream ID.
 
 Finished streams will cause the delivery of an inband "ServerClose" response
@@ -85,6 +85,18 @@ StreamID)
 On the proxy, all of the various streams initiated by a clients are 'children'
 of the single client -> proxy stream, and will be cancelled automatically
 if the client -> proxy stream is itself broken or times out.
+
+The 'low-level' nature of the proxy protocol is helpful for accommodating
+multiple gRPC call patterns, but can be somewhat difficult to use as
+a result. To help manage the complexity of using the proxy, sansshell also
+includes a grpc plugin for generating 'helper' logic for calling a particular
+service via the proxy.
+
+This plugin generates new methods on each client stub with a 'OneMany' suffix (e.g. `ReadOneMany` for `Read`) that allow invoking the method (via the proxy) against multiple backend targets. Since the `OneMany` versions also work
+for single targets (even if no proxy is used), the Sansshell client code
+uses the `OnMany` version of all calls unconditionally.
+
+
 
 ```mermaid
 sequenceDiagram
