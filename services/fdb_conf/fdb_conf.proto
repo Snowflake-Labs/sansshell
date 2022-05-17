@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/services/fdb_conf";
+
+import "google/protobuf/empty.proto";
+
+package FdbConf;
+
+// The FdbConf service definition.
+service FdbConf {
+    // Read a configuration value from a section in FDB config file.
+    rpc Read(ReadRequest) returns (FdbConfResponse) {}
+    // Write updates a configuration value in a section of FDB config file.
+    rpc Write(WriteRequest) returns (google.protobuf.Empty) {}
+    // Delete a section value based on a key
+    rpc Delete(DeleteRequest) returns (google.protobuf.Empty) {}
+}
+
+message Location {
+    string file = 1;
+    string section = 2;
+    string key = 3;
+}
+
+message ReadRequest {
+    Location location = 1;
+}
+
+message WriteRequest {
+    Location location = 1;
+    string value = 2;
+}
+
+message DeleteRequest {
+    Location location = 1;
+}
+
+//
+message FdbConfResponse { string value = 1; }
