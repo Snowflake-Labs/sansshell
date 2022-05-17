@@ -27,6 +27,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/go-logr/logr"
+	"google.golang.org/grpc"
 )
 
 type RunState struct {
@@ -45,6 +46,12 @@ type RunState struct {
 	// entry is found. The supplied function can then do any validation it wants
 	// in order to ensure it's compliant.
 	JustificationFunc func(string) error
+	// UnaryInterceptors are any additional interceptors to be added to unary RPCs
+	// served from this instance. They will be added after logging and authz checks.
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+	// StreamInterceptors are any additional interceptors to be added to streaming RPCs
+	// served from this instance. They will be added after logging and authz checks.
+	StreamInterceptors []grpc.StreamServerInterceptor
 }
 
 // Run takes the given context and RunState and starts up a sansshell server.
@@ -59,7 +66,15 @@ func Run(ctx context.Context, rs RunState) {
 	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.JustificationFunc), func(input *rpcauth.RPCAuthInput) bool {
 		return rs.Justification
 	})
-	if err := server.Serve(rs.Hostport, creds, rs.Policy, rs.Logger, justificationHook); err != nil {
+	setup := server.ServeSetup{
+		Creds:              creds,
+		Policy:             rs.Policy,
+		Logger:             rs.Logger,
+		AuthzHooks:         []rpcauth.RPCAuthzHook{justificationHook},
+		UnaryInterceptors:  rs.UnaryInterceptors,
+		StreamInterceptors: rs.StreamInterceptors,
+	}
+	if err := server.Serve(rs.Hostport, setup); err != nil {
 		rs.Logger.Error(err, "server.Serve", "hostport", rs.Hostport)
 		os.Exit(1)
 	}

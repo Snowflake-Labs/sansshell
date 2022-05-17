@@ -55,6 +55,18 @@ type RunState struct {
 	// entry is found. The supplied function can then do any validation it wants
 	// in order to ensure it's compliant.
 	JustificationFunc func(string) error
+	// UnaryInterceptors are any additional interceptors to be added to unary RPCs
+	// served from this instance. They will be added after logging and authz checks.
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+	// UnaryClientInterceptors are any additional interceptors to be added to unary RPCs
+	// requested from this instance. They will be added after logging and authz checks.
+	UnaryClientInterceptors []grpc.UnaryClientInterceptor
+	// StreamInterceptors are any additional interceptors to be added to streaming RPCs
+	// served from this instance. They will be added after logging and authz checks.
+	StreamInterceptors []grpc.StreamServerInterceptor
+	// StreamClientInterceptors are any additional interceptors to be added to streaming RPCs
+	// requested from this instance. They will be added after logging and authz checks.
+	StreamClientInterceptors []grpc.StreamClientInterceptor
 }
 
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
@@ -102,15 +114,21 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 		}
 	}
 
-	// We always have the logger but might need to chain if we're also doing client OPA checks.
-	intOp := grpc.WithStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger))
-	if clientAuthz != nil {
-		intOp = grpc.WithChainStreamInterceptor(telemetry.StreamClientLogInterceptor(rs.Logger), clientAuthz.AuthorizeClientStream)
+	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
+	unaryClient := []grpc.UnaryClientInterceptor{
+		telemetry.UnaryClientLogInterceptor(rs.Logger),
 	}
-
+	streamClient := []grpc.StreamClientInterceptor{
+		telemetry.StreamClientLogInterceptor(rs.Logger),
+	}
+	if clientAuthz != nil {
+		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
+		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
+	}
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
-		intOp,
+		grpc.WithChainUnaryInterceptor(unaryClient...),
+		grpc.WithChainStreamInterceptor(streamClient...),
 	}
 	targetDialer := server.NewDialer(dialOpts...)
 
@@ -118,12 +136,22 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 	rs.Logger.Info("loaded service map", "serviceMap", svcMap)
 	server := server.New(targetDialer, authz)
 
+	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
+	// also need to properly auth and log.
+	unaryServer := []grpc.UnaryServerInterceptor{
+		telemetry.UnaryServerLogInterceptor(rs.Logger),
+		authz.Authorize,
+	}
+	unaryServer = append(unaryServer, rs.UnaryInterceptors...)
+	streamServer := []grpc.StreamServerInterceptor{
+		telemetry.StreamServerLogInterceptor(rs.Logger),
+		authz.AuthorizeStream,
+	}
+	streamServer = append(streamServer, rs.StreamInterceptors...)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
-		// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
-		// also need to properly auth and log.
-		grpc.ChainUnaryInterceptor(telemetry.UnaryServerLogInterceptor(rs.Logger), authz.Authorize),
-		grpc.ChainStreamInterceptor(telemetry.StreamServerLogInterceptor(rs.Logger), authz.AuthorizeStream),
+		grpc.ChainUnaryInterceptor(unaryServer...),
+		grpc.ChainStreamInterceptor(streamServer...),
 	}
 	g := grpc.NewServer(serverOpts...)
 

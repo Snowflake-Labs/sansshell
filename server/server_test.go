@@ -68,7 +68,14 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+	setup := ServeSetup{
+		Policy: policy,
+		Logger: logr.Discard(),
+		AuthzHooks: []rpcauth.RPCAuthzHook{
+			rpcauth.HostNetHook(lis.Addr()),
+		},
+	}
+	s, err := BuildServer(setup)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -84,7 +91,13 @@ func TestMain(m *testing.M) {
 
 func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
-	_, err := BuildServer(nil, "", logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+	setup := ServeSetup{
+		Logger: logr.Discard(),
+		AuthzHooks: []rpcauth.RPCAuthzHook{
+			rpcauth.HostNetHook(lis.Addr()),
+		},
+	}
+	_, err := BuildServer(setup)
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
@@ -98,13 +111,17 @@ func TestServe(t *testing.T) {
 			getSrv().Stop()
 		}
 	}()
-
-	err := Serve("-", nil, policy, logr.Discard())
-	testutil.FatalOnNoErr("bad hostport", err, t)
-	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
+	setup := ServeSetup{
+		Logger: logr.Discard(),
+	}
+	err := Serve("127.0.0.1:0", setup)
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
+	setup.Policy = policy
+
+	err = Serve("-", setup)
+	testutil.FatalOnNoErr("bad hostport", err, t)
+	err = Serve("127.0.0.1:0", setup)
 	testutil.FatalOnErr("Serve 127.0.0.1:0", err, t)
 }
 
