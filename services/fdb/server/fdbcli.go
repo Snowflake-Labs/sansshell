@@ -292,7 +292,7 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	}
 	for _, l := range logs {
 		if l.Cleanup {
-			defer os.RemoveAll(l.Path)
+			os.RemoveAll(l.Path)
 		}
 	}
 	return nil
