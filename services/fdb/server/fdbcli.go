@@ -132,7 +132,6 @@ func parseLogs(logs []captureLogs) ([]*pb.Log, error) {
 	// Parse captureLogs to see if there's something we need to transmit back.
 	var files []string
 	for _, l := range logs {
-
 		if l.IsDir {
 			dir := l.Path
 			fs, err := os.ReadDir(dir)

@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -101,6 +102,7 @@ func TestFDBCLI(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		req        *pb.FDBCLIRequest
+		output     *pb.FDBCLIResponseOutput
 		respLogs   map[string][]byte // Set log to filename only. Full path will get filled in below
 		wantAnyErr bool
 		wantLogErr bool
@@ -299,6 +301,26 @@ func TestFDBCLI(t *testing.T) {
 			subdir:     "subdir",
 			bin:        testutil.ResolvePath(t, "true"),
 			wantLogErr: true,
+		},
+		{
+			name: "stdout check",
+			req: &pb.FDBCLIRequest{
+				Request: &pb.FDBCLIRequest_Command{
+					Command: &pb.FDBCLICommand{
+						Command: &pb.FDBCLICommand_Status{},
+					},
+				},
+			},
+			output: &pb.FDBCLIResponseOutput{
+				Stdout: []byte(fmt.Sprintf("%s --exec status\n", FDBCLI)),
+			},
+			bin:      testutil.ResolvePath(t, "echo"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"status",
+			},
 		},
 		{
 			name: "top level args",
@@ -2397,7 +2419,10 @@ func TestFDBCLI(t *testing.T) {
 					testutil.FatalOnNoErr("Recv", err, t)
 					break
 				}
-				// We only care about logs
+				if tc.output != nil {
+					testutil.DiffErr("output", resp.GetOutput(), tc.output, t)
+				}
+				// We only care about logs from here
 				if err == nil && (resp == nil || resp.GetLog() == nil) {
 					continue
 				}
