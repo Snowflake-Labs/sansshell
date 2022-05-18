@@ -1806,6 +1806,7 @@ func TestRename(t *testing.T) {
 	testutil.FatalOnErr("os.Mkdir", err, t)
 	badDir := filepath.Join(temp, "/bad")
 	err = os.Mkdir(badDir, 0)
+	testutil.FatalOnErr("os.Mkdir", err, t)
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.

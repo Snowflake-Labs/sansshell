@@ -138,15 +138,13 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	creds, err := LoadServerCredentials(context.Background(), "refresh")
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
-	setup := server.ServeSetup{
-		Creds:  creds,
-		Policy: policy,
-		Logger: logr.Discard(),
-		AuthzHooks: []rpcauth.RPCAuthzHook{
-			rpcauth.HostNetHook(lis.Addr()),
-		},
-	}
-	s, err := server.BuildServer(setup)
+
+	s, err := server.BuildServer(
+		server.WithCredentials(creds),
+		server.WithPolicy(policy),
+		server.WithLogger(logr.Discard()),
+		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+	)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
 	go func() {
