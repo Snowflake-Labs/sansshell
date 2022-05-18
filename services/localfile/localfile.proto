@@ -53,6 +53,12 @@ service LocalFile {
 
   // Rmdir removes the given directory (must be empty).
   rpc Rmdir(RmdirRequest) returns (google.protobuf.Empty) {}
+
+  // Rename renames (moves) the given file to a new name. If the destination
+  // is not a directory it will be replaced if it already exists.
+  // OS restrictions may apply if the old and new names are outside of the same
+  // directory.
+  rpc Rename(RenameRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -232,4 +238,9 @@ message RmdirRequest {
   // The fully qualified path to the directory to remove.
   // Must be empty of any entries.
   string directory = 1;
+}
+
+message RenameRequest {
+  string original_name = 1;
+  string destination_name = 2;
 }
