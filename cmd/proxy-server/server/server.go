@@ -32,6 +32,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -157,6 +158,7 @@ func Run(ctx context.Context, rs RunState, hooks ...rpcauth.RPCAuthzHook) {
 
 	server.Register(g)
 	reflection.Register(g)
+	channelz.RegisterChannelzServiceToServer(g)
 	// Create a an instance of logging for the proxy server itself.
 	s := &ss.Server{}
 	s.Register(g)

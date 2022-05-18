@@ -612,6 +612,22 @@ func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
+func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("rename request", "old", req.OriginalName, "new", req.DestinationName)
+	if err := util.ValidPath(req.OriginalName); err != nil {
+		return nil, err
+	}
+	if err := util.ValidPath(req.DestinationName); err != nil {
+		return nil, err
+	}
+	err := unix.Rename(req.OriginalName, req.DestinationName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "rename error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
 	pb.RegisterLocalFileServer(gs, s)

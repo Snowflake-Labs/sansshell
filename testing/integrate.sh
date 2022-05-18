@@ -863,6 +863,11 @@ function setup_rm {
   touch ${LOGS}/testdir/file
 }
 
+function setup_mv {
+  setup_rmdir
+  touch ${LOGS}/testdir/file
+}
+
 function check_rm {
   if [ -f ${LOGS}/testdir/file ]; then
     check_status 1 /dev/null ${LOGS}/testdir/file not removed as expected
@@ -873,6 +878,16 @@ function check_rmdir {
   if [ -d ${LOGS}/testdir ]; then
     check_status 1 /dev/null ${LOGS}/testdir not removed as expected
   fi
+}
+
+function check_mv {
+  if [ -f ${LOGS}/testdir/file ]; then
+    check_status 1 /dev/null ${LOGS}/testdir/file still exists, not renamed
+  fi
+  if [ ! -f ${LOGS}/testdir/rename ]; then
+    check_status 1 /dev/null ${LOGS}/testdir/rename does not exist.
+  fi
+  rm -rf ${LOGS}/testdir
 }
 
 echo "rm checks"
@@ -923,6 +938,27 @@ ${SANSSH_NOPROXY} ${SINGLE_TARGET} file rmdir ${LOGS}/testdir
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rmdir didn't get error when expected"
 fi
+
+echo "mv checks"
+echo "mv proxy to 2 hosts (one will fail)"
+setup_mv
+${SANSSH_PROXY} ${MULTI_TARGETS} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+if [ $? != 1 ]; then
+  check_status 1 /dev/null "mv didn't get error when expected"
+fi
+check_mv
+
+echo "mv proxy to 1 host"
+setup_mv
+${SANSSH_PROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+check_status $? /dev/null mv failed
+check_mv
+
+echo "mv with no proxy"
+setup_mv
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+check_status $? /dev/null mv failed
+check_mv
 
 # TODO(jchacon): Provide a java binary for test{s
 echo

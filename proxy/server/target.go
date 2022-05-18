@@ -573,12 +573,12 @@ type unconnectedClientStream struct {
 }
 
 var (
-	unconnectedClientError = errors.New("unconnected stream")
+	errUnconnectedClient = errors.New("unconnected stream")
 )
 
 // see: grpc.ClientStream.Header()
 func (u *unconnectedClientStream) Header() (metadata.MD, error) {
-	return nil, unconnectedClientError
+	return nil, errUnconnectedClient
 }
 
 // see: grpc.ClientStream.Trailer()
@@ -588,7 +588,7 @@ func (u *unconnectedClientStream) Trailer() metadata.MD {
 
 // see: grpc.ClientStream.CloseSend()
 func (u *unconnectedClientStream) CloseSend() error {
-	return fmt.Errorf("%w: CloseSend", unconnectedClientError)
+	return fmt.Errorf("%w: CloseSend", errUnconnectedClient)
 }
 
 // see: grpc.ClientStream.Context()
@@ -598,12 +598,12 @@ func (u *unconnectedClientStream) Context() context.Context {
 
 // see: grpc.ClientStream.SendMsg()
 func (u *unconnectedClientStream) SendMsg(interface{}) error {
-	return fmt.Errorf("%w: SendMsg", unconnectedClientError)
+	return fmt.Errorf("%w: SendMsg", errUnconnectedClient)
 }
 
 // see: grpc.ClientStream.RecvMsg()
 func (u *unconnectedClientStream) RecvMsg(interface{}) error {
-	return fmt.Errorf("%w: RecvMsg", unconnectedClientError)
+	return fmt.Errorf("%w: RecvMsg", errUnconnectedClient)
 }
 
 func init() {

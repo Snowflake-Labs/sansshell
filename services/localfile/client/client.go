@@ -50,6 +50,7 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&immutableCmd{}, "")
 	c.Register(&lsCmd{}, "")
 	c.Register(&readCmd{}, "")
+	c.Register(&renameCmd{}, "")
 	c.Register(&rmCmd{}, "")
 	c.Register(&rmdirCmd{}, "")
 	c.Register(&statCmd{}, "")
@@ -1027,13 +1028,13 @@ func (i *rmCmd) SetFlags(f *flag.FlagSet) {}
 
 func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
-	if f.NArg() == 0 {
+	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "please specify a filename to rm")
 		return subcommands.ExitUsageError
 	}
 
 	req := &pb.RmRequest{
-		Filename: f.Args()[0],
+		Filename: f.Arg(0),
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmOneMany(ctx, req)
@@ -1070,13 +1071,13 @@ func (i *rmdirCmd) SetFlags(f *flag.FlagSet) {}
 
 func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
-	if f.NArg() == 0 {
+	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "please specify a directory to rm")
 		return subcommands.ExitUsageError
 	}
 
 	req := &pb.RmdirRequest{
-		Directory: f.Args()[0],
+		Directory: f.Arg(0),
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmdirOneMany(ctx, req)
@@ -1092,6 +1093,50 @@ func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	for r := range respChan {
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "rm client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
+type renameCmd struct {
+}
+
+func (*renameCmd) Name() string     { return "mv" }
+func (*renameCmd) Synopsis() string { return "Rename a file/directory." }
+func (*renameCmd) Usage() string {
+	return `mv <old> <new>:
+  Rename the given file/directory.
+  `
+}
+
+func (i *renameCmd) SetFlags(f *flag.FlagSet) {}
+
+func (i *renameCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "please specify the old and new names")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.RenameRequest{
+		OriginalName:    f.Arg(0),
+		DestinationName: f.Arg(1),
+	}
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.RenameOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "rmdir client error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "mv client error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}

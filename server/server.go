@@ -25,6 +25,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
@@ -105,6 +106,7 @@ func BuildServer(setup ServeSetup) (*grpc.Server, error) {
 	}
 	s := grpc.NewServer(opts...)
 	reflection.Register(s)
+	channelz.RegisterChannelzServiceToServer(s)
 
 	for _, sansShellService := range services.ListServices() {
 		sansShellService.Register(s)
