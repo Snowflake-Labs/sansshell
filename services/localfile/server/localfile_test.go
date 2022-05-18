@@ -27,6 +27,7 @@ import (
 	"net"
 	"os"
 	"os/user"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1775,7 +1776,7 @@ func TestRmdir(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "bad permissions to direcotry",
+			name:      "bad permissions to directory",
 			directory: failDir,
 			wantErr:   true,
 		},
@@ -1789,6 +1790,86 @@ func TestRmdir(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
 			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directory: tc.directory})
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
+		})
+	}
+}
+
+func TestRename(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	dir := filepath.Join(temp, "/dir")
+	err = os.Mkdir(dir, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	badDir := filepath.Join(temp, "/bad")
+	err = os.Mkdir(badDir, 0)
+
+	t.Cleanup(func() {
+		// Needed or we panic with generated cleanup trying to remove tmp directories.
+		unix.Chmod(badDir, uint32(fs.ModePerm))
+	})
+
+	for _, tc := range []struct {
+		name    string
+		req     *pb.RenameRequest
+		wantErr bool
+	}{
+		{
+			name: "bad original path",
+			req: &pb.RenameRequest{
+				OriginalName: "/tmp/foo/../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "bad destination path",
+			req: &pb.RenameRequest{
+				OriginalName:    "/tmp/foo",
+				DestinationName: "/tmp/bar/../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "bad permissions to directory",
+			req: &pb.RenameRequest{
+				OriginalName:    path.Join(temp, "file"),
+				DestinationName: badDir,
+			},
+			wantErr: true,
+		},
+		{
+			name: "working rename",
+			req: &pb.RenameRequest{
+				OriginalName:    path.Join(temp, "file"),
+				DestinationName: path.Join(temp, "newfile"),
+			},
+		},
+		{
+			name: "rename a directory",
+			req: &pb.RenameRequest{
+				OriginalName:    dir,
+				DestinationName: path.Join(temp, "newdir"),
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			os.WriteFile(path.Join(temp, "file"), []byte("contents"), 0644)
+			defer os.Remove(path.Join(temp, "file"))
+			client := pb.NewLocalFileClient(conn)
+			_, err := client.Rename(ctx, tc.req)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+			if tc.wantErr {
+				return
+			}
+			_, err = os.Stat(tc.req.OriginalName)
+			testutil.FatalOnNoErr("original remains", err, t)
+			_, err = os.Stat(tc.req.DestinationName)
+			testutil.FatalOnErr("destination doesn't exist", err, t)
+			os.Remove(tc.req.DestinationName)
 		})
 	}
 }
