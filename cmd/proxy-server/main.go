@@ -101,13 +101,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	rs := server.RunState{
-		Logger:        logger,
-		Policy:        policy,
-		ClientPolicy:  clientPolicy,
-		CredSource:    *credSource,
-		Hostport:      *hostport,
-		Justification: *justification,
-	}
-	server.Run(ctx, rs)
+	server.Run(ctx,
+		server.WithLogger(logger),
+		server.WithPolicy(policy),
+		server.WithClientPolicy(clientPolicy),
+		server.WithCredSource(*credSource),
+		server.WithHostPort(*hostport),
+		server.WithJustification(*justification),
+	)
 }

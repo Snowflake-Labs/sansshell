@@ -36,6 +36,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
@@ -68,7 +69,11 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(nil, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+	s, err := BuildServer(
+		WithCredentials((insecure.NewCredentials())),
+		WithPolicy(policy),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+	)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -84,7 +89,10 @@ func TestMain(m *testing.M) {
 
 func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
-	_, err := BuildServer(nil, "", logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+	_, err := BuildServer(
+		WithLogger(logr.Discard()),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+	)
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
@@ -98,14 +106,18 @@ func TestServe(t *testing.T) {
 			getSrv().Stop()
 		}
 	}()
-
-	err := Serve("-", nil, policy, logr.Discard())
-	testutil.FatalOnNoErr("bad hostport", err, t)
-	err = Serve("127.0.0.1:0", nil, "", logr.Discard())
+	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	err = Serve("127.0.0.1:0", nil, policy, logr.Discard())
-	testutil.FatalOnErr("Serve 127.0.0.1:0", err, t)
+	err = Serve("-", WithPolicy(policy))
+	testutil.FatalOnNoErr("bad hostport", err, t)
+	// Add an 2nd copy of the logging interceptor just to prove adding works.
+	err = Serve("127.0.0.1:0",
+		WithPolicy(policy),
+		WithUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logr.Discard())),
+		WithStreamInterceptor(telemetry.StreamServerLogInterceptor(logr.Discard())),
+	)
+	testutil.FatalOnErr("Serve 127.0.0.1:0 with extra interceptors", err, t)
 }
 
 func TestRead(t *testing.T) {

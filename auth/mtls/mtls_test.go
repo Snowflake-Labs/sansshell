@@ -26,7 +26,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -138,7 +137,12 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	creds, err := LoadServerCredentials(context.Background(), "refresh")
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
-	s, err := server.BuildServer(creds, policy, logr.Discard(), rpcauth.HostNetHook(lis.Addr()))
+
+	s, err := server.BuildServer(
+		server.WithCredentials(creds),
+		server.WithPolicy(policy),
+		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+	)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
 	go func() {
