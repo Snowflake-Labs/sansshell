@@ -65,7 +65,8 @@ func (o optionFunc) apply(r *runState) error {
 	return o(r)
 }
 
-// WithLogger applies a logger that is used for all logging.
+// WithLogger applies a logger that is used for all logging. A discard
+// based one is used if none is supplied.
 func WithLogger(l logr.Logger) Option {
 	return optionFunc(func(r *runState) error {
 		r.logger = l

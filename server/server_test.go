@@ -69,7 +69,11 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
-	s, err := BuildServer(WithCredentials((insecure.NewCredentials())), WithPolicy(policy), WithLogger(logr.Discard()), WithAuthzHook(rpcauth.HostNetHook(lis.Addr())))
+	s, err := BuildServer(
+		WithCredentials((insecure.NewCredentials())),
+		WithPolicy(policy),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+	)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
 	}
@@ -102,15 +106,14 @@ func TestServe(t *testing.T) {
 			getSrv().Stop()
 		}
 	}()
-	err := Serve("127.0.0.1:0", WithLogger(logr.Discard()))
+	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	err = Serve("-", WithPolicy(policy), WithLogger(logr.Discard()))
+	err = Serve("-", WithPolicy(policy))
 	testutil.FatalOnNoErr("bad hostport", err, t)
 	// Add an 2nd copy of the logging interceptor just to prove adding works.
 	err = Serve("127.0.0.1:0",
 		WithPolicy(policy),
-		WithLogger(logr.Discard()),
 		WithUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logr.Discard())),
 		WithStreamInterceptor(telemetry.StreamServerLogInterceptor(logr.Discard())),
 	)

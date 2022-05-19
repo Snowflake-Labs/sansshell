@@ -26,7 +26,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -142,7 +141,6 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	s, err := server.BuildServer(
 		server.WithCredentials(creds),
 		server.WithPolicy(policy),
-		server.WithLogger(logr.Discard()),
 		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
 	)
 	testutil.FatalOnErr("Could not build server", err, t)
