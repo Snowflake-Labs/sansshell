@@ -89,7 +89,7 @@ func (s *setVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not set logging: %v\n", err)
+			fmt.Fprintf(e, "All targets - Could not set logging: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -127,7 +127,7 @@ func (g *getVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not set logging: %v\n", err)
+			fmt.Fprintf(e, "All targets - Could not get logging: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -225,7 +225,7 @@ func (s *versionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not get version: %v\n", err)
+			fmt.Fprintf(e, "All targets - could not get version: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}

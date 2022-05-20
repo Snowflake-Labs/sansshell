@@ -121,11 +121,12 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
 			filename := req.GetFile().Filename
-			fmt.Fprintf(e, "Could not read file %s: %v\n", filename, err)
+			fmt.Fprintf(e, "All targets - could not read file %s: %v\n", filename, err)
 		}
 		return subcommands.ExitFailure
 	}
 
+	targetsDone := make(map[int]bool)
 	exit := subcommands.ExitSuccess
 	for {
 		resp, err := stream.Recv()
@@ -134,8 +135,12 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 		}
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "Stream error: %v\n", err)
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "Stream error: %v\n", err)
+				}
 			}
 			exit = subcommands.ExitFailure
 			break
@@ -144,18 +149,35 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 			contents := r.Resp.Contents
 			if r.Error != nil && r.Error != io.EOF {
 				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
+				targetsDone[r.Index] = true
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
 				exit = subcommands.ExitFailure
 				continue
 			}
-			n, err := state.Out[r.Index].Write(contents)
-			if got, want := n, len(contents); got != want {
-				fmt.Fprintf(state.Err[r.Index], "can't write into buffer at correct length. Got %d want %d\n", got, want)
-				exit = subcommands.ExitFailure
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
 			}
-			if err != nil {
-				fmt.Fprintf(state.Err[r.Index], "error writing output to output index %d - %v\n", r.Index, err)
-				exit = subcommands.ExitFailure
+
+			// If we haven't previously had a problem keep writing. Otherwise we drop this and just keep processing.
+			if !targetsDone[r.Index] {
+				n, err := state.Out[r.Index].Write(contents)
+				if got, want := n, len(contents); got != want {
+					fmt.Fprintf(state.Err[r.Index], "can't write into buffer at correct length. Got %d want %d\n", got, want)
+					targetsDone[r.Index] = true
+					exit = subcommands.ExitFailure
+				}
+				if err != nil {
+					fmt.Fprintf(state.Err[r.Index], "error writing output to output index %d - %v\n", r.Index, err)
+					targetsDone[r.Index] = true
+					exit = subcommands.ExitFailure
+				}
 			}
+
 		}
 	}
 	return exit
@@ -222,7 +244,7 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "stat client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - stat client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -238,7 +260,7 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			if err = stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
 				// Emit this to every error file as it's not specific to a given target.
 				for _, e := range state.Err {
-					fmt.Fprintf(e, "stat: send error: %v\n", err)
+					fmt.Fprintf(e, "All targets - stat: send error: %v\n", err)
 				}
 				break
 			}
@@ -251,6 +273,7 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		close(waitc)
 	}()
 
+	targetsDone := make(map[int]bool)
 	retCode := subcommands.ExitSuccess
 	for {
 		reply, err := stream.Recv()
@@ -259,19 +282,33 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "stat: receive error: %v\n", err)
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "stat: receive error: %v\n", err)
+				}
 			}
-			return subcommands.ExitFailure
+			retCode = subcommands.ExitFailure
+			break
 		}
 		for _, r := range reply {
-			if r.Error != nil {
-				if r.Error != io.EOF {
-					fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
-					retCode = subcommands.ExitFailure
-				}
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
+				targetsDone[r.Index] = true
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
+				retCode = subcommands.ExitFailure
 				continue
 			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
 			mode := os.FileMode(r.Resp.Mode)
 			outTmpl := "File: %s\nSize: %d\nType: %s\nAccess: %s Uid: %d Gid: %d\nModify: %s\nImmutable: %t\n"
 			fmt.Fprintf(state.Out[r.Index], outTmpl, r.Resp.Filename, r.Resp.Size, fileTypeString(mode), mode, r.Resp.Uid, r.Resp.Gid, r.Resp.Modtime.AsTime(), r.Resp.Immutable)
@@ -356,7 +393,7 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "sum client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - sum client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -372,7 +409,7 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			if err = stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
 				// Emit this to every error file as it's not specific to a given target.
 				for _, e := range state.Err {
-					fmt.Fprintf(e, "sum: send error: %v\n", err)
+					fmt.Fprintf(e, "All targets - sum: send error: %v\n", err)
 				}
 				break
 			}
@@ -385,6 +422,7 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		close(waitc)
 	}()
 
+	targetsDone := make(map[int]bool)
 	retCode := subcommands.ExitSuccess
 	for {
 		reply, err := stream.Recv()
@@ -393,20 +431,33 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "stat: receive error: %v\n", err)
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "stat: receive error: %v\n", err)
+				}
 			}
 			retCode = subcommands.ExitFailure
 			break
 		}
 		for _, r := range reply {
-			if r.Error != nil {
-				if r.Error != io.EOF {
-					fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
-					retCode = subcommands.ExitFailure
-				}
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+				targetsDone[r.Index] = true
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
+				retCode = subcommands.ExitFailure
 				continue
 			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
 			fmt.Fprintf(state.Out[r.Index], "%s %s\n", r.Resp.Sum, r.Resp.Filename)
 		}
 	}
@@ -476,7 +527,7 @@ func (c *chownCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "chown client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - chown client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -549,7 +600,7 @@ func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "chgrp client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - chgrp client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -609,7 +660,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "chmod client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - chmod client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -664,7 +715,7 @@ func (i *immutableCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "immutable client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - immutable client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -708,6 +759,7 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 
 	c := pb.NewLocalFileClientProxy(state.Conn)
 
+	targetsDone := make(map[int]bool)
 	retCode := subcommands.ExitSuccess
 	for _, filename := range f.Args() {
 		req := &pb.ListRequest{
@@ -718,7 +770,7 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
 			for _, e := range state.Err {
-				fmt.Fprintf(e, "Error from ListOneMany for %s: %v\n", filename, err)
+				fmt.Fprintf(e, "All targets - error for %s: %v\n", filename, err)
 			}
 			retCode = subcommands.ExitFailure
 			continue
@@ -737,19 +789,31 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			}
 			if err != nil {
 				// Emit this to every error file as it's not specific to a given target.
-				for _, e := range state.Err {
-					fmt.Fprintf(e, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+				// But...we only do this for targets that aren't complete. A complete target
+				// didn't have an error. i.e. we got N done then the context expired.
+				for i, e := range state.Err {
+					if !targetsDone[i] {
+						fmt.Fprintf(e, "Error from ListOneMany.Recv() for %s %v\n", filename, err)
+					}
 				}
 				retCode = subcommands.ExitFailure
 				break
 			}
 
 			for _, r := range resp {
-				if r.Error != nil {
-					if r.Error != io.EOF {
-						fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
-						retCode = subcommands.ExitFailure
-					}
+				if r.Error != nil && r.Error != io.EOF {
+					fmt.Fprintf(state.Err[r.Index], "Got error from target %s (%d) - %v\n", r.Target, r.Index, r.Error)
+					targetsDone[r.Index] = true
+					// If any target had errors it needs to be reported for that target but we still
+					// need to process responses off the channel. Final return code though should
+					// indicate something failed.
+					retCode = subcommands.ExitFailure
+					continue
+				}
+
+				// At EOF this target is done.
+				if r.Error == io.EOF {
+					targetsDone[r.Index] = true
 					continue
 				}
 
@@ -926,7 +990,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
 			for _, e := range state.Err {
-				fmt.Fprintf(e, "Error from CopyOneMany: %v\n", err)
+				fmt.Fprintf(e, "All targets - error copying: %v\n", err)
 			}
 			return subcommands.ExitFailure
 		}
@@ -952,7 +1016,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Error from WriteOneMany: %v\n", err)
+			fmt.Fprintf(e, "All targets - error copying: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -966,7 +1030,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	if err := stream.Send(req); err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Error sending on stream - %v\n", err)
+			fmt.Fprintf(e, "All targets - error sending on stream - %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -987,7 +1051,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		if err := stream.Send(req); err != nil {
 			// Emit this to every error file as it's not specific to a given target.
 			for _, e := range state.Err {
-				fmt.Fprintf(e, "Error sending on stream - %v\n", err)
+				fmt.Fprintf(e, "All targets - error sending on stream - %v\n", err)
 			}
 			return subcommands.ExitFailure
 		}
@@ -996,7 +1060,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	if err != nil && err != io.EOF {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Error closing stream - %v\n", err)
+			fmt.Fprintf(e, "All targets - error closing stream - %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -1041,7 +1105,7 @@ func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "rm client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - rm client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -1084,7 +1148,7 @@ func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "rmdir client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - rmdir client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -1128,7 +1192,7 @@ func (i *renameCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "rmdir client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - rmdir client error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
