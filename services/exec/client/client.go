@@ -86,20 +86,23 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not execute due to likely program failure: %v\n", err)
+			fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
 
 	returnCode := subcommands.ExitSuccess
 	for r := range resp {
-		if len(r.Resp.Stderr) > 0 {
-			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
-		}
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Command execution failure for target %s (%d) - error - %v\n", r.Target, r.Index, r.Error)
+			// If any target had errors it needs to be reported for that target but we still
+			// need to process responses off the channel. Final return code though should
+			// indicate something failed.
 			returnCode = subcommands.ExitFailure
 			continue
+		}
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
 		}
 		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
 	}

@@ -78,7 +78,7 @@ func (p *validateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not healthcheck server: %v\n", err)
+			fmt.Fprintf(e, "All targets - could not healthcheck servers: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -87,6 +87,9 @@ func (p *validateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	for r := range resp {
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Healthcheck for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			// If any target had errors it needs to be reported for that target but we still
+			// need to process responses off the channel. Final return code though should
+			// indicate something failed.
 			retCode = subcommands.ExitFailure
 			continue
 		}

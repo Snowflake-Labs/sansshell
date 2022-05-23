@@ -96,7 +96,7 @@ func (p *psCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "ListOneMany returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - List returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -225,14 +225,14 @@ func (p *killCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "KillOneMany returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - Kill returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
+
 	for resp := range respChan {
 		if resp.Error != nil {
 			fmt.Fprintf(state.Err[resp.Index], "Got error from target %s (%d) - %v\n", resp.Target, resp.Index, resp.Error)
-			continue
 		}
 	}
 	return subcommands.ExitSuccess
@@ -269,7 +269,7 @@ func (p *pstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "GetStacks returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - GetStacks returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -325,7 +325,7 @@ func (p *jstackCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "GetJavaStacks returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - GetJavaStacks returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -451,11 +451,12 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "GetMemoryDump returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - GetMemoryDump returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
 
+	targetsDone := make(map[int]bool)
 	retCode := subcommands.ExitSuccess
 	for {
 		resp, err := stream.Recv()
@@ -465,8 +466,12 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		// If the stream returns an error we're just done.
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "Receive error: %v\n", err)
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "Receive error: %v\n", err)
+				}
 			}
 			retCode = subcommands.ExitFailure
 			break
@@ -478,6 +483,13 @@ func (p *dumpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 				retCode = subcommands.ExitFailure
 				continue
 			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
 			if p.output == "" {
 				n, err := state.Out[r.Index].Write(r.Resp.Data)
 				if err != nil {

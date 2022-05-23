@@ -124,7 +124,7 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Install returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - Install returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -192,7 +192,7 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Update returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - Update returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -241,7 +241,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "List returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - List returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -296,7 +296,7 @@ func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Repo list returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - Repo list returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}

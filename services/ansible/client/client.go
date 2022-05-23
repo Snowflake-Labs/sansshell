@@ -112,7 +112,7 @@ func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Run returned error: %v\n", err)
+			fmt.Fprintf(e, "All targets - Run returned error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -122,6 +122,9 @@ func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		fmt.Fprintf(state.Out[r.Index], "Target: %s (%d)\n\n", r.Target, r.Index)
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			// If any target had errors it needs to be reported for that target but we still
+			// need to process responses off the channel. Final return code though should
+			// indicate something failed.
 			retCode = subcommands.ExitFailure
 			continue
 		}
