@@ -89,9 +89,16 @@ type TargetStream struct {
 	// A logger used to log additional information
 	logger logr.Logger
 
-	// the authorizer (from the stream set) used to OPA check requests
+	// The authorizer (from the stream set) used to OPA check requests
 	// sent to this stream.
 	authorizer *rpcauth.Authorizer
+
+	// The dialer to use for connecting to targets.
+	dialer TargetDialer
+
+	// If this is set it will be used as a blocking dial timeout to
+	// the remote target.
+	dialTimeout *time.Duration
 }
 
 func (s *TargetStream) getStream() grpc.ClientStream {
@@ -183,6 +190,18 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.ctx)
 
 	group.Go(func() error {
+		dialCtx, cancel := context.WithCancel(ctx)
+		var opts []grpc.DialOption
+		if s.dialTimeout != nil {
+			dialCtx, cancel = context.WithTimeout(ctx, *s.dialTimeout)
+			opts = append(opts, grpc.WithBlock())
+		}
+		var err error
+		s.grpcConn, err = s.dialer.DialContext(dialCtx, s.target, opts...)
+		if err != nil {
+			cancel()
+			return err
+		}
 		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
@@ -310,7 +329,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
-func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod, authorizer *rpcauth.Authorizer) (*TargetStream, error) {
+func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer *rpcauth.Authorizer) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -420,8 +439,13 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		sendReply(reply)
 		return nil
 	}
+	var dialTimeout *time.Duration
+	if req.DialTimeout != nil {
+		d := req.DialTimeout.AsDuration()
+		dialTimeout = &d
+	}
 	// TODO(jallie): authorization check for opening new stream goes here
-	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, serviceMethod, t.authorizer)
+	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer)
 	if err != nil {
 		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
 			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
