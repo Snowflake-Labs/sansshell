@@ -181,3 +181,24 @@ func TestTargetStreamAddNonBlocking(t *testing.T) {
 		// return
 	}
 }
+
+func TestUnconnectedClientStream(t *testing.T) {
+	u := &unconnectedClientStream{
+		ctx: context.Background(),
+	}
+
+	_, err := u.Header()
+	testutil.FatalOnNoErr("Header", err, t)
+	err = u.CloseSend()
+	testutil.FatalOnNoErr("CloseSend", err, t)
+	err = u.SendMsg(nil)
+	testutil.FatalOnNoErr("SendMsg", err, t)
+	err = u.RecvMsg(nil)
+	testutil.FatalOnNoErr("RecvMsg", err, t)
+
+	testutil.FatalOnNoErr("Header", err, t)
+	if tr := u.Trailer(); tr != nil {
+		t.Fatalf("Trailer returned data: %v", tr)
+	}
+
+}

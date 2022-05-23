@@ -229,8 +229,8 @@ func (p *proxyStream) closeClients() error {
 			},
 		},
 	}
-	// Send the request to the proxy.
-	if err := p.stream.Send(data); err != nil {
+	// Send the request to the proxy. Only error if it's not EOF (session was closed).
+	if err := p.stream.Send(data); err != nil && err != io.EOF {
 		return status.Errorf(codes.Internal, "can't send close data for %s on stream - %v", p.method, err)
 	}
 	return nil

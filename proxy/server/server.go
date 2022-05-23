@@ -178,12 +178,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	})
 
 	// Final RPC status is the status of the waitgroup
-	err := group.Wait()
-
-	if err != nil {
-		return err
-	}
-	return nil
+	return group.Wait()
 }
 
 // send relays messages from `replyChan` to the provided stream

@@ -291,11 +291,17 @@ func TestProxyServerServerStreamBadData(t *testing.T) {
 		t.Fatalf("didn't get serverClose as expected. Got %T instead", resp.Reply)
 	}
 
-	// TODO(): Internally this should be returning an error about invalid data but there are so many places
-	// we cancel the context invariably the errGroup at the top of dispatch/send/receive returns that instead.
-	// A channel to return an error should probably be used there to supercede context errors.
+	t.Log(resp)
+	// Close will return an error which is generally a canceled context.
+	// A further read from the stream will show the reason since the stream itself
+	// returns an error too (and you get at that via Recv)
 	if resp.GetServerClose().GetStatus().Code == 0 {
 		t.Fatal("didn't get non-zero status from Close as expected")
+	}
+	_, err = proxyStream.Recv()
+	t.Log(err)
+	if got, want := status.Code(err), codes.InvalidArgument; got != want {
+		t.Fatalf("didn't get expected stream error code. got %s want %s", codes.Code(got), codes.Code(want))
 	}
 }
 
@@ -475,12 +481,14 @@ allow {
 	// initial stream as the proxy stream is torn down, followed by a
 	// final error with a PermissionDenied
 	reply := testutil.Exchange(t, proxyStream, req)
+	t.Log(reply)
 	if reply.GetServerClose() == nil {
 		t.Fatalf("Exchange(%v) reply was %v, want ServerClose", req, reply)
 	}
 
 	// subsequent recv gets the final status, which is PermissionDenied
-	_, err := proxyStream.Recv()
+	resp, err := proxyStream.Recv()
+	t.Log(resp)
 	if err == nil || status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("Recv() err was %v, want err with code PermissionDenied", err)
 	}

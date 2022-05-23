@@ -267,8 +267,10 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
 			if err != nil {
+				err = status.Errorf(codes.Internal, "error creating authz input %v", err)
+				s.errChan <- err
 				s.cancelFunc()
-				return status.Errorf(codes.Internal, "error creating authz input %v", err)
+				return err
 			}
 			streamPeerInfo := s.PeerAuthInfo()
 			authinput.Host = &rpcauth.HostAuthInput{
@@ -277,6 +279,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
+				s.errChan <- err
 				s.cancelFunc()
 				return err
 			}
@@ -532,9 +535,8 @@ func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 // Before dispatching to the stream(s), an authorization check will be made to
 // ensure that the request is permitted for all specified streams. On failure,
 // streams that failed authorization will be closed with PermissionDenied,
-// while other streams in the same request which would otherwise have been
-// permitted will be closed with status Aborted. Any other open TargetStreams
-// which are not specified in the request are unaffected.
+// while other streams in the same request will continue along. Any other open
+// TargetStreams which are not specified in the request are unaffected.
 func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	streamReq, err := req.Payload.UnmarshalNew()
 	if err != nil {
