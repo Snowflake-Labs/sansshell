@@ -19,6 +19,7 @@ syntax = "proto3";
 option go_package = "github.com/Snowflake-Labs/sansshell/proxy";
 
 import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
 
 package Proxy;
 
@@ -53,7 +54,7 @@ message ProxyReply {
     StartStreamReply start_stream_reply = 1;
 
     // Additional server data for one or more established streams.
-    StreamData  stream_data = 2;
+    StreamData stream_data = 2;
 
     // An end of stream message for one or more established streams.
     ServerClose server_close = 3;
@@ -75,6 +76,14 @@ message StartStream {
   // to allow the client to correlate this stream
   // request with the server-assigned stream ID.
   uint32 nonce = 3;
+
+  // A dial timeout will bound how long to wait to connect
+  // to the remote target. By default in grpc for Go for instance
+  // this is 20s and handled asychronously when creating the actual
+  // connection. Setting a timeout here will block the Dial() call
+  // to that timeout before proceeding. Each Dial() happens in their
+  // own routine so this will not block the overall progress for a stream.
+  google.protobuf.Duration dial_timeout = 4;
 }
 
 message StartStreamReply {
@@ -90,7 +99,7 @@ message StartStreamReply {
     // stream_ids are only guaranteed to be unique within the
     // context of a single proxy stream.
     uint64 stream_id = 3;
-    
+
     // Status carries an error if the stream could not be
     // established.
     Status error_status = 4;

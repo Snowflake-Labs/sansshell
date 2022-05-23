@@ -39,8 +39,9 @@ type LocalFileClient interface {
 	// Rmdir removes the given directory (must be empty).
 	Rmdir(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Rename renames (moves) the given file to a new name. If the destination
-	// is not a directory it will be replaced. OS restrictions may apply if the
-	// old and new names are outside of the same directory.
+	// is not a directory it will be replaced if it already exists.
+	// OS restrictions may apply if the old and new names are outside of the same
+	// directory.
 	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
@@ -281,8 +282,9 @@ type LocalFileServer interface {
 	// Rmdir removes the given directory (must be empty).
 	Rmdir(context.Context, *RmdirRequest) (*emptypb.Empty, error)
 	// Rename renames (moves) the given file to a new name. If the destination
-	// is not a directory it will be replaced. OS restrictions may apply if the
-	// old and new names are outside of the same directory.
+	// is not a directory it will be replaced if it already exists.
+	// OS restrictions may apply if the old and new names are outside of the same
+	// directory.
 	Rename(context.Context, *RenameRequest) (*emptypb.Empty, error)
 }
 
