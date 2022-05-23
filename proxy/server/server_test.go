@@ -475,12 +475,14 @@ allow {
 	// initial stream as the proxy stream is torn down, followed by a
 	// final error with a PermissionDenied
 	reply := testutil.Exchange(t, proxyStream, req)
+	t.Log(reply)
 	if reply.GetServerClose() == nil {
 		t.Fatalf("Exchange(%v) reply was %v, want ServerClose", req, reply)
 	}
 
 	// subsequent recv gets the final status, which is PermissionDenied
-	_, err := proxyStream.Recv()
+	resp, err := proxyStream.Recv()
+	t.Log(resp)
 	if err == nil || status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("Recv() err was %v, want err with code PermissionDenied", err)
 	}
