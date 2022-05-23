@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
@@ -89,6 +90,22 @@ func TestProxyServerStartStream(t *testing.T) {
 			if s1 == s2 {
 				t.Errorf("StartStream(%s, %s) duplicate id %d, want non-duplicate", name, m, s2)
 			}
+		}
+	}
+
+	// Now try a connection with a dialTimeout that shouldn't error but is smaller than 20s.
+	for name := range testServerMap {
+		testutil.MustStartStream(t, proxyStream, name, validMethods[0], 5*time.Second)
+	}
+
+	// Now try one with 0s which should error
+	for name := range testServerMap {
+		testutil.StartStream(t, proxyStream, name, validMethods[0], 0)
+		preply, err := proxyStream.Recv()
+		tu.FatalOnErr("ProxyClient.Recv()", err, t)
+		t.Log(preply)
+		if preply.GetServerClose() == nil {
+			t.Fatal("didn't get ServerClose as expected for small dial")
 		}
 	}
 
