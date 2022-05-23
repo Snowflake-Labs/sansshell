@@ -197,9 +197,12 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			opts = append(opts, grpc.WithBlock())
 		}
 		var err error
+		defer cancel()
 		s.grpcConn, err = s.dialer.DialContext(dialCtx, s.target, opts...)
 		if err != nil {
-			cancel()
+			// We cannot create a new stream to the target. So we need to cancel this stream.
+			s.logger.Info("unable to create stream", "status", err)
+			s.cancelFunc()
 			return err
 		}
 		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
