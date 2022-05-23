@@ -267,8 +267,10 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
 			if err != nil {
+				err = status.Errorf(codes.Internal, "error creating authz input %v", err)
+				s.errChan <- err
 				s.cancelFunc()
-				return status.Errorf(codes.Internal, "error creating authz input %v", err)
+				return err
 			}
 			streamPeerInfo := s.PeerAuthInfo()
 			authinput.Host = &rpcauth.HostAuthInput{
@@ -277,6 +279,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
+				s.errChan <- err
 				s.cancelFunc()
 				return err
 			}
