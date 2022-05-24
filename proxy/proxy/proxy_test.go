@@ -463,6 +463,46 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		})
 		return nil
 	}
+	closePacketNil := func(stream proxypb.Proxy_ProxyServer) error {
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_ServerClose{
+				ServerClose: nil,
+			},
+		})
+		return nil
+	}
+	closeInvalidStream := func(stream proxypb.Proxy_ProxyServer) error {
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_ServerClose{
+				ServerClose: &proxypb.ServerClose{
+					StreamIds: []uint64{1},
+					Status: &proxypb.Status{
+						Code:    12,
+						Message: "error",
+					},
+				},
+			},
+		})
+		return nil
+	}
+	badReply := func(stream proxypb.Proxy_ProxyServer) error {
+		_, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		stream.Send(&proxypb.ProxyReply{
+			Reply: &proxypb.ProxyReply_StreamData{},
+		})
+		return nil
+	}
 	badPacket := func(stream proxypb.Proxy_ProxyServer) error {
 		channelSetup(stream)
 		_, err := stream.Recv()
@@ -552,6 +592,14 @@ func TestWithFakeServerForErrors(t *testing.T) {
 			wantStreamErr: true,
 		},
 		{
+			name:          "bad reply",
+			action:        badReply,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
+		},
+		{
 			name:          "don't match target/nonce",
 			action:        nonMatchingData,
 			input:         &emptypb.Empty{},
@@ -592,6 +640,22 @@ func TestWithFakeServerForErrors(t *testing.T) {
 			input:   &emptypb.Empty{},
 			output:  &emptypb.Empty{},
 			wantErr: true,
+		},
+		{
+			name:          "close invalid stream",
+			action:        closeInvalidStream,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
+		},
+		{
+			name:          "close packet nil",
+			action:        closePacketNil,
+			input:         &emptypb.Empty{},
+			output:        &emptypb.Empty{},
+			wantErr:       true,
+			wantStreamErr: true,
 		},
 		{
 			name:    "bad packet - not close or data",
