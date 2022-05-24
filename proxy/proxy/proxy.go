@@ -370,8 +370,10 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 
 	// We sent len(p.Targets) requests so loop for that many replies. If the server doesn't we'll have to wait until
 	// our context times out then. If the server attempts something invalid we'll catch and just abort (i.e, duplicate
-	// responses and/or out of range).
-	for range p.Targets {
+	// responses and/or out of range). We may encounter closes() in here mixed in with replies but we'll never get
+	// more than that (data can't start until we return).
+	replies := 0
+	for replies != len(p.Targets) {
 		resp, err := stream.Recv()
 		if err != nil {
 			return nil, nil, errors, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
@@ -381,37 +383,55 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 
 		// These are all sanity checks for the entire session so an overall error is appropriate since we're likely
 		// dealing with a broken proxy of some sort.
-		r := resp.GetStartStreamReply()
-		if r == nil {
-			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
-		}
+		switch t := resp.Reply.(type) {
+		case *proxypb.ProxyReply_StartStreamReply:
+			replies++
+			r := t.StartStreamReply
+			// We want the returned Target+nonce to match what we sent and that it's one we know about.
+			if r.Nonce >= uint32(len(p.Targets)) {
+				return nil, nil, errors, status.Errorf(codes.Internal, "got back invalid nonce (out of range): %+v", r)
+			}
+			if p.Targets[r.Nonce] != r.Target {
+				return nil, nil, errors, status.Errorf(codes.Internal, "Target/nonce don't match. target %s(%d) is not %s: %+v", p.Targets[r.Nonce], r.Nonce, r.Target, r)
+			}
 
-		// We want the returned Target+nonce to match what we sent and that it's one we know about.
-		if r.Nonce >= uint32(len(p.Targets)) {
-			return nil, nil, errors, status.Errorf(codes.Internal, "got back invalid nonce (out of range): %+v", r)
-		}
-		if p.Targets[r.Nonce] != r.Target {
-			return nil, nil, errors, status.Errorf(codes.Internal, "Target/nonce don't match. target %s(%d) is not %s: %+v", p.Targets[r.Nonce], r.Nonce, r.Target, r)
-		}
+			id := r.GetStreamId()
+			if streamIds[id] != nil {
+				return nil, nil, errors, status.Errorf(codes.Internal, "Duplicate response for target %s. Already have %+v for response %+v", r.Target, streamIds[id], r)
+			}
 
-		id := r.GetStreamId()
-		if streamIds[id] != nil {
-			return nil, nil, errors, status.Errorf(codes.Internal, "Duplicate response for target %s. Already have %+v for response %+v", r.Target, streamIds[id], r)
-		}
+			ret := &Ret{
+				Target: r.GetTarget(),
+				Index:  int(r.GetNonce()),
+			}
+			// If the target reported an error stick it in errors.
+			if s := r.GetErrorStatus(); s != nil {
+				ret.Error = status.Errorf(codes.Internal, "got reply error from stream. Code: %s Message: %s", codes.Code(s.Code), s.Message)
+				errors = append(errors, ret)
+				continue
+			}
 
-		ret := &Ret{
-			Target: r.GetTarget(),
-			Index:  int(r.GetNonce()),
+			// Save stream ID/nonce for later matching.
+			streamIds[r.GetStreamId()] = ret
+		case *proxypb.ProxyReply_ServerClose:
+			c := t.ServerClose
+			// We've never sent any data so a close here has to be an error.
+			st := c.GetStatus()
+			if st == nil || st.Code == 0 {
+				return nil, nil, errors, status.Errorf(codes.Internal, "close with no data sent and no error? %+v", resp)
+			}
+			for _, id := range c.StreamIds {
+				if streamIds[id] == nil {
+					return nil, nil, errors, status.Errorf(codes.Internal, "close on invalid stream id: %+v", resp)
+				}
+				streamIds[id].Error = status.Errorf(codes.Internal, "got close error from stream. Code: %s Message: %s", codes.Code(st.Code), st.Message)
+				errors = append(errors, streamIds[id])
+				// If it's closed make sure we don't process it later on.
+				delete(streamIds, id)
+			}
+		default:
+			return nil, nil, errors, status.Errorf(codes.Internal, "unexpected reply for %s on stream - %+v", method, resp)
 		}
-		// If the target reported an error stick it in errors.
-		if s := r.GetErrorStatus(); s != nil {
-			ret.Error = status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code), s.Message)
-			errors = append(errors, ret)
-			continue
-		}
-
-		// Save stream ID/nonce for later matching.
-		streamIds[r.GetStreamId()] = ret
 	}
 	return stream, streamIds, errors, nil
 }
