@@ -4665,7 +4665,7 @@ func (x *Log) GetContents() []byte {
 	return nil
 }
 
-type FDBCLIResponse struct {
+type FDBCLIResponseOutput struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -4673,13 +4673,76 @@ type FDBCLIResponse struct {
 	Stdout  []byte `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
 	Stderr  []byte `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
 	RetCode int32  `protobuf:"varint,3,opt,name=retCode,proto3" json:"retCode,omitempty"`
-	Logs    []*Log `protobuf:"bytes,4,rep,name=logs,proto3" json:"logs,omitempty"`
+}
+
+func (x *FDBCLIResponseOutput) Reset() {
+	*x = FDBCLIResponseOutput{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_fdb_proto_msgTypes[70]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FDBCLIResponseOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FDBCLIResponseOutput) ProtoMessage() {}
+
+func (x *FDBCLIResponseOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_fdb_proto_msgTypes[70]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FDBCLIResponseOutput.ProtoReflect.Descriptor instead.
+func (*FDBCLIResponseOutput) Descriptor() ([]byte, []int) {
+	return file_fdb_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *FDBCLIResponseOutput) GetStdout() []byte {
+	if x != nil {
+		return x.Stdout
+	}
+	return nil
+}
+
+func (x *FDBCLIResponseOutput) GetStderr() []byte {
+	if x != nil {
+		return x.Stderr
+	}
+	return nil
+}
+
+func (x *FDBCLIResponseOutput) GetRetCode() int32 {
+	if x != nil {
+		return x.RetCode
+	}
+	return 0
+}
+
+type FDBCLIResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to Response:
+	//	*FDBCLIResponse_Output
+	//	*FDBCLIResponse_Log
+	Response isFDBCLIResponse_Response `protobuf_oneof:"response"`
 }
 
 func (x *FDBCLIResponse) Reset() {
 	*x = FDBCLIResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_fdb_proto_msgTypes[70]
+		mi := &file_fdb_proto_msgTypes[71]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -4692,7 +4755,7 @@ func (x *FDBCLIResponse) String() string {
 func (*FDBCLIResponse) ProtoMessage() {}
 
 func (x *FDBCLIResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fdb_proto_msgTypes[70]
+	mi := &file_fdb_proto_msgTypes[71]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4705,36 +4768,47 @@ func (x *FDBCLIResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FDBCLIResponse.ProtoReflect.Descriptor instead.
 func (*FDBCLIResponse) Descriptor() ([]byte, []int) {
-	return file_fdb_proto_rawDescGZIP(), []int{70}
+	return file_fdb_proto_rawDescGZIP(), []int{71}
 }
 
-func (x *FDBCLIResponse) GetStdout() []byte {
-	if x != nil {
-		return x.Stdout
+func (m *FDBCLIResponse) GetResponse() isFDBCLIResponse_Response {
+	if m != nil {
+		return m.Response
 	}
 	return nil
 }
 
-func (x *FDBCLIResponse) GetStderr() []byte {
-	if x != nil {
-		return x.Stderr
+func (x *FDBCLIResponse) GetOutput() *FDBCLIResponseOutput {
+	if x, ok := x.GetResponse().(*FDBCLIResponse_Output); ok {
+		return x.Output
 	}
 	return nil
 }
 
-func (x *FDBCLIResponse) GetRetCode() int32 {
-	if x != nil {
-		return x.RetCode
-	}
-	return 0
-}
-
-func (x *FDBCLIResponse) GetLogs() []*Log {
-	if x != nil {
-		return x.Logs
+func (x *FDBCLIResponse) GetLog() *Log {
+	if x, ok := x.GetResponse().(*FDBCLIResponse_Log); ok {
+		return x.Log
 	}
 	return nil
 }
+
+type isFDBCLIResponse_Response interface {
+	isFDBCLIResponse_Response()
+}
+
+type FDBCLIResponse_Output struct {
+	Output *FDBCLIResponseOutput `protobuf:"bytes,1,opt,name=output,proto3,oneof"`
+}
+
+type FDBCLIResponse_Log struct {
+	// Log will steam back any logfiles generated sequentially.
+	// When filename changes a new log has begun and the previous completed.
+	Log *Log `protobuf:"bytes,2,opt,name=log,proto3,oneof"`
+}
+
+func (*FDBCLIResponse_Output) isFDBCLIResponse_Response() {}
+
+func (*FDBCLIResponse_Log) isFDBCLIResponse_Response() {}
 
 var File_fdb_proto protoreflect.FileDescriptor
 
@@ -5326,33 +5400,39 @@ var file_fdb_proto_rawDesc = []byte{
 	0x03, 0x4c, 0x6f, 0x67, 0x12, 0x1a, 0x0a, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65,
 	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x66, 0x69, 0x6c, 0x65, 0x6e, 0x61, 0x6d, 0x65,
 	0x12, 0x1a, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x22, 0x78, 0x0a, 0x0e,
-	0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x16,
-	0x0a, 0x06, 0x73, 0x74, 0x64, 0x6f, 0x75, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06,
-	0x73, 0x74, 0x64, 0x6f, 0x75, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x64, 0x65, 0x72, 0x72,
-	0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x73, 0x74, 0x64, 0x65, 0x72, 0x72, 0x12, 0x18,
-	0x0a, 0x07, 0x72, 0x65, 0x74, 0x43, 0x6f, 0x64, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x05, 0x52,
-	0x07, 0x72, 0x65, 0x74, 0x43, 0x6f, 0x64, 0x65, 0x12, 0x1c, 0x0a, 0x04, 0x6c, 0x6f, 0x67, 0x73,
-	0x18, 0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x08, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x4c, 0x6f, 0x67,
-	0x52, 0x04, 0x6c, 0x6f, 0x67, 0x73, 0x32, 0xa6, 0x01, 0x0a, 0x04, 0x43, 0x6f, 0x6e, 0x66, 0x12,
-	0x30, 0x0a, 0x04, 0x52, 0x65, 0x61, 0x64, 0x12, 0x10, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x52, 0x65,
-	0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x46, 0x64, 0x62, 0x2e,
-	0x46, 0x64, 0x62, 0x43, 0x6f, 0x6e, 0x66, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
-	0x00, 0x12, 0x34, 0x0a, 0x05, 0x57, 0x72, 0x69, 0x74, 0x65, 0x12, 0x11, 0x2e, 0x46, 0x64, 0x62,
-	0x2e, 0x57, 0x72, 0x69, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e,
-	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
-	0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x12, 0x36, 0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74,
-	0x65, 0x12, 0x12, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x32,
-	0x3a, 0x0a, 0x03, 0x43, 0x4c, 0x49, 0x12, 0x33, 0x0a, 0x06, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49,
-	0x12, 0x12, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x46, 0x44, 0x42, 0x43, 0x4c,
-	0x49, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x32, 0x5a, 0x30, 0x67,
-	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x53, 0x6e, 0x6f, 0x77, 0x66, 0x6c,
-	0x61, 0x6b, 0x65, 0x2d, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x73, 0x61, 0x6e, 0x73, 0x73, 0x68, 0x65,
-	0x6c, 0x6c, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x2f, 0x66, 0x64, 0x62, 0x62,
-	0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x28, 0x0c, 0x52, 0x08, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x73, 0x22, 0x60, 0x0a, 0x14,
+	0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x4f, 0x75,
+	0x74, 0x70, 0x75, 0x74, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x64, 0x6f, 0x75, 0x74, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x73, 0x74, 0x64, 0x6f, 0x75, 0x74, 0x12, 0x16, 0x0a, 0x06,
+	0x73, 0x74, 0x64, 0x65, 0x72, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x73, 0x74,
+	0x64, 0x65, 0x72, 0x72, 0x12, 0x18, 0x0a, 0x07, 0x72, 0x65, 0x74, 0x43, 0x6f, 0x64, 0x65, 0x18,
+	0x03, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x72, 0x65, 0x74, 0x43, 0x6f, 0x64, 0x65, 0x22, 0x6f,
+	0x0a, 0x0e, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x33, 0x0a, 0x06, 0x6f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x19, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x4f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x48, 0x00, 0x52, 0x06, 0x6f,
+	0x75, 0x74, 0x70, 0x75, 0x74, 0x12, 0x1c, 0x0a, 0x03, 0x6c, 0x6f, 0x67, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x08, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x4c, 0x6f, 0x67, 0x48, 0x00, 0x52, 0x03,
+	0x6c, 0x6f, 0x67, 0x42, 0x0a, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32,
+	0xa6, 0x01, 0x0a, 0x04, 0x43, 0x6f, 0x6e, 0x66, 0x12, 0x30, 0x0a, 0x04, 0x52, 0x65, 0x61, 0x64,
+	0x12, 0x10, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x52, 0x65, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x14, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x46, 0x64, 0x62, 0x43, 0x6f, 0x6e, 0x66,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x34, 0x0a, 0x05, 0x57, 0x72,
+	0x69, 0x74, 0x65, 0x12, 0x11, 0x2e, 0x46, 0x64, 0x62, 0x2e, 0x57, 0x72, 0x69, 0x74, 0x65, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00,
+	0x12, 0x36, 0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x12, 0x2e, 0x46, 0x64, 0x62,
+	0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x32, 0x3c, 0x0a, 0x03, 0x43, 0x4c, 0x49, 0x12,
+	0x35, 0x0a, 0x06, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x12, 0x12, 0x2e, 0x46, 0x64, 0x62, 0x2e,
+	0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x13, 0x2e,
+	0x46, 0x64, 0x62, 0x2e, 0x46, 0x44, 0x42, 0x43, 0x4c, 0x49, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x22, 0x00, 0x30, 0x01, 0x42, 0x32, 0x5a, 0x30, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
+	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x53, 0x6e, 0x6f, 0x77, 0x66, 0x6c, 0x61, 0x6b, 0x65, 0x2d, 0x4c,
+	0x61, 0x62, 0x73, 0x2f, 0x73, 0x61, 0x6e, 0x73, 0x73, 0x68, 0x65, 0x6c, 0x6c, 0x2f, 0x73, 0x65,
+	0x72, 0x76, 0x69, 0x63, 0x65, 0x73, 0x2f, 0x66, 0x64, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -5367,7 +5447,7 @@ func file_fdb_proto_rawDescGZIP() []byte {
 	return file_fdb_proto_rawDescData
 }
 
-var file_fdb_proto_msgTypes = make([]protoimpl.MessageInfo, 71)
+var file_fdb_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
 var file_fdb_proto_goTypes = []interface{}{
 	(*Location)(nil),                         // 0: Fdb.Location
 	(*ReadRequest)(nil),                      // 1: Fdb.ReadRequest
@@ -5439,48 +5519,49 @@ var file_fdb_proto_goTypes = []interface{}{
 	(*FDBCLIUnknownAction)(nil),              // 67: Fdb.FDBCLIUnknownAction
 	(*FDBCLIRequest)(nil),                    // 68: Fdb.FDBCLIRequest
 	(*Log)(nil),                              // 69: Fdb.Log
-	(*FDBCLIResponse)(nil),                   // 70: Fdb.FDBCLIResponse
-	(*wrapperspb.StringValue)(nil),           // 71: google.protobuf.StringValue
-	(*wrapperspb.UInt32Value)(nil),           // 72: google.protobuf.UInt32Value
-	(*wrapperspb.BoolValue)(nil),             // 73: google.protobuf.BoolValue
-	(*wrapperspb.Int32Value)(nil),            // 74: google.protobuf.Int32Value
-	(*emptypb.Empty)(nil),                    // 75: google.protobuf.Empty
+	(*FDBCLIResponseOutput)(nil),             // 70: Fdb.FDBCLIResponseOutput
+	(*FDBCLIResponse)(nil),                   // 71: Fdb.FDBCLIResponse
+	(*wrapperspb.StringValue)(nil),           // 72: google.protobuf.StringValue
+	(*wrapperspb.UInt32Value)(nil),           // 73: google.protobuf.UInt32Value
+	(*wrapperspb.BoolValue)(nil),             // 74: google.protobuf.BoolValue
+	(*wrapperspb.Int32Value)(nil),            // 75: google.protobuf.Int32Value
+	(*emptypb.Empty)(nil),                    // 76: google.protobuf.Empty
 }
 var file_fdb_proto_depIdxs = []int32{
 	0,   // 0: Fdb.ReadRequest.location:type_name -> Fdb.Location
 	0,   // 1: Fdb.WriteRequest.location:type_name -> Fdb.Location
 	0,   // 2: Fdb.DeleteRequest.location:type_name -> Fdb.Location
-	71,  // 3: Fdb.FDBCLIConfigure.new_or_tss:type_name -> google.protobuf.StringValue
-	71,  // 4: Fdb.FDBCLIConfigure.redundancy_mode:type_name -> google.protobuf.StringValue
-	71,  // 5: Fdb.FDBCLIConfigure.storage_engine:type_name -> google.protobuf.StringValue
-	72,  // 6: Fdb.FDBCLIConfigure.grv_proxies:type_name -> google.protobuf.UInt32Value
-	72,  // 7: Fdb.FDBCLIConfigure.commit_proxies:type_name -> google.protobuf.UInt32Value
-	72,  // 8: Fdb.FDBCLIConfigure.resolvers:type_name -> google.protobuf.UInt32Value
-	72,  // 9: Fdb.FDBCLIConfigure.logs:type_name -> google.protobuf.UInt32Value
-	72,  // 10: Fdb.FDBCLIConfigure.count:type_name -> google.protobuf.UInt32Value
-	72,  // 11: Fdb.FDBCLIConfigure.perpetual_storage_wiggle:type_name -> google.protobuf.UInt32Value
-	71,  // 12: Fdb.FDBCLIConfigure.perpetual_storage_wiggle_locality:type_name -> google.protobuf.StringValue
-	71,  // 13: Fdb.FDBCLIConfigure.storage_migration_type:type_name -> google.protobuf.StringValue
-	71,  // 14: Fdb.FDBCLIConfigure.tenant_mode:type_name -> google.protobuf.StringValue
-	73,  // 15: Fdb.FDBCLIConsistencycheck.mode:type_name -> google.protobuf.BoolValue
+	72,  // 3: Fdb.FDBCLIConfigure.new_or_tss:type_name -> google.protobuf.StringValue
+	72,  // 4: Fdb.FDBCLIConfigure.redundancy_mode:type_name -> google.protobuf.StringValue
+	72,  // 5: Fdb.FDBCLIConfigure.storage_engine:type_name -> google.protobuf.StringValue
+	73,  // 6: Fdb.FDBCLIConfigure.grv_proxies:type_name -> google.protobuf.UInt32Value
+	73,  // 7: Fdb.FDBCLIConfigure.commit_proxies:type_name -> google.protobuf.UInt32Value
+	73,  // 8: Fdb.FDBCLIConfigure.resolvers:type_name -> google.protobuf.UInt32Value
+	73,  // 9: Fdb.FDBCLIConfigure.logs:type_name -> google.protobuf.UInt32Value
+	73,  // 10: Fdb.FDBCLIConfigure.count:type_name -> google.protobuf.UInt32Value
+	73,  // 11: Fdb.FDBCLIConfigure.perpetual_storage_wiggle:type_name -> google.protobuf.UInt32Value
+	72,  // 12: Fdb.FDBCLIConfigure.perpetual_storage_wiggle_locality:type_name -> google.protobuf.StringValue
+	72,  // 13: Fdb.FDBCLIConfigure.storage_migration_type:type_name -> google.protobuf.StringValue
+	72,  // 14: Fdb.FDBCLIConfigure.tenant_mode:type_name -> google.protobuf.StringValue
+	74,  // 15: Fdb.FDBCLIConsistencycheck.mode:type_name -> google.protobuf.BoolValue
 	10,  // 16: Fdb.FDBCLICoordinators.auto:type_name -> Fdb.FDBCLICoordinatorsAuto
 	11,  // 17: Fdb.FDBCLICoordinators.addresses:type_name -> Fdb.FDBCLICoordinatorsAddresses
-	71,  // 18: Fdb.FDBCLICoordinators.description:type_name -> google.protobuf.StringValue
-	73,  // 19: Fdb.FDBCLIExclude.failed:type_name -> google.protobuf.BoolValue
-	73,  // 20: Fdb.FDBCLIFileconfigure.new:type_name -> google.protobuf.BoolValue
-	71,  // 21: Fdb.FDBCLIGetrange.end_key:type_name -> google.protobuf.StringValue
-	72,  // 22: Fdb.FDBCLIGetrange.limit:type_name -> google.protobuf.UInt32Value
-	71,  // 23: Fdb.FDBCLIGetrangekeys.end_key:type_name -> google.protobuf.StringValue
-	72,  // 24: Fdb.FDBCLIGetrangekeys.limit:type_name -> google.protobuf.UInt32Value
-	73,  // 25: Fdb.FDBCLIInclude.failed:type_name -> google.protobuf.BoolValue
+	72,  // 18: Fdb.FDBCLICoordinators.description:type_name -> google.protobuf.StringValue
+	74,  // 19: Fdb.FDBCLIExclude.failed:type_name -> google.protobuf.BoolValue
+	74,  // 20: Fdb.FDBCLIFileconfigure.new:type_name -> google.protobuf.BoolValue
+	72,  // 21: Fdb.FDBCLIGetrange.end_key:type_name -> google.protobuf.StringValue
+	73,  // 22: Fdb.FDBCLIGetrange.limit:type_name -> google.protobuf.UInt32Value
+	72,  // 23: Fdb.FDBCLIGetrangekeys.end_key:type_name -> google.protobuf.StringValue
+	73,  // 24: Fdb.FDBCLIGetrangekeys.limit:type_name -> google.protobuf.UInt32Value
+	74,  // 25: Fdb.FDBCLIInclude.failed:type_name -> google.protobuf.BoolValue
 	25,  // 26: Fdb.FDBCLIInclude.addresses:type_name -> Fdb.FDBCLIIncludeAddresses
-	71,  // 27: Fdb.FDBCLIListtenants.begin:type_name -> google.protobuf.StringValue
-	71,  // 28: Fdb.FDBCLIListtenants.end:type_name -> google.protobuf.StringValue
-	72,  // 29: Fdb.FDBCLIListtenants.limit:type_name -> google.protobuf.UInt32Value
+	72,  // 27: Fdb.FDBCLIListtenants.begin:type_name -> google.protobuf.StringValue
+	72,  // 28: Fdb.FDBCLIListtenants.end:type_name -> google.protobuf.StringValue
+	73,  // 29: Fdb.FDBCLIListtenants.limit:type_name -> google.protobuf.UInt32Value
 	30,  // 30: Fdb.FDBCLIMaintenance.status:type_name -> Fdb.FDBCLIMaintenanceStatus
 	31,  // 31: Fdb.FDBCLIMaintenance.on:type_name -> Fdb.FDBCLIMaintenanceOn
 	32,  // 32: Fdb.FDBCLIMaintenance.off:type_name -> Fdb.FDBCLIMaintenanceOff
-	71,  // 33: Fdb.FDBCLIOptionArg.arg:type_name -> google.protobuf.StringValue
+	72,  // 33: Fdb.FDBCLIOptionArg.arg:type_name -> google.protobuf.StringValue
 	34,  // 34: Fdb.FDBCLIOption.blank:type_name -> Fdb.FDBCLIOptionBlank
 	35,  // 35: Fdb.FDBCLIOption.arg:type_name -> Fdb.FDBCLIOptionArg
 	37,  // 36: Fdb.FDBCLIProfileActionClientSet.default_rate:type_name -> Fdb.FDBCLIProfileActionClientDefault
@@ -5493,15 +5574,15 @@ var file_fdb_proto_depIdxs = []int32{
 	43,  // 43: Fdb.FDBCLIProfile.heap:type_name -> Fdb.FDBCLIProfileActionHeap
 	47,  // 44: Fdb.FDBCLISetclass.list:type_name -> Fdb.FDBCLISetclassList
 	46,  // 45: Fdb.FDBCLISetclass.arg:type_name -> Fdb.FDBCLISetclassArg
-	71,  // 46: Fdb.FDBCLIStatus.style:type_name -> google.protobuf.StringValue
-	72,  // 47: Fdb.FDBCLIThrottleActionOn.rate:type_name -> google.protobuf.UInt32Value
-	71,  // 48: Fdb.FDBCLIThrottleActionOn.duration:type_name -> google.protobuf.StringValue
-	71,  // 49: Fdb.FDBCLIThrottleActionOn.priority:type_name -> google.protobuf.StringValue
-	71,  // 50: Fdb.FDBCLIThrottleActionOff.type:type_name -> google.protobuf.StringValue
-	71,  // 51: Fdb.FDBCLIThrottleActionOff.tag:type_name -> google.protobuf.StringValue
-	71,  // 52: Fdb.FDBCLIThrottleActionOff.priority:type_name -> google.protobuf.StringValue
-	71,  // 53: Fdb.FDBCLIThrottleActionList.type:type_name -> google.protobuf.StringValue
-	72,  // 54: Fdb.FDBCLIThrottleActionList.limit:type_name -> google.protobuf.UInt32Value
+	72,  // 46: Fdb.FDBCLIStatus.style:type_name -> google.protobuf.StringValue
+	73,  // 47: Fdb.FDBCLIThrottleActionOn.rate:type_name -> google.protobuf.UInt32Value
+	72,  // 48: Fdb.FDBCLIThrottleActionOn.duration:type_name -> google.protobuf.StringValue
+	72,  // 49: Fdb.FDBCLIThrottleActionOn.priority:type_name -> google.protobuf.StringValue
+	72,  // 50: Fdb.FDBCLIThrottleActionOff.type:type_name -> google.protobuf.StringValue
+	72,  // 51: Fdb.FDBCLIThrottleActionOff.tag:type_name -> google.protobuf.StringValue
+	72,  // 52: Fdb.FDBCLIThrottleActionOff.priority:type_name -> google.protobuf.StringValue
+	72,  // 53: Fdb.FDBCLIThrottleActionList.type:type_name -> google.protobuf.StringValue
+	73,  // 54: Fdb.FDBCLIThrottleActionList.limit:type_name -> google.protobuf.UInt32Value
 	51,  // 55: Fdb.FDBCLIThrottle.on:type_name -> Fdb.FDBCLIThrottleActionOn
 	52,  // 56: Fdb.FDBCLIThrottle.off:type_name -> Fdb.FDBCLIThrottleActionOff
 	53,  // 57: Fdb.FDBCLIThrottle.enable:type_name -> Fdb.FDBCLIThrottleActionEnable
@@ -5547,38 +5628,39 @@ var file_fdb_proto_depIdxs = []int32{
 	64,  // 97: Fdb.FDBCLICommand.tssq:type_name -> Fdb.FDBCLITssq
 	67,  // 98: Fdb.FDBCLICommand.unknown:type_name -> Fdb.FDBCLIUnknownAction
 	65,  // 99: Fdb.FDBCLITransaction.commands:type_name -> Fdb.FDBCLICommand
-	71,  // 100: Fdb.FDBCLIRequest.config:type_name -> google.protobuf.StringValue
-	73,  // 101: Fdb.FDBCLIRequest.log:type_name -> google.protobuf.BoolValue
-	71,  // 102: Fdb.FDBCLIRequest.trace_format:type_name -> google.protobuf.StringValue
-	71,  // 103: Fdb.FDBCLIRequest.tls_certificate_file:type_name -> google.protobuf.StringValue
-	71,  // 104: Fdb.FDBCLIRequest.tls_ca_file:type_name -> google.protobuf.StringValue
-	71,  // 105: Fdb.FDBCLIRequest.tls_key_file:type_name -> google.protobuf.StringValue
-	71,  // 106: Fdb.FDBCLIRequest.tls_password:type_name -> google.protobuf.StringValue
-	71,  // 107: Fdb.FDBCLIRequest.tls_verify_peers:type_name -> google.protobuf.StringValue
-	73,  // 108: Fdb.FDBCLIRequest.debug_tls:type_name -> google.protobuf.BoolValue
-	73,  // 109: Fdb.FDBCLIRequest.version:type_name -> google.protobuf.BoolValue
-	71,  // 110: Fdb.FDBCLIRequest.log_group:type_name -> google.protobuf.StringValue
-	73,  // 111: Fdb.FDBCLIRequest.no_status:type_name -> google.protobuf.BoolValue
-	71,  // 112: Fdb.FDBCLIRequest.memory:type_name -> google.protobuf.StringValue
-	73,  // 113: Fdb.FDBCLIRequest.build_flags:type_name -> google.protobuf.BoolValue
-	74,  // 114: Fdb.FDBCLIRequest.timeout:type_name -> google.protobuf.Int32Value
+	72,  // 100: Fdb.FDBCLIRequest.config:type_name -> google.protobuf.StringValue
+	74,  // 101: Fdb.FDBCLIRequest.log:type_name -> google.protobuf.BoolValue
+	72,  // 102: Fdb.FDBCLIRequest.trace_format:type_name -> google.protobuf.StringValue
+	72,  // 103: Fdb.FDBCLIRequest.tls_certificate_file:type_name -> google.protobuf.StringValue
+	72,  // 104: Fdb.FDBCLIRequest.tls_ca_file:type_name -> google.protobuf.StringValue
+	72,  // 105: Fdb.FDBCLIRequest.tls_key_file:type_name -> google.protobuf.StringValue
+	72,  // 106: Fdb.FDBCLIRequest.tls_password:type_name -> google.protobuf.StringValue
+	72,  // 107: Fdb.FDBCLIRequest.tls_verify_peers:type_name -> google.protobuf.StringValue
+	74,  // 108: Fdb.FDBCLIRequest.debug_tls:type_name -> google.protobuf.BoolValue
+	74,  // 109: Fdb.FDBCLIRequest.version:type_name -> google.protobuf.BoolValue
+	72,  // 110: Fdb.FDBCLIRequest.log_group:type_name -> google.protobuf.StringValue
+	74,  // 111: Fdb.FDBCLIRequest.no_status:type_name -> google.protobuf.BoolValue
+	72,  // 112: Fdb.FDBCLIRequest.memory:type_name -> google.protobuf.StringValue
+	74,  // 113: Fdb.FDBCLIRequest.build_flags:type_name -> google.protobuf.BoolValue
+	75,  // 114: Fdb.FDBCLIRequest.timeout:type_name -> google.protobuf.Int32Value
 	65,  // 115: Fdb.FDBCLIRequest.command:type_name -> Fdb.FDBCLICommand
 	66,  // 116: Fdb.FDBCLIRequest.transaction:type_name -> Fdb.FDBCLITransaction
 	67,  // 117: Fdb.FDBCLIRequest.unknown:type_name -> Fdb.FDBCLIUnknownAction
-	69,  // 118: Fdb.FDBCLIResponse.logs:type_name -> Fdb.Log
-	1,   // 119: Fdb.Conf.Read:input_type -> Fdb.ReadRequest
-	2,   // 120: Fdb.Conf.Write:input_type -> Fdb.WriteRequest
-	3,   // 121: Fdb.Conf.Delete:input_type -> Fdb.DeleteRequest
-	68,  // 122: Fdb.CLI.FDBCLI:input_type -> Fdb.FDBCLIRequest
-	4,   // 123: Fdb.Conf.Read:output_type -> Fdb.FdbConfResponse
-	75,  // 124: Fdb.Conf.Write:output_type -> google.protobuf.Empty
-	75,  // 125: Fdb.Conf.Delete:output_type -> google.protobuf.Empty
-	70,  // 126: Fdb.CLI.FDBCLI:output_type -> Fdb.FDBCLIResponse
-	123, // [123:127] is the sub-list for method output_type
-	119, // [119:123] is the sub-list for method input_type
-	119, // [119:119] is the sub-list for extension type_name
-	119, // [119:119] is the sub-list for extension extendee
-	0,   // [0:119] is the sub-list for field type_name
+	70,  // 118: Fdb.FDBCLIResponse.output:type_name -> Fdb.FDBCLIResponseOutput
+	69,  // 119: Fdb.FDBCLIResponse.log:type_name -> Fdb.Log
+	1,   // 120: Fdb.Conf.Read:input_type -> Fdb.ReadRequest
+	2,   // 121: Fdb.Conf.Write:input_type -> Fdb.WriteRequest
+	3,   // 122: Fdb.Conf.Delete:input_type -> Fdb.DeleteRequest
+	68,  // 123: Fdb.CLI.FDBCLI:input_type -> Fdb.FDBCLIRequest
+	4,   // 124: Fdb.Conf.Read:output_type -> Fdb.FdbConfResponse
+	76,  // 125: Fdb.Conf.Write:output_type -> google.protobuf.Empty
+	76,  // 126: Fdb.Conf.Delete:output_type -> google.protobuf.Empty
+	71,  // 127: Fdb.CLI.FDBCLI:output_type -> Fdb.FDBCLIResponse
+	124, // [124:128] is the sub-list for method output_type
+	120, // [120:124] is the sub-list for method input_type
+	120, // [120:120] is the sub-list for extension type_name
+	120, // [120:120] is the sub-list for extension extendee
+	0,   // [0:120] is the sub-list for field type_name
 }
 
 func init() { file_fdb_proto_init() }
@@ -6428,6 +6510,18 @@ func file_fdb_proto_init() {
 			}
 		}
 		file_fdb_proto_msgTypes[70].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FDBCLIResponseOutput); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_fdb_proto_msgTypes[71].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*FDBCLIResponse); i {
 			case 0:
 				return &v.state
@@ -6532,13 +6626,17 @@ func file_fdb_proto_init() {
 		(*FDBCLIRequest_Transaction)(nil),
 		(*FDBCLIRequest_Unknown)(nil),
 	}
+	file_fdb_proto_msgTypes[71].OneofWrappers = []interface{}{
+		(*FDBCLIResponse_Output)(nil),
+		(*FDBCLIResponse_Log)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_fdb_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   71,
+			NumMessages:   72,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

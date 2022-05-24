@@ -17,8 +17,8 @@
 package server
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path"
@@ -132,9 +132,6 @@ func parseLogs(logs []captureLogs) ([]*pb.Log, error) {
 	// Parse captureLogs to see if there's something we need to transmit back.
 	var files []string
 	for _, l := range logs {
-		if l.Cleanup {
-			defer os.RemoveAll(l.Path)
-		}
 		if l.IsDir {
 			dir := l.Path
 			fs, err := os.ReadDir(dir)
@@ -151,13 +148,8 @@ func parseLogs(logs []captureLogs) ([]*pb.Log, error) {
 		files = append(files, l.Path)
 	}
 	for _, f := range files {
-		contents, err := os.ReadFile(f)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "can't read file %s: %v", f, err)
-		}
 		retLogs = append(retLogs, &pb.Log{
 			Filename: f,
-			Contents: contents,
 		})
 	}
 	return retLogs, nil
@@ -219,42 +211,90 @@ func boolFlag(args []string, flag *wrapperspb.BoolValue, value string) []string 
 	return args
 }
 
-func (s *server) FDBCLI(ctx context.Context, req *pb.FDBCLIRequest) (*pb.FDBCLIResponse, error) {
+func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error {
 	if req.Request == nil {
-		return nil, status.Error(codes.InvalidArgument, "must fill in request")
+		return status.Error(codes.InvalidArgument, "must fill in request")
 	}
 
 	command, logs, err := generateFDBCLIArgs(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	opts, err := s.generateCommandOpts()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	// Add env vars from flag
 	for _, e := range FDBCLIEnvList {
 		opts = append(opts, util.EnvVar(e))
 	}
 
-	run, err := util.RunCommand(ctx, command[0], command[1:], opts...)
+	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
+		return status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
 	}
 	if run.Error != nil {
-		return nil, status.Errorf(codes.Internal, "can't exec fdbcli: %v", run.Error)
+		return status.Errorf(codes.Internal, "can't exec fdbcli: %v", run.Error)
 	}
 	resp := &pb.FDBCLIResponse{
-		RetCode: int32(run.ExitCode),
-		Stderr:  run.Stderr.Bytes(),
-		Stdout:  run.Stdout.Bytes(),
+		Response: &pb.FDBCLIResponse_Output{
+			Output: &pb.FDBCLIResponseOutput{
+				RetCode: int32(run.ExitCode),
+				Stderr:  run.Stderr.Bytes(),
+				Stdout:  run.Stdout.Bytes(),
+			},
+		},
 	}
+	if err := stream.Send(resp); err != nil {
+		return status.Errorf(codes.Internal, "can't send on stream: %v", err)
+	}
+
+	// Process any logs
 	retLogs, err := parseLogs(logs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	resp.Logs = retLogs
-	return resp, nil
+	// We get a list of filenames. So now we go over each and do chunk reads and send them back.
+	for _, log := range retLogs {
+		f, err := os.Open(log.Filename)
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't open file %s: %v", log.Filename, err)
+		}
+		defer f.Close()
+		buf := make([]byte, util.StreamingChunkSize)
+
+		for {
+			n, err := f.Read(buf)
+
+			// If we got EOF we're done for this file
+			if err == io.EOF {
+				break
+			}
+
+			if err != nil {
+				return status.Errorf(codes.Internal, "can't read file %s: %v", log.Filename, err)
+			}
+			// Only send over the number of bytes we actually read or
+			// else we'll send over garbage in the last packet potentially.
+			resp := &pb.FDBCLIResponse{
+				Response: &pb.FDBCLIResponse_Log{
+					Log: &pb.Log{
+						Filename: log.Filename,
+						Contents: buf[:n],
+					},
+				},
+			}
+			if err := stream.Send(resp); err != nil {
+				return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", log.Filename, err)
+			}
+		}
+	}
+	for _, l := range logs {
+		if l.Cleanup {
+			os.RemoveAll(l.Path)
+		}
+	}
+	return nil
 }
 
 func generateFDBCLIArgsImpl(req *pb.FDBCLIRequest) ([]string, []captureLogs, error) {
