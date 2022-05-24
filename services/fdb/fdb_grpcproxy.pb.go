@@ -14,6 +14,7 @@ import (
 
 import (
 	"fmt"
+	"io"
 )
 
 // ConfClientProxy is the superset of ConfClient which additionally includes the OneMany proxy methods
@@ -239,7 +240,7 @@ func (c *confClientProxy) DeleteOneMany(ctx context.Context, in *DeleteRequest, 
 // CLIClientProxy is the superset of CLIClient which additionally includes the OneMany proxy methods
 type CLIClientProxy interface {
 	CLIClient
-	FDBCLIOneMany(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (<-chan *FDBCLIManyResponse, error)
+	FDBCLIOneMany(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (CLI_FDBCLIClientProxy, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -263,59 +264,80 @@ type FDBCLIManyResponse struct {
 	Error error
 }
 
+type CLI_FDBCLIClientProxy interface {
+	Recv() ([]*FDBCLIManyResponse, error)
+	grpc.ClientStream
+}
+
+type cLIClientFDBCLIClientProxy struct {
+	cc         *proxy.Conn
+	directDone bool
+	grpc.ClientStream
+}
+
+func (x *cLIClientFDBCLIClientProxy) Recv() ([]*FDBCLIManyResponse, error) {
+	var ret []*FDBCLIManyResponse
+	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
+	// and not our proxy based one. This means we need to receive a typed response and
+	// convert it into a single slice entry return. This ensures the OneMany style calls
+	// can be used by proxy with 1:N targets and non proxy with 1 target without client changes.
+	if x.cc.Direct() {
+		// Check if we're done. Just return EOF now. Any real error was already sent inside
+		// of a ManyResponse.
+		if x.directDone {
+			return nil, io.EOF
+		}
+		m := &FDBCLIResponse{}
+		err := x.ClientStream.RecvMsg(m)
+		ret = append(ret, &FDBCLIManyResponse{
+			Resp:   m,
+			Error:  err,
+			Target: x.cc.Targets[0],
+			Index:  0,
+		})
+		// An error means we're done so set things so a later call now gets an EOF.
+		if err != nil {
+			x.directDone = true
+		}
+		return ret, nil
+	}
+
+	m := []*proxy.Ret{}
+	if err := x.ClientStream.RecvMsg(&m); err != nil {
+		return nil, err
+	}
+	for _, r := range m {
+		typedResp := &FDBCLIManyResponse{
+			Resp: &FDBCLIResponse{},
+		}
+		typedResp.Target = r.Target
+		typedResp.Index = r.Index
+		typedResp.Error = r.Error
+		if r.Error == nil {
+			if err := r.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+				typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, r.Error)
+			}
+		}
+		ret = append(ret, typedResp)
+	}
+	return ret, nil
+}
+
 // FDBCLIOneMany provides the same API as FDBCLI but sends the same request to N destinations at once.
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *cLIClientProxy) FDBCLIOneMany(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (<-chan *FDBCLIManyResponse, error) {
-	conn := c.cc.(*proxy.Conn)
-	ret := make(chan *FDBCLIManyResponse)
-	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
-	if len(conn.Targets) == 1 {
-		go func() {
-			out := &FDBCLIManyResponse{
-				Target: conn.Targets[0],
-				Index:  0,
-				Resp:   &FDBCLIResponse{},
-			}
-			err := conn.Invoke(ctx, "/Fdb.CLI/FDBCLI", in, out.Resp, opts...)
-			if err != nil {
-				out.Error = err
-			}
-			// Send and close.
-			ret <- out
-			close(ret)
-		}()
-		return ret, nil
-	}
-	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.CLI/FDBCLI", in, opts...)
+func (c *cLIClientProxy) FDBCLIOneMany(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (CLI_FDBCLIClientProxy, error) {
+	stream, err := c.cc.NewStream(ctx, &CLI_ServiceDesc.Streams[0], "/Fdb.CLI/FDBCLI", opts...)
 	if err != nil {
 		return nil, err
 	}
-	// A goroutine to retrive untyped responses and convert them to typed ones.
-	go func() {
-		for {
-			typedResp := &FDBCLIManyResponse{
-				Resp: &FDBCLIResponse{},
-			}
-
-			resp, ok := <-manyRet
-			if !ok {
-				// All done so we can shut down.
-				close(ret)
-				return
-			}
-			typedResp.Target = resp.Target
-			typedResp.Index = resp.Index
-			typedResp.Error = resp.Error
-			if resp.Error == nil {
-				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
-					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
-				}
-			}
-			ret <- typedResp
-		}
-	}()
-
-	return ret, nil
+	x := &cLIClientFDBCLIClientProxy{c.cc.(*proxy.Conn), false, stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
 }

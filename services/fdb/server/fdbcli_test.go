@@ -18,6 +18,8 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -98,43 +100,45 @@ func TestFDBCLI(t *testing.T) {
 	contents := []byte("contents")
 
 	for _, tc := range []struct {
-		name    string
-		req     *pb.FDBCLIRequest
-		resp    *pb.FDBCLIResponse // Set log to filename only. Full path will get filled in below
-		wantErr bool
-		bin     string
-		user    string
-		group   string
-		subPath bool
-		subdir  string
-		command []string
-		perms   fs.FileMode
+		name       string
+		req        *pb.FDBCLIRequest
+		output     *pb.FDBCLIResponseOutput
+		respLogs   map[string][]byte // Set log to filename only. Full path will get filled in below
+		wantAnyErr bool
+		wantLogErr bool
+		bin        string
+		user       string
+		group      string
+		subPath    bool
+		subdir     string
+		command    []string
+		perms      fs.FileMode
 	}{
 		{
-			name:    "missing request",
-			req:     &pb.FDBCLIRequest{},
-			wantErr: true,
+			name:       "missing request",
+			req:        &pb.FDBCLIRequest{},
+			wantAnyErr: true,
 		},
 		{
 			name: "missing command",
 			req: &pb.FDBCLIRequest{
 				Request: &pb.FDBCLIRequest_Command{},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "transaction with no commands",
 			req: &pb.FDBCLIRequest{
 				Request: &pb.FDBCLIRequest_Transaction{},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "unknown request",
 			req: &pb.FDBCLIRequest{
 				Request: &pb.FDBCLIRequest_Unknown{},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "unknown command",
@@ -145,7 +149,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 
 		{
@@ -157,8 +161,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     "cat",
-			wantErr: true,
+			bin:        "cat",
+			wantAnyErr: true,
 		},
 		{
 			name: "valid user/group - fails as can't setuid",
@@ -169,10 +173,10 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "echo"),
-			user:    "nobody",
-			group:   "nobody",
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "echo"),
+			user:       "nobody",
+			group:      "nobody",
+			wantAnyErr: true,
 		},
 		{
 			name: "invalid user",
@@ -183,9 +187,9 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "echo"),
-			user:    "nobody2",
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "echo"),
+			user:       "nobody2",
+			wantAnyErr: true,
 		},
 		{
 			name: "invalid group",
@@ -196,9 +200,9 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "echo"),
-			group:   "nobody2",
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "echo"),
+			group:      "nobody2",
+			wantAnyErr: true,
 		},
 		{
 			name: "transaction with bad command",
@@ -213,7 +217,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "simple transaction",
@@ -228,8 +232,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			resp: &pb.FDBCLIResponse{},
-			bin:  testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -259,8 +263,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			resp: &pb.FDBCLIResponse{},
-			bin:  testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -279,8 +283,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "true"),
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "true"),
+			wantLogErr: true,
 		},
 		{
 			name: "can't read log dir",
@@ -294,9 +298,29 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			subdir:  "subdir",
-			bin:     testutil.ResolvePath(t, "true"),
-			wantErr: true,
+			subdir:     "subdir",
+			bin:        testutil.ResolvePath(t, "true"),
+			wantLogErr: true,
+		},
+		{
+			name: "stdout check",
+			req: &pb.FDBCLIRequest{
+				Request: &pb.FDBCLIRequest_Command{
+					Command: &pb.FDBCLICommand{
+						Command: &pb.FDBCLICommand_Status{},
+					},
+				},
+			},
+			output: &pb.FDBCLIResponseOutput{
+				Stdout: []byte(fmt.Sprintf("%s --exec status\n", FDBCLI)),
+			},
+			bin:      testutil.ResolvePath(t, "echo"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"status",
+			},
 		},
 		{
 			name: "top level args",
@@ -352,13 +376,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			resp: &pb.FDBCLIResponse{
-				Logs: []*pb.Log{
-					{
-						Filename: "file",
-						Contents: contents,
-					},
-				},
+			respLogs: map[string][]byte{
+				"file": contents,
 			},
 			bin: testutil.ResolvePath(t, "true"),
 			command: []string{
@@ -410,8 +429,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			resp: &pb.FDBCLIResponse{},
-			bin:  testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -429,8 +448,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "true"),
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
 		},
 		{
 			name: "clear",
@@ -445,8 +464,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -464,8 +483,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "true"),
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
 		},
 		{
 			name: "clearrange missing end key",
@@ -480,8 +499,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:     testutil.ResolvePath(t, "true"),
-			wantErr: true,
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
 		},
 		{
 			name: "clearrange",
@@ -497,8 +516,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -553,8 +572,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -572,8 +591,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -593,8 +612,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -616,8 +635,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -635,7 +654,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "coordinators auto",
@@ -653,8 +672,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -684,8 +703,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -703,7 +722,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "createtenant",
@@ -718,8 +737,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -737,8 +756,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -756,7 +775,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "deletetenant",
@@ -771,8 +790,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -798,8 +817,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -817,7 +836,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "fileconfigure bad path file",
@@ -832,7 +851,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "fileconfigure",
@@ -850,8 +869,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -869,7 +888,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "force_recovery_with_data_loss",
@@ -884,8 +903,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -903,7 +922,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "get",
@@ -918,8 +937,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -937,7 +956,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "getrange",
@@ -958,8 +977,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -977,7 +996,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "getrangekeys",
@@ -998,8 +1017,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1017,7 +1036,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "gettenant",
@@ -1032,8 +1051,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1051,8 +1070,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1075,8 +1094,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1094,7 +1113,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "include no addresses",
@@ -1111,7 +1130,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "include all",
@@ -1129,8 +1148,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1160,8 +1179,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1179,8 +1198,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1203,8 +1222,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1222,8 +1241,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1251,8 +1270,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1270,7 +1289,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "maintenance status",
@@ -1285,8 +1304,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1308,7 +1327,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "maintenance on",
@@ -1328,8 +1347,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1351,8 +1370,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1370,7 +1389,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "option blank",
@@ -1385,8 +1404,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1408,7 +1427,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "option arg missing option",
@@ -1427,7 +1446,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "option arg",
@@ -1450,8 +1469,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1469,7 +1488,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile client no request",
@@ -1486,7 +1505,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile client get",
@@ -1507,8 +1526,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1534,7 +1553,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile client set no size",
@@ -1559,7 +1578,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile client set rate and size default",
@@ -1587,8 +1606,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1621,8 +1640,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1644,8 +1663,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1667,7 +1686,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile flow",
@@ -1691,13 +1710,8 @@ func TestFDBCLI(t *testing.T) {
 				},
 			},
 			bin: testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{
-				Logs: []*pb.Log{
-					{
-						Filename: "file",
-						Contents: contents,
-					},
-				},
+			respLogs: map[string][]byte{
+				"file": contents,
 			},
 			command: []string{
 				FDBCLI,
@@ -1722,7 +1736,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "profile heap",
@@ -1741,8 +1755,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1760,7 +1774,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "set no value",
@@ -1775,7 +1789,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "set",
@@ -1791,8 +1805,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1810,7 +1824,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "setclass list",
@@ -1827,8 +1841,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1850,7 +1864,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "setclass arg no class",
@@ -1869,7 +1883,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "setclass arg",
@@ -1889,8 +1903,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1910,8 +1924,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1933,8 +1947,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -1952,7 +1966,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "throttle on no tag",
@@ -1969,7 +1983,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "throttle on",
@@ -1997,8 +2011,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2030,8 +2044,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2053,8 +2067,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2076,8 +2090,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2106,8 +2120,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2125,8 +2139,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2144,7 +2158,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "unlock",
@@ -2159,8 +2173,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2178,7 +2192,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "usetenant",
@@ -2193,8 +2207,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2212,7 +2226,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "writemode",
@@ -2227,8 +2241,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2246,7 +2260,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "tssq start no storage uid",
@@ -2263,7 +2277,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "tssq start",
@@ -2282,8 +2296,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2305,7 +2319,7 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantAnyErr: true,
 		},
 		{
 			name: "tssq stop",
@@ -2324,8 +2338,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2347,8 +2361,8 @@ func TestFDBCLI(t *testing.T) {
 					},
 				},
 			},
-			bin:  testutil.ResolvePath(t, "true"),
-			resp: &pb.FDBCLIResponse{},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
 			command: []string{
 				FDBCLI,
 				"--exec",
@@ -2390,15 +2404,42 @@ func TestFDBCLI(t *testing.T) {
 			}
 
 			client := pb.NewCLIClient(conn)
-			resp, err := client.FDBCLI(context.Background(), tc.req)
-			t.Log(err)
-			testutil.WantErr("call", err, tc.wantErr, t)
-			if !tc.wantErr {
-				// Fixup our test response as we didn't know the temp dir in the table.
-				for _, l := range tc.resp.Logs {
-					l.Filename = path.Join(temp, tc.subdir, l.Filename)
+			stream, err := client.FDBCLI(context.Background(), tc.req)
+			testutil.FatalOnErr("stream setup", err, t)
+			respLogs := make(map[string][]byte)
+			for {
+				resp, err := stream.Recv()
+				t.Logf("resp: %+v err: %+v", resp, err)
+				if err == io.EOF {
+					break
 				}
-				testutil.DiffErr("diff responses", resp, tc.resp, t)
+				// This is hard because as a stream we might get an output packet (which has no error)
+				// and then an error for a bad log file. We have to handle that.
+				if tc.wantAnyErr {
+					testutil.FatalOnNoErr("Recv", err, t)
+					break
+				}
+				if tc.output != nil {
+					testutil.DiffErr("output", resp.GetOutput(), tc.output, t)
+				}
+				// We only care about logs from here
+				if err == nil && (resp == nil || resp.GetLog() == nil) {
+					continue
+				}
+				testutil.WantErr("Recv", err, tc.wantLogErr, t)
+				if tc.wantLogErr {
+					break
+				}
+				log := resp.GetLog()
+				respLogs[log.Filename] = append(respLogs[log.Filename], log.Contents...)
+			}
+			if !tc.wantAnyErr && !tc.wantLogErr {
+				// Fixup our test response as we didn't know the temp dir in the table.
+				want := make(map[string][]byte)
+				for k, v := range tc.respLogs {
+					want[path.Join(temp, tc.subdir, path.Base(k))] = v
+				}
+				testutil.DiffErr("diff responses", respLogs, want, t)
 				// The paths are often generated tmp ones so just replace that entry
 				// with a placeholder. If this isn't the right entry the diff will fail
 				// anyways.
