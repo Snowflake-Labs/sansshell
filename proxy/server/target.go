@@ -39,14 +39,14 @@ import (
 )
 
 var (
-	// ReqChanSize is the amount of requests we'll buffer on a given stream
+	// ReqBufferSize is the amount of requests we'll buffer on a given stream
 	// while blocking to do the initial connect. After this the whole stream
 	// will block until it can proceed (or error). Exported as a var so it can
 	// be bound to a flag if wanted. By default this is only one as most RPCs
 	// are unary from the client end so a small buffer is fine. Larger numbers
 	// can cause large explosions in memory usage as potentially needing to buffer
 	// N requests per sub stream that is slow/timing out.
-	ReqChanSize = 1
+	ReqBufferSize = 1
 )
 
 // A TargetStream is a single bidirectional stream between
@@ -259,7 +259,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					if s.serviceMethod.ClientStreams() {
 						err = grpcStream.CloseSend()
 						if err != nil {
-							s.cancelFunc()
+							s.CloseWith(err)
 						}
 						return err
 					}
@@ -271,8 +271,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
 			if err != nil {
 				err = status.Errorf(codes.Internal, "error creating authz input %v", err)
-				s.errChan <- err
-				s.cancelFunc()
+				s.CloseWith(err)
 				return err
 			}
 			streamPeerInfo := s.PeerAuthInfo()
@@ -282,8 +281,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
-				s.errChan <- err
-				s.cancelFunc()
+				s.CloseWith(err)
 				return err
 			}
 
@@ -347,7 +345,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, di
 		serviceMethod: method,
 		grpcStream:    &unconnectedClientStream{ctx: ctx},
 		cancelFunc:    cancel,
-		reqChan:       make(chan proto.Message, ReqChanSize),
+		reqChan:       make(chan proto.Message, ReqBufferSize),
 		errChan:       make(chan error, 1),
 		dialer:        dialer,
 		dialTimeout:   dialTimeout,
