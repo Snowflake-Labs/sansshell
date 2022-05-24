@@ -181,7 +181,7 @@ var Conf_ServiceDesc = grpc.ServiceDesc{
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CLIClient interface {
-	FDBCLI(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (*FDBCLIResponse, error)
+	FDBCLI(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (CLI_FDBCLIClient, error)
 }
 
 type cLIClient struct {
@@ -192,28 +192,51 @@ func NewCLIClient(cc grpc.ClientConnInterface) CLIClient {
 	return &cLIClient{cc}
 }
 
-func (c *cLIClient) FDBCLI(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (*FDBCLIResponse, error) {
-	out := new(FDBCLIResponse)
-	err := c.cc.Invoke(ctx, "/Fdb.CLI/FDBCLI", in, out, opts...)
+func (c *cLIClient) FDBCLI(ctx context.Context, in *FDBCLIRequest, opts ...grpc.CallOption) (CLI_FDBCLIClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CLI_ServiceDesc.Streams[0], "/Fdb.CLI/FDBCLI", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &cLIFDBCLIClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type CLI_FDBCLIClient interface {
+	Recv() (*FDBCLIResponse, error)
+	grpc.ClientStream
+}
+
+type cLIFDBCLIClient struct {
+	grpc.ClientStream
+}
+
+func (x *cLIFDBCLIClient) Recv() (*FDBCLIResponse, error) {
+	m := new(FDBCLIResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // CLIServer is the server API for CLI service.
 // All implementations should embed UnimplementedCLIServer
 // for forward compatibility
 type CLIServer interface {
-	FDBCLI(context.Context, *FDBCLIRequest) (*FDBCLIResponse, error)
+	FDBCLI(*FDBCLIRequest, CLI_FDBCLIServer) error
 }
 
 // UnimplementedCLIServer should be embedded to have forward compatible implementations.
 type UnimplementedCLIServer struct {
 }
 
-func (UnimplementedCLIServer) FDBCLI(context.Context, *FDBCLIRequest) (*FDBCLIResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method FDBCLI not implemented")
+func (UnimplementedCLIServer) FDBCLI(*FDBCLIRequest, CLI_FDBCLIServer) error {
+	return status.Errorf(codes.Unimplemented, "method FDBCLI not implemented")
 }
 
 // UnsafeCLIServer may be embedded to opt out of forward compatibility for this service.
@@ -227,22 +250,25 @@ func RegisterCLIServer(s grpc.ServiceRegistrar, srv CLIServer) {
 	s.RegisterService(&CLI_ServiceDesc, srv)
 }
 
-func _CLI_FDBCLI_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(FDBCLIRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _CLI_FDBCLI_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FDBCLIRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(CLIServer).FDBCLI(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/Fdb.CLI/FDBCLI",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CLIServer).FDBCLI(ctx, req.(*FDBCLIRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(CLIServer).FDBCLI(m, &cLIFDBCLIServer{stream})
+}
+
+type CLI_FDBCLIServer interface {
+	Send(*FDBCLIResponse) error
+	grpc.ServerStream
+}
+
+type cLIFDBCLIServer struct {
+	grpc.ServerStream
+}
+
+func (x *cLIFDBCLIServer) Send(m *FDBCLIResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 // CLI_ServiceDesc is the grpc.ServiceDesc for CLI service.
@@ -251,12 +277,13 @@ func _CLI_FDBCLI_Handler(srv interface{}, ctx context.Context, dec func(interfac
 var CLI_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "Fdb.CLI",
 	HandlerType: (*CLIServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "FDBCLI",
-			Handler:    _CLI_FDBCLI_Handler,
+			StreamName:    "FDBCLI",
+			Handler:       _CLI_FDBCLI_Handler,
+			ServerStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "fdb.proto",
 }
