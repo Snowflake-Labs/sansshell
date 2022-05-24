@@ -326,7 +326,7 @@ func runFDBCLI(ctx context.Context, c pb.CLIClientProxy, state *util.ExecuteStat
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "fdbcli %s error: %v\n", command, err)
+			fmt.Fprintf(e, "All targets - fdbcli %s error: %v\n", command, err)
 		}
 		return subcommands.ExitFailure
 	}
