@@ -38,12 +38,6 @@ function check_status {
       ls ${LOGS}
       print_logs ${LOG} ${FAIL}
     fi
-    if [ -f ${LOGS}/proxy.log ]; then
-      print_logs ${LOGS}/proxy.log proxy log
-    fi
-    if [ -f ${LOGS}/server.log ]; then
-      print_logs ${LOGS}/server.log server log
-    fi
     exit 1
   fi
 }
@@ -959,6 +953,25 @@ setup_mv
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
 check_status $? /dev/null mv failed
 check_mv
+
+echo "parallel work with some bad targets"
+mkdir -p "${LOGS}/parallel"
+if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localhost,1.1.1.1,0.0.0.1,localhost healthcheck validate; then
+  check_status 1 /dev/null healtcheck did not error out
+fi
+
+invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
+deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
+healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
+if [ "${invalid}" != 1 ]; then
+  check_status 1 /dev/null 1 targets should be unhealthy for invalid arguments
+fi
+if [ "${deadline}" != 1 ]; then
+  check_status 1 /dev/null 1 targets should be unhealthy for deadline exceeded
+fi
+if [ "${healthy}" != 2 ]; then
+  check_status 1 /dev/null 2 targets should be healthy
+fi
 
 # TODO(jchacon): Provide a java binary for test{s
 echo
