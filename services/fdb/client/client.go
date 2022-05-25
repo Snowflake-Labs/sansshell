@@ -59,7 +59,7 @@ func processLog(state *util.ExecuteState, index int, log *pb.Log, openFiles map[
 	// This means we can only depend on the basename of the path which may have duplicates.
 	fn := filepath.Base(log.Filename)
 	if fn == "" {
-		fmt.Fprintf(state.Err[index], "RPC returned an invalid log structure: %+v", log)
+		fmt.Fprintf(state.Err[index], "RPC returned an invalid log structure: %+v\n", log)
 		return subcommands.ExitFailure, openFiles
 	}
 
@@ -85,7 +85,7 @@ func processLog(state *util.ExecuteState, index int, log *pb.Log, openFiles map[
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Fprintf(state.Err[index], "can't write logfile %s: %v", path, err)
+		fmt.Fprintf(state.Err[index], "can't write logfile %s: %v\n", path, err)
 		return subcommands.ExitFailure, openFiles
 	}
 	openFiles[log.Filename] = f
