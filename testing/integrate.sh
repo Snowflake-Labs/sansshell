@@ -959,6 +959,12 @@ mkdir -p "${LOGS}/parallel"
 if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localhost,1.1.1.1,0.0.0.1,localhost healthcheck validate; then
   check_status 1 /dev/null healtcheck did not error out
 fi
+echo "logs from parallel work"
+for i in "{$LOGS}"/parallel/*; do
+  echo $i
+  cat $i
+  echo
+done
 
 invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
 deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
