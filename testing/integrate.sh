@@ -961,19 +961,15 @@ if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localh
 fi
 echo "logs from parallel work"
 for i in "${LOGS}"/parallel/*; do
-  echo $i
-  cat $i
+  echo "${i}"
+  cat "${i}"
   echo
 done
 
-invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
-deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
+bad=$(wc -l "${LOGS}"/parallel/*.error)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
-if [ "${invalid}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for invalid arguments
-fi
-if [ "${deadline}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for deadline exceeded
+if [ "${bad}" != 1 ]; then
+  check_status 1 /dev/null 2 targets should be unhealthy for some reason
 fi
 if [ "${healthy}" != 2 ]; then
   check_status 1 /dev/null 2 targets should be healthy
