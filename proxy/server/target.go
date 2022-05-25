@@ -209,7 +209,6 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
-			s.cancelFunc()
 			return err
 		}
 
@@ -570,10 +569,13 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 		if msgName != proto.MessageName(stream.NewRequest()) {
 			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
 		}
+		// At this point it has passed checks so we can Send below.
+		// A separate list is maintained as we might be silently dropping ids above due to a closed stream.
+		ids = append(ids, id)
 	}
 
 	// All checks succeeded, send to all streams
-	for _, id := range req.StreamIds {
+	for _, id := range ids {
 		reqClone := proto.Clone(streamReq)
 		// TargetStream send only enqueues the message to the stream, and only fails
 		// if the stream is being torn down, and is unable to accept it.
