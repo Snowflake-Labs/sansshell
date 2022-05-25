@@ -960,7 +960,7 @@ if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localh
   check_status 1 /dev/null healtcheck did not error out
 fi
 echo "logs from parallel work"
-for i in "{$LOGS}"/parallel/*; do
+for i in "${LOGS}"/parallel/*; do
   echo $i
   cat $i
   echo
