@@ -209,7 +209,6 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
-			s.cancelFunc()
 			return err
 		}
 
@@ -372,6 +371,9 @@ type TargetStreamSet struct {
 	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
 
+	// The streams we've previously had open but have since closed.
+	closedStreams map[uint64]bool
+
 	// A WaitGroup used to track active streams
 	wg sync.WaitGroup
 
@@ -387,6 +389,7 @@ func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetD
 		targetDialer:   dialer,
 		authorizer:     authorizer,
 		streams:        make(map[uint64]*TargetStream),
+		closedStreams:  make(map[uint64]bool),
 		noncePairs:     make(map[string]bool),
 	}
 }
@@ -481,19 +484,20 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 
 // Remove the stream corresponding to `streamid` from the
 // stream set. Future references to this stream will return
-// an error
+// an error generally.
 func (t *TargetStreamSet) Remove(streamID uint64) {
 	delete(t.streams, streamID)
+	t.closedStreams[streamID] = true
 }
 
 // Wait blocks until all TargetStreams associated with this
-// stream set have completed
+// stream set have completed.
 func (t *TargetStreamSet) Wait() {
 	t.wg.Wait()
 }
 
 // ClientClose dispatches ClientClose requests to TargetStreams
-// identified by ID in `req`
+// identified by ID in `req`.
 func (t *TargetStreamSet) ClientClose(req *pb.ClientClose) error {
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
@@ -521,7 +525,12 @@ func (t *TargetStreamSet) ClientCloseAll() {
 func (t *TargetStreamSet) ClientCancel(req *pb.ClientCancel) error {
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
+		// Ordering problems means a client may dispatch data while a Close is
+		// in flight. If we've previously had this stream we'll just ignore it.
 		if !ok {
+			if t.closedStreams[id] {
+				continue
+			}
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
 		stream.ClientCancel()
@@ -545,19 +554,28 @@ func (t *TargetStreamSet) Send(ctx context.Context, req *pb.StreamData) error {
 	}
 	msgName := proto.MessageName(streamReq)
 
+	var ids []uint64
 	for _, id := range req.StreamIds {
 		stream, ok := t.streams[id]
+		// Ordering problems means a client may dispatch data while a Close is
+		// in flight. If we've previously had this stream we'll just ignore it.
 		if !ok {
+			if t.closedStreams[id] {
+				continue
+			}
 			return status.Errorf(codes.InvalidArgument, "no such stream: %d", id)
 		}
 
 		if msgName != proto.MessageName(stream.NewRequest()) {
 			return status.Errorf(codes.InvalidArgument, "invalid request type for method %s", stream.Method())
 		}
+		// At this point it has passed checks so we can Send below.
+		// A separate list is maintained as we might be silently dropping ids above due to a closed stream.
+		ids = append(ids, id)
 	}
 
 	// All checks succeeded, send to all streams
-	for _, id := range req.StreamIds {
+	for _, id := range ids {
 		reqClone := proto.Clone(streamReq)
 		// TargetStream send only enqueues the message to the stream, and only fails
 		// if the stream is being torn down, and is unable to accept it.
