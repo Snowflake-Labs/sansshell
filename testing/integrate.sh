@@ -966,7 +966,7 @@ for i in "${LOGS}"/parallel/*; do
   echo
 done
 
-bad=$(wc -l "${LOGS}"/parallel/*.error)
+bad=$(cat "${LOGS}"/parallel/*.error | wc -l)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
 if [ "${bad}" != 2 ]; then
   check_status 1 /dev/null "2 targets should be unhealthy for some reason but only found ${bad}"
