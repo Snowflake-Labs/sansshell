@@ -968,11 +968,11 @@ done
 
 bad=$(wc -l "${LOGS}"/parallel/*.error)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
-if [ "${bad}" != 1 ]; then
-  check_status 1 /dev/null 2 targets should be unhealthy for some reason
+if [ "${bad}" != 2 ]; then
+  check_status 1 /dev/null "2 targets should be unhealthy for some reason but only found ${bad}"
 fi
 if [ "${healthy}" != 2 ]; then
-  check_status 1 /dev/null 2 targets should be healthy
+  check_status 1 /dev/null "2 targets should be healthy but only found ${healthy}"
 fi
 
 # TODO(jchacon): Provide a java binary for test{s
