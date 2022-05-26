@@ -447,7 +447,6 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		d := req.DialTimeout.AsDuration()
 		dialTimeout = &d
 	}
-	// TODO(jallie): authorization check for opening new stream goes here
 	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer)
 	if err != nil {
 		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
