@@ -960,6 +960,15 @@ if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localh
   check_status 1 /dev/null healtcheck did not error out
 fi
 
+echo "Logs from parallel work - debugging"
+echo
+for i in "${LOGS}"/parallel/*; do
+  echo "${i}"
+  echo
+  cat "${i}"
+  echo
+done
+
 invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
 deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
