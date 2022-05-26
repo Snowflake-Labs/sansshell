@@ -969,14 +969,10 @@ for i in "${LOGS}"/parallel/*; do
   echo
 done
 
-invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
-deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
+errors=$(cat "${LOGS}"/parallel/*.error | wc -l)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
-if [ "${invalid}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for invalid arguments
-fi
-if [ "${deadline}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for deadline exceeded
+if [ "${errors}" != 2 ]; then
+  check_status 1 /dev/null 2 targets should be unhealthy for various reasons
 fi
 if [ "${healthy}" != 2 ]; then
   check_status 1 /dev/null 2 targets should be healthy
