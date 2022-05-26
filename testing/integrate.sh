@@ -954,13 +954,17 @@ ${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/
 check_status $? /dev/null mv failed
 check_mv
 
-echo "parallel work with some bad targets"
+echo "parallel work with some bad targets and various timeouts"
 mkdir -p "${LOGS}/parallel"
-if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localhost,1.1.1.1,0.0.0.1,localhost healthcheck validate; then
-  check_status 1 /dev/null healtcheck did not error out
+start=$(date +%s)
+if ${SANSSH_NOPROXY} --proxy="localhost;2s" --timeout=10s --output-dir="${LOGS}/parallel" --targets="localhost:50042;3s,1.1.1.1;4s,0.0.0.1;5s,localhost;6s" healthcheck validate; then
+  check_status 1 /dev/null healthcheck did not error out
+fi
+end=$(date +%s)
+if [ "$(expr \( "${end}" - "${start}" \) \> 9)" == "1" ]; then
+  check_status 1 /dev/null took to main deadline. should be no more than 6s
 fi
 
-<<<<<<< HEAD
 echo "Logs from parallel work - debugging"
 echo
 for i in "${LOGS}"/parallel/*; do
@@ -974,19 +978,9 @@ errors=$(cat "${LOGS}"/parallel/*.error | wc -l)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
 if [ "${errors}" != 2 ]; then
   check_status 1 /dev/null 2 targets should be unhealthy for various reasons
-=======
-invalid=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "invalid argument")
-deadline=$(cat "${LOGS}"/parallel/*.error | grep -c -h -E "DeadlineExceeded")
-healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
-if [ "${invalid}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for invalid arguments
-fi
-if [ "${deadline}" != 1 ]; then
-  check_status 1 /dev/null 1 targets should be unhealthy for deadline exceeded
->>>>>>> b60aab8 (Add test proving parallel works.)
 fi
 if [ "${healthy}" != 2 ]; then
-  check_status 1 /dev/null 2 targets should be healthy
+  check_status 1 /dev/null 2 "targets should be healthy"
 fi
 
 # TODO(jchacon): Provide a java binary for test{s
