@@ -35,6 +35,7 @@ import (
 // targets makes it possible to regenerate all services
 // by executing `go generate` against this file.
 
+//go:generate go generate ./proxy
 //go:generate go generate ./proxy/testdata
 //go:generate go generate ./services/ansible
 //go:generate go generate ./services/exec

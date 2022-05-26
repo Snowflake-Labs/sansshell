@@ -27,11 +27,13 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
@@ -57,15 +59,20 @@ func Exchange(t *testing.T, stream pb.Proxy_ProxyClient, req *pb.ProxyRequest) *
 // StartStream establishes a new target stream through the proxy connection in `stream`.
 // Will fail `t` on any errors communicating with the proxy, or if the returned response from
 // the proxy is not a valid StartStreamReply.
-func StartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method string) *pb.StartStreamReply {
+func StartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method string, dialTimeout ...time.Duration) *pb.StartStreamReply {
 	t.Helper()
 	nonce := rand.Uint32()
+	var dt *durationpb.Duration
+	if len(dialTimeout) != 0 {
+		dt = durationpb.New(dialTimeout[0])
+	}
 	req := &pb.ProxyRequest{
 		Request: &pb.ProxyRequest_StartStream{
 			StartStream: &pb.StartStream{
-				Target:     target,
-				MethodName: method,
-				Nonce:      nonce,
+				Target:      target,
+				MethodName:  method,
+				Nonce:       nonce,
+				DialTimeout: dt,
 			},
 		},
 	}
@@ -85,9 +92,9 @@ func StartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method strin
 
 // MustStartStream invokes StartStream, but fails `t` if the response does not contain a valid
 // stream id. Returns the created stream id.
-func MustStartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method string) uint64 {
+func MustStartStream(t *testing.T, stream pb.Proxy_ProxyClient, target, method string, dialTimeout ...time.Duration) uint64 {
 	t.Helper()
-	reply := StartStream(t, stream, target, method)
+	reply := StartStream(t, stream, target, method, dialTimeout...)
 	if reply.GetStreamId() == 0 {
 		t.Fatalf("MustStartStream(%s, %s) want response with valid stream ID, got %+v", target, method, reply)
 	}

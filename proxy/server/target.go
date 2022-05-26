@@ -80,18 +80,25 @@ type TargetStream struct {
 	// A 'once' guarding CloseSend to allow it to be called idempotently
 	closeOnce sync.Once
 
-	// the (internal) channel used to manage incoming requests
+	// The (internal) channel used to manage incoming requests
 	reqChan chan proto.Message
 
 	// A channel used to carry an error from proxy-initiated closure
 	errChan chan error
 
-	// a logger used to log additional information
+	// A logger used to log additional information
 	logger logr.Logger
 
-	// the authorizer (from the stream set) used to OPA check requests
+	// The authorizer (from the stream set) used to OPA check requests
 	// sent to this stream.
 	authorizer *rpcauth.Authorizer
+
+	// The dialer to use for connecting to targets.
+	dialer TargetDialer
+
+	// If this is set it will be used as a blocking dial timeout to
+	// the remote target.
+	dialTimeout *time.Duration
 }
 
 func (s *TargetStream) getStream() grpc.ClientStream {
@@ -183,6 +190,21 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.ctx)
 
 	group.Go(func() error {
+		dialCtx, cancel := context.WithCancel(ctx)
+		var opts []grpc.DialOption
+		if s.dialTimeout != nil {
+			dialCtx, cancel = context.WithTimeout(ctx, *s.dialTimeout)
+			opts = append(opts, grpc.WithBlock())
+		}
+		var err error
+		defer cancel()
+		s.grpcConn, err = s.dialer.DialContext(dialCtx, s.target, opts...)
+		if err != nil {
+			// We cannot create a new stream to the target. So we need to cancel this stream.
+			s.logger.Info("unable to create stream", "status", err)
+			s.cancelFunc()
+			return err
+		}
 		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
@@ -310,25 +332,22 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
-func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, method *ServiceMethod, authorizer *rpcauth.Authorizer) (*TargetStream, error) {
+func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer *rpcauth.Authorizer) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
-	conn, err := dialer.DialContext(ctx, target)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
+
 	ts := &TargetStream{
 		ctx:           ctx,
 		authorizer:    authorizer,
 		streamID:      rand.Uint64(),
 		target:        target,
 		serviceMethod: method,
-		grpcConn:      conn,
 		grpcStream:    &unconnectedClientStream{ctx: ctx},
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message, ReqBufferSize),
 		errChan:       make(chan error, 1),
+		dialer:        dialer,
+		dialTimeout:   dialTimeout,
 	}
 	ts.logger = logger.WithValues("stream", ts.String())
 	ts.logger.Info("created")
@@ -423,8 +442,12 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		sendReply(reply)
 		return nil
 	}
-	// TODO(jallie): authorization check for opening new stream goes here
-	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, serviceMethod, t.authorizer)
+	var dialTimeout *time.Duration
+	if req.DialTimeout != nil {
+		d := req.DialTimeout.AsDuration()
+		dialTimeout = &d
+	}
+	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer)
 	if err != nil {
 		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
 			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),

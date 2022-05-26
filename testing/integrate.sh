@@ -959,20 +959,23 @@ mkdir -p "${LOGS}/parallel"
 if ${SANSSH_PROXY} --timeout=5s --output-dir="${LOGS}/parallel" --targets=localhost,1.1.1.1,0.0.0.1,localhost healthcheck validate; then
   check_status 1 /dev/null healtcheck did not error out
 fi
-echo "logs from parallel work"
+
+echo "Logs from parallel work - debugging"
+echo
 for i in "${LOGS}"/parallel/*; do
   echo "${i}"
+  echo
   cat "${i}"
   echo
 done
 
-bad=$(cat "${LOGS}"/parallel/*.error | wc -l)
+errors=$(cat "${LOGS}"/parallel/*.error | wc -l)
 healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
-if [ "${bad}" != 2 ]; then
-  check_status 1 /dev/null "2 targets should be unhealthy for some reason but only found ${bad}"
+if [ "${errors}" != 2 ]; then
+  check_status 1 /dev/null 2 targets should be unhealthy for various reasons
 fi
 if [ "${healthy}" != 2 ]; then
-  check_status 1 /dev/null "2 targets should be healthy but only found ${healthy}"
+  check_status 1 /dev/null 2 targets should be healthy
 fi
 
 # TODO(jchacon): Provide a java binary for test{s

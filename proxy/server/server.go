@@ -36,7 +36,7 @@ import (
 // connections (such as client credentials, deadlines, etc) which
 // the proxy can use without needing to understand them.
 type TargetDialer interface {
-	DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error)
+	DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error)
 }
 
 // an optionsDialer implements TargetDialer using native grpc.Dial
@@ -45,8 +45,10 @@ type optionsDialer struct {
 }
 
 // See TargetDialer.DialContext
-func (o *optionsDialer) DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error) {
-	return grpc.DialContext(ctx, target, o.opts...)
+func (o *optionsDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+	opts := o.opts
+	opts = append(opts, dialOpts...)
+	return grpc.DialContext(ctx, target, opts...)
 }
 
 // NewDialer creates a new TargetDialer that uses grpc.Dial with the
