@@ -63,7 +63,7 @@ func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufco
 func TestDial(t *testing.T) {
 	ctx := context.Background()
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:123")
-	startTestProxy(ctx, t, testServerMap)
+	bufMap := startTestProxy(ctx, t, testServerMap)
 
 	// This should fail since we don't set credentials
 	_, err := proxy.DialContext(ctx, "b", []string{"foo:123"})
@@ -80,6 +80,12 @@ func TestDial(t *testing.T) {
 			name:    "proxy and N hosts",
 			proxy:   "proxy",
 			targets: []string{"foo:123", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+		},
+		{
+			name:    "proxy with timeout and N hosts with timeouts",
+			proxy:   "proxy;5s",
+			targets: []string{"foo:123;5s", "bar:123;5s"},
 			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
 		},
 		{
@@ -115,10 +121,46 @@ func TestDial(t *testing.T) {
 			targets: []string{"foo:123", "bar:123"},
 			wantErr: true,
 		},
+		{
+			name:    "proxy with a dial duration",
+			proxy:   "proxy;5s",
+			targets: []string{"foo:123", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+		},
+		{
+			name:    "proxy with bad duration",
+			proxy:   "proxy;5p",
+			targets: []string{"foo:123", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+			wantErr: true,
+		},
+		{
+			name:    "target with bad form",
+			proxy:   "proxy",
+			targets: []string{"foo:123;5s;5s", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+			wantErr: true,
+		},
+		{
+			name:    "blank target",
+			proxy:   "proxy",
+			targets: []string{"", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+			wantErr: true,
+		},
+		{
+			name:    "blank target2",
+			proxy:   "proxy",
+			targets: []string{";5s", "bar:123"},
+			options: []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())},
+			wantErr: true,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := proxy.Dial(tc.proxy, tc.targets, tc.options...)
+			opts := []grpc.DialOption{testutil.WithBufDialer(bufMap)}
+			opts = append(opts, tc.options...)
+			_, err := proxy.Dial(tc.proxy, tc.targets, opts...)
 			tu.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}

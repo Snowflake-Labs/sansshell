@@ -114,6 +114,23 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
+func validateAndAddPort(s string, port int) string {
+	// See if there's a duration appended and pull it off
+	p := strings.Split(s, ";")
+	if len(p) == 0 || len(p) > 2 || p[0] == "" {
+		log.Fatalf("Invalid address %q - should be of the form host[:port][;<duration>]", s)
+	}
+	new := s
+	if !hasPort(p[0]) {
+		new = fmt.Sprintf("%s:%d", p[0], port)
+		if len(p) == 2 {
+			// Add duration back if we pulled it off.
+			new = fmt.Sprintf("%s;%s", new, p[1])
+		}
+	}
+	return new
+}
+
 func main() {
 	// If this is blank it'll remain blank which is fine
 	// as that means just talk to --targets[0] instead.
@@ -142,16 +159,15 @@ func main() {
 		}
 	}
 
-	// Add the default proxy port (if needed).
-	if *proxyAddr != "" && !hasPort(*proxyAddr) {
-		*proxyAddr = fmt.Sprintf("%s:%d", *proxyAddr, defaultProxyPort)
+	// Validate and add the default proxy port (if needed).
+	if *proxyAddr != "" {
+		*proxyAddr = validateAndAddPort(*proxyAddr, defaultProxyPort)
 	}
-	// Add default target port (if needed).
+	// Validate and add the default target port (if needed) for each target.
 	for i, t := range *targetsFlag.Target {
-		if !hasPort(t) {
-			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
-		}
+		(*targetsFlag.Target)[i] = validateAndAddPort(t, defaultTargetPort)
 	}
+
 	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile

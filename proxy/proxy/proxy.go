@@ -23,6 +23,8 @@ import (
 	"context"
 	"io"
 	"log"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
@@ -39,6 +42,9 @@ import (
 type Conn struct {
 	// The targets we're proxying for currently.
 	Targets []string
+
+	// Possible dial timeouts for each target
+	timeouts []*time.Duration
 
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
@@ -354,6 +360,9 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 				},
 			},
 		}
+		if p.timeouts[i] != nil {
+			req.GetStartStream().DialTimeout = durationpb.New(*p.timeouts[i])
+		}
 		err = stream.Send(req)
 
 		// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
@@ -571,9 +580,43 @@ func (p *Conn) Close() error {
 	return p.cc.Close()
 }
 
+func parseTargets(targets []string) ([]string, []*time.Duration, error) {
+	var hostport []string
+	var timeouts []*time.Duration
+	for _, t := range targets {
+		if len(t) == 0 {
+			return nil, nil, status.Error(codes.InvalidArgument, "blank targets are not allowed")
+		}
+		// First pull off any possible duration
+		p := strings.Split(t, ";")
+		if len(p) > 2 {
+			return nil, nil, status.Errorf(codes.InvalidArgument, "target must be of the form host[:port][;N<time.Duration>] and %s is invalid", t)
+		}
+		if p[0] == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "blank targets are not allowed")
+		}
+		// That's the most we'll parse target here. The rest can happen in Invoke/NewStream later.
+		hostport = append(hostport, p[0])
+		if len(p) == 1 {
+			// No timeout, so just append a placeholder empty value.
+			timeouts = append(timeouts, nil)
+			continue
+		}
+		d, err := time.ParseDuration(p[1])
+		if err != nil {
+			return nil, nil, status.Errorf(codes.InvalidArgument, "%s invalid duration - %v", p[1], err)
+		}
+		timeouts = append(timeouts, &d)
+	}
+	return hostport, timeouts, nil
+}
+
 // Dial will connect to the given proxy and setup to send RPCs to the listed targets.
 // If proxy is blank and there is only one target this will return a normal grpc connection object (*grpc.ClientConn).
-// Otherwise this will return a *ProxyConn setup to act with the proxy.
+// Otherwise this will return a *ProxyConn setup to act with the proxy. Targets is a list of normal gRPC style
+// endpoint addresses with an optional dial timeout appended with a semi-colon in time.Duration format.
+// i.e. host[:port][;Ns] for instance to set the dial timeout to N seconds. The proxy value can also specify a dial timeout
+// in the same fashion.
 func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
 	return DialContext(context.Background(), proxy, targets, opts...)
 }
@@ -581,16 +624,40 @@ func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
 // By default dial operations are non-blocking. See grpc.Dial for a complete explanation.
 func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
+	ret := &Conn{}
+	parsedProxy := []string{proxy}
+	proxyTimeout := []*time.Duration{nil}
+
+	var err error
+	if proxy != "" {
+		parsedProxy, proxyTimeout, err = parseTargets([]string{proxy})
+		if err != nil {
+			return nil, err
+		}
+	}
+	hostport, timeouts, err := parseTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+
 	// If there are no targets things will likely fail but this gives the ability to still send RPCs to the
 	// proxy itself.
-	dialTarget := proxy
-	ret := &Conn{}
+	dialTarget := parsedProxy[0]
+	dialTimeout := proxyTimeout[0]
 	if proxy == "" {
 		if len(targets) != 1 {
 			return nil, status.Error(codes.InvalidArgument, "no proxy specified but more than one target set")
 		}
-		dialTarget = targets[0]
+		dialTarget = hostport[0]
+		dialTimeout = timeouts[0]
 		ret.direct = true
+
+	}
+	var cancel context.CancelFunc
+	if dialTimeout != nil {
+		ctx, cancel = context.WithTimeout(ctx, *dialTimeout)
+		opts = append(opts, grpc.WithBlock())
+		defer cancel()
 	}
 	conn, err := grpc.DialContext(ctx, dialTarget, opts...)
 	if err != nil {
@@ -598,6 +665,7 @@ func DialContext(ctx context.Context, proxy string, targets []string, opts ...gr
 	}
 	ret.cc = conn
 	// Make our own copy of these.
-	ret.Targets = append(ret.Targets, targets...)
+	ret.Targets = append(ret.Targets, hostport...)
+	ret.timeouts = append(ret.timeouts, timeouts...)
 	return ret, nil
 }
