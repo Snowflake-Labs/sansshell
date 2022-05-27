@@ -31,13 +31,13 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
-	github.com/aws/aws-sdk-go v1.44.22 // indirect
+	github.com/aws/aws-sdk-go v1.44.24 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.16.4 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.1 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.15.8 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.12.3 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.15.9 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.12.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.5 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.13 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.14 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.5 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.12 // indirect
@@ -47,7 +47,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.13.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.26.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.11.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.11.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.16.6 // indirect
 	github.com/aws/smithy-go v1.11.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
@@ -69,12 +69,12 @@ require (
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
-	golang.org/x/net v0.0.0-20220524220425-1d687d428aca // indirect
+	golang.org/x/net v0.0.0-20220526153639-5463443f8c37 // indirect
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220517211312-f3a8303e98df // indirect
 	google.golang.org/api v0.81.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20220525015930-6ca3db687a9d // indirect
+	google.golang.org/genproto v0.0.0-20220527130721-00d5c0f3be58 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
