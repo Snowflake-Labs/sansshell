@@ -236,6 +236,16 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	if run.Error != nil {
 		return status.Errorf(codes.Internal, "can't exec fdbcli: %v", run.Error)
 	}
+
+	// Make sure we always remove logs even if errors happen below.
+	defer func() {
+		for _, l := range logs {
+			if l.Cleanup {
+				os.RemoveAll(l.Path)
+			}
+		}
+	}()
+
 	resp := &pb.FDBCLIResponse{
 		Response: &pb.FDBCLIResponse_Output{
 			Output: &pb.FDBCLIResponseOutput{
@@ -289,11 +299,7 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 			}
 		}
 	}
-	for _, l := range logs {
-		if l.Cleanup {
-			os.RemoveAll(l.Path)
-		}
-	}
+
 	return nil
 }
 
