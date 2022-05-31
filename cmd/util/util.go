@@ -19,7 +19,10 @@ package util
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 )
@@ -50,4 +53,29 @@ func ChoosePolicy(logger logr.Logger, defaultPolicy string, policyFlag string, p
 		}
 	}
 	return policy
+}
+
+// hasPort returns true if the provided address does not include a port number.
+func hasPort(s string) bool {
+	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
+}
+
+// ValidateAndAddPort will take a given target address and optionally add a default port
+// onto it if a port is missing. This will also take in account optional dial timeout
+// suffix and make sure the returned value has that if it exists.
+func ValidateAndAddPort(s string, port int) string {
+	// See if there's a duration appended and pull it off
+	p := strings.Split(s, ";")
+	if len(p) == 0 || len(p) > 2 || p[0] == "" {
+		log.Fatalf("Invalid address %q - should be of the form host[:port][;<duration>]", s)
+	}
+	new := s
+	if !hasPort(p[0]) {
+		new = fmt.Sprintf("%s:%d", p[0], port)
+		if len(p) == 2 {
+			// Add duration back if we pulled it off.
+			new = fmt.Sprintf("%s;%s", new, p[1])
+		}
+	}
+	return new
 }
