@@ -365,6 +365,35 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "multiple commands",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Begin{
+							Begin: &pb.FDBCLIBegin{},
+						},
+					},
+					{
+						Command: &pb.FDBCLICommand_Status{
+							Status: &pb.FDBCLIStatus{},
+						},
+					},
+					{
+						Command: &pb.FDBCLICommand_Commit{
+							Commit: &pb.FDBCLICommit{},
+						},
+					},
+				},
+			},
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"begin ; status ; commit ;",
+			},
+		},
+		{
 			name: "advanceversion",
 			req: &pb.FDBCLIRequest{
 				Commands: []*pb.FDBCLICommand{

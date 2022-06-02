@@ -320,6 +320,9 @@ func generateFDBCLIArgsImpl(req *pb.FDBCLIRequest) ([]string, []captureLogs, err
 		}
 		args = append(args, newArgs...)
 		logs = append(logs, newLogs...)
+		if len(req.Commands) > 1 {
+			args = append(args, ";")
+		}
 	}
 	// fdbcli expects --exec to be passed one arg
 	final := strings.Join(args, " ")
