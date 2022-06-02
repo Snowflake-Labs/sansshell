@@ -22,7 +22,7 @@ import (
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb_conf"
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,10 +32,10 @@ import (
 
 // TODO add section name validator https://apple.github.io/foundationdb/configuration.html#foundationdb-conf
 
-type server struct {
+type cserver struct {
 }
 
-func (s *server) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfResponse, error) {
+func (s *cserver) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfResponse, error) {
 	cfg, err := ini.Load(req.Location.File)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not load config file %s: %v", req.Location.File, err)
@@ -46,7 +46,7 @@ func (s *server) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfRespon
 	return &pb.FdbConfResponse{Value: value}, nil
 }
 
-func (s *server) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty, error) {
+func (s *cserver) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty, error) {
 	section := req.Location.Section
 	if section == "" {
 		return nil, status.Error(codes.InvalidArgument, "section name can not be empty")
@@ -78,7 +78,7 @@ func (s *server) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty,
 	return &emptypb.Empty{}, nil
 }
 
-func (s *server) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Empty, error) {
+func (s *cserver) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Empty, error) {
 	section := req.Location.Section
 	if section == "" {
 		return nil, status.Error(codes.InvalidArgument, "section name can not be empty")
@@ -105,8 +105,8 @@ func (s *server) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
-func (s *server) Register(gs *grpc.Server) {
-	pb.RegisterFdbConfServer(gs, s)
+func (s *cserver) Register(gs *grpc.Server) {
+	pb.RegisterConfServer(gs, s)
 }
 
 func init() {

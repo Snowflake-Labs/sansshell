@@ -20,44 +20,16 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb_conf"
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 )
-
-var (
-	bufSize = 1024 * 1024
-	lis     *bufconn.Listener
-)
-
-func bufDialer(context.Context, string) (net.Conn, error) {
-	return lis.Dial()
-}
-
-func TestMain(m *testing.M) {
-	lis = bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	lfs := &server{}
-	lfs.Register(s)
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	defer s.GracefulStop()
-
-	os.Exit(m.Run())
-
-}
 
 func TestRead(t *testing.T) {
 	ctx := context.Background()
@@ -65,7 +37,7 @@ func TestRead(t *testing.T) {
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	client := pb.NewFdbConfClient(conn)
+	client := pb.NewConfClient(conn)
 
 	wd, err := os.Getwd()
 	testutil.FatalOnErr("can't get current working directory", err, t)
@@ -117,7 +89,7 @@ cluster_file = /etc/foundatindb/fdb.cluster`)
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	client := pb.NewFdbConfClient(conn)
+	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
 		name     string
 		req      *pb.WriteRequest
@@ -188,7 +160,7 @@ bar = baz`)
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	client := pb.NewFdbConfClient(conn)
+	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
 		name     string
 		req      *pb.DeleteRequest
