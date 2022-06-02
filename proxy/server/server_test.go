@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
@@ -91,6 +93,22 @@ func TestProxyServerStartStream(t *testing.T) {
 		}
 	}
 
+	// Now try a connection with a dialTimeout that shouldn't error but is smaller than 20s.
+	for name := range testServerMap {
+		testutil.MustStartStream(t, proxyStream, name, validMethods[0], 5*time.Second)
+	}
+
+	// Now try one with 0s which should error
+	for name := range testServerMap {
+		testutil.StartStream(t, proxyStream, name, validMethods[0], 0)
+		preply, err := proxyStream.Recv()
+		tu.FatalOnErr("ProxyClient.Recv()", err, t)
+		t.Log(preply)
+		if preply.GetServerClose() == nil {
+			t.Fatal("didn't get ServerClose as expected for small dial")
+		}
+	}
+
 	// Bad methods yield errors
 	invalidMethods := []string{
 		"bad format",
@@ -112,8 +130,19 @@ func TestProxyServerStartStream(t *testing.T) {
 	for _, name := range []string{"noSuchHost", "bogus"} {
 		for _, m := range validMethods {
 			reply := testutil.StartStream(t, proxyStream, name, m)
-			if c := reply.GetErrorStatus().GetCode(); codes.Code(c) != codes.Internal {
-				t.Errorf("startTargetStream(%s, %s) reply was %v, want reply with code Internal", name, m, reply)
+			if stat := reply.GetErrorStatus(); stat != nil {
+				t.Errorf("startTargetStream(%s, %s) had error: %v", name, m, stat.Message)
+				continue
+			}
+			preply, err := proxyStream.Recv()
+			tu.FatalOnErr("ProxyClient.Recv()", err, t)
+
+			if preply.GetServerClose() == nil {
+				t.Errorf("startTargetStream(%s, %s) didn't get close", name, m)
+				continue
+			}
+			if c := preply.GetServerClose().GetStatus().GetCode(); codes.Code(c) != codes.Unavailable {
+				t.Errorf("startTargetStream(%s, %s) reply was %v(%d), want reply with code Unavailable", name, m, reply, c)
 			}
 		}
 	}
@@ -260,6 +289,36 @@ func TestProxyServerServerStream(t *testing.T) {
 		if !proto.Equal(want, data) {
 			t.Errorf("Server response %d, proto.Equal(%v, %v) was false, want true", i, want, data)
 		}
+	}
+}
+
+func TestProxyServerServerStreamBadData(t *testing.T) {
+	ctx := context.Background()
+	testServerMap := testutil.StartTestDataServers(t, "foo:456")
+	proxyStream := startTestProxy(ctx, t, testServerMap)
+
+	streamID := testutil.MustStartStream(t, proxyStream, "foo:456", "/Testdata.TestService/TestServerStream")
+
+	req := testutil.PackStreamData(t, &emptypb.Empty{}, streamID)
+	err := proxyStream.Send(req)
+	tu.FatalOnErr("ProxyClient.Send", err, t)
+	resp, err := proxyStream.Recv()
+	tu.FatalOnErr(fmt.Sprintf("ProxyClient.Send(%v) no error for bad data", resp), err, t)
+	if resp.GetServerClose() == nil {
+		t.Fatalf("didn't get serverClose as expected. Got %T instead", resp.Reply)
+	}
+
+	t.Log(resp)
+	// Close will return an error which is generally a canceled context.
+	// A further read from the stream will show the reason since the stream itself
+	// returns an error too (and you get at that via Recv)
+	if resp.GetServerClose().GetStatus().Code == 0 {
+		t.Fatal("didn't get non-zero status from Close as expected")
+	}
+	_, err = proxyStream.Recv()
+	t.Log(err)
+	if got, want := status.Code(err), codes.InvalidArgument; got != want {
+		t.Fatalf("didn't get expected stream error code. got %s want %s", codes.Code(got), codes.Code(want))
 	}
 }
 
@@ -439,12 +498,14 @@ allow {
 	// initial stream as the proxy stream is torn down, followed by a
 	// final error with a PermissionDenied
 	reply := testutil.Exchange(t, proxyStream, req)
+	t.Log(reply)
 	if reply.GetServerClose() == nil {
 		t.Fatalf("Exchange(%v) reply was %v, want ServerClose", req, reply)
 	}
 
 	// subsequent recv gets the final status, which is PermissionDenied
-	_, err := proxyStream.Recv()
+	resp, err := proxyStream.Recv()
+	t.Log(resp)
 	if err == nil || status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("Recv() err was %v, want err with code PermissionDenied", err)
 	}
@@ -489,7 +550,6 @@ allow {
 			},
 		}
 	}
-
 	for _, tc := range []struct {
 		name   string
 		target string
@@ -615,31 +675,39 @@ allow {
 
 	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "whatever"}, fooid, barid)
 
-	// we'll eventually get 2 replies, but the order is undefined, so we'll collect both
+	// we'll eventually get 3 replies, but the order is undefined, so we'll collect all
 	replies := []*pb.ProxyReply{
 		// first reply after exchanging req
 		testutil.Exchange(t, proxyStream, req),
 	}
-	// second reply
+	// second and 3rd replies
 	replies = append(replies, testutil.Exchange(t, proxyStream, nil))
+	replies = append(replies, testutil.Exchange(t, proxyStream, nil))
+	sawData := false
 	for _, reply := range replies {
-		sc := reply.GetServerClose()
-		if sc == nil || len(sc.StreamIds) != 1 {
-			t.Fatalf("Proxy reply was %v, want ServerClose with single streamID", reply)
-		}
-		switch sc.StreamIds[0] {
-		case barid:
-			// barID is not permitted by the policy, we we get a PermissionDenied
-			if sc.GetStatus().GetCode() != int32(codes.PermissionDenied) {
-				t.Errorf("Status for bar was %v, want status with PermissionDenied", sc.GetStatus())
+		switch r := reply.GetReply().(type) {
+		case *pb.ProxyReply_ServerClose:
+			if got, want := r.ServerClose.StreamIds[0], fooid; !sawData && got == want {
+				t.Error("got serverClose on foo before receiving data")
+				break
 			}
-		case fooid:
-			// fooID is permitted, but won't be sent due to the failure in bar
-			if sc.GetStatus().GetCode() != int32(codes.Aborted) {
-				t.Errorf("Status for foo was %v, want status with Aborted", sc.GetStatus())
+			// If the above didn't error then getting a close for foo is fine.
+			if r.ServerClose.StreamIds[0] == fooid {
+				break
 			}
+			if got, want := r.ServerClose.StreamIds[0], barid; got != want {
+				t.Errorf("got serverClose for wrong stream ID. Got %d want %d", got, want)
+			}
+			if got, want := r.ServerClose.GetStatus().GetCode(), int32(codes.PermissionDenied); got != want {
+				t.Errorf("Status for bar was %v, want status with PermissionDenied", r.ServerClose.GetStatus())
+			}
+		case *pb.ProxyReply_StreamData:
+			if got, want := r.StreamData.StreamIds[0], fooid; got != want {
+				t.Errorf("got streamData for wrong stream ID. Got %d want %d", got, want)
+			}
+			sawData = true
 		default:
-			t.Errorf("Got ServerClose with streamid %d, want streamid in [%d, %d]", sc.StreamIds[0], fooid, barid)
+			t.Errorf("got unexpected packet type: %+v", r)
 		}
 	}
 }

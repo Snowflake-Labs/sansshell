@@ -38,6 +38,11 @@ type LocalFileClient interface {
 	Rm(ctx context.Context, in *RmRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Rmdir removes the given directory (must be empty).
 	Rmdir(ctx context.Context, in *RmdirRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Rename renames (moves) the given file to a new name. If the destination
+	// is not a directory it will be replaced if it already exists.
+	// OS restrictions may apply if the old and new names are outside of the same
+	// directory.
+	Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type localFileClient struct {
@@ -244,6 +249,15 @@ func (c *localFileClient) Rmdir(ctx context.Context, in *RmdirRequest, opts ...g
 	return out, nil
 }
 
+func (c *localFileClient) Rename(ctx context.Context, in *RenameRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/LocalFile.LocalFile/Rename", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LocalFileServer is the server API for LocalFile service.
 // All implementations should embed UnimplementedLocalFileServer
 // for forward compatibility
@@ -267,6 +281,11 @@ type LocalFileServer interface {
 	Rm(context.Context, *RmRequest) (*emptypb.Empty, error)
 	// Rmdir removes the given directory (must be empty).
 	Rmdir(context.Context, *RmdirRequest) (*emptypb.Empty, error)
+	// Rename renames (moves) the given file to a new name. If the destination
+	// is not a directory it will be replaced if it already exists.
+	// OS restrictions may apply if the old and new names are outside of the same
+	// directory.
+	Rename(context.Context, *RenameRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedLocalFileServer should be embedded to have forward compatible implementations.
@@ -299,6 +318,9 @@ func (UnimplementedLocalFileServer) Rm(context.Context, *RmRequest) (*emptypb.Em
 }
 func (UnimplementedLocalFileServer) Rmdir(context.Context, *RmdirRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Rmdir not implemented")
+}
+func (UnimplementedLocalFileServer) Rename(context.Context, *RenameRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Rename not implemented")
 }
 
 // UnsafeLocalFileServer may be embedded to opt out of forward compatibility for this service.
@@ -504,6 +526,24 @@ func _LocalFile_Rmdir_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LocalFile_Rename_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LocalFileServer).Rename(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/LocalFile.LocalFile/Rename",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LocalFileServer).Rename(ctx, req.(*RenameRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LocalFile_ServiceDesc is the grpc.ServiceDesc for LocalFile service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -526,6 +566,10 @@ var LocalFile_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Rmdir",
 			Handler:    _LocalFile_Rmdir_Handler,
+		},
+		{
+			MethodName: "Rename",
+			Handler:    _LocalFile_Rename_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

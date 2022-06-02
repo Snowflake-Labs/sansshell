@@ -109,11 +109,6 @@ func init() {
 	subcommands.ImportantFlag("v")
 }
 
-func hasPort(s string) bool {
-	// Returns true if the provided address does not include a port number.
-	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
-}
-
 func main() {
 	// If this is blank it'll remain blank which is fine
 	// as that means just talk to --targets[0] instead.
@@ -142,16 +137,15 @@ func main() {
 		}
 	}
 
-	// Add the default proxy port (if needed).
-	if *proxyAddr != "" && !hasPort(*proxyAddr) {
-		*proxyAddr = fmt.Sprintf("%s:%d", *proxyAddr, defaultProxyPort)
+	// Validate and add the default proxy port (if needed).
+	if *proxyAddr != "" {
+		*proxyAddr = cmdUtil.ValidateAndAddPort(*proxyAddr, defaultProxyPort)
 	}
-	// Add default target port (if needed).
+	// Validate and add the default target port (if needed) for each target.
 	for i, t := range *targetsFlag.Target {
-		if !hasPort(t) {
-			(*targetsFlag.Target)[i] = fmt.Sprintf("%s:%d", t, defaultTargetPort)
-		}
+		(*targetsFlag.Target)[i] = cmdUtil.ValidateAndAddPort(t, defaultTargetPort)
 	}
+
 	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile

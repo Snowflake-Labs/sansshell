@@ -21,6 +21,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -47,40 +48,49 @@ func (f funcValue) Set(s string) error { return f(s) }
 func (f funcValue) String() string     { return "" }
 func (f funcValue) IsBoolFlag() bool   { return true }
 
-func processLogs(state *util.ExecuteState, index int, logs []*pb.Log) subcommands.ExitStatus {
-	files := make(map[string]bool)
-	retCode := subcommands.ExitSuccess
-	for _, l := range logs {
-		fn := filepath.Base(l.Filename)
-		// If the same basename exists we'll try and
-		// create a new one with -NUMBER on the end.
-		// Start at one until we find a unique one.
-		if files[fn] {
-			i := 1
-			for {
-				fn = fmt.Sprintf("%s-%d", fn, i)
-				if !files[fn] {
-					break
-				}
-				i++
+// processLog does setup and opens up the logfile we'll be appending to based on the passed pb.Log struct.
+func processLog(state *util.ExecuteState, index int, log *pb.Log, openFiles map[string]*os.File) (subcommands.ExitStatus, map[string]*os.File) {
+	// If it's already open we don't need to do anything
+	if openFiles[log.Filename] != nil {
+		return subcommands.ExitSuccess, openFiles
+	}
+
+	// The server returns a full path where-as locally we drop into the directory state says to use.
+	// This means we can only depend on the basename of the path which may have duplicates.
+	fn := filepath.Base(log.Filename)
+	if fn == "" {
+		fmt.Fprintf(state.Err[index], "RPC returned an invalid log structure: %+v\n", log)
+		return subcommands.ExitFailure, openFiles
+	}
+
+	// See if the file already exists. If so we'll keep trying until we can append a number onto the name.
+	// Create index based names for each log.
+	fn = fmt.Sprintf("%d.%s", index, fn)
+	path := filepath.Join(state.Dir, fn)
+
+	// If the stat succeeds it already exists so we need to find another filename.
+	if _, err := os.Stat(path); err == nil {
+		i := 1
+		for {
+			// If the same basename exists we'll try and
+			// create a new one with -NUMBER on the end.
+			// Start at one until we find a unique one.
+			p := fmt.Sprintf("%s-%d", path, i)
+			if _, err := os.Stat(p); err != nil {
+				path = p
+				break
 			}
-		}
-		files[fn] = true
-		if fn == "" {
-			fmt.Fprintf(state.Err[index], "RPC returned an invalid log structure: %+v", l)
-			retCode = subcommands.ExitFailure
-			continue
-		}
-		// Now create index based names for each log.
-		fn = fmt.Sprintf("%d.%s", index, fn)
-		path := filepath.Join(state.Dir, fn)
-		err := os.WriteFile(path, l.Contents, 0644)
-		if err != nil {
-			fmt.Fprintf(state.Err[index], "can't write logfile %s: %v", path, err)
-			retCode = subcommands.ExitFailure
+			i++
 		}
 	}
-	return retCode
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(state.Err[index], "can't write logfile %s: %v\n", path, err)
+		return subcommands.ExitFailure, openFiles
+	}
+	openFiles[log.Filename] = f
+
+	return subcommands.ExitSuccess, openFiles
 }
 
 func setup(f *flag.FlagSet) *subcommands.Commander {
@@ -313,35 +323,59 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 // Send the request and process the response stream. The only difference being the command to name
 // in error messages.
 func runFDBCLI(ctx context.Context, c pb.CLIClientProxy, state *util.ExecuteState, req *pb.FDBCLIRequest, command string) subcommands.ExitStatus {
-	resp, err := c.FDBCLIOneMany(ctx, req)
+	stream, err := c.FDBCLIOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "fdbcli %s error: %v\n", command, err)
+			fmt.Fprintf(e, "All targets - fdbcli %s error: %v\n", command, err)
 		}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
-	for r := range resp {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "fdbcli %s error: %v\n", command, r.Error)
-			// If any target had errors it needs to be reported for that target but we still
-			// need to process responses off the channel. Final return code though should
-			// indicate something failed.
+	openFiles := make(map[string]*os.File)
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "Stream error: %v\n", err)
+			}
 			retCode = subcommands.ExitFailure
-			continue
+			break
 		}
-		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
-		fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
-		// If it was non-zero we should exit non-zero
-		if r.Resp.RetCode != 0 {
-			retCode = subcommands.ExitFailure
+		for _, r := range resp {
+			if r.Error != nil {
+				fmt.Fprintf(state.Err[r.Index], "fdbcli %s error: %v\n", command, r.Error)
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
+				retCode = subcommands.ExitFailure
+				continue
+			}
+			switch t := r.Resp.Response.(type) {
+			case *pb.FDBCLIResponse_Output:
+				fmt.Fprintf(state.Out[r.Index], "%s", t.Output.Stdout)
+				fmt.Fprintf(state.Err[r.Index], "%s", t.Output.Stderr)
+				// If it was non-zero we should exit non-zero
+				if t.Output.RetCode != 0 {
+					retCode = subcommands.ExitFailure
+				}
+			case *pb.FDBCLIResponse_Log:
+				retCode, openFiles = processLog(state, r.Index, t.Log, openFiles)
+				if retCode == subcommands.ExitSuccess {
+					if _, err := openFiles[t.Log.Filename].Write(t.Log.Contents); err != nil {
+						fmt.Fprintf(state.Err[r.Index], "error writing to logfile %s: %v\n", t.Log.Filename, err)
+					}
+				}
+			}
 		}
-		r := processLogs(state, r.Index, r.Resp.Logs)
-		if r != subcommands.ExitSuccess {
-			retCode = r
-		}
+	}
+	for _, v := range openFiles {
+		v.Close()
 	}
 	return retCode
 }

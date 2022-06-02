@@ -38,12 +38,6 @@ function check_status {
       ls ${LOGS}
       print_logs ${LOG} ${FAIL}
     fi
-    if [ -f ${LOGS}/proxy.log ]; then
-      print_logs ${LOGS}/proxy.log proxy log
-    fi
-    if [ -f ${LOGS}/server.log ]; then
-      print_logs ${LOGS}/server.log server log
-    fi
     exit 1
   fi
 }
@@ -863,6 +857,11 @@ function setup_rm {
   touch ${LOGS}/testdir/file
 }
 
+function setup_mv {
+  setup_rmdir
+  touch ${LOGS}/testdir/file
+}
+
 function check_rm {
   if [ -f ${LOGS}/testdir/file ]; then
     check_status 1 /dev/null ${LOGS}/testdir/file not removed as expected
@@ -873,6 +872,16 @@ function check_rmdir {
   if [ -d ${LOGS}/testdir ]; then
     check_status 1 /dev/null ${LOGS}/testdir not removed as expected
   fi
+}
+
+function check_mv {
+  if [ -f ${LOGS}/testdir/file ]; then
+    check_status 1 /dev/null ${LOGS}/testdir/file still exists, not renamed
+  fi
+  if [ ! -f ${LOGS}/testdir/rename ]; then
+    check_status 1 /dev/null ${LOGS}/testdir/rename does not exist.
+  fi
+  rm -rf ${LOGS}/testdir
 }
 
 echo "rm checks"
@@ -922,6 +931,56 @@ setup_rm
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} file rmdir ${LOGS}/testdir
 if [ $? != 1 ]; then
   check_status 1 /dev/null "rmdir didn't get error when expected"
+fi
+
+echo "mv checks"
+echo "mv proxy to 2 hosts (one will fail)"
+setup_mv
+${SANSSH_PROXY} ${MULTI_TARGETS} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+if [ $? != 1 ]; then
+  check_status 1 /dev/null "mv didn't get error when expected"
+fi
+check_mv
+
+echo "mv proxy to 1 host"
+setup_mv
+${SANSSH_PROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+check_status $? /dev/null mv failed
+check_mv
+
+echo "mv with no proxy"
+setup_mv
+${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
+check_status $? /dev/null mv failed
+check_mv
+
+echo "parallel work with some bad targets and various timeouts"
+mkdir -p "${LOGS}/parallel"
+start=$(date +%s)
+if ${SANSSH_NOPROXY} --proxy="localhost;2s" --timeout=10s --output-dir="${LOGS}/parallel" --targets="localhost:50042;3s,1.1.1.1;4s,0.0.0.1;5s,localhost;6s" healthcheck validate; then
+  check_status 1 /dev/null healthcheck did not error out
+fi
+end=$(date +%s)
+if [ "$(expr \( "${end}" - "${start}" \) \> 9)" == "1" ]; then
+  check_status 1 /dev/null took to main deadline. should be no more than 6s
+fi
+
+echo "Logs from parallel work - debugging"
+echo
+for i in "${LOGS}"/parallel/*; do
+  echo "${i}"
+  echo
+  cat "${i}"
+  echo
+done
+
+errors=$(cat "${LOGS}"/parallel/*.error | wc -l)
+healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
+if [ "${errors}" != 2 ]; then
+  check_status 1 /dev/null 2 "targets should be unhealthy for various reasons"
+fi
+if [ "${healthy}" != 2 ]; then
+  check_status 1 /dev/null 2 "targets should be healthy"
 fi
 
 # TODO(jchacon): Provide a java binary for test{s

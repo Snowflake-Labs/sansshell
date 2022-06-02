@@ -35,7 +35,7 @@ import (
 // A TargetDialer than returns an error for all Dials
 type dialErrTargetDialer codes.Code
 
-func (e dialErrTargetDialer) DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error) {
+func (e dialErrTargetDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
 	return nil, status.Error(codes.Code(e), "")
 }
 
@@ -83,9 +83,6 @@ func TestStreamSetAddErrors(t *testing.T) {
 	serviceMap := LoadGlobalServiceMap()
 	ss := NewTargetStreamSet(serviceMap, errDialer, nil)
 
-	// buffered reply channel, so that Add will not block
-	replyChan := make(chan *pb.ProxyReply, 1)
-
 	for _, tc := range []struct {
 		name    string
 		method  string
@@ -93,10 +90,9 @@ func TestStreamSetAddErrors(t *testing.T) {
 		errCode codes.Code
 	}{
 		{
-			name:    "dial failure",
-			nonce:   1,
-			method:  "/Testdata.TestService/TestUnary",
-			errCode: codes.Internal,
+			name:   "dial failure no error",
+			nonce:  1,
+			method: "/Testdata.TestService/TestUnary",
 		},
 		{
 			name:    "method lookup failure",
@@ -107,6 +103,9 @@ func TestStreamSetAddErrors(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			// buffered reply channel, so that Add will not block
+			replyChan := make(chan *pb.ProxyReply, 1)
+
 			req := &pb.StartStream{
 				Target:     "nosuchhost:000",
 				Nonce:      tc.nonce,
@@ -154,7 +153,7 @@ func (b blockingClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc
 // a context dialer that returns blockingClientConn
 type blockingClientDialer struct{}
 
-func (b blockingClientDialer) DialContext(ctx context.Context, target string) (grpc.ClientConnInterface, error) {
+func (b blockingClientDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
 	return blockingClientConn{}, nil
 }
 
@@ -181,4 +180,25 @@ func TestTargetStreamAddNonBlocking(t *testing.T) {
 	case <-doneChan:
 		// return
 	}
+}
+
+func TestUnconnectedClientStream(t *testing.T) {
+	u := &unconnectedClientStream{
+		ctx: context.Background(),
+	}
+
+	_, err := u.Header()
+	testutil.FatalOnNoErr("Header", err, t)
+	err = u.CloseSend()
+	testutil.FatalOnNoErr("CloseSend", err, t)
+	err = u.SendMsg(nil)
+	testutil.FatalOnNoErr("SendMsg", err, t)
+	err = u.RecvMsg(nil)
+	testutil.FatalOnNoErr("RecvMsg", err, t)
+
+	testutil.FatalOnNoErr("Header", err, t)
+	if tr := u.Trailer(); tr != nil {
+		t.Fatalf("Trailer returned data: %v", tr)
+	}
+
 }

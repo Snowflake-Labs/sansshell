@@ -72,24 +72,33 @@ type setVerbosityCmd struct {
 func (*setVerbosityCmd) Name() string     { return "set-verbosity" }
 func (*setVerbosityCmd) Synopsis() string { return "Set the logging verbosity level." }
 func (*setVerbosityCmd) Usage() string {
-	return `set-verbosity:
+	return `set-verbosity --verbosity=X
   Sends an integer logging level and returns the previous integer logging level.
 `
 }
 
 func (s *setVerbosityCmd) SetFlags(f *flag.FlagSet) {
-	f.IntVar(&s.level, "verbosity", 0, "The logging verbosity level to set")
+	f.IntVar(&s.level, "verbosity", -1, "The logging verbosity level to set")
 }
 
 func (s *setVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewLoggingClientProxy(state.Conn)
 
+	if s.level < 0 {
+		fmt.Fprintln(os.Stderr, "--verbosity must be non-negative")
+		return subcommands.ExitFailure
+	}
+	if f.NArg() != 0 {
+		fmt.Fprint(os.Stderr, s.Usage())
+		return subcommands.ExitFailure
+	}
+
 	resp, err := c.SetVerbosityOneMany(ctx, &pb.SetVerbosityRequest{Level: int32(s.level)})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not set logging: %v\n", err)
+			fmt.Fprintf(e, "All targets - Could not set logging: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -127,7 +136,7 @@ func (g *getVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not set logging: %v\n", err)
+			fmt.Fprintf(e, "All targets - Could not get logging: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -151,20 +160,30 @@ type setProxyVerbosityCmd struct {
 func (*setProxyVerbosityCmd) Name() string     { return "set-proxy-verbosity" }
 func (*setProxyVerbosityCmd) Synopsis() string { return "Set the proxy logging verbosity level." }
 func (*setProxyVerbosityCmd) Usage() string {
-	return `set-proxy-verbosity:
-  Sends an integer logging level for the proxy server and returns the previous integer logging level.
+	return `set-proxy-verbosity --verbosity=X
+Sends an integer logging level for the proxy server and returns the previous integer logging level.
 `
 }
 
 func (s *setProxyVerbosityCmd) SetFlags(f *flag.FlagSet) {
-	f.IntVar(&s.level, "verbosity", 0, "The logging verbosity level to set")
+	f.IntVar(&s.level, "verbosity", -1, "The logging verbosity level to set")
 }
 
 func (s *setProxyVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if len(state.Out) > 1 {
-		fmt.Fprintf(os.Stderr, "can't call proxy logging with multiple targets")
+		fmt.Fprintln(os.Stderr, "can't call proxy logging with multiple targets")
+		return subcommands.ExitFailure
 	}
+	if s.level < 0 {
+		fmt.Fprintln(os.Stderr, "--verbosity must be non-negative")
+		return subcommands.ExitFailure
+	}
+	if f.NArg() != 0 {
+		fmt.Fprint(os.Stderr, s.Usage())
+		return subcommands.ExitFailure
+	}
+
 	// Get a real connection to the proxy
 	c := pb.NewLoggingClient(state.Conn.Proxy())
 
@@ -193,7 +212,7 @@ func (*getProxyVerbosityCmd) SetFlags(f *flag.FlagSet) {}
 func (g *getProxyVerbosityCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if len(state.Out) > 1 {
-		fmt.Fprintf(os.Stderr, "can't call proxy logging with multiple targets")
+		fmt.Fprintln(os.Stderr, "can't call proxy logging with multiple targets")
 	}
 	// Get a real connection to the proxy
 	c := pb.NewLoggingClient(state.Conn.Proxy())
@@ -225,7 +244,7 @@ func (s *versionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "Could not get version: %v\n", err)
+			fmt.Fprintf(e, "All targets - could not get version: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -255,7 +274,7 @@ func (*proxyVersionCmd) SetFlags(f *flag.FlagSet) {}
 func (g *proxyVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if len(state.Out) > 1 {
-		fmt.Fprintf(os.Stderr, "can't call proxy version with multiple targets")
+		fmt.Fprintln(os.Stderr, "can't call proxy version with multiple targets")
 	}
 	// Get a real connection to the proxy
 	c := pb.NewStateClient(state.Conn.Proxy())

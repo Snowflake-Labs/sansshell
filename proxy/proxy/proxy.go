@@ -23,6 +23,8 @@ import (
 	"context"
 	"io"
 	"log"
+	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -30,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
@@ -39,6 +42,9 @@ import (
 type Conn struct {
 	// The targets we're proxying for currently.
 	Targets []string
+
+	// Possible dial timeouts for each target
+	timeouts []*time.Duration
 
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
@@ -229,8 +235,8 @@ func (p *proxyStream) closeClients() error {
 			},
 		},
 	}
-	// Send the request to the proxy.
-	if err := p.stream.Send(data); err != nil {
+	// Send the request to the proxy. Only error if it's not EOF (session was closed).
+	if err := p.stream.Send(data); err != nil && err != io.EOF {
 		return status.Errorf(codes.Internal, "can't send close data for %s on stream - %v", p.method, err)
 	}
 	return nil
@@ -354,6 +360,9 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 				},
 			},
 		}
+		if p.timeouts[i] != nil {
+			req.GetStartStream().DialTimeout = durationpb.New(*p.timeouts[i])
+		}
 		err = stream.Send(req)
 
 		// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
@@ -370,8 +379,10 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 
 	// We sent len(p.Targets) requests so loop for that many replies. If the server doesn't we'll have to wait until
 	// our context times out then. If the server attempts something invalid we'll catch and just abort (i.e, duplicate
-	// responses and/or out of range).
-	for range p.Targets {
+	// responses and/or out of range). We may encounter closes() in here mixed in with replies but we'll never get
+	// more than that (data can't start until we return).
+	replies := 0
+	for replies != len(p.Targets) {
 		resp, err := stream.Recv()
 		if err != nil {
 			return nil, nil, errors, status.Errorf(codes.Internal, "can't get response for %s on stream - %v", method, err)
@@ -381,37 +392,55 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 
 		// These are all sanity checks for the entire session so an overall error is appropriate since we're likely
 		// dealing with a broken proxy of some sort.
-		r := resp.GetStartStreamReply()
-		if r == nil {
-			return nil, nil, errors, status.Errorf(codes.Internal, "didn't get expected start stream reply for %s on stream - %v", method, err)
-		}
+		switch t := resp.Reply.(type) {
+		case *proxypb.ProxyReply_StartStreamReply:
+			replies++
+			r := t.StartStreamReply
+			// We want the returned Target+nonce to match what we sent and that it's one we know about.
+			if r.Nonce >= uint32(len(p.Targets)) {
+				return nil, nil, errors, status.Errorf(codes.Internal, "got back invalid nonce (out of range): %+v", r)
+			}
+			if p.Targets[r.Nonce] != r.Target {
+				return nil, nil, errors, status.Errorf(codes.Internal, "Target/nonce don't match. target %s(%d) is not %s: %+v", p.Targets[r.Nonce], r.Nonce, r.Target, r)
+			}
 
-		// We want the returned Target+nonce to match what we sent and that it's one we know about.
-		if r.Nonce >= uint32(len(p.Targets)) {
-			return nil, nil, errors, status.Errorf(codes.Internal, "got back invalid nonce (out of range): %+v", r)
-		}
-		if p.Targets[r.Nonce] != r.Target {
-			return nil, nil, errors, status.Errorf(codes.Internal, "Target/nonce don't match. target %s(%d) is not %s: %+v", p.Targets[r.Nonce], r.Nonce, r.Target, r)
-		}
+			id := r.GetStreamId()
+			if streamIds[id] != nil {
+				return nil, nil, errors, status.Errorf(codes.Internal, "Duplicate response for target %s. Already have %+v for response %+v", r.Target, streamIds[id], r)
+			}
 
-		id := r.GetStreamId()
-		if streamIds[id] != nil {
-			return nil, nil, errors, status.Errorf(codes.Internal, "Duplicate response for target %s. Already have %+v for response %+v", r.Target, streamIds[id], r)
-		}
+			ret := &Ret{
+				Target: r.GetTarget(),
+				Index:  int(r.GetNonce()),
+			}
+			// If the target reported an error stick it in errors.
+			if s := r.GetErrorStatus(); s != nil {
+				ret.Error = status.Errorf(codes.Internal, "got reply error from stream. Code: %s Message: %s", codes.Code(s.Code), s.Message)
+				errors = append(errors, ret)
+				continue
+			}
 
-		ret := &Ret{
-			Target: r.GetTarget(),
-			Index:  int(r.GetNonce()),
+			// Save stream ID/nonce for later matching.
+			streamIds[r.GetStreamId()] = ret
+		case *proxypb.ProxyReply_ServerClose:
+			c := t.ServerClose
+			// We've never sent any data so a close here has to be an error.
+			st := c.GetStatus()
+			if st == nil || st.Code == 0 {
+				return nil, nil, errors, status.Errorf(codes.Internal, "close with no data sent and no error? %+v", resp)
+			}
+			for _, id := range c.StreamIds {
+				if streamIds[id] == nil {
+					return nil, nil, errors, status.Errorf(codes.Internal, "close on invalid stream id: %+v", resp)
+				}
+				streamIds[id].Error = status.Errorf(codes.Internal, "got close error from stream. Code: %s Message: %s", codes.Code(st.Code), st.Message)
+				errors = append(errors, streamIds[id])
+				// If it's closed make sure we don't process it later on.
+				delete(streamIds, id)
+			}
+		default:
+			return nil, nil, errors, status.Errorf(codes.Internal, "unexpected reply for %s on stream - %+v", method, resp)
 		}
-		// If the target reported an error stick it in errors.
-		if s := r.GetErrorStatus(); s != nil {
-			ret.Error = status.Errorf(codes.Internal, "got error from stream. Code: %s Message: %s", codes.Code(s.Code), s.Message)
-			errors = append(errors, ret)
-			continue
-		}
-
-		// Save stream ID/nonce for later matching.
-		streamIds[r.GetStreamId()] = ret
 	}
 	return stream, streamIds, errors, nil
 }
@@ -551,9 +580,43 @@ func (p *Conn) Close() error {
 	return p.cc.Close()
 }
 
+func parseTargets(targets []string) ([]string, []*time.Duration, error) {
+	var hostport []string
+	var timeouts []*time.Duration
+	for _, t := range targets {
+		if len(t) == 0 {
+			return nil, nil, status.Error(codes.InvalidArgument, "blank targets are not allowed")
+		}
+		// First pull off any possible duration
+		p := strings.Split(t, ";")
+		if len(p) > 2 {
+			return nil, nil, status.Errorf(codes.InvalidArgument, "target must be of the form host[:port][;N<time.Duration>] and %s is invalid", t)
+		}
+		if p[0] == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "blank targets are not allowed")
+		}
+		// That's the most we'll parse target here. The rest can happen in Invoke/NewStream later.
+		hostport = append(hostport, p[0])
+		if len(p) == 1 {
+			// No timeout, so just append a placeholder empty value.
+			timeouts = append(timeouts, nil)
+			continue
+		}
+		d, err := time.ParseDuration(p[1])
+		if err != nil {
+			return nil, nil, status.Errorf(codes.InvalidArgument, "%s invalid duration - %v", p[1], err)
+		}
+		timeouts = append(timeouts, &d)
+	}
+	return hostport, timeouts, nil
+}
+
 // Dial will connect to the given proxy and setup to send RPCs to the listed targets.
 // If proxy is blank and there is only one target this will return a normal grpc connection object (*grpc.ClientConn).
-// Otherwise this will return a *ProxyConn setup to act with the proxy.
+// Otherwise this will return a *ProxyConn setup to act with the proxy. Targets is a list of normal gRPC style
+// endpoint addresses with an optional dial timeout appended with a semi-colon in time.Duration format.
+// i.e. host[:port][;Ns] for instance to set the dial timeout to N seconds. The proxy value can also specify a dial timeout
+// in the same fashion.
 func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
 	return DialContext(context.Background(), proxy, targets, opts...)
 }
@@ -561,16 +624,40 @@ func Dial(proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error
 // DialContext is the same as Dial except the context provided can be used to cancel or expire the pending connection.
 // By default dial operations are non-blocking. See grpc.Dial for a complete explanation.
 func DialContext(ctx context.Context, proxy string, targets []string, opts ...grpc.DialOption) (*Conn, error) {
+	ret := &Conn{}
+	parsedProxy := []string{proxy}
+	proxyTimeout := []*time.Duration{nil}
+
+	var err error
+	if proxy != "" {
+		parsedProxy, proxyTimeout, err = parseTargets([]string{proxy})
+		if err != nil {
+			return nil, err
+		}
+	}
+	hostport, timeouts, err := parseTargets(targets)
+	if err != nil {
+		return nil, err
+	}
+
 	// If there are no targets things will likely fail but this gives the ability to still send RPCs to the
 	// proxy itself.
-	dialTarget := proxy
-	ret := &Conn{}
+	dialTarget := parsedProxy[0]
+	dialTimeout := proxyTimeout[0]
 	if proxy == "" {
 		if len(targets) != 1 {
 			return nil, status.Error(codes.InvalidArgument, "no proxy specified but more than one target set")
 		}
-		dialTarget = targets[0]
+		dialTarget = hostport[0]
+		dialTimeout = timeouts[0]
 		ret.direct = true
+
+	}
+	var cancel context.CancelFunc
+	if dialTimeout != nil {
+		ctx, cancel = context.WithTimeout(ctx, *dialTimeout)
+		opts = append(opts, grpc.WithBlock())
+		defer cancel()
 	}
 	conn, err := grpc.DialContext(ctx, dialTarget, opts...)
 	if err != nil {
@@ -578,6 +665,7 @@ func DialContext(ctx context.Context, proxy string, targets []string, opts ...gr
 	}
 	ret.cc = conn
 	// Make our own copy of these.
-	ret.Targets = append(ret.Targets, targets...)
+	ret.Targets = append(ret.Targets, hostport...)
+	ret.timeouts = append(ret.timeouts, timeouts...)
 	return ret, nil
 }

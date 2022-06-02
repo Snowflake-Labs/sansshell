@@ -151,7 +151,7 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "error executing %s: %v\n", as, err)
+			fmt.Fprintf(e, "All targets +error executing %s: %v\n", as, err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -227,7 +227,7 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "error executing 'status' for service %s: %v\n", serviceName, err)
+			fmt.Fprintf(e, "All targets - error executing 'status' for service %s: %v\n", serviceName, err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -296,7 +296,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "error executing 'list' for services: %v\n", err)
+			fmt.Fprintf(e, "All targets - error executing 'list' for services: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
