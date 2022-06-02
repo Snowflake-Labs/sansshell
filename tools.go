@@ -39,7 +39,6 @@ import (
 //go:generate go generate ./services/ansible
 //go:generate go generate ./services/exec
 //go:generate go generate ./services/fdb
-//go:generate go generate ./services/fdb_conf
 //go:generate go generate ./services/healthcheck
 //go:generate go generate ./services/localfile
 //go:generate go generate ./services/packages
