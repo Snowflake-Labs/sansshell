@@ -212,8 +212,8 @@ func boolFlag(args []string, flag *wrapperspb.BoolValue, value string) []string 
 }
 
 func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error {
-	if req.Request == nil {
-		return status.Error(codes.InvalidArgument, "must fill in request")
+	if len(req.Commands) == 0 {
+		return status.Error(codes.InvalidArgument, "must fill in at least one command")
 	}
 
 	command, logs, err := generateFDBCLIArgs(req)
@@ -229,12 +229,13 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 		opts = append(opts, util.EnvVar(e))
 	}
 
+	fmt.Printf("Execing: %q\n", command)
 	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
 	if err != nil {
 		return status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
 	}
 	if run.Error != nil {
-		return status.Errorf(codes.Internal, "can't exec fdbcli: %v", run.Error)
+		return status.Errorf(codes.Internal, "can't exec fdbcli: %v - %s", run.Error, run.Stderr)
 	}
 
 	// Make sure we always remove logs even if errors happen below.
@@ -312,33 +313,14 @@ func generateFDBCLIArgsImpl(req *pb.FDBCLIRequest) ([]string, []captureLogs, err
 	logs = append(logs, l...)
 
 	var args []string
-	switch req.Request.(type) {
-	case *pb.FDBCLIRequest_Command:
-		args, l, err = parseFDBCommand(req.GetCommand())
-	case *pb.FDBCLIRequest_Transaction:
-		if len(req.GetTransaction().Commands) == 0 {
-			return nil, nil, status.Error(codes.InvalidArgument, "transaction must have commands filled in")
+	for _, c := range req.Commands {
+		newArgs, newLogs, err := parseFDBCommand(c)
+		if err != nil {
+			return nil, nil, err
 		}
-		args = append(args, "begin")
-		args = append(args, ";")
-		for _, c := range req.GetTransaction().Commands {
-			a, l1, err := parseFDBCommand(c)
-			if err != nil {
-				return nil, nil, err
-			}
-			args = append(args, a...)
-			l = append(l, l1...)
-			args = append(args, ";")
-		}
-		args = append(args, "commit")
-	default:
-		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown type %T for request", req.Request)
+		args = append(args, newArgs...)
+		logs = append(logs, newLogs...)
 	}
-	if err != nil {
-		return nil, nil, err
-	}
-	logs = append(logs, l...)
-
 	// fdbcli expects --exec to be passed one arg
 	final := strings.Join(args, " ")
 	args = []string{"--exec", final}
@@ -452,14 +434,38 @@ func parseFDBCommand(req *pb.FDBCLICommand) (args []string, l []captureLogs, err
 		args, l, err = parseFDBCLIThrottle(req.GetThrottle())
 	case *pb.FDBCLICommand_Triggerddteaminfolog:
 		args, l, err = parseFDBCLITriggerddteaminfolog(req.GetTriggerddteaminfolog())
+	case *pb.FDBCLICommand_Tssq:
+		args, l, err = parseFDBCLITssq(req.GetTssq())
 	case *pb.FDBCLICommand_Unlock:
 		args, l, err = parseFDBCLIUnlock(req.GetUnlock())
 	case *pb.FDBCLICommand_Usetenant:
 		args, l, err = parseFDBCLIUseTenant(req.GetUsetenant())
 	case *pb.FDBCLICommand_Writemode:
 		args, l, err = parseFDBCLIWritemode(req.GetWritemode())
-	case *pb.FDBCLICommand_Tssq:
-		args, l, err = parseFDBCLITssq(req.GetTssq())
+	case *pb.FDBCLICommand_Begin:
+		args, l, err = parseFDBCLIBegin(req.GetBegin())
+	case *pb.FDBCLICommand_Blobrange:
+		args, l, err = parseFDBCLIBlobrange(req.GetBlobrange())
+	case *pb.FDBCLICommand_CacheRange:
+		args, l, err = parseFDBCLICacheRange(req.GetCacheRange())
+	case *pb.FDBCLICommand_Changefeed:
+		args, l, err = parseFDBCLIChangefeed(req.GetChangefeed())
+	case *pb.FDBCLICommand_Commit:
+		args, l, err = parseFDBCLICommit(req.GetCommit())
+	case *pb.FDBCLICommand_Datadistribution:
+		args, l, err = parseFDBCLIDatadistribution(req.GetDatadistribution())
+	case *pb.FDBCLICommand_ExpensiveDataCheck:
+		args, l, err = parseFDBCLIExpensiveDataCheck(req.GetExpensiveDataCheck())
+	case *pb.FDBCLICommand_Snapshot:
+		args, l, err = parseFDBCLISnapshot(req.GetSnapshot())
+	case *pb.FDBCLICommand_Suspend:
+		args, l, err = parseFDBCLISuspend(req.GetSuspend())
+	case *pb.FDBCLICommand_Versionepoch:
+		args, l, err = parseFDBCLIVersionepoch(req.GetVersionepoch())
+	case *pb.FDBCLICommand_Waitconnected:
+		args, l, err = parseFDBCLIWaitconnected(req.GetWaitconnected())
+	case *pb.FDBCLICommand_Waitopen:
+		args, l, err = parseFDBCLIWaitopen(req.GetWaitopen())
 	default:
 		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown type %T for command", req.Command)
 	}
@@ -468,6 +474,126 @@ func parseFDBCommand(req *pb.FDBCLICommand) (args []string, l []captureLogs, err
 
 func parseFDBCLIAdvanceversion(req *pb.FDBCLIAdvanceversion) ([]string, []captureLogs, error) {
 	return []string{"advanceversion", fmt.Sprintf("%d", req.Version)}, nil, nil
+}
+
+func parseFDBCLIBegin(req *pb.FDBCLIBegin) ([]string, []captureLogs, error) {
+	return []string{"begin"}, nil, nil
+}
+
+func parseFDBCLIBlobrange(req *pb.FDBCLIBlobrange) ([]string, []captureLogs, error) {
+	args := []string{"blobrange"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "blobrange requires request to be set")
+	}
+
+	var begin, end string
+	switch req.Request.(type) {
+	case *pb.FDBCLIBlobrange_Start:
+		s := req.GetStart()
+		if s.BeginKey == "" || s.EndKey == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "both begin_key and end_key must be set")
+		}
+		begin, end = s.BeginKey, s.EndKey
+		args = append(args, "start")
+	case *pb.FDBCLIBlobrange_Stop:
+		s := req.GetStop()
+		if s.BeginKey == "" || s.EndKey == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "both begin_key and end_key must be set")
+		}
+		begin, end = s.BeginKey, s.EndKey
+		args = append(args, "stop")
+	}
+
+	args = append(args, begin, end)
+	return args, nil, nil
+}
+
+func parseFDBCLICacheRange(req *pb.FDBCLICacheRange) ([]string, []captureLogs, error) {
+	args := []string{"cacherange"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "cacherange requires request to be set")
+	}
+
+	var begin, end string
+	switch req.Request.(type) {
+	case *pb.FDBCLICacheRange_Clear:
+		s := req.GetClear()
+		if s.BeginKey == "" || s.EndKey == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "both begin_key and end_key must be set")
+		}
+		begin, end = s.BeginKey, s.EndKey
+		args = append(args, "clear")
+	case *pb.FDBCLICacheRange_Set:
+		s := req.GetSet()
+		if s.BeginKey == "" || s.EndKey == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "both begin_key and end_key must be set")
+		}
+		begin, end = s.BeginKey, s.EndKey
+		args = append(args, "set")
+	}
+
+	args = append(args, begin, end)
+	return args, nil, nil
+}
+
+func parseFDBCLIChangefeed(req *pb.FDBCLIChangefeed) ([]string, []captureLogs, error) {
+	args := []string{"changefeed"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "changefeed requires request to be set")
+	}
+
+	switch req.Request.(type) {
+	case *pb.FDBCLIChangefeed_List:
+		args = append(args, "list")
+	case *pb.FDBCLIChangefeed_Register:
+		r := req.GetRegister()
+		if r.Begin == "" || r.End == "" || r.RangeId == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed register requires begin end and range_id to be set")
+		}
+		args = append(args, "register", r.RangeId, r.Begin, r.End)
+	case *pb.FDBCLIChangefeed_Stop:
+		s := req.GetStop()
+		if s.RangeId == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed stop requires range_id to be set")
+		}
+		args = append(args, "stop", s.RangeId)
+	case *pb.FDBCLIChangefeed_Destroy:
+		d := req.GetDestroy()
+		if d.RangeId == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed destroy requires range_id to be set")
+		}
+		args = append(args, "destroy", d.RangeId)
+	case *pb.FDBCLIChangefeed_Stream:
+		s := req.GetStream()
+		if s.Type == nil {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed stream requires type to be set")
+		}
+		if s.RangeId == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed stream requires range_id to be set")
+		}
+		args = append(args, "stream", s.RangeId)
+		switch s.Type.(type) {
+		case *pb.FDBCLIChangefeedStream_NoVersion:
+			// Nothing here
+		case *pb.FDBCLIChangefeedStream_StartVersion:
+			st := s.GetStartVersion()
+			args = append(args, fmt.Sprintf("%d", st.StartVersion))
+		case *pb.FDBCLIChangefeedStream_StartEndVersion:
+			se := s.GetStartEndVersion()
+			args = append(args, fmt.Sprintf("%d", se.StartVersion), fmt.Sprintf("%d", se.EndVersion))
+		}
+	case *pb.FDBCLIChangefeed_Pop:
+		p := req.GetPop()
+		if p.RangeId == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "changefeed destroy requires range_id to be set")
+		}
+		args = append(args, "pop", p.RangeId, fmt.Sprintf("%d", p.Version))
+	}
+
+	return args, nil, nil
 }
 
 func parseFDBCLIClear(req *pb.FDBCLIClear) ([]string, []captureLogs, error) {
@@ -485,6 +611,10 @@ func parseFDBCLIClearrange(req *pb.FDBCLIClearrange) ([]string, []captureLogs, e
 		return nil, nil, status.Error(codes.InvalidArgument, "clearrange requires end_key to be set")
 	}
 	return []string{"clearrange", req.BeginKey, req.EndKey}, nil, nil
+}
+
+func parseFDBCLICommit(req *pb.FDBCLICommit) ([]string, []captureLogs, error) {
+	return []string{"commit"}, nil, nil
 }
 
 func parseFDBCLIConfigure(req *pb.FDBCLIConfigure) ([]string, []captureLogs, error) {
@@ -525,7 +655,7 @@ func parseFDBCLICoordinators(req *pb.FDBCLICoordinators) ([]string, []captureLog
 	args := []string{"coordinators"}
 
 	if req.Request == nil {
-		return nil, nil, status.Errorf(codes.InvalidArgument, "coordinators requires request to be set")
+		return nil, nil, status.Error(codes.InvalidArgument, "coordinators requires request to be set")
 	}
 	if req.GetAuto() != nil {
 		args = append(args, "auto")
@@ -544,6 +674,34 @@ func parseFDBCLICreateTentant(req *pb.FDBCLICreatetenant) ([]string, []captureLo
 		return nil, nil, status.Error(codes.InvalidArgument, "createtenant must fill in name")
 	}
 	args = append(args, req.Name)
+	return args, nil, nil
+}
+
+func parseFDBCLIDatadistribution(req *pb.FDBCLIDatadistribution) ([]string, []captureLogs, error) {
+	args := []string{"datadistribution"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "datadistribution requires request to be set")
+	}
+
+	switch req.Request.(type) {
+	case *pb.FDBCLIDatadistribution_On:
+		args = append(args, "on")
+	case *pb.FDBCLIDatadistribution_Off:
+		args = append(args, "off")
+	case *pb.FDBCLIDatadistribution_Enable:
+		e := req.GetEnable()
+		if e.Option == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "datadistribution enable requires option to be set")
+		}
+		args = append(args, "enable", e.Option)
+	case *pb.FDBCLIDatadistribution_Disable:
+		d := req.GetDisable()
+		if d.Option == "" {
+			return nil, nil, status.Error(codes.InvalidArgument, "datadistribution disable requires option to be set")
+		}
+		args = append(args, "disable", d.Option)
+	}
 	return args, nil, nil
 }
 
@@ -566,6 +724,30 @@ func parseFDBCLIExclude(req *pb.FDBCLIExclude) ([]string, []captureLogs, error) 
 
 	args = boolFlag(args, req.Failed, "failed")
 	args = append(args, req.Addresses...)
+	return args, nil, nil
+}
+
+func parseFDBCLIExpensiveDataCheck(req *pb.FDBCLIExpensiveDataCheck) ([]string, []captureLogs, error) {
+	args := []string{"expensive_data_check"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "expensive_data_check requires request to be set")
+	}
+
+	switch req.Request.(type) {
+	case *pb.FDBCLIExpensiveDataCheck_Init:
+		// Nothing to do. It's just the base command for prepping the local cache.
+	case *pb.FDBCLIExpensiveDataCheck_List:
+		args = append(args, "list")
+	case *pb.FDBCLIExpensiveDataCheck_All:
+		args = append(args, "all")
+	case *pb.FDBCLIExpensiveDataCheck_Check:
+		c := req.GetCheck()
+		if len(c.Addresses) == 0 {
+			return nil, nil, status.Error(codes.InvalidArgument, "expensive_data_check check requires addresses to be filled in")
+		}
+		args = append(args, c.Addresses...)
+	}
 	return args, nil, nil
 }
 
@@ -673,8 +855,22 @@ func parseFDBCLIInclude(req *pb.FDBCLIInclude) ([]string, []captureLogs, error) 
 func parseFDBCLIKill(req *pb.FDBCLIKill) ([]string, []captureLogs, error) {
 	args := []string{"kill"}
 
-	for _, a := range req.Addresses {
-		args = append(args, fmt.Sprintf("; kill %s", a))
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "kill requires request to be set")
+	}
+	switch req.Request.(type) {
+	case *pb.FDBCLIKill_Init:
+		// Nothing, this just prewarms the cache and then does the same as list.
+	case *pb.FDBCLIKill_List:
+		args = append(args, "list")
+	case *pb.FDBCLIKill_All:
+		args = append(args, "all")
+	case *pb.FDBCLIKill_Targets:
+		t := req.GetTargets()
+		if len(t.Addresses) == 0 {
+			return nil, nil, status.Error(codes.InvalidArgument, "kill requires targets")
+		}
+		args = append(args, t.Addresses...)
 	}
 
 	return args, nil, nil
@@ -753,7 +949,7 @@ func parseFDBCLIProfile(req *pb.FDBCLIProfile) ([]string, []captureLogs, error) 
 		args = append(args, "client")
 		client := req.GetClient()
 		if client.Request == nil {
-			return nil, nil, status.Errorf(codes.InvalidArgument, "profile client requires request to be filled in")
+			return nil, nil, status.Error(codes.InvalidArgument, "profile client requires request to be filled in")
 		}
 		switch client.Request.(type) {
 		case *pb.FDBCLIProfileActionClient_Get:
@@ -761,10 +957,10 @@ func parseFDBCLIProfile(req *pb.FDBCLIProfile) ([]string, []captureLogs, error) 
 		case *pb.FDBCLIProfileActionClient_Set:
 			set := client.GetSet()
 			if set.Rate == nil {
-				return nil, nil, status.Errorf(codes.InvalidArgument, "profile client set requires rate to be filled in ")
+				return nil, nil, status.Error(codes.InvalidArgument, "profile client set requires rate to be filled in ")
 			}
 			if set.Size == nil {
-				return nil, nil, status.Errorf(codes.InvalidArgument, "profile client set requires size to be filled in ")
+				return nil, nil, status.Error(codes.InvalidArgument, "profile client set requires size to be filled in ")
 			}
 
 			args = append(args, "set")
@@ -865,10 +1061,41 @@ func parseFDBCLISleep(req *pb.FDBCLISleep) ([]string, []captureLogs, error) {
 	return args, nil, nil
 }
 
+func parseFDBCLISnapshot(req *pb.FDBCLISnapshot) ([]string, []captureLogs, error) {
+	args := []string{"snapshot"}
+
+	if req.Command == "" {
+		return nil, nil, status.Error(codes.InvalidArgument, "snapshot requires command to be filled in")
+	}
+	args = append(args, req.Command)
+	args = append(args, req.Options...)
+	return args, nil, nil
+}
+
 func parseFDBCLIStatus(req *pb.FDBCLIStatus) ([]string, []captureLogs, error) {
 	args := []string{"status"}
 
 	args = stringFlag(args, req.Style, "")
+	return args, nil, nil
+}
+
+func parseFDBCLISuspend(req *pb.FDBCLISuspend) ([]string, []captureLogs, error) {
+	args := []string{"suspend"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "suspend requires request to be filled in")
+	}
+	switch req.Request.(type) {
+	case *pb.FDBCLISuspend_Init:
+		// Nothing to do here. Just the command which prewarms the local cache.
+	case *pb.FDBCLISuspend_Suspend:
+		s := req.GetSuspend()
+		if len(s.Addresses) == 0 {
+			return nil, nil, status.Error(codes.InvalidArgument, "suspend requires addresses to be filled in")
+		}
+		args = append(args, fmt.Sprintf("%g", s.Seconds))
+		args = append(args, s.Addresses...)
+	}
 	return args, nil, nil
 }
 
@@ -911,36 +1138,6 @@ func parseFDBCLITriggerddteaminfolog(req *pb.FDBCLITriggerddteaminfolog) ([]stri
 	return []string{"triggerddteaminfolog"}, nil, nil
 }
 
-func parseFDBCLIUnlock(req *pb.FDBCLIUnlock) ([]string, []captureLogs, error) {
-	args := []string{"unlock"}
-
-	if req.Uid == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "unlock requires uid to be filled in")
-	}
-	args = append(args, req.Uid)
-	return args, nil, nil
-}
-
-func parseFDBCLIUseTenant(req *pb.FDBCLIUsetenant) ([]string, []captureLogs, error) {
-	args := []string{"usetenant"}
-
-	if req.Name == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "usetenant requires name to be filled in")
-	}
-	args = append(args, req.Name)
-	return args, nil, nil
-}
-
-func parseFDBCLIWritemode(req *pb.FDBCLIWritemode) ([]string, []captureLogs, error) {
-	args := []string{"writemode"}
-
-	if req.Mode == "" {
-		return nil, nil, status.Error(codes.InvalidArgument, "writemode requires mode to be filled in")
-	}
-	args = append(args, req.Mode)
-	return args, nil, nil
-}
-
 func parseFDBCLITssq(req *pb.FDBCLITssq) ([]string, []captureLogs, error) {
 	args := []string{"tssq"}
 
@@ -964,6 +1161,68 @@ func parseFDBCLITssq(req *pb.FDBCLITssq) ([]string, []captureLogs, error) {
 	case *pb.FDBCLITssq_List:
 		args = append(args, "list")
 	}
+	return args, nil, nil
+}
+
+func parseFDBCLIUnlock(req *pb.FDBCLIUnlock) ([]string, []captureLogs, error) {
+	args := []string{"unlock"}
+
+	if req.Uid == "" {
+		return nil, nil, status.Error(codes.InvalidArgument, "unlock requires uid to be filled in")
+	}
+	args = append(args, req.Uid)
+	return args, nil, nil
+}
+
+func parseFDBCLIUseTenant(req *pb.FDBCLIUsetenant) ([]string, []captureLogs, error) {
+	args := []string{"usetenant"}
+
+	if req.Name == "" {
+		return nil, nil, status.Error(codes.InvalidArgument, "usetenant requires name to be filled in")
+	}
+	args = append(args, req.Name)
+	return args, nil, nil
+}
+
+func parseFDBCLIVersionepoch(req *pb.FDBCLIVersionepoch) ([]string, []captureLogs, error) {
+	args := []string{"versionepoch"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "versionepoch requires request to be set")
+	}
+
+	switch req.Request.(type) {
+	case *pb.FDBCLIVersionepoch_Info:
+		// Nothing to do here as an empty option set just dumps information.
+	case *pb.FDBCLIVersionepoch_Get:
+		args = append(args, "get")
+	case *pb.FDBCLIVersionepoch_Disable:
+		args = append(args, "disable")
+	case *pb.FDBCLIVersionepoch_Enable:
+		args = append(args, "enable")
+	case *pb.FDBCLIVersionepoch_Commit:
+		args = append(args, "commit")
+	case *pb.FDBCLIVersionepoch_Set:
+		args = append(args, "set", fmt.Sprintf("%d", req.GetSet().Epoch))
+	}
+	return args, nil, nil
+}
+
+func parseFDBCLIWaitconnected(req *pb.FDBCLIWaitconnected) ([]string, []captureLogs, error) {
+	return []string{"waitconnected"}, nil, nil
+}
+
+func parseFDBCLIWaitopen(req *pb.FDBCLIWaitopen) ([]string, []captureLogs, error) {
+	return []string{"waitopen"}, nil, nil
+}
+
+func parseFDBCLIWritemode(req *pb.FDBCLIWritemode) ([]string, []captureLogs, error) {
+	args := []string{"writemode"}
+
+	if req.Mode == "" {
+		return nil, nil, status.Error(codes.InvalidArgument, "writemode requires mode to be filled in")
+	}
+	args = append(args, req.Mode)
 	return args, nil, nil
 }
 

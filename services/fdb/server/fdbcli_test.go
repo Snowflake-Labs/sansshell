@@ -113,6 +113,8 @@ func TestFDBCLI(t *testing.T) {
 		subdir     string
 		command    []string
 		perms      fs.FileMode
+		envList    []string
+		ignoreOpts bool
 	}{
 		{
 			name:       "missing request",
@@ -120,43 +122,30 @@ func TestFDBCLI(t *testing.T) {
 			wantAnyErr: true,
 		},
 		{
-			name: "missing command",
+			name: "nil command",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "transaction with no commands",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Transaction{},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "unknown request",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Unknown{},
+				Commands: []*pb.FDBCLICommand{
+					nil,
+				},
 			},
 			wantAnyErr: true,
 		},
 		{
 			name: "unknown command",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Unknown{},
 					},
 				},
 			},
 			wantAnyErr: true,
 		},
-
 		{
 			name: "bad binary path",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Defaulttenant{},
 					},
 				},
@@ -167,8 +156,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "valid user/group - fails as can't setuid",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Defaulttenant{},
 					},
 				},
@@ -181,8 +170,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "invalid user",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Defaulttenant{},
 					},
 				},
@@ -194,8 +183,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "invalid group",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Defaulttenant{},
 					},
 				},
@@ -205,80 +194,13 @@ func TestFDBCLI(t *testing.T) {
 			wantAnyErr: true,
 		},
 		{
-			name: "transaction with bad command",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Transaction{
-					Transaction: &pb.FDBCLITransaction{
-						Commands: []*pb.FDBCLICommand{
-							{
-								Command: &pb.FDBCLICommand_Unknown{},
-							},
-						},
-					},
-				},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "simple transaction",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Transaction{
-					Transaction: &pb.FDBCLITransaction{
-						Commands: []*pb.FDBCLICommand{
-							{
-								Command: &pb.FDBCLICommand_Defaulttenant{},
-							},
-						},
-					},
-				},
-			},
-			respLogs: make(map[string][]byte),
-			bin:      testutil.ResolvePath(t, "true"),
-			command: []string{
-				FDBCLI,
-				"--exec",
-				"begin ; defaulttenant ; commit",
-			},
-		},
-		{
-			name: "complex transaction",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Transaction{
-					Transaction: &pb.FDBCLITransaction{
-						Commands: []*pb.FDBCLICommand{
-							{
-								Command: &pb.FDBCLICommand_Status{},
-							},
-							{
-								Command: &pb.FDBCLICommand_Sleep{
-									Sleep: &pb.FDBCLISleep{
-										Seconds: 4,
-									},
-								},
-							},
-							{
-								Command: &pb.FDBCLICommand_Status{},
-							},
-						},
-					},
-				},
-			},
-			respLogs: make(map[string][]byte),
-			bin:      testutil.ResolvePath(t, "true"),
-			command: []string{
-				FDBCLI,
-				"--exec",
-				"begin ; status ; sleep 4 ; status ; commit",
-			},
-		},
-		{
 			name: "can't read log file",
 			req: &pb.FDBCLIRequest{
 				Log: &wrapperspb.BoolValue{
 					Value: true,
 				},
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Status{},
 					},
 				},
@@ -292,8 +214,8 @@ func TestFDBCLI(t *testing.T) {
 				Log: &wrapperspb.BoolValue{
 					Value: true,
 				},
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Status{},
 					},
 				},
@@ -305,8 +227,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "stdout check",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Status{},
 					},
 				},
@@ -370,8 +292,8 @@ func TestFDBCLI(t *testing.T) {
 				Timeout: &wrapperspb.Int32Value{
 					Value: 12345,
 				},
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Status{},
 					},
 				},
@@ -417,10 +339,36 @@ func TestFDBCLI(t *testing.T) {
 			perms:   0755,
 		},
 		{
+			name: "env vars set",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Info{},
+							},
+						},
+					},
+				},
+			},
+			envList:    []string{"FOO=BAR"},
+			ignoreOpts: true,
+			respLogs:   make(map[string][]byte),
+			output: &pb.FDBCLIResponseOutput{
+				Stdout: []byte("FOO=BAR\n"),
+			},
+			bin: testutil.ResolvePath(t, "env"),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch",
+			},
+		},
+		{
 			name: "advanceversion",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Advanceversion{
 							Advanceversion: &pb.FDBCLIAdvanceversion{
 								Version: 12345,
@@ -438,10 +386,568 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "begin",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Begin{
+							Begin: &pb.FDBCLIBegin{},
+						},
+					},
+				},
+			},
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"begin",
+			},
+		},
+		{
+			name: "blobrange no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Blobrange{
+							Blobrange: &pb.FDBCLIBlobrange{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "blobrange start missing keys",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Blobrange{
+							Blobrange: &pb.FDBCLIBlobrange{
+								Request: &pb.FDBCLIBlobrange_Start{
+									Start: &pb.FDBCLIBlobrangeStart{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "blobrange stop missing keys",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Blobrange{
+							Blobrange: &pb.FDBCLIBlobrange{
+								Request: &pb.FDBCLIBlobrange_Stop{
+									Stop: &pb.FDBCLIBlobrangeStop{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "blobrange start",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Blobrange{
+							Blobrange: &pb.FDBCLIBlobrange{
+								Request: &pb.FDBCLIBlobrange_Start{
+									Start: &pb.FDBCLIBlobrangeStart{
+										BeginKey: "begin",
+										EndKey:   "end",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"blobrange start begin end",
+			},
+		},
+		{
+			name: "blobrange stop",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Blobrange{
+							Blobrange: &pb.FDBCLIBlobrange{
+								Request: &pb.FDBCLIBlobrange_Stop{
+									Stop: &pb.FDBCLIBlobrangeStop{
+										BeginKey: "begin",
+										EndKey:   "end",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"blobrange stop begin end",
+			},
+		},
+		{
+			name: "cacherange no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_CacheRange{
+							CacheRange: &pb.FDBCLICacheRange{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "cacherange set missing keys",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_CacheRange{
+							CacheRange: &pb.FDBCLICacheRange{
+								Request: &pb.FDBCLICacheRange_Set{
+									Set: &pb.FDBCLICacheRangeSet{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "cacherange clear missing keys",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_CacheRange{
+							CacheRange: &pb.FDBCLICacheRange{
+								Request: &pb.FDBCLICacheRange_Clear{
+									Clear: &pb.FDBCLICacheRangeClear{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "cacherange set",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_CacheRange{
+							CacheRange: &pb.FDBCLICacheRange{
+								Request: &pb.FDBCLICacheRange_Set{
+									Set: &pb.FDBCLICacheRangeSet{
+										BeginKey: "begin",
+										EndKey:   "end",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"cacherange set begin end",
+			},
+		},
+		{
+			name: "cacherange clear",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_CacheRange{
+							CacheRange: &pb.FDBCLICacheRange{
+								Request: &pb.FDBCLICacheRange_Clear{
+									Clear: &pb.FDBCLICacheRangeClear{
+										BeginKey: "begin",
+										EndKey:   "end",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"cacherange clear begin end",
+			},
+		},
+		{
+			name: "changefeed no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed list",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_List{},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed list",
+			},
+		},
+		{
+			name: "changefeed register blank entries",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Register{
+									Register: &pb.FDBCLIChangefeedRegister{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed register",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Register{
+									Register: &pb.FDBCLIChangefeedRegister{
+										RangeId: "rangeid",
+										Begin:   "begin",
+										End:     "end",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed register rangeid begin end",
+			},
+		},
+		{
+			name: "changefeed stop blank entries",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stop{
+									Stop: &pb.FDBCLIChangefeedStop{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed stop",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stop{
+									Stop: &pb.FDBCLIChangefeedStop{
+										RangeId: "rangeid",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed stop rangeid",
+			},
+		},
+		{
+			name: "changefeed destroy blank entries",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Destroy{
+									Destroy: &pb.FDBCLIChangefeedDestroy{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed destroy",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Destroy{
+									Destroy: &pb.FDBCLIChangefeedDestroy{
+										RangeId: "rangeid",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed destroy rangeid",
+			},
+		},
+		{
+			name: "changefeed stream blank entries",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stream{
+									Stream: &pb.FDBCLIChangefeedStream{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed stream no range id",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stream{
+									Stream: &pb.FDBCLIChangefeedStream{
+										Type: &pb.FDBCLIChangefeedStream_NoVersion{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed stream no version",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stream{
+									Stream: &pb.FDBCLIChangefeedStream{
+										RangeId: "rangeid",
+										Type:    &pb.FDBCLIChangefeedStream_NoVersion{},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed stream rangeid",
+			},
+		},
+		{
+			name: "changefeed stream start version",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stream{
+									Stream: &pb.FDBCLIChangefeedStream{
+										RangeId: "rangeid",
+										Type: &pb.FDBCLIChangefeedStream_StartVersion{
+											StartVersion: &pb.FDBCLIChangefeedStreamStartVersion{
+												StartVersion: 12345,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed stream rangeid 12345",
+			},
+		},
+		{
+			name: "changefeed stream start and end version",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Stream{
+									Stream: &pb.FDBCLIChangefeedStream{
+										RangeId: "rangeid",
+										Type: &pb.FDBCLIChangefeedStream_StartEndVersion{
+											StartEndVersion: &pb.FDBCLIChangefeedStreamStartEndVersion{
+												StartVersion: 12345,
+												EndVersion:   23456,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed stream rangeid 12345 23456",
+			},
+		},
+		{
+			name: "changefeed pop blank entries",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Pop{
+									Pop: &pb.FDBCLIChangefeedStreamPop{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "changefeed pop",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Changefeed{
+							Changefeed: &pb.FDBCLIChangefeed{
+								Request: &pb.FDBCLIChangefeed_Pop{
+									Pop: &pb.FDBCLIChangefeedStreamPop{
+										RangeId: "rangeid",
+										Version: 12345,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"changefeed pop rangeid 12345",
+			},
+		},
+		{
 			name: "clear missing key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Clear{
 							Clear: &pb.FDBCLIClear{},
 						},
@@ -454,8 +960,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "clear",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Clear{
 							Clear: &pb.FDBCLIClear{
 								Key: "key",
@@ -475,8 +981,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "clearrange missing begin key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Clearrange{
 							Clearrange: &pb.FDBCLIClearrange{},
 						},
@@ -489,8 +995,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "clearrange missing end key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Clearrange{
 							Clearrange: &pb.FDBCLIClearrange{
 								BeginKey: "begin",
@@ -505,8 +1011,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "clearrange",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Clearrange{
 							Clearrange: &pb.FDBCLIClearrange{
 								BeginKey: "begin",
@@ -525,10 +1031,29 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "commit",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Commit{
+							Commit: &pb.FDBCLICommit{},
+						},
+					},
+				},
+			},
+			respLogs: make(map[string][]byte),
+			bin:      testutil.ResolvePath(t, "true"),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"commit",
+			},
+		},
+		{
 			name: "configure",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Configure{
 							Configure: &pb.FDBCLIConfigure{
 								NewOrTss: &wrapperspb.StringValue{
@@ -583,8 +1108,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "consistencycheck no mode",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Consistencycheck{
 							Consistencycheck: &pb.FDBCLIConsistencycheck{},
 						},
@@ -602,8 +1127,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "consistencycheck with mode off",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Consistencycheck{
 							Consistencycheck: &pb.FDBCLIConsistencycheck{
 								Mode: &wrapperspb.BoolValue{},
@@ -623,8 +1148,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "consistencycheck with mode on",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Consistencycheck{
 							Consistencycheck: &pb.FDBCLIConsistencycheck{
 								Mode: &wrapperspb.BoolValue{
@@ -646,8 +1171,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "coordinators no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Coordinators{
 							Coordinators: &pb.FDBCLICoordinators{},
 						},
@@ -659,8 +1184,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "coordinators auto",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Coordinators{
 							Coordinators: &pb.FDBCLICoordinators{
 								Request: &pb.FDBCLICoordinators_Auto{},
@@ -683,8 +1208,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "coordinators addresses",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Coordinators{
 							Coordinators: &pb.FDBCLICoordinators{
 								Request: &pb.FDBCLICoordinators_Addresses{
@@ -714,8 +1239,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "createtenant no name",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Createtenant{
 							Createtenant: &pb.FDBCLICreatetenant{},
 						},
@@ -727,8 +1252,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "createtenant",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Createtenant{
 							Createtenant: &pb.FDBCLICreatetenant{
 								Name: "name",
@@ -746,10 +1271,156 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "datadistribution no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "datadistribution on",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_On{
+									On: &pb.FDBCLIDatadistributionOn{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"datadistribution on",
+			},
+		},
+		{
+			name: "datadistribution off",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_Off{
+									Off: &pb.FDBCLIDatadistributionOff{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"datadistribution off",
+			},
+		},
+		{
+			name: "datadistribution enable no option",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_Enable{
+									Enable: &pb.FDBCLIDatadistributionEnable{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "datadistribution enable",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_Enable{
+									Enable: &pb.FDBCLIDatadistributionEnable{
+										Option: "option",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"datadistribution enable option",
+			},
+		},
+		{
+			name: "datadistribution disable no option",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_Disable{
+									Disable: &pb.FDBCLIDatadistributionDisable{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "datadistribution disable",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Datadistribution{
+							Datadistribution: &pb.FDBCLIDatadistribution{
+								Request: &pb.FDBCLIDatadistribution_Disable{
+									Disable: &pb.FDBCLIDatadistributionDisable{
+										Option: "option",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"datadistribution disable option",
+			},
+		},
+		{
 			name: "defaulttenant",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Defaulttenant{
 							Defaulttenant: &pb.FDBCLIDefaulttenant{},
 						},
@@ -767,8 +1438,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "deletetenant no name",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Deletetenant{
 							Deletetenant: &pb.FDBCLIDeletetenant{},
 						},
@@ -780,8 +1451,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "deletetenant",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Deletetenant{
 							Deletetenant: &pb.FDBCLIDeletetenant{
 								Name: "name",
@@ -801,8 +1472,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "exclude",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Exclude{
 							Exclude: &pb.FDBCLIExclude{
 								Failed: &wrapperspb.BoolValue{
@@ -826,10 +1497,130 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "expensive_data_check no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "expensive_data_check init",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{
+								Request: &pb.FDBCLIExpensiveDataCheck_Init{},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"expensive_data_check",
+			},
+		},
+		{
+			name: "expensive_data_check list",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{
+								Request: &pb.FDBCLIExpensiveDataCheck_List{},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"expensive_data_check list",
+			},
+		},
+		{
+			name: "expensive_data_check all",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{
+								Request: &pb.FDBCLIExpensiveDataCheck_All{},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"expensive_data_check all",
+			},
+		},
+		{
+			name: "expensive_data_check check no addresses",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{
+								Request: &pb.FDBCLIExpensiveDataCheck_Check{
+									Check: &pb.FDBCLIExpensiveDataCheckCheck{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "expensive_data_check check",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+							ExpensiveDataCheck: &pb.FDBCLIExpensiveDataCheck{
+								Request: &pb.FDBCLIExpensiveDataCheck_Check{
+									Check: &pb.FDBCLIExpensiveDataCheckCheck{
+										Addresses: []string{"address1", "address2"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"expensive_data_check address1 address2",
+			},
+		},
+		{
 			name: "fileconfigure no file",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Fileconfigure{
 							Fileconfigure: &pb.FDBCLIFileconfigure{},
 						},
@@ -841,8 +1632,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "fileconfigure bad path file",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Fileconfigure{
 							Fileconfigure: &pb.FDBCLIFileconfigure{
 								File: "/some/path/../../etc/passwd",
@@ -856,8 +1647,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "fileconfigure",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Fileconfigure{
 							Fileconfigure: &pb.FDBCLIFileconfigure{
 								New: &wrapperspb.BoolValue{
@@ -880,8 +1671,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "force_recovery_with_data_loss no dcid",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_ForceRecoveryWithDataLoss{
 							ForceRecoveryWithDataLoss: &pb.FDBCLIForceRecoveryWithDataLoss{},
 						},
@@ -893,8 +1684,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "force_recovery_with_data_loss",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_ForceRecoveryWithDataLoss{
 							ForceRecoveryWithDataLoss: &pb.FDBCLIForceRecoveryWithDataLoss{
 								Dcid: "dcid",
@@ -914,8 +1705,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "get no key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Get{
 							Get: &pb.FDBCLIGet{},
 						},
@@ -927,8 +1718,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "get",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Get{
 							Get: &pb.FDBCLIGet{
 								Key: "key",
@@ -948,8 +1739,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "getrange no begin key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Getrange{
 							Getrange: &pb.FDBCLIGetrange{},
 						},
@@ -961,8 +1752,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "getrange",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Getrange{
 							Getrange: &pb.FDBCLIGetrange{
 								BeginKey: "key",
@@ -988,8 +1779,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "getrangekeys no begin key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Getrangekeys{
 							Getrangekeys: &pb.FDBCLIGetrangekeys{},
 						},
@@ -1001,8 +1792,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "getrangekeys",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Getrangekeys{
 							Getrangekeys: &pb.FDBCLIGetrangekeys{
 								BeginKey: "key",
@@ -1028,8 +1819,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "gettenant no name",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Gettenant{
 							Gettenant: &pb.FDBCLIGettenant{},
 						},
@@ -1041,8 +1832,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "gettenant",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Gettenant{
 							Gettenant: &pb.FDBCLIGettenant{
 								Name: "tenant",
@@ -1062,8 +1853,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "getversion",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Getversion{
 							Getversion: &pb.FDBCLIGetversion{},
 						},
@@ -1081,8 +1872,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "help",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Help{
 							Help: &pb.FDBCLIHelp{
 								Options: []string{
@@ -1105,8 +1896,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "include no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Include{
 							Include: &pb.FDBCLIInclude{},
 						},
@@ -1118,8 +1909,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "include no addresses",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Include{
 							Include: &pb.FDBCLIInclude{
 								Request: &pb.FDBCLIInclude_Addresses{
@@ -1135,8 +1926,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "include all",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Include{
 							Include: &pb.FDBCLIInclude{
 								Failed: &wrapperspb.BoolValue{
@@ -1159,8 +1950,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "include addresses",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Include{
 							Include: &pb.FDBCLIInclude{
 								Failed: &wrapperspb.BoolValue{
@@ -1188,12 +1979,30 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
-			name: "kill no address",
+			name: "kill no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Kill{
 							Kill: &pb.FDBCLIKill{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "kill init",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Kill{
+							Kill: &pb.FDBCLIKill{
+								Request: &pb.FDBCLIKill_Init{
+									Init: &pb.FDBCLIKillInit{},
+								},
+							},
 						},
 					},
 				},
@@ -1207,15 +2016,14 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
-			name: "kill",
+			name: "kill list",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Kill{
 							Kill: &pb.FDBCLIKill{
-								Addresses: []string{
-									"address",
-									"address2",
+								Request: &pb.FDBCLIKill_List{
+									List: &pb.FDBCLIKillList{},
 								},
 							},
 						},
@@ -1227,14 +2035,80 @@ func TestFDBCLI(t *testing.T) {
 			command: []string{
 				FDBCLI,
 				"--exec",
-				"kill ; kill address ; kill address2",
+				"kill list",
+			},
+		},
+		{
+			name: "kill all",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Kill{
+							Kill: &pb.FDBCLIKill{
+								Request: &pb.FDBCLIKill_All{
+									All: &pb.FDBCLIKillAll{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"kill all",
+			},
+		},
+		{
+			name: "kill targets no addresses",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Kill{
+							Kill: &pb.FDBCLIKill{
+								Request: &pb.FDBCLIKill_Targets{
+									Targets: &pb.FDBCLIKillTargets{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "kill targets",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Kill{
+							Kill: &pb.FDBCLIKill{
+								Request: &pb.FDBCLIKill_Targets{
+									Targets: &pb.FDBCLIKillTargets{
+										Addresses: []string{"address1", "address2"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"kill address1 address2",
 			},
 		},
 		{
 			name: "lock",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Lock{
 							Lock: &pb.FDBCLILock{},
 						},
@@ -1252,8 +2126,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "listtenants",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Listtenants{
 							Listtenants: &pb.FDBCLIListtenants{
 								Begin: &wrapperspb.StringValue{
@@ -1281,8 +2155,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "maintenance no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Maintenance{
 							Maintenance: &pb.FDBCLIMaintenance{},
 						},
@@ -1294,8 +2168,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "maintenance status",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Maintenance{
 							Maintenance: &pb.FDBCLIMaintenance{
 								Request: &pb.FDBCLIMaintenance_Status{},
@@ -1315,8 +2189,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "maintenance on no zoneid",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Maintenance{
 							Maintenance: &pb.FDBCLIMaintenance{
 								Request: &pb.FDBCLIMaintenance_On{
@@ -1332,8 +2206,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "maintenance on",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Maintenance{
 							Maintenance: &pb.FDBCLIMaintenance{
 								Request: &pb.FDBCLIMaintenance_On{
@@ -1358,8 +2232,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "maintenance off",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Maintenance{
 							Maintenance: &pb.FDBCLIMaintenance{
 								Request: &pb.FDBCLIMaintenance_Off{
@@ -1381,8 +2255,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "option no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Option{
 							Option: &pb.FDBCLIOption{},
 						},
@@ -1394,8 +2268,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "option blank",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Option{
 							Option: &pb.FDBCLIOption{
 								Request: &pb.FDBCLIOption_Blank{},
@@ -1415,8 +2289,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "option arg missing state",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Option{
 							Option: &pb.FDBCLIOption{
 								Request: &pb.FDBCLIOption_Arg{
@@ -1432,8 +2306,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "option arg missing option",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Option{
 							Option: &pb.FDBCLIOption{
 								Request: &pb.FDBCLIOption_Arg{
@@ -1451,8 +2325,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "option arg",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Option{
 							Option: &pb.FDBCLIOption{
 								Request: &pb.FDBCLIOption_Arg{
@@ -1480,8 +2354,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{},
 						},
@@ -1493,8 +2367,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1510,8 +2384,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client get",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1537,8 +2411,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client set no rate",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1558,8 +2432,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client set no size",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1583,8 +2457,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client set rate and size default",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1617,8 +2491,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile client set rate and size values",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Client{
@@ -1651,8 +2525,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile list",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_List{
@@ -1674,8 +2548,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile flow no processes",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Flow{
@@ -1691,8 +2565,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile flow",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Flow{
@@ -1724,8 +2598,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile heap no process",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Heap{
@@ -1741,8 +2615,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "profile heap",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Profile{
 							Profile: &pb.FDBCLIProfile{
 								Request: &pb.FDBCLIProfile_Heap{
@@ -1766,8 +2640,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "set no key",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Set{
 							Set: &pb.FDBCLISet{},
 						},
@@ -1779,8 +2653,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "set no value",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Set{
 							Set: &pb.FDBCLISet{
 								Key: "key",
@@ -1794,8 +2668,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "set",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Set{
 							Set: &pb.FDBCLISet{
 								Key:   "key",
@@ -1816,8 +2690,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "setclass no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Setclass{
 							Setclass: &pb.FDBCLISetclass{},
 						},
@@ -1829,8 +2703,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "setclass list",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Setclass{
 							Setclass: &pb.FDBCLISetclass{
 								Request: &pb.FDBCLISetclass_List{
@@ -1852,8 +2726,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "setclass arg no address",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Setclass{
 							Setclass: &pb.FDBCLISetclass{
 								Request: &pb.FDBCLISetclass_Arg{
@@ -1869,8 +2743,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "setclass arg no class",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Setclass{
 							Setclass: &pb.FDBCLISetclass{
 								Request: &pb.FDBCLISetclass_Arg{
@@ -1888,8 +2762,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "setclass arg",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Setclass{
 							Setclass: &pb.FDBCLISetclass{
 								Request: &pb.FDBCLISetclass_Arg{
@@ -1914,8 +2788,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "sleep",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Sleep{
 							Sleep: &pb.FDBCLISleep{
 								Seconds: 123,
@@ -1933,10 +2807,46 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "snapshot no command",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Snapshot{
+							Snapshot: &pb.FDBCLISnapshot{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "snapshot",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Snapshot{
+							Snapshot: &pb.FDBCLISnapshot{
+								Command: "command",
+								Options: []string{"option1", "option2"},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"snapshot command option1 option2",
+			},
+		},
+		{
 			name: "status",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Status{
 							Status: &pb.FDBCLIStatus{
 								Style: &wrapperspb.StringValue{
@@ -1956,10 +2866,91 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "suspend no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Suspend{
+							Suspend: &pb.FDBCLISuspend{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "suspend init",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Suspend{
+							Suspend: &pb.FDBCLISuspend{
+								Request: &pb.FDBCLISuspend_Init{
+									Init: &pb.FDBCLISuspendInit{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"suspend",
+			},
+		},
+		{
+			name: "suspend suspend no addresses",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Suspend{
+							Suspend: &pb.FDBCLISuspend{
+								Request: &pb.FDBCLISuspend_Suspend{
+									Suspend: &pb.FDBCLISuspendSuspend{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "suspend suspend",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Suspend{
+							Suspend: &pb.FDBCLISuspend{
+								Request: &pb.FDBCLISuspend_Suspend{
+									Suspend: &pb.FDBCLISuspendSuspend{
+										Seconds:   12.345,
+										Addresses: []string{"address1", "address2"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"suspend 12.345 address1 address2",
+			},
+		},
+		{
 			name: "throttle no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{},
 						},
@@ -1971,8 +2962,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle on no tag",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_On{
@@ -1988,8 +2979,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle on",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_On{
@@ -2022,8 +3013,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle off",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_Off{
@@ -2055,8 +3046,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle enable",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_Enable{
@@ -2078,8 +3069,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle disble",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_Disable{
@@ -2101,8 +3092,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "throttle list",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Throttle{
 							Throttle: &pb.FDBCLIThrottle{
 								Request: &pb.FDBCLIThrottle_List{
@@ -2131,8 +3122,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "triggerddteaminfolog",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Triggerddteaminfolog{
 							Triggerddteaminfolog: &pb.FDBCLITriggerddteaminfolog{},
 						},
@@ -2148,112 +3139,10 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
-			name: "unlock no uid",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Unlock{
-							Unlock: &pb.FDBCLIUnlock{},
-						},
-					},
-				},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "unlock",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Unlock{
-							Unlock: &pb.FDBCLIUnlock{
-								Uid: "uid",
-							},
-						},
-					},
-				},
-			},
-			bin:      testutil.ResolvePath(t, "true"),
-			respLogs: make(map[string][]byte),
-			command: []string{
-				FDBCLI,
-				"--exec",
-				"unlock uid",
-			},
-		},
-		{
-			name: "usetenant no name",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Usetenant{
-							Usetenant: &pb.FDBCLIUsetenant{},
-						},
-					},
-				},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "usetenant",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Usetenant{
-							Usetenant: &pb.FDBCLIUsetenant{
-								Name: "name",
-							},
-						},
-					},
-				},
-			},
-			bin:      testutil.ResolvePath(t, "true"),
-			respLogs: make(map[string][]byte),
-			command: []string{
-				FDBCLI,
-				"--exec",
-				"usetenant name",
-			},
-		},
-		{
-			name: "writemode no mode",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Writemode{
-							Writemode: &pb.FDBCLIWritemode{},
-						},
-					},
-				},
-			},
-			wantAnyErr: true,
-		},
-		{
-			name: "writemode",
-			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
-						Command: &pb.FDBCLICommand_Writemode{
-							Writemode: &pb.FDBCLIWritemode{
-								Mode: "on",
-							},
-						},
-					},
-				},
-			},
-			bin:      testutil.ResolvePath(t, "true"),
-			respLogs: make(map[string][]byte),
-			command: []string{
-				FDBCLI,
-				"--exec",
-				"writemode on",
-			},
-		},
-		{
 			name: "tssq no request",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{},
 						},
@@ -2265,8 +3154,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "tssq start no storage uid",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{
 								Request: &pb.FDBCLITssq_Start{
@@ -2282,8 +3171,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "tssq start",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{
 								Request: &pb.FDBCLITssq_Start{
@@ -2307,8 +3196,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "tssq stop no storage uid",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{
 								Request: &pb.FDBCLITssq_Stop{
@@ -2324,8 +3213,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "tssq stop",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{
 								Request: &pb.FDBCLITssq_Stop{
@@ -2349,8 +3238,8 @@ func TestFDBCLI(t *testing.T) {
 		{
 			name: "tssq list",
 			req: &pb.FDBCLIRequest{
-				Request: &pb.FDBCLIRequest_Command{
-					Command: &pb.FDBCLICommand{
+				Commands: []*pb.FDBCLICommand{
+					{
 						Command: &pb.FDBCLICommand_Tssq{
 							Tssq: &pb.FDBCLITssq{
 								Request: &pb.FDBCLITssq_List{
@@ -2369,22 +3258,319 @@ func TestFDBCLI(t *testing.T) {
 				"tssq list",
 			},
 		},
+		{
+			name: "unlock no uid",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Unlock{
+							Unlock: &pb.FDBCLIUnlock{},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
+			name: "unlock",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Unlock{
+							Unlock: &pb.FDBCLIUnlock{
+								Uid: "uid",
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"unlock uid",
+			},
+		},
+		{
+			name: "usetenant no name",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Usetenant{
+							Usetenant: &pb.FDBCLIUsetenant{},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
+			name: "usetenant",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Usetenant{
+							Usetenant: &pb.FDBCLIUsetenant{
+								Name: "name",
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"usetenant name",
+			},
+		},
+		{
+			name: "waitconnected",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Waitconnected{
+							Waitconnected: &pb.FDBCLIWaitconnected{},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"waitconnected",
+			},
+		},
+		{
+			name: "waitopen",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Waitopen{
+							Waitopen: &pb.FDBCLIWaitopen{},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"waitopen",
+			},
+		},
+		{
+			name: "writemode no mode",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Writemode{
+							Writemode: &pb.FDBCLIWritemode{},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
+			name: "writemode",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Writemode{
+							Writemode: &pb.FDBCLIWritemode{
+								Mode: "on",
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"writemode on",
+			},
+		},
+		{
+			name: "versionepoch no request",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{},
+						},
+					},
+				},
+			},
+			bin:        testutil.ResolvePath(t, "true"),
+			wantAnyErr: true,
+		},
+		{
+			name: "versionepoch info",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Info{
+									Info: &pb.FDBCLIVersionepochInfo{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch",
+			},
+		},
+		{
+			name: "versionepoch get",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Get{
+									Get: &pb.FDBCLIVersionepochGet{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch get",
+			},
+		},
+		{
+			name: "versionepoch disable",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Disable{
+									Disable: &pb.FDBCLIVersionepochDisable{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch disable",
+			},
+		},
+		{
+			name: "versionepoch enable",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Enable{
+									Enable: &pb.FDBCLIVersionepochEnable{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch enable",
+			},
+		},
+		{
+			name: "versionepoch commit",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Commit{
+									Commit: &pb.FDBCLIVersionepochCommit{},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch commit",
+			},
+		},
+		{
+			name: "versionepoch set",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Versionepoch{
+							Versionepoch: &pb.FDBCLIVersionepoch{
+								Request: &pb.FDBCLIVersionepoch_Set{
+									Set: &pb.FDBCLIVersionepochSet{
+										Epoch: 12345,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"versionepoch set 12345",
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			origGen := generateFDBCLIArgs
 			origUser := FDBCLIUser
 			origGroup := FDBCLIGroup
+			origEnvList := FDBCLIEnvList
 			t.Cleanup(func() {
 				generateFDBCLIArgs = origGen
 				FDBCLIUser = origUser
 				FDBCLIGroup = origGroup
+				FDBCLIEnvList = origEnvList
 				// Reset these so each test starts fresh.
 				lfs.fdbCLIUid = -1
 				lfs.fdbCLIGid = -1
 			})
 			FDBCLIUser = tc.user
 			FDBCLIGroup = tc.group
+			FDBCLIEnvList = tc.envList
 			var generatedOpts []string
 			var logs []captureLogs
 
@@ -2400,6 +3586,9 @@ func TestFDBCLI(t *testing.T) {
 					contents: contents,
 					perms:    tc.perms,
 				})
+				if tc.ignoreOpts {
+					return []string{tc.bin}, logs, err
+				}
 				return []string{tc.bin, strings.Join(generatedOpts, " ")}, logs, err
 			}
 

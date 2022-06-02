@@ -56,12 +56,97 @@ service CLI {
 
 message FDBCLIAdvanceversion { int64 version = 1; }
 
+message FDBCLIBegin {}
+
+message FDBCLIBlobrangeStart {
+  string begin_key = 1;
+  string end_key = 2;
+}
+
+message FDBCLIBlobrangeStop {
+  string begin_key = 1;
+  string end_key = 2;
+}
+
+message FDBCLIBlobrange {
+  oneof request {
+    FDBCLIBlobrangeStart start = 1;
+    FDBCLIBlobrangeStop stop = 2;
+  }
+}
+
+message FDBCLICacheRangeSet {
+  string begin_key = 1;
+  string end_key = 2;
+}
+
+message FDBCLICacheRangeClear {
+  string begin_key = 1;
+  string end_key = 2;
+}
+
+message FDBCLICacheRange {
+  oneof request {
+    FDBCLICacheRangeSet set = 1;
+    FDBCLICacheRangeClear clear = 2;
+  }
+}
+
+message FDBCLIChangefeedList {}
+
+message FDBCLIChangefeedRegister {
+  string range_id = 1;
+  string begin = 2;
+  string end = 3;
+}
+
+message FDBCLIChangefeedStop { string range_id = 1; }
+
+message FDBCLIChangefeedDestroy { string range_id = 1; }
+
+message FDBCLIChangefeedStreamNoVersion {}
+
+message FDBCLIChangefeedStreamStartVersion { int64 start_version = 1; }
+
+message FDBCLIChangefeedStreamStartEndVersion {
+  int64 start_version = 1;
+  int64 end_version = 2;
+}
+
+message FDBCLIChangefeedStream {
+  string range_id = 1;
+  // Either begin only is set or begin+end. Can't just set end.
+  oneof type {
+    FDBCLIChangefeedStreamNoVersion no_version = 2;
+    FDBCLIChangefeedStreamStartVersion start_version = 3;
+    FDBCLIChangefeedStreamStartEndVersion start_end_version = 4;
+  }
+}
+
+message FDBCLIChangefeedStreamPop {
+  string range_id = 1;
+  int64 version = 2;
+}
+
+message FDBCLIChangefeed {
+  oneof request {
+    FDBCLIChangefeedList list = 1;
+    FDBCLIChangefeedRegister register = 2;
+    FDBCLIChangefeedStop stop = 3;
+    FDBCLIChangefeedDestroy destroy = 4;
+    FDBCLIChangefeedStream stream = 5;
+    FDBCLIChangefeedStreamPop pop = 6;
+  }
+}
+
 message FDBCLIClear { string key = 1; }
 
 message FDBCLIClearrange {
   string begin_key = 1;
   string end_key = 2;
 }
+
+message FDBCLICommit {}
 
 // See
 // https://apple.github.io/foundationdb/command-line-interface.html#configure
@@ -96,6 +181,23 @@ message FDBCLICoordinators {
 
 message FDBCLICreatetenant { string name = 1; }
 
+message FDBCLIDatadistributionOn {}
+
+message FDBCLIDatadistributionOff {}
+
+message FDBCLIDatadistributionEnable { string option = 1; }
+
+message FDBCLIDatadistributionDisable { string option = 1; }
+
+message FDBCLIDatadistribution {
+  oneof request {
+    FDBCLIDatadistributionOn on = 1;
+    FDBCLIDatadistributionOff off = 2;
+    FDBCLIDatadistributionEnable enable = 3;
+    FDBCLIDatadistributionDisable disable = 4;
+  }
+}
+
 message FDBCLIDefaulttenant {}
 
 message FDBCLIDeletetenant { string name = 1; }
@@ -103,6 +205,23 @@ message FDBCLIDeletetenant { string name = 1; }
 message FDBCLIExclude {
   google.protobuf.BoolValue failed = 1;
   repeated string addresses = 2;
+}
+
+message FDBCLIExpensiveDataCheckInit {}
+
+message FDBCLIExpensiveDataCheckList {}
+
+message FDBCLIExpensiveDataCheckAll {}
+
+message FDBCLIExpensiveDataCheckCheck { repeated string addresses = 1; }
+
+message FDBCLIExpensiveDataCheck {
+  oneof request {
+    FDBCLIExpensiveDataCheckInit init = 1;
+    FDBCLIExpensiveDataCheckList list = 2;
+    FDBCLIExpensiveDataCheckAll all = 3;
+    FDBCLIExpensiveDataCheckCheck check = 4;
+  }
 }
 
 message FDBCLIFileconfigure {
@@ -142,9 +261,21 @@ message FDBCLIInclude {
   }
 }
 
+message FDBCLIKillInit {}
+
+message FDBCLIKillList {}
+
+message FDBCLIKillAll {}
+
+message FDBCLIKillTargets { repeated string addresses = 1; }
+
 message FDBCLIKill {
-  // Will convert to –exec “kill; kill address...” internally.
-  repeated string addresses = 1;
+  oneof request {
+    FDBCLIKillInit init = 1;
+    FDBCLIKillList list = 2;
+    FDBCLIKillAll all = 3;
+    FDBCLIKillTargets targets = 4;
+  }
 }
 
 message FDBCLIListtenants {
@@ -251,7 +382,26 @@ message FDBCLISetclass {
 
 message FDBCLISleep { uint32 seconds = 1; }
 
+message FDBCLISnapshot {
+  string command = 1;
+  repeated string options = 2;
+}
+
 message FDBCLIStatus { google.protobuf.StringValue style = 1; }
+
+message FDBCLISuspendInit {}
+
+message FDBCLISuspendSuspend {
+  double seconds = 1;
+  repeated string addresses = 2;
+}
+
+message FDBCLISuspend {
+  oneof request {
+    FDBCLISuspendInit init = 1;
+    FDBCLISuspendSuspend suspend = 2;
+  }
+}
 
 message FDBCLIThrottleActionOn {
   string tag = 1;
@@ -287,12 +437,6 @@ message FDBCLIThrottle {
 
 message FDBCLITriggerddteaminfolog {}
 
-message FDBCLIUnlock { string uid = 1; }
-
-message FDBCLIUsetenant { string name = 1; }
-
-message FDBCLIWritemode { string mode = 1; }
-
 message FDBCLITssqStart { string storage_uid = 1; }
 
 message FDBCLITssqStop { string storage_uid = 1; }
@@ -307,21 +451,65 @@ message FDBCLITssq {
   }
 }
 
-// This is a top level message so it can be used for potential transaction
-// support later.
+message FDBCLIUnlock { string uid = 1; }
+
+message FDBCLIUsetenant { string name = 1; }
+
+message FDBCLIWritemode { string mode = 1; }
+
+message FDBCLIVersionepochInfo {}
+
+message FDBCLIVersionepochGet {}
+
+message FDBCLIVersionepochDisable {}
+
+message FDBCLIVersionepochEnable {}
+
+message FDBCLIVersionepochCommit {}
+
+message FDBCLIVersionepochSet { int64 epoch = 1; }
+
+message FDBCLIVersionepoch {
+  oneof request {
+    FDBCLIVersionepochInfo info = 1;
+    FDBCLIVersionepochGet get = 2;
+    FDBCLIVersionepochDisable disable = 3;
+    FDBCLIVersionepochEnable enable = 4;
+    FDBCLIVersionepochCommit commit = 5;
+    FDBCLIVersionepochSet set = 6;
+  }
+}
+
+message FDBCLIWaitconnected {}
+
+message FDBCLIWaitopen {}
+
+// FDBCLICommand defines all of the fdbcli commands supported.
+// Certain items are excluded that don't make sense in a non-interactive
+// session such as reset or rollback.
+// This message is broken out separately for ease of use since it has
+// gotten so large.
+// NEXT: 49
 message FDBCLICommand {
   oneof command {
     // Does not include begin, commit, exit, help, reset, or rollback.
     FDBCLIAdvanceversion advanceversion = 1;
+    FDBCLIBegin begin = 47;
+    FDBCLIBlobrange blobrange = 41;
+    FDBCLICacheRange cache_range = 46;
+    FDBCLIChangefeed changefeed = 40;
     FDBCLIClear clear = 2;
     FDBCLIClearrange clearrange = 3;
+    FDBCLICommit commit = 48;
     FDBCLIConfigure configure = 4;
     FDBCLIConsistencycheck consistencycheck = 5;
     FDBCLICoordinators coordinators = 6;
     FDBCLICreatetenant createtenant = 29;
+    FDBCLIDatadistribution datadistribution = 45;
     FDBCLIDefaulttenant defaulttenant = 30;
     FDBCLIDeletetenant deletetenant = 31;
     FDBCLIExclude exclude = 7;
+    FDBCLIExpensiveDataCheck expensive_data_check = 44;
     FDBCLIFileconfigure fileconfigure = 8;
     FDBCLIForceRecoveryWithDataLoss force_recovery_with_data_loss = 9;
     FDBCLIGet get = 10;
@@ -339,14 +527,19 @@ message FDBCLICommand {
     FDBCLIProfile profile = 19;
     FDBCLISet set = 20;
     FDBCLISetclass setclass = 21;
+    FDBCLISnapshot snapshot = 39;
     FDBCLISleep sleep = 22;
     FDBCLIStatus status = 23;
+    FDBCLISuspend suspend = 43;
     FDBCLIThrottle throttle = 24;
     FDBCLITriggerddteaminfolog triggerddteaminfolog = 25;
+    FDBCLITssq tssq = 35;
     FDBCLIUnlock unlock = 26;
     FDBCLIUsetenant usetenant = 34;
     FDBCLIWritemode writemode = 27;
-    FDBCLITssq tssq = 35;
+    FDBCLIVersionepoch versionepoch = 42;
+    FDBCLIWaitconnected waitconnected = 37;
+    FDBCLIWaitopen waitopen = 38;
     // This one isn't used but defined so tests can trigger the unknown type
     // check.
     FDBCLIUnknownAction unknown = 28;
@@ -360,6 +553,9 @@ message FDBCLITransaction {
 
 message FDBCLIUnknownAction {}
 
+// FDBCLIRequest defines the fdbcli command(s) to run.
+// This will replicate fdbcli --exec "command(s)" (where N commands are
+// separated by ;) NEXT: 19 DO NOT USE: 11, 12, 13
 message FDBCLIRequest {
   // NOTE: Doesn't include status-from-json as that just prints a status
   //       from a given json file which would require uploading and seems
@@ -394,13 +590,7 @@ message FDBCLIRequest {
   google.protobuf.BoolValue build_flags = 17;
   // Maps to --timeout
   google.protobuf.Int32Value timeout = 18;
-  oneof request {
-    FDBCLICommand command = 11;
-    FDBCLITransaction transaction = 12;
-    // This one isn't used but defined so tests can trigger the unknown type
-    // check.
-    FDBCLIUnknownAction unknown = 13;
-  }
+  repeated FDBCLICommand commands = 19;
 }
 
 message Log {
