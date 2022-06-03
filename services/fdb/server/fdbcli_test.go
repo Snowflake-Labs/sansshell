@@ -21,8 +21,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
-	"net"
 	"os"
 	"path"
 	"strings"
@@ -32,37 +30,8 @@ import (
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
-
-var (
-	bufSize = 1024 * 1024
-	lis     *bufconn.Listener
-	lfs     *server
-)
-
-func bufDialer(context.Context, string) (net.Conn, error) {
-	return lis.Dial()
-}
-
-func TestMain(m *testing.M) {
-	lis = bufconn.Listen(bufSize)
-	s := grpc.NewServer()
-	lfs = &server{
-		fdbCLIUid: -1,
-		fdbCLIGid: -1,
-	}
-	lfs.Register(s)
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("Server exited with error: %v", err)
-		}
-	}()
-	defer s.GracefulStop()
-
-	os.Exit(m.Run())
-}
 
 type logDef struct {
 	basePath string
