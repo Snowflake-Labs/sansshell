@@ -313,20 +313,53 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		args := strings.Fields(r.exec)
 		f.Parse(args)
 	}
+
 	c := setupFDBCLI(f)
 	args = append(args, r.req)
-	return c.Execute(ctx, args...)
+	var cmd []string
+	for _, a := range f.Args() {
+		if a == ";" || strings.HasSuffix(a, ";") {
+			// Handle standalone ; vs trailing ; on a command item.
+			// For standalone ; we can just ignore this entry.
+			if len(a) > 1 {
+				a = strings.TrimSuffix(a, ";")
+				cmd = append(cmd, a)
+			}
+			f.Parse(cmd)
+			exit := c.Execute(ctx, args...)
+			if exit != subcommands.ExitSuccess {
+				fmt.Fprintln(os.Stderr, "Error parsing command")
+				return exit
+			}
+			cmd = nil
+			continue
+		}
+		cmd = append(cmd, a)
+	}
+	if len(cmd) != 0 {
+		f.Parse(cmd)
+		exit := c.Execute(ctx, args...)
+		if exit != subcommands.ExitSuccess {
+			fmt.Fprintln(os.Stderr, "Error parsing command")
+			return exit
+		}
+	}
+	state := args[0].(*util.ExecuteState)
+
+	return r.runFDBCLI(ctx, state)
 }
 
 // runFDBCLI does the legwork for final RPC exection since for each command this is the same.
 // Send the request and process the response stream. The only difference being the command to name
 // in error messages.
-func runFDBCLI(ctx context.Context, c pb.CLIClientProxy, state *util.ExecuteState, req *pb.FDBCLIRequest, command string) subcommands.ExitStatus {
-	stream, err := c.FDBCLIOneMany(ctx, req)
+func (r *fdbCLICmd) runFDBCLI(ctx context.Context, state *util.ExecuteState) subcommands.ExitStatus {
+	c := pb.NewCLIClientProxy(state.Conn)
+
+	stream, err := c.FDBCLIOneMany(ctx, r.req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - fdbcli %s error: %v\n", command, err)
+			fmt.Fprintf(e, "All targets - fdbcli error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -348,7 +381,7 @@ func runFDBCLI(ctx context.Context, c pb.CLIClientProxy, state *util.ExecuteStat
 		}
 		for _, r := range resp {
 			if r.Error != nil {
-				fmt.Fprintf(state.Err[r.Index], "fdbcli %s error: %v\n", command, r.Error)
+				fmt.Fprintf(state.Err[r.Index], "fdbcli error: %v\n", r.Error)
 				// If any target had errors it needs to be reported for that target but we still
 				// need to process responses off the channel. Final return code though should
 				// indicate something failed.
@@ -396,10 +429,7 @@ func (r *fdbCLIAdvanceversionCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIAdvanceversionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "must specify one version")
@@ -413,15 +443,14 @@ func (r *fdbCLIAdvanceversionCmd) Execute(ctx context.Context, f *flag.FlagSet, 
 	}
 	r.req.Version = v
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Advanceversion{
 				Advanceversion: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "advanceversion")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIClearCmd struct {
@@ -441,10 +470,7 @@ func (r *fdbCLIClearCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIClearCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify a key")
@@ -453,15 +479,14 @@ func (r *fdbCLIClearCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 	}
 	r.req.Key = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Clear{
 				Clear: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "clear")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIClearrangeCmd struct {
@@ -481,10 +506,7 @@ func (r *fdbCLIClearrangeCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIClearrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 2 || f.Arg(0) == "" || f.Arg(1) == "" {
 		fmt.Fprintln(os.Stderr, "must specify a begin key and an end key")
@@ -494,15 +516,14 @@ func (r *fdbCLIClearrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 	r.req.BeginKey = f.Arg(0)
 	r.req.EndKey = f.Arg(1)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Clearrange{
 				Clearrange: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "clearrange")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIConfigureCmd struct {
@@ -522,10 +543,7 @@ func (r *fdbCLIConfigureCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "Must supply at least one configure option")
@@ -637,15 +655,14 @@ func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Configure{
 				Configure: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "configure")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIConsistencycheckCmd struct {
@@ -665,10 +682,7 @@ func (r *fdbCLIConsistencycheckCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIConsistencycheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "Only one option of either on or off can be specified")
@@ -689,15 +703,14 @@ func (r *fdbCLIConsistencycheckCmd) Execute(ctx context.Context, f *flag.FlagSet
 
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Consistencycheck{
 				Consistencycheck: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "consistencycheck")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLICoordinatorsCmd struct {
@@ -717,10 +730,7 @@ func (r *fdbCLICoordinatorsCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLICoordinatorsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "must specify auto or at least one address")
@@ -770,15 +780,14 @@ func (r *fdbCLICoordinatorsCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		auto = true
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Coordinators{
 				Coordinators: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "coordinators")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLICreatetenantCmd struct {
@@ -798,10 +807,7 @@ func (r *fdbCLICreatetenantCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLICreatetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify a tenant name")
@@ -809,15 +815,14 @@ func (r *fdbCLICreatetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	}
 	r.req.Name = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Createtenant{
 				Createtenant: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "createtenant")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIDefaulttenantCmd struct {
@@ -837,25 +842,21 @@ func (r *fdbCLIDefaulttenantCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIDefaulttenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Defaulttenant{
 				Defaulttenant: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "defaulttenant")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIDeletetenantCmd struct {
@@ -875,10 +876,7 @@ func (r *fdbCLIDeletetenantCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIDeletetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify a tenant name")
@@ -886,15 +884,14 @@ func (r *fdbCLIDeletetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	}
 	r.req.Name = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Deletetenant{
 				Deletetenant: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "deletetenant")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIExcludeCmd struct {
@@ -914,10 +911,7 @@ func (r *fdbCLIExcludeCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	failed, address := false, false
 	for _, opt := range f.Args() {
@@ -944,15 +938,14 @@ func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		r.req.Addresses = append(r.req.Addresses, opt)
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Exclude{
 				Exclude: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "exclude")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIFileconfigureCmd struct {
@@ -975,10 +968,7 @@ func (r *fdbCLIFileconfigureCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIFileconfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 2 || f.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "must specify optionally \"new\" and a filename")
@@ -1003,15 +993,14 @@ func (r *fdbCLIFileconfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, a
 	}
 	r.req.File = file
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Fileconfigure{
 				Fileconfigure: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "fileconfigure")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIForceRecoveryWithDataLossCmd struct {
@@ -1031,10 +1020,7 @@ func (r *fdbCLIForceRecoveryWithDataLossCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIForceRecoveryWithDataLossCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify dcid")
@@ -1043,15 +1029,14 @@ func (r *fdbCLIForceRecoveryWithDataLossCmd) Execute(ctx context.Context, f *fla
 	}
 	r.req.Dcid = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_ForceRecoveryWithDataLoss{
 				ForceRecoveryWithDataLoss: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "forcerecoverywithdataloss")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIGetCmd struct {
@@ -1071,10 +1056,7 @@ func (r *fdbCLIGetCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIGetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify key")
@@ -1083,15 +1065,14 @@ func (r *fdbCLIGetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	}
 	r.req.Key = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Get{
 				Get: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "get")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIGetrangeCmd struct {
@@ -1111,10 +1092,7 @@ func (r *fdbCLIGetrangeCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIGetrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() < 1 || f.NArg() > 3 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify at least a begin key and optionally end key and/or limit")
@@ -1150,15 +1128,14 @@ func (r *fdbCLIGetrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Getrange{
 				Getrange: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "getrange")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIGetrangekeysCmd struct {
@@ -1178,10 +1155,7 @@ func (r *fdbCLIGetrangekeysCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIGetrangekeysCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	// NOTE: This is the same as getkeys but differing proto fields make it annoying to break into a utility function.
 	if f.NArg() < 1 || f.NArg() > 3 || f.Arg(0) == "" {
@@ -1218,15 +1192,14 @@ func (r *fdbCLIGetrangekeysCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Getrangekeys{
 				Getrangekeys: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "getrangekeys")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIGettenantCmd struct {
@@ -1246,10 +1219,7 @@ func (r *fdbCLIGettenantCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIGettenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
 		fmt.Fprintln(os.Stderr, "must specify a tenant name")
@@ -1257,15 +1227,14 @@ func (r *fdbCLIGettenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	}
 	r.req.Name = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Gettenant{
 				Gettenant: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "gettenant")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIGetversionCmd struct {
@@ -1285,25 +1254,21 @@ func (r *fdbCLIGetversionCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIGetversionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Getversion{
 				Getversion: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "getversion")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIHelpCmd struct {
@@ -1323,22 +1288,18 @@ func (r *fdbCLIHelpCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIHelpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	r.req.Options = append(r.req.Options, f.Args()...)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Help{
 				Help: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "help")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIIncludeCmd struct {
@@ -1358,10 +1319,7 @@ func (r *fdbCLIIncludeCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIIncludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	failed, address, all := false, false, false
 	for _, opt := range f.Args() {
@@ -1410,15 +1368,14 @@ func (r *fdbCLIIncludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Include{
 				Include: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "include")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIKillCmd struct {
@@ -1430,7 +1387,7 @@ func (*fdbCLIKillCmd) Synopsis() string {
 	return "The kill command attempts to kill one or more processes in the cluster."
 }
 func (p *fdbCLIKillCmd) Usage() string {
-	return `kill [list|address...]
+	return `kill [list|all|address...]
 
 NOTE: Internally this will be converted to kill; kill <address...> to do the required auto fill of addresses needed.
 `
@@ -1441,28 +1398,63 @@ func (r *fdbCLIKillCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIKillCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
 
-	c := pb.NewCLIClientProxy(state.Conn)
+	if f.NArg() == 0 {
+		req.Commands = append(req.Commands,
+			&pb.FDBCLICommand{
+				Command: &pb.FDBCLICommand_Kill{
+					Kill: &pb.FDBCLIKill{
+						Request: &pb.FDBCLIKill_Init{},
+					},
+				},
+			})
+		return subcommands.ExitSuccess
+	}
+	if f.NArg() == 1 {
+		switch f.Arg(0) {
+		case "list":
+			req.Commands = append(req.Commands,
+				&pb.FDBCLICommand{
+					Command: &pb.FDBCLICommand_Kill{
+						Kill: &pb.FDBCLIKill{
+							Request: &pb.FDBCLIKill_List{},
+						},
+					},
+				})
+			return subcommands.ExitSuccess
+		case "all":
+			req.Commands = append(req.Commands,
+				&pb.FDBCLICommand{
+					Command: &pb.FDBCLICommand_Kill{
+						Kill: &pb.FDBCLIKill{
+							Request: &pb.FDBCLIKill_All{},
+						},
+					},
+				})
 
+			return subcommands.ExitSuccess
+		}
+	}
+
+	// If neither of the above matched this is N addresses.
+	com := &pb.FDBCLICommand{
+		Command: &pb.FDBCLICommand_Kill{
+			Kill: &pb.FDBCLIKill{
+				Request: &pb.FDBCLIKill_Targets{},
+			},
+		},
+	}
 	for _, opt := range f.Args() {
 		if opt == "" {
 			fmt.Fprintln(os.Stderr, "address cannot be blank")
 			return subcommands.ExitFailure
 		}
-		r.req.Addresses = append(r.req.Addresses, opt)
+		com.GetKill().GetTargets().Addresses = append(com.GetKill().GetTargets().Addresses, opt)
 	}
+	req.Commands = append(req.Commands, com)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
-			Command: &pb.FDBCLICommand_Kill{
-				Kill: r.req,
-			},
-		},
-	}
-
-	return runFDBCLI(ctx, c, state, req, "kill")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIListtenantsCmd struct {
@@ -1482,10 +1474,7 @@ func (r *fdbCLIListtenantsCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIListtenantsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 3 {
 		fmt.Fprintln(os.Stderr, "must specify at most begin/end and limit")
@@ -1528,15 +1517,14 @@ func (r *fdbCLIListtenantsCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Listtenants{
 				Listtenants: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "listtenants")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLILockCmd struct {
@@ -1556,25 +1544,21 @@ func (r *fdbCLILockCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLILockCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 0 {
 		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Lock{
 				Lock: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "lock")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIMaintenanceCmd struct {
@@ -1594,10 +1578,7 @@ func (r *fdbCLIMaintenanceCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIMaintenanceCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() == 2 || f.NArg() > 3 {
 		fmt.Fprintln(os.Stderr, `must specify either "on zoneid seconds" or "off"`)
@@ -1639,15 +1620,14 @@ func (r *fdbCLIMaintenanceCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Maintenance{
 				Maintenance: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "maintenance")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIOptionCmd struct {
@@ -1667,10 +1647,7 @@ func (r *fdbCLIOptionCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIOptionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() == 1 || f.NArg() > 3 {
 		fmt.Fprintln(os.Stderr, "must specify either no options or 'on <option> [arg]' or 'off <option>'")
@@ -1697,15 +1674,14 @@ func (r *fdbCLIOptionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Option{
 				Option: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "option")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIProfileCmd struct {
@@ -1729,10 +1705,7 @@ func (r *fdbCLIProfileCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIProfileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "must specify a profile option")
@@ -1851,15 +1824,14 @@ func (r *fdbCLIProfileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Profile{
 				Profile: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "profile")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLISetCmd struct {
@@ -1879,10 +1851,7 @@ func (r *fdbCLISetCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLISetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 2 || f.Arg(0) == "" || f.Arg(1) == "" {
 		fmt.Fprintln(os.Stderr, "must specify key and value")
@@ -1892,15 +1861,14 @@ func (r *fdbCLISetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	r.req.Key = f.Arg(0)
 	r.req.Value = f.Arg(1)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Set{
 				Set: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "set")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLISetclassCmd struct {
@@ -1920,10 +1888,7 @@ func (r *fdbCLISetclassCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLISetclassCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 0 && f.NArg() != 2 || (f.NArg() == 2 && (f.Arg(0) == "" || f.Arg(1) == "")) {
 		fmt.Fprintln(os.Stderr, "must specify either no arguments or <address> <class>")
@@ -1942,15 +1907,14 @@ func (r *fdbCLISetclassCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Setclass{
 				Setclass: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "setclass")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLISleepCmd struct {
@@ -1970,10 +1934,7 @@ func (r *fdbCLISleepCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLISleepCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "must specify seconds")
@@ -1986,15 +1947,14 @@ func (r *fdbCLISleepCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 	}
 	r.req.Seconds = uint32(v)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Sleep{
 				Sleep: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "sleep")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIStatusCmd struct {
@@ -2014,10 +1974,7 @@ func (r *fdbCLIStatusCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIStatusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "must specify no arguments or a style")
@@ -2029,15 +1986,14 @@ func (r *fdbCLIStatusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 		}
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Status{
 				Status: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "status")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIThrottleCmd struct {
@@ -2062,10 +2018,7 @@ func (r *fdbCLIThrottleCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "must specify on or off")
@@ -2217,15 +2170,14 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Throttle{
 				Throttle: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "throttle")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLITriggerddteaminfologCmd struct {
@@ -2245,10 +2197,7 @@ func (r *fdbCLITriggerddteaminfologCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLITriggerddteaminfologCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "triggerddteaminfolog takes no arguments")
@@ -2256,15 +2205,14 @@ func (r *fdbCLITriggerddteaminfologCmd) Execute(ctx context.Context, f *flag.Fla
 
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Triggerddteaminfolog{
 				Triggerddteaminfolog: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "triggerddteaminfolog")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIUnlockCmd struct {
@@ -2284,10 +2232,7 @@ func (r *fdbCLIUnlockCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIUnlockCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "must specify uid")
@@ -2295,15 +2240,14 @@ func (r *fdbCLIUnlockCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	}
 	r.req.Uid = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Unlock{
 				Unlock: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "unlock")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIUsetenantCmd struct {
@@ -2323,10 +2267,7 @@ func (r *fdbCLIUsetenantCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIUsetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "must specify tenant name")
@@ -2334,15 +2275,14 @@ func (r *fdbCLIUsetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	}
 	r.req.Name = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Usetenant{
 				Usetenant: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "usetenant")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLIWritemodeCmd struct {
@@ -2362,10 +2302,7 @@ func (r *fdbCLIWritemodeCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLIWritemodeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "must specify mode")
@@ -2373,15 +2310,14 @@ func (r *fdbCLIWritemodeCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	}
 	r.req.Mode = f.Arg(0)
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Writemode{
 				Writemode: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "writemode")
+	return subcommands.ExitSuccess
 }
 
 type fdbCLITssqCmd struct {
@@ -2404,10 +2340,7 @@ func (r *fdbCLITssqCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *fdbCLITssqCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBCLIRequest)
-
-	c := pb.NewCLIClientProxy(state.Conn)
 
 	if f.NArg() != 1 && f.NArg() != 2 {
 		fmt.Fprintln(os.Stderr, "must specify a valid tssq command")
@@ -2443,13 +2376,12 @@ func (r *fdbCLITssqCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...in
 		return subcommands.ExitFailure
 	}
 
-	req.Request = &pb.FDBCLIRequest_Command{
-		Command: &pb.FDBCLICommand{
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Tssq{
 				Tssq: r.req,
 			},
-		},
-	}
+		})
 
-	return runFDBCLI(ctx, c, state, req, "tssq")
+	return subcommands.ExitSuccess
 }
