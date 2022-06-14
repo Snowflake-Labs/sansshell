@@ -122,15 +122,23 @@ const fdbCLIPackage = "fdbcli"
 func setupFDBCLI(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbCLIPackage, f)
 	c.Register(&fdbCLIAdvanceversionCmd{}, "")
+	c.Register(&fdbCLIBeginCmd{}, "")
+	c.Register(&fdbCLIBlobrangeCmd{}, "")
+	c.Register(&fdbCLICacheRangeCmd{}, "")
+	c.Register(&fdbCLIChangefeedCmd{}, "")
+	c.Register(&fdbCLIClearrangeCmd{}, "")
 	c.Register(&fdbCLIClearCmd{}, "")
 	c.Register(&fdbCLIClearrangeCmd{}, "")
+	c.Register(&fdbCLICommitCmd{}, "")
 	c.Register(&fdbCLIConfigureCmd{}, "")
 	c.Register(&fdbCLIConsistencycheckCmd{}, "")
 	c.Register(&fdbCLICoordinatorsCmd{}, "")
 	c.Register(&fdbCLICreatetenantCmd{}, "")
+	c.Register(&fdbCLIDatadistributionCmd{}, "")
 	c.Register(&fdbCLIDefaulttenantCmd{}, "")
 	c.Register(&fdbCLIDeletetenantCmd{}, "")
 	c.Register(&fdbCLIExcludeCmd{}, "")
+	c.Register(&fdbCLIExpensiveDataCheckCmd{}, "")
 	c.Register(&fdbCLIFileconfigureCmd{}, "")
 	c.Register(&fdbCLIForceRecoveryWithDataLossCmd{}, "")
 	c.Register(&fdbCLIGetCmd{}, "")
@@ -149,13 +157,18 @@ func setupFDBCLI(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&fdbCLISetCmd{}, "")
 	c.Register(&fdbCLISetclassCmd{}, "")
 	c.Register(&fdbCLISleepCmd{}, "")
+	c.Register(&fdbCLISnapshotCmd{}, "")
 	c.Register(&fdbCLIStatusCmd{}, "")
+	c.Register(&fdbCLISuspendCmd{}, "")
 	c.Register(&fdbCLIThrottleCmd{}, "")
 	c.Register(&fdbCLITriggerddteaminfologCmd{}, "")
+	c.Register(&fdbCLITssqCmd{}, "")
 	c.Register(&fdbCLIUnlockCmd{}, "")
 	c.Register(&fdbCLIUsetenantCmd{}, "")
 	c.Register(&fdbCLIWritemodeCmd{}, "")
-	c.Register(&fdbCLITssqCmd{}, "")
+	c.Register(&fdbCLIVersionepochCmd{}, "")
+	c.Register(&fdbCLIWaitconnectedCmd{}, "")
+	c.Register(&fdbCLIWaitopenCmd{}, "")
 
 	return c
 }
@@ -298,27 +311,41 @@ func (r *fdbCLICmd) SetFlags(f *flag.FlagSet) {
 	})
 }
 
-// Execute acts like the top level metadataCmd does and delegates actual execution to the parsed sub-command.
+// Execute acts like the top level fdbCmd does and delegates actual execution to the parsed sub-command.
 // It does pass along the top level request since any top level flags need to be filled in there and available
 // for the final request. Sub commands will implement the specific oneof Command and any command specific flags.
 func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := setupFDBCLI(f)
+	// If it's just asking for flags or commands run those and exit. Help is special since we have that
+	// as its own subcommand which executes remotely.
+	if f.Arg(0) == "flags" || f.Arg(0) == "commands" || f.Arg(0) == "help" {
+		return c.Execute(ctx, args...)
+	}
+
 	// We allow --exec and also just a trailing command/args to work. The former is to mimic how people are used
 	// to doing this from the existing CLI so migration is simpler.
-	if f.NArg() < 1 {
-		if r.exec == "" {
-			fmt.Fprintln(os.Stderr, "Must specify a command after all options or with --exec")
+	if f.NArg() > 0 {
+		if r.exec != "" {
+			fmt.Fprintln(os.Stderr, "Must specify a command after all options or with --exec but not both")
 			return subcommands.ExitFailure
 		}
+	}
+	if r.exec != "" {
 		// We want this to still use the parser so move the string from --exec in as Args to the flagset
 		f = flag.NewFlagSet("", flag.ContinueOnError)
 		args := strings.Fields(r.exec)
 		f.Parse(args)
 	}
 
-	c := setupFDBCLI(f)
+	c = setupFDBCLI(f)
+
 	args = append(args, r.req)
 	var cmd []string
-	for _, a := range f.Args() {
+
+	// Join everything back into one string and then resplit. So a command of fdbcli "kill; kill X" will
+	// parse through here one by one.
+	t := strings.Join(f.Args(), " ")
+	for _, a := range strings.Split(t, " ") {
 		if a == ";" || strings.HasSuffix(a, ";") {
 			// Handle standalone ; vs trailing ; on a command item.
 			// For standalone ; we can just ignore this entry.
@@ -413,6 +440,16 @@ func (r *fdbCLICmd) runFDBCLI(ctx context.Context, state *util.ExecuteState) sub
 	return retCode
 }
 
+// anyEmpty will return true if any entry in the passed in slice is an empty string.
+func anyEmpty(s []string) bool {
+	for _, e := range s {
+		if e == "" {
+			return true
+		}
+	}
+	return false
+}
+
 type fdbCLIAdvanceversionCmd struct {
 	req *pb.FDBCLIAdvanceversion
 }
@@ -421,7 +458,7 @@ func (*fdbCLIAdvanceversionCmd) Name() string { return "advanceversion" }
 func (*fdbCLIAdvanceversionCmd) Synopsis() string {
 	return "Force the cluster to recover at the specified version"
 }
-func (p *fdbCLIAdvanceversionCmd) Usage() string {
+func (*fdbCLIAdvanceversionCmd) Usage() string {
 	return "advanceversion <version>"
 }
 
@@ -433,7 +470,7 @@ func (r *fdbCLIAdvanceversionCmd) Execute(ctx context.Context, f *flag.FlagSet, 
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "must specify one version")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -448,6 +485,284 @@ func (r *fdbCLIAdvanceversionCmd) Execute(ctx context.Context, f *flag.FlagSet, 
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Advanceversion{
 				Advanceversion: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIBeginCmd struct {
+	req *pb.FDBCLIBegin
+}
+
+func (*fdbCLIBeginCmd) Name() string { return "begin" }
+func (*fdbCLIBeginCmd) Synopsis() string {
+	return "Begin a new transaction"
+}
+func (*fdbCLIBeginCmd) Usage() string {
+	return "begin"
+}
+
+func (r *fdbCLIBeginCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIBegin{}
+}
+
+func (r *fdbCLIBeginCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Begin{
+				Begin: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIBlobrangeCmd struct {
+	req *pb.FDBCLIBlobrange
+}
+
+func (*fdbCLIBlobrangeCmd) Name() string { return "blobrange" }
+func (*fdbCLIBlobrangeCmd) Synopsis() string {
+	return "blobify (or not) a given key range"
+}
+func (*fdbCLIBlobrangeCmd) Usage() string {
+	return "blobrange <start|stop> <begin key> <end key>"
+}
+
+func (r *fdbCLIBlobrangeCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIBlobrange{}
+}
+
+func (r *fdbCLIBlobrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	switch f.Arg(0) {
+	case "start":
+		r.req.Request = &pb.FDBCLIBlobrange_Start{
+			Start: &pb.FDBCLIBlobrangeStart{
+				BeginKey: f.Arg(1),
+				EndKey:   f.Arg(2),
+			},
+		}
+	case "stop":
+		r.req.Request = &pb.FDBCLIBlobrange_Stop{
+			Stop: &pb.FDBCLIBlobrangeStop{
+				BeginKey: f.Arg(1),
+				EndKey:   f.Arg(2),
+			},
+		}
+	}
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Blobrange{
+				Blobrange: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLICacheRangeCmd struct {
+	req *pb.FDBCLICacheRange
+}
+
+func (*fdbCLICacheRangeCmd) Name() string { return "cacherange" }
+func (*fdbCLICacheRangeCmd) Synopsis() string {
+	return "Mark a key range to add to or remove from storage caches."
+}
+func (*fdbCLICacheRangeCmd) Usage() string {
+	return "cacherange <set|clear> <begin key> <end key>"
+}
+
+func (r *fdbCLICacheRangeCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLICacheRange{}
+}
+
+func (r *fdbCLICacheRangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	switch f.Arg(0) {
+	case "set":
+		r.req.Request = &pb.FDBCLICacheRange_Set{
+			Set: &pb.FDBCLICacheRangeSet{
+				BeginKey: f.Arg(1),
+				EndKey:   f.Arg(2),
+			},
+		}
+	case "clear":
+		r.req.Request = &pb.FDBCLICacheRange_Clear{
+			Clear: &pb.FDBCLICacheRangeClear{
+				BeginKey: f.Arg(1),
+				EndKey:   f.Arg(2),
+			},
+		}
+	}
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_CacheRange{
+				CacheRange: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIChangefeedCmd struct {
+	req *pb.FDBCLIChangefeed
+}
+
+func (*fdbCLIChangefeedCmd) Name() string { return "changefeed" }
+func (*fdbCLIChangefeedCmd) Synopsis() string {
+	return "List, setup, destroy or stream changefeeds"
+}
+func (p *fdbCLIChangefeedCmd) Usage() string {
+	return "changefeed <list|register <range_id> <begin> <end>|destroy <range_id>|stop <range_id>|stream <range_id> [start_version [end_version]]|pop <range_id> <version>"
+}
+
+func (r *fdbCLIChangefeedCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIChangefeed{}
+}
+
+func (r *fdbCLIChangefeedCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() == 0 || f.Arg(0) == "" {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	usage := true
+	switch f.Arg(0) {
+	case "list":
+		if f.NArg() != 1 {
+			break
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_List{
+			List: &pb.FDBCLIChangefeedList{},
+		}
+	case "register":
+		if f.NArg() != 4 || anyEmpty(f.Args()) {
+			break
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_Register{
+			Register: &pb.FDBCLIChangefeedRegister{
+				RangeId: f.Arg(1),
+				Begin:   f.Arg(2),
+				End:     f.Arg(3),
+			},
+		}
+	case "stop":
+		if f.NArg() != 2 || anyEmpty(f.Args()) {
+			break
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_Stop{
+			Stop: &pb.FDBCLIChangefeedStop{
+				RangeId: f.Arg(1),
+			},
+		}
+	case "destroy":
+		if f.NArg() != 2 || anyEmpty(f.Args()) {
+			break
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_Destroy{
+			Destroy: &pb.FDBCLIChangefeedDestroy{
+				RangeId: f.Arg(1),
+			},
+		}
+	case "stream":
+		if f.NArg() < 2 || f.NArg() > 4 || anyEmpty(f.Args()) {
+			break
+		}
+		var s, e int64
+		var err error
+		if f.NArg() > 2 {
+			s, err = strconv.ParseInt(f.Arg(2), 10, 64)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "can't parse start version: %v\n", err)
+				break
+			}
+		}
+		if f.NArg() > 3 {
+			e, err = strconv.ParseInt(f.Arg(2), 10, 64)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "can't parse end version: %v\n", err)
+				break
+			}
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_Stream{
+			Stream: &pb.FDBCLIChangefeedStream{
+				RangeId: f.Arg(1),
+			},
+		}
+		switch f.NArg() {
+		case 3:
+			r.req.GetStream().Type = &pb.FDBCLIChangefeedStream_StartVersion{
+				StartVersion: &pb.FDBCLIChangefeedStreamStartVersion{
+					StartVersion: s,
+				},
+			}
+		case 4:
+			r.req.GetStream().Type = &pb.FDBCLIChangefeedStream_StartEndVersion{
+				StartEndVersion: &pb.FDBCLIChangefeedStreamStartEndVersion{
+					StartVersion: s,
+					EndVersion:   e,
+				},
+			}
+		default:
+			r.req.GetStream().Type = &pb.FDBCLIChangefeedStream_NoVersion{
+				NoVersion: &pb.FDBCLIChangefeedStreamNoVersion{},
+			}
+		}
+	case "pop":
+		if f.NArg() != 3 || anyEmpty(f.Args()) {
+			break
+		}
+		v, err := strconv.ParseInt(f.Arg(1), 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't parse version: %v\n", err)
+			break
+		}
+		usage = false
+		r.req.Request = &pb.FDBCLIChangefeed_Pop{
+			Pop: &pb.FDBCLIChangefeedStreamPop{
+				RangeId: f.Arg(1),
+				Version: v,
+			},
+		}
+	}
+	if usage {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Changefeed{
+				Changefeed: r.req,
 			},
 		})
 
@@ -474,9 +789,8 @@ func (r *fdbCLIClearCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify a key")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
-
 	}
 	r.req.Key = f.Arg(0)
 
@@ -509,10 +823,9 @@ func (r *fdbCLIClearrangeCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIClearrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 2 || f.Arg(0) == "" || f.Arg(1) == "" {
-		fmt.Fprintln(os.Stderr, "must specify a begin key and an end key")
+	if f.NArg() != 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
-
 	}
 	r.req.BeginKey = f.Arg(0)
 	r.req.EndKey = f.Arg(1)
@@ -521,6 +834,40 @@ func (r *fdbCLIClearrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Clearrange{
 				Clearrange: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLICommitCmd struct {
+	req *pb.FDBCLICommit
+}
+
+func (*fdbCLICommitCmd) Name() string { return "commit" }
+func (*fdbCLICommitCmd) Synopsis() string {
+	return "Commit the current transaction"
+}
+func (p *fdbCLICommitCmd) Usage() string {
+	return "commit"
+}
+
+func (r *fdbCLICommitCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLICommit{}
+}
+
+func (r *fdbCLICommitCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Commit{
+				Commit: r.req,
 			},
 		})
 
@@ -547,32 +894,39 @@ func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "Must supply at least one configure option")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
 	// Technically these have an order but can be parsed regardless of position.
 	// The only real constraint is each is only set once possibly.
+	usage := true
 	for _, opt := range f.Args() {
 		switch opt {
 		case "new", "tss":
 			if r.req.NewOrTss != nil {
 				fmt.Fprintln(os.Stderr, "new|tss can only be set once")
+				break
 			}
+			usage = false
 			r.req.NewOrTss = &wrapperspb.StringValue{
 				Value: opt,
 			}
 		case "single", "double", "triple", "three_data_hall", "three_datacenter":
 			if r.req.RedundancyMode != nil {
 				fmt.Fprintln(os.Stderr, "redundancy mode can only be set once")
+				break
 			}
+			usage = false
 			r.req.RedundancyMode = &wrapperspb.StringValue{
 				Value: opt,
 			}
 		case "ssd", "memory":
 			if r.req.StorageEngine != nil {
 				fmt.Fprintln(os.Stderr, "storage engine can only be set once")
+				break
 			}
+			usage = false
 			r.req.StorageEngine = &wrapperspb.StringValue{
 				Value: opt,
 			}
@@ -580,9 +934,9 @@ func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 			// Need to be K=V style
 			kv := strings.SplitN(opt, "=", 2)
 			// foo= will parse as 2 entries just the 2nd is blank.
-			if len(kv) != 2 || (len(kv) == 2 && kv[1] == "") {
+			if len(kv) != 2 || anyEmpty(kv) {
 				fmt.Fprintf(os.Stderr, "can't parse configure option %q\n", opt)
-				return subcommands.ExitFailure
+				break
 			}
 			setUintVal := func(e string, val string, field **wrapperspb.UInt32Value) subcommands.ExitStatus {
 				if *field != nil {
@@ -602,58 +956,65 @@ func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 
 			switch kv[0] {
 			case "grv_proxies":
-				if setUintVal(opt, kv[1], &r.req.GrvProxies) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.GrvProxies) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "commit_proxies":
-				if setUintVal(opt, kv[1], &r.req.CommitProxies) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.CommitProxies) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "resolvers":
-				if setUintVal(opt, kv[1], &r.req.Resolvers) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.Resolvers) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "logs":
-				if setUintVal(opt, kv[1], &r.req.Logs) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.Logs) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "count":
-				if setUintVal(opt, kv[1], &r.req.Count) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.Count) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "perpetual_storage_wiggle":
-				if setUintVal(opt, kv[1], &r.req.PerpetualStorageWiggle) != subcommands.ExitSuccess {
-					return subcommands.ExitFailure
+				if setUintVal(opt, kv[1], &r.req.PerpetualStorageWiggle) == subcommands.ExitSuccess {
+					usage = false
 				}
 			case "perpetual_storage_wiggle_locality":
 				if r.req.PerpetualStorageWiggleLocality != nil {
 					fmt.Fprintf(os.Stderr, "option %s already set\n", opt)
-					return subcommands.ExitFailure
+					break
 				}
+				usage = false
 				r.req.PerpetualStorageWiggleLocality = &wrapperspb.StringValue{
 					Value: kv[1],
 				}
 			case "storage_migration_type":
 				if r.req.StorageMigrationType != nil {
 					fmt.Fprintf(os.Stderr, "option %s already set\n", opt)
-					return subcommands.ExitFailure
+					break
 				}
+				usage = false
 				r.req.StorageMigrationType = &wrapperspb.StringValue{
 					Value: kv[1],
 				}
 			case "tenant_mode":
 				if r.req.TenantMode != nil {
 					fmt.Fprintf(os.Stderr, "option %s already set\n", opt)
-					return subcommands.ExitFailure
+					break
 				}
+				usage = false
 				r.req.TenantMode = &wrapperspb.StringValue{
 					Value: kv[1],
 				}
 			default:
 				fmt.Fprintf(os.Stderr, "can't parse configure option %q\n", opt)
-				return subcommands.ExitFailure
 			}
 		}
+
+	}
+	if usage {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
 	}
 
 	req.Commands = append(req.Commands,
@@ -685,23 +1046,20 @@ func (r *fdbCLIConsistencycheckCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIConsistencycheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "Only one option of either on or off can be specified")
+	if f.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
-	if f.NArg() == 1 {
-		switch f.Args()[0] {
-		case "on":
-			r.req.Mode = &wrapperspb.BoolValue{
-				Value: true,
-			}
-		case "off":
-			r.req.Mode = &wrapperspb.BoolValue{}
-		default:
-			fmt.Fprintln(os.Stderr, "Only one option of either on or off can be specified")
-			return subcommands.ExitFailure
+	switch f.Arg(0) {
+	case "on":
+		r.req.Mode = &wrapperspb.BoolValue{
+			Value: true,
 		}
-
+	case "off":
+		r.req.Mode = &wrapperspb.BoolValue{}
+	default:
+		fmt.Fprintln(os.Stderr, "Only one option of either on or off can be specified")
+		return subcommands.ExitFailure
 	}
 
 	req.Commands = append(req.Commands,
@@ -734,20 +1092,22 @@ func (r *fdbCLICoordinatorsCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "must specify auto or at least one address")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
-	auto, desc := false, false
+	auto, desc, usage := false, false, false
 	for _, opt := range f.Args() {
 		if desc {
 			fmt.Fprintln(os.Stderr, "description cannot be set more than once and must be last")
-			return subcommands.ExitFailure
+			usage = true
+			break
 		}
 		if opt == "auto" {
 			if auto {
 				fmt.Fprintln(os.Stderr, "auto can only be set once and not after addresses")
-				return subcommands.ExitFailure
+				usage = true
+				break
 			}
 			r.req.Request = &pb.FDBCLICoordinators_Auto{
 				Auto: &pb.FDBCLICoordinatorsAuto{},
@@ -758,12 +1118,14 @@ func (r *fdbCLICoordinatorsCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		if strings.HasPrefix(opt, "description=") {
 			if desc {
 				fmt.Fprintln(os.Stderr, "description can only be set once")
-				return subcommands.ExitFailure
+				usage = true
+				break
 			}
 			d := strings.SplitN(opt, "=", 2)
-			if len(d) != 2 || (len(d) == 2 && d[1] == "") {
+			if len(d) != 2 || anyEmpty(d) {
 				fmt.Fprintln(os.Stderr, "description must be of the form description=X")
-				return subcommands.ExitFailure
+				usage = true
+				break
 			}
 			r.req.Description = &wrapperspb.StringValue{
 				Value: d[1],
@@ -779,6 +1141,10 @@ func (r *fdbCLICoordinatorsCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		}
 		r.req.GetAddresses().Addresses = append(r.req.GetAddresses().Addresses, opt)
 		auto = true
+	}
+	if usage {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
 	}
 
 	req.Commands = append(req.Commands,
@@ -811,7 +1177,7 @@ func (r *fdbCLICreatetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify a tenant name")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Name = f.Arg(0)
@@ -820,6 +1186,63 @@ func (r *fdbCLICreatetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Createtenant{
 				Createtenant: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIDatadistributionCmd struct {
+	req *pb.FDBCLIDatadistribution
+}
+
+func (*fdbCLIDatadistributionCmd) Name() string { return "datadistribution" }
+func (*fdbCLIDatadistributionCmd) Synopsis() string {
+	return "Set data distribution state/modes"
+}
+func (p *fdbCLIDatadistributionCmd) Usage() string {
+	return "datadistribution <on|off|disable <option>|enable <option>>"
+}
+
+func (r *fdbCLIDatadistributionCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIDatadistribution{}
+}
+
+func (r *fdbCLIDatadistributionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() < 1 || f.NArg() > 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	switch f.Arg(0) {
+	case "on":
+		r.req.Request = &pb.FDBCLIDatadistribution_On{
+			On: &pb.FDBCLIDatadistributionOn{},
+		}
+	case "off":
+		r.req.Request = &pb.FDBCLIDatadistribution_Off{
+			Off: &pb.FDBCLIDatadistributionOff{},
+		}
+	case "enable":
+		r.req.Request = &pb.FDBCLIDatadistribution_Enable{
+			Enable: &pb.FDBCLIDatadistributionEnable{
+				Option: f.Arg(1),
+			},
+		}
+	case "disable":
+		r.req.Request = &pb.FDBCLIDatadistribution_Disable{
+			Disable: &pb.FDBCLIDatadistributionDisable{
+				Option: f.Arg(1),
+			},
+		}
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Datadistribution{
+				Datadistribution: r.req,
 			},
 		})
 
@@ -846,7 +1269,7 @@ func (r *fdbCLIDefaulttenantCmd) Execute(ctx context.Context, f *flag.FlagSet, a
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -880,7 +1303,7 @@ func (r *fdbCLIDeletetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify a tenant name")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Name = f.Arg(0)
@@ -919,10 +1342,12 @@ func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		if opt == "failed" {
 			if failed {
 				fmt.Fprintln(os.Stderr, "cannot specify failed more than once")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			if address {
 				fmt.Fprintln(os.Stderr, "cannot specify failed after listing addresses")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			r.req.Failed = &wrapperspb.BoolValue{
@@ -934,6 +1359,7 @@ func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		address = true
 		if opt == "" {
 			fmt.Fprintln(os.Stderr, "address cannot be blank")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Addresses = append(r.req.Addresses, opt)
@@ -943,6 +1369,66 @@ func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Exclude{
 				Exclude: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIExpensiveDataCheckCmd struct {
+	req *pb.FDBCLIExpensiveDataCheck
+}
+
+func (*fdbCLIExpensiveDataCheckCmd) Name() string { return "expensivedatacheck" }
+func (*fdbCLIExpensiveDataCheckCmd) Synopsis() string {
+	return "expensivedatacheck is used to send a data check request to the specified process. The check request is accomplished by rebooting the process."
+}
+func (p *fdbCLIExpensiveDataCheckCmd) Usage() string {
+	return "expensivedatacheck [list|all|address...]"
+}
+
+func (r *fdbCLIExpensiveDataCheckCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIExpensiveDataCheck{}
+}
+
+func (r *fdbCLIExpensiveDataCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	switch f.NArg() {
+	case 0:
+		r.req.Request = &pb.FDBCLIExpensiveDataCheck_Init{
+			Init: &pb.FDBCLIExpensiveDataCheckInit{},
+		}
+	case 1:
+		switch f.Arg(0) {
+		case "list":
+			r.req.Request = &pb.FDBCLIExpensiveDataCheck_List{
+				List: &pb.FDBCLIExpensiveDataCheckList{},
+			}
+		case "all":
+			r.req.Request = &pb.FDBCLIExpensiveDataCheck_All{
+				All: &pb.FDBCLIExpensiveDataCheckAll{},
+			}
+		default:
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+	default:
+		r.req.Request = &pb.FDBCLIExpensiveDataCheck_Check{
+			Check: &pb.FDBCLIExpensiveDataCheckCheck{},
+		}
+		r.req.GetCheck().Addresses = append(r.req.GetCheck().Addresses, f.Args()...)
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_ExpensiveDataCheck{
+				ExpensiveDataCheck: r.req,
 			},
 		})
 
@@ -971,8 +1457,8 @@ func (r *fdbCLIFileconfigureCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIFileconfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() > 2 || f.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "must specify optionally \"new\" and a filename")
+	if f.NArg() < 1 || f.NArg() > 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -980,6 +1466,7 @@ func (r *fdbCLIFileconfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, a
 	if f.NArg() == 2 {
 		if f.Arg(0) != "new" {
 			fmt.Fprintln(os.Stderr, "first argument must be \"new\" if 2 args are specified")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.New = &wrapperspb.BoolValue{
@@ -988,10 +1475,6 @@ func (r *fdbCLIFileconfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, a
 		file = f.Arg(1)
 	}
 
-	if file == "" {
-		fmt.Fprintln(os.Stderr, "filename cannot be blank")
-		return subcommands.ExitFailure
-	}
 	r.req.File = file
 
 	req.Commands = append(req.Commands,
@@ -1024,7 +1507,7 @@ func (r *fdbCLIForceRecoveryWithDataLossCmd) Execute(ctx context.Context, f *fla
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify dcid")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -1060,7 +1543,7 @@ func (r *fdbCLIGetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify key")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -1095,37 +1578,39 @@ func (r *fdbCLIGetrangeCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIGetrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() < 1 || f.NArg() > 3 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify at least a begin key and optionally end key and/or limit")
+	if f.NArg() < 1 || f.NArg() > 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.BeginKey = f.Arg(0)
-	if f.NArg() > 1 {
+	switch f.NArg() {
+	case 1:
 		// This could be an end key or a limit. If it parses as a integer it's a limit and there
 		// can't be anything else. Otherwise it's and end key and the next one must parse as a limit.
-		for _, opt := range f.Args()[1:] {
-			if opt == "" {
-				fmt.Fprintln(os.Stderr, "end key/limit cannot be blank if set")
-				return subcommands.ExitFailure
+		v, err := strconv.ParseInt(f.Arg(1), 10, 32)
+		if err != nil {
+			r.req.EndKey = &wrapperspb.StringValue{
+				Value: f.Arg(1),
 			}
-			if r.req.Limit != nil {
-				fmt.Fprintln(os.Stderr, "limit already set, nothing else can be set")
-				return subcommands.ExitFailure
-			}
-			v, err := strconv.ParseInt(f.Arg(1), 10, 32)
-			if err != nil {
-				if r.req.EndKey != nil {
-					fmt.Fprintln(os.Stderr, "end key already set")
-					return subcommands.ExitFailure
-				}
-				r.req.EndKey = &wrapperspb.StringValue{
-					Value: f.Arg(1),
-				}
-				continue
-			}
-			r.req.Limit = &wrapperspb.UInt32Value{
-				Value: uint32(v),
-			}
+			break
+		}
+		// Otherwise it's a limit if it's a number.
+		r.req.Limit = &wrapperspb.UInt32Value{
+			Value: uint32(v),
+		}
+	case 2:
+		// 2nd one is a limit so has to be a number.
+		v, err := strconv.ParseInt(f.Arg(2), 10, 32)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't parse limit: %v\n", err)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.EndKey = &wrapperspb.StringValue{
+			Value: f.Arg(1),
+		}
+		r.req.Limit = &wrapperspb.UInt32Value{
+			Value: uint32(v),
 		}
 	}
 
@@ -1159,37 +1644,39 @@ func (r *fdbCLIGetrangekeysCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	req := args[1].(*pb.FDBCLIRequest)
 
 	// NOTE: This is the same as getkeys but differing proto fields make it annoying to break into a utility function.
-	if f.NArg() < 1 || f.NArg() > 3 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify at least a begin key and optionally end key and/or limit")
+	if f.NArg() < 1 || f.NArg() > 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.BeginKey = f.Arg(0)
-	if f.NArg() > 1 {
+	switch f.NArg() {
+	case 1:
 		// This could be an end key or a limit. If it parses as a integer it's a limit and there
 		// can't be anything else. Otherwise it's and end key and the next one must parse as a limit.
-		for _, opt := range f.Args()[1:] {
-			if opt == "" {
-				fmt.Fprintln(os.Stderr, "end key/limit cannot be blank if set")
-				return subcommands.ExitFailure
+		v, err := strconv.ParseInt(f.Arg(1), 10, 32)
+		if err != nil {
+			r.req.EndKey = &wrapperspb.StringValue{
+				Value: f.Arg(1),
 			}
-			if r.req.Limit != nil {
-				fmt.Fprintln(os.Stderr, "limit already set, nothing else can be set")
-				return subcommands.ExitFailure
-			}
-			v, err := strconv.ParseInt(f.Arg(1), 10, 32)
-			if err != nil {
-				if r.req.EndKey != nil {
-					fmt.Fprintln(os.Stderr, "end key already set")
-					return subcommands.ExitFailure
-				}
-				r.req.EndKey = &wrapperspb.StringValue{
-					Value: f.Arg(1),
-				}
-				continue
-			}
-			r.req.Limit = &wrapperspb.UInt32Value{
-				Value: uint32(v),
-			}
+			break
+		}
+		// Otherwise it's a limit if it's a number.
+		r.req.Limit = &wrapperspb.UInt32Value{
+			Value: uint32(v),
+		}
+	case 2:
+		// 2nd one is a limit so has to be a number.
+		v, err := strconv.ParseInt(f.Arg(2), 10, 32)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't parse limit: %v\n", err)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.EndKey = &wrapperspb.StringValue{
+			Value: f.Arg(1),
+		}
+		r.req.Limit = &wrapperspb.UInt32Value{
+			Value: uint32(v),
 		}
 	}
 
@@ -1223,7 +1710,7 @@ func (r *fdbCLIGettenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 1 || f.Arg(0) == "" {
-		fmt.Fprintln(os.Stderr, "must specify a tenant name")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Name = f.Arg(0)
@@ -1258,7 +1745,7 @@ func (r *fdbCLIGetversionCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -1276,12 +1763,13 @@ type fdbCLIHelpCmd struct {
 	req *pb.FDBCLIHelp
 }
 
-func (*fdbCLIHelpCmd) Name() string { return "help" }
+func (*fdbCLIHelpCmd) Name() string { return "fdbclihelp" }
 func (*fdbCLIHelpCmd) Synopsis() string {
 	return "The help command provides information on specific commands. Its syntax is help <TOPIC>, where <TOPIC> is any of the commands in this section, escaping, or options"
 }
 func (p *fdbCLIHelpCmd) Usage() string {
-	return "help [TOPIC]"
+	return `fdbclihelp [TOPIC]
+NOTE: This actually runs help on the remote fdbcli process but needed to be renamed here due conflicts with standard commands`
 }
 
 func (r *fdbCLIHelpCmd) SetFlags(f *flag.FlagSet) {
@@ -1326,15 +1814,19 @@ func (r *fdbCLIIncludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 	for _, opt := range f.Args() {
 		if all {
 			fmt.Fprintln(os.Stderr, "can't set any addresses after all is declared")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
 		}
 		switch opt {
 		case "failed":
 			if failed {
 				fmt.Fprintln(os.Stderr, "cannot specify failed more than once")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			if address || all {
 				fmt.Fprintln(os.Stderr, "cannot specify failed after listing addresses")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			r.req.Failed = &wrapperspb.BoolValue{
@@ -1344,10 +1836,12 @@ func (r *fdbCLIIncludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		case "all":
 			if all {
 				fmt.Fprintln(os.Stderr, "cannot specify all more than once")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			if address {
 				fmt.Fprintln(os.Stderr, "cannot specify all and addresses together")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			r.req.Request = &pb.FDBCLIInclude_All{
@@ -1357,6 +1851,7 @@ func (r *fdbCLIIncludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		default:
 			if opt == "" {
 				fmt.Fprintln(os.Stderr, "address cannot be blank")
+				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 				return subcommands.ExitFailure
 			}
 			if r.req.Request == nil {
@@ -1401,59 +1896,42 @@ func (r *fdbCLIKillCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIKillCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() == 0 {
-		req.Commands = append(req.Commands,
-			&pb.FDBCLICommand{
-				Command: &pb.FDBCLICommand_Kill{
-					Kill: &pb.FDBCLIKill{
-						Request: &pb.FDBCLIKill_Init{},
-					},
-				},
-			})
-		return subcommands.ExitSuccess
+	if anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
 	}
-	if f.NArg() == 1 {
+
+	switch f.NArg() {
+	case 0:
+		r.req.Request = &pb.FDBCLIKill_Init{
+			Init: &pb.FDBCLIKillInit{},
+		}
+	case 1:
 		switch f.Arg(0) {
 		case "list":
-			req.Commands = append(req.Commands,
-				&pb.FDBCLICommand{
-					Command: &pb.FDBCLICommand_Kill{
-						Kill: &pb.FDBCLIKill{
-							Request: &pb.FDBCLIKill_List{},
-						},
-					},
-				})
-			return subcommands.ExitSuccess
+			r.req.Request = &pb.FDBCLIKill_List{
+				List: &pb.FDBCLIKillList{},
+			}
 		case "all":
-			req.Commands = append(req.Commands,
-				&pb.FDBCLICommand{
-					Command: &pb.FDBCLICommand_Kill{
-						Kill: &pb.FDBCLIKill{
-							Request: &pb.FDBCLIKill_All{},
-						},
-					},
-				})
-
-			return subcommands.ExitSuccess
+			r.req.Request = &pb.FDBCLIKill_All{
+				All: &pb.FDBCLIKillAll{},
+			}
 		}
 	}
+	if r.req.Request == nil {
+		// If neither of the above matched this is N addresses.
+		r.req.Request = &pb.FDBCLIKill_Targets{
+			Targets: &pb.FDBCLIKillTargets{},
+		}
+		r.req.GetTargets().Addresses = append(r.req.GetTargets().Addresses, f.Args()...)
 
-	// If neither of the above matched this is N addresses.
-	com := &pb.FDBCLICommand{
-		Command: &pb.FDBCLICommand_Kill{
-			Kill: &pb.FDBCLIKill{
-				Request: &pb.FDBCLIKill_Targets{},
+	}
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Kill{
+				Kill: r.req,
 			},
-		},
-	}
-	for _, opt := range f.Args() {
-		if opt == "" {
-			fmt.Fprintln(os.Stderr, "address cannot be blank")
-			return subcommands.ExitFailure
-		}
-		com.GetKill().GetTargets().Addresses = append(com.GetKill().GetTargets().Addresses, opt)
-	}
-	req.Commands = append(req.Commands, com)
+		})
 
 	return subcommands.ExitSuccess
 }
@@ -1477,10 +1955,9 @@ func (r *fdbCLIListtenantsCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIListtenantsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() > 3 {
-		fmt.Fprintln(os.Stderr, "must specify at most begin/end and limit")
+	if f.NArg() > 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
-
 	}
 
 	parseLimit := func(arg string) subcommands.ExitStatus {
@@ -1502,9 +1979,6 @@ func (r *fdbCLIListtenantsCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 		}
 	case 2, 3:
 		// Begin and end must be first
-		if f.Arg(0) == "" || f.Arg(1) == "" {
-			fmt.Fprintln(os.Stderr, "Begin and end must not be empty strings")
-		}
 		r.req.Begin = &wrapperspb.StringValue{
 			Value: f.Arg(0),
 		}
@@ -1548,7 +2022,7 @@ func (r *fdbCLILockCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...in
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() > 0 {
-		fmt.Fprintln(os.Stderr, "no additional arguments accepted")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -1581,8 +2055,8 @@ func (r *fdbCLIMaintenanceCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIMaintenanceCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() == 2 || f.NArg() > 3 {
-		fmt.Fprintln(os.Stderr, `must specify either "on zoneid seconds" or "off"`)
+	if f.NArg() == 2 || f.NArg() > 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -1597,6 +2071,7 @@ func (r *fdbCLIMaintenanceCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 	case 1:
 		if f.Arg(0) != "off" {
 			fmt.Fprintln(os.Stderr, `called with a single argument only - must be "off"`)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIMaintenance_Off{
@@ -1604,13 +2079,15 @@ func (r *fdbCLIMaintenanceCmd) Execute(ctx context.Context, f *flag.FlagSet, arg
 		}
 	// on zoneid seconds
 	case 3:
-		if f.Arg(0) != "on" || f.Arg(1) == "" {
+		if f.Arg(0) != "on" {
 			fmt.Fprintln(os.Stderr, `3 argument case must be "on zoneid seconds"`)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		v, err := strconv.ParseInt(f.Arg(2), 10, 32)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "can't parse seconds: %v\n", err)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIMaintenance_On{
@@ -1650,8 +2127,8 @@ func (r *fdbCLIOptionCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIOptionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() == 1 || f.NArg() > 3 {
-		fmt.Fprintln(os.Stderr, "must specify either no options or 'on <option> [arg]' or 'off <option>'")
+	if f.NArg() < 2 || f.NArg() > 3 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -1661,6 +2138,7 @@ func (r *fdbCLIOptionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 		// Just to validate.
 	default:
 		fmt.Fprintln(os.Stderr, "must specify on or off")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Request = &pb.FDBCLIOption_Arg{
@@ -1708,8 +2186,8 @@ func (r *fdbCLIProfileCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIProfileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "must specify a profile option")
+	if f.NArg() == 0 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	switch f.Arg(0) {
@@ -1763,12 +2241,13 @@ func (r *fdbCLIProfileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 			errCase = true
 		}
 		if errCase {
-			fmt.Fprintln(os.Stderr, `profile client is of the form: profile client get|<set <rate|"default"> <size|"default">>`)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 	case "list":
 		if f.NArg() != 1 {
 			fmt.Fprintln(os.Stderr, "profile list takes no arguments")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIProfile_List{
@@ -1793,35 +2272,20 @@ func (r *fdbCLIProfileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 				break
 			}
 			r.req.GetFlow().Duration = uint32(v)
-			// Don't care about value of next arg except shouldn't be blank
-			if f.Arg(3) == "" {
-				errCase = true
-				break
-			}
-			for _, opt := range f.Args()[4:] {
-				if opt == "" {
-					errCase = true
-					break
-				}
-				r.req.GetFlow().Processes = append(r.req.GetFlow().Processes, opt)
-			}
+			r.req.GetFlow().Processes = append(r.req.GetFlow().Processes, f.Args()[4:]...)
 		}
 		if errCase {
-			fmt.Fprintln(os.Stderr, "profile flow is of the form: profile flow run <duration> <filename> <process...>")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 	case "heap":
-		if f.Arg(1) == "" {
-			fmt.Fprintln(os.Stderr, "profile heap is of the form: profile heap <process>")
-			return subcommands.ExitFailure
-		}
 		r.req.Request = &pb.FDBCLIProfile_Heap{
 			Heap: &pb.FDBCLIProfileActionHeap{
 				Process: f.Arg(1),
 			},
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "unknown profile option")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -1854,8 +2318,8 @@ func (r *fdbCLISetCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLISetCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 2 || f.Arg(0) == "" || f.Arg(1) == "" {
-		fmt.Fprintln(os.Stderr, "must specify key and value")
+	if f.NArg() != 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -1891,8 +2355,8 @@ func (r *fdbCLISetclassCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLISetclassCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 0 && f.NArg() != 2 || (f.NArg() == 2 && (f.Arg(0) == "" || f.Arg(1) == "")) {
-		fmt.Fprintln(os.Stderr, "must specify either no arguments or <address> <class>")
+	if f.NArg() == 1 || f.NArg() > 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -1937,8 +2401,8 @@ func (r *fdbCLISleepCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLISleepCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "must specify seconds")
+	if f.NArg() != 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	v, err := strconv.ParseInt(f.Arg(0), 10, 32)
@@ -1952,6 +2416,44 @@ func (r *fdbCLISleepCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Sleep{
 				Sleep: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLISnapshotCmd struct {
+	req *pb.FDBCLISnapshot
+}
+
+func (*fdbCLISnapshotCmd) Name() string { return "snapshot" }
+func (*fdbCLISnapshotCmd) Synopsis() string {
+	return "Take a snapshot of the database using the given command."
+}
+func (p *fdbCLISnapshotCmd) Usage() string {
+	return "snapshot <command> [option...]"
+}
+
+func (r *fdbCLISnapshotCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLISnapshot{}
+}
+
+func (r *fdbCLISnapshotCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() < 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+	r.req.Command = f.Arg(0)
+	if f.NArg() > 1 {
+		r.req.Options = append(r.req.Options, f.Args()[1:]...)
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Snapshot{
+				Snapshot: r.req,
 			},
 		})
 
@@ -1977,8 +2479,8 @@ func (r *fdbCLIStatusCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIStatusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "must specify no arguments or a style")
+	if f.NArg() > 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	if f.NArg() == 1 {
@@ -1991,6 +2493,62 @@ func (r *fdbCLIStatusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Status{
 				Status: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLISuspendCmd struct {
+	req *pb.FDBCLISuspend
+}
+
+func (*fdbCLISuspendCmd) Name() string { return "suspend" }
+func (*fdbCLISuspendCmd) Synopsis() string {
+	return "Suspend the given processes for N seconds. Without arguments will prime the local cache of addresses and prints them out."
+}
+func (p *fdbCLISuspendCmd) Usage() string {
+	return "suspend [<seconds> <address> [address...]]"
+}
+
+func (r *fdbCLISuspendCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLISuspend{}
+}
+
+func (r *fdbCLISuspendCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+	switch {
+	case f.NArg() == 0:
+		r.req.Request = &pb.FDBCLISuspend_Init{
+			Init: &pb.FDBCLISuspendInit{},
+		}
+	case f.NArg() > 1:
+		v, err := strconv.ParseFloat(f.Arg(0), 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't parse seconds as float: %v", err)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.Request = &pb.FDBCLISuspend_Suspend{
+			Suspend: &pb.FDBCLISuspendSuspend{
+				Seconds: v,
+			},
+		}
+		r.req.GetSuspend().Addresses = append(r.req.GetSuspend().Addresses, f.Args()[1:]...)
+	default:
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Suspend{
+				Suspend: r.req,
 			},
 		})
 
@@ -2021,14 +2579,15 @@ func (r *fdbCLIThrottleCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "must specify on or off")
+	if f.NArg() < 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	switch f.Arg(0) {
 	case "on":
-		if f.Arg(1) != "tag" || f.Arg(2) == "" {
+		if f.Arg(1) != "tag" {
 			fmt.Fprintln(os.Stderr, "throttle on is of the form: throttle on tag <tag> [rate] [duration N<s|m|h|d>] [priority]")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIThrottle_On{
@@ -2043,6 +2602,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 				if err == nil {
 					if r.req.GetOn().Rate != nil {
 						fmt.Fprintln(os.Stderr, "can't set rate more than once for throttle on")
+						fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 						return subcommands.ExitFailure
 					}
 					r.req.GetOn().Rate = &wrapperspb.UInt32Value{
@@ -2055,6 +2615,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 				if err == nil {
 					if r.req.GetOn().Duration != nil {
 						fmt.Fprintln(os.Stderr, "can't set duration more than once for throttle on")
+						fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 						return subcommands.ExitFailure
 					}
 					r.req.GetOn().Duration = &wrapperspb.StringValue{
@@ -2064,6 +2625,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 				// Everything else is a priority
 				if r.req.GetOn().Priority != nil {
 					fmt.Fprintln(os.Stderr, "can't set priority more than once for throttle on")
+					fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 					return subcommands.ExitFailure
 				}
 				r.req.GetOn().Priority = &wrapperspb.StringValue{
@@ -2080,6 +2642,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 			case "all", "auto", "manual":
 				if r.req.GetOff().Type != nil {
 					fmt.Fprintln(os.Stderr, "throttle off can only specify one type")
+					fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 					return subcommands.ExitFailure
 				}
 				r.req.GetOff().Type = &wrapperspb.StringValue{
@@ -2090,10 +2653,12 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 				i++
 				if i >= f.NArg() {
 					fmt.Fprintln(os.Stderr, "throttle off tag must include a tag value")
+					fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 					return subcommands.ExitFailure
 				}
 				if r.req.GetOff().Tag != nil {
 					fmt.Fprintln(os.Stderr, "throttle off can only specify one tag")
+					fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 					return subcommands.ExitFailure
 				}
 				r.req.GetOff().Tag = &wrapperspb.StringValue{
@@ -2103,6 +2668,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 				// Anything else is a priority
 				if r.req.GetOff().Priority != nil {
 					fmt.Fprintln(os.Stderr, "throttle off can only specify one priority")
+					fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 					return subcommands.ExitFailure
 				}
 				r.req.GetOff().Priority = &wrapperspb.StringValue{
@@ -2113,6 +2679,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 	case "enable":
 		if f.NArg() != 2 || f.Arg(1) != "auto" {
 			fmt.Fprintln(os.Stderr, "throttle enable is of the form: throttle enable auto")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIThrottle_Enable{
@@ -2121,6 +2688,7 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 	case "disable":
 		if f.NArg() != 2 || f.Arg(1) != "auto" {
 			fmt.Fprintln(os.Stderr, "throttle disable is of the form: throttle disable auto")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 		r.req.Request = &pb.FDBCLIThrottle_Disable{
@@ -2164,10 +2732,11 @@ func (r *fdbCLIThrottleCmd) Execute(ctx context.Context, f *flag.FlagSet, args .
 		}
 		if errCase {
 			fmt.Fprintln(os.Stderr, "throttle list is of the form: throttle list [throttled|recommended|all] [LIMIT]")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
 	default:
-		fmt.Fprintln(os.Stderr, "must specify on, off, enable, disable, or list")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
@@ -2201,7 +2770,7 @@ func (r *fdbCLITriggerddteaminfologCmd) Execute(ctx context.Context, f *flag.Fla
 	req := args[1].(*pb.FDBCLIRequest)
 
 	if f.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "triggerddteaminfolog takes no arguments")
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 
 	}
@@ -2210,6 +2779,74 @@ func (r *fdbCLITriggerddteaminfologCmd) Execute(ctx context.Context, f *flag.Fla
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Triggerddteaminfolog{
 				Triggerddteaminfolog: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLITssqCmd struct {
+	req *pb.FDBCLITssq
+}
+
+func (*fdbCLITssqCmd) Name() string { return "tssq" }
+func (*fdbCLITssqCmd) Synopsis() string {
+	return "Utility commands for handling quarantining Testing Storage Servers."
+}
+func (p *fdbCLITssqCmd) Usage() string {
+	return `tssq start <StorageUID>
+tssq stop <StorageUID>
+tssq list
+`
+}
+
+func (r *fdbCLITssqCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLITssq{}
+}
+
+func (r *fdbCLITssqCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() < 1 || f.NArg() > 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+	switch f.Arg(0) {
+	case "start":
+		if f.NArg() != 2 {
+			fmt.Fprintln(os.Stderr, "tssq start required a storage uid")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.Request = &pb.FDBCLITssq_Start{
+			Start: &pb.FDBCLITssqStart{
+				StorageUid: f.Arg(1),
+			},
+		}
+	case "stop":
+		if f.NArg() != 2 {
+			fmt.Fprintln(os.Stderr, "tssq stop required a storage uid")
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.Request = &pb.FDBCLITssq_Stop{
+			Stop: &pb.FDBCLITssqStop{
+				StorageUid: f.Arg(1),
+			},
+		}
+	case "list":
+		r.req.Request = &pb.FDBCLITssq_List{
+			List: &pb.FDBCLITssqList{},
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Tssq{
+				Tssq: r.req,
 			},
 		})
 
@@ -2235,8 +2872,8 @@ func (r *fdbCLIUnlockCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIUnlockCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "must specify uid")
+	if f.NArg() != 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Uid = f.Arg(0)
@@ -2270,8 +2907,8 @@ func (r *fdbCLIUsetenantCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIUsetenantCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "must specify tenant name")
+	if f.NArg() != 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Name = f.Arg(0)
@@ -2305,8 +2942,8 @@ func (r *fdbCLIWritemodeCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIWritemodeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "must specify mode")
+	if f.NArg() != 1 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	r.req.Mode = f.Arg(0)
@@ -2321,66 +2958,144 @@ func (r *fdbCLIWritemodeCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	return subcommands.ExitSuccess
 }
 
-type fdbCLITssqCmd struct {
-	req *pb.FDBCLITssq
+type fdbCLIVersionepochCmd struct {
+	req *pb.FDBCLIVersionepoch
 }
 
-func (*fdbCLITssqCmd) Name() string { return "tssq" }
-func (*fdbCLITssqCmd) Synopsis() string {
-	return "Utility commands for handling quarantining Testing Storage Servers."
+func (*fdbCLIVersionepochCmd) Name() string { return "versionepoch" }
+func (*fdbCLIVersionepochCmd) Synopsis() string {
+	return "Query/enable/disable and set the version epoch"
 }
-func (p *fdbCLITssqCmd) Usage() string {
-	return `tssq start <StorageUID>
-tssq stop <StorageUID>
-tssq list
-`
+func (p *fdbCLIVersionepochCmd) Usage() string {
+	return "versionepoch [get|disable|enable|commit|set <epoch>]"
 }
 
-func (r *fdbCLITssqCmd) SetFlags(f *flag.FlagSet) {
-	r.req = &pb.FDBCLITssq{}
+func (r *fdbCLIVersionepochCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIVersionepoch{}
 }
 
-func (r *fdbCLITssqCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (r *fdbCLIVersionepochCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 1 && f.NArg() != 2 {
-		fmt.Fprintln(os.Stderr, "must specify a valid tssq command")
+	if f.NArg() > 2 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
-	switch f.Arg(0) {
-	case "start":
-		if f.NArg() != 2 {
-			fmt.Fprintln(os.Stderr, "tssq start required a storage uid")
+	switch f.NArg() {
+	case 0:
+		r.req.Request = &pb.FDBCLIVersionepoch_Info{
+			Info: &pb.FDBCLIVersionepochInfo{},
+		}
+	case 1:
+		switch f.Arg(0) {
+		case "get":
+			r.req.Request = &pb.FDBCLIVersionepoch_Get{
+				Get: &pb.FDBCLIVersionepochGet{},
+			}
+		case "disable":
+			r.req.Request = &pb.FDBCLIVersionepoch_Disable{
+				Disable: &pb.FDBCLIVersionepochDisable{},
+			}
+		case "enable":
+			r.req.Request = &pb.FDBCLIVersionepoch_Enable{
+				Enable: &pb.FDBCLIVersionepochEnable{},
+			}
+		case "commit":
+			r.req.Request = &pb.FDBCLIVersionepoch_Commit{
+				Commit: &pb.FDBCLIVersionepochCommit{},
+			}
+		default:
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
-		r.req.Request = &pb.FDBCLITssq_Start{
-			Start: &pb.FDBCLITssqStart{
-				StorageUid: f.Arg(1),
-			},
-		}
-	case "stop":
-		if f.NArg() != 2 {
-			fmt.Fprintln(os.Stderr, "tssq stop required a storage uid")
+	case 2:
+		v, err := strconv.ParseInt(f.Arg(1), 10, 64)
+		if f.Arg(0) != "set" || err != nil {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "can't parse epoch: %v\n", err)
+			}
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 			return subcommands.ExitFailure
 		}
-		r.req.Request = &pb.FDBCLITssq_Stop{
-			Stop: &pb.FDBCLITssqStop{
-				StorageUid: f.Arg(1),
+		r.req.Request = &pb.FDBCLIVersionepoch_Set{
+			Set: &pb.FDBCLIVersionepochSet{
+				Epoch: v,
 			},
 		}
-	case "list":
-		r.req.Request = &pb.FDBCLITssq_List{
-			List: &pb.FDBCLITssqList{},
-		}
-	default:
-		fmt.Fprintln(os.Stderr, "unknown tssq command")
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Versionepoch{
+				Versionepoch: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIWaitconnectedCmd struct {
+	req *pb.FDBCLIWaitconnected
+}
+
+func (*fdbCLIWaitconnectedCmd) Name() string { return "waitconnected" }
+func (*fdbCLIWaitconnectedCmd) Synopsis() string {
+	return "Pause and wait until connected to the DB"
+}
+func (p *fdbCLIWaitconnectedCmd) Usage() string {
+	return "waitconnected"
+}
+
+func (r *fdbCLIWaitconnectedCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIWaitconnected{}
+}
+
+func (r *fdbCLIWaitconnectedCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
 	req.Commands = append(req.Commands,
 		&pb.FDBCLICommand{
-			Command: &pb.FDBCLICommand_Tssq{
-				Tssq: r.req,
+			Command: &pb.FDBCLICommand_Waitconnected{
+				Waitconnected: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLIWaitopenCmd struct {
+	req *pb.FDBCLIWaitopen
+}
+
+func (*fdbCLIWaitopenCmd) Name() string { return "waitopen" }
+func (*fdbCLIWaitopenCmd) Synopsis() string {
+	return "Pause and wait until a connection to the DB is opened."
+}
+func (p *fdbCLIWaitopenCmd) Usage() string {
+	return "waitopen"
+}
+
+func (r *fdbCLIWaitopenCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLIWaitopen{}
+}
+
+func (r *fdbCLIWaitopenCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_Waitopen{
+				Waitopen: r.req,
 			},
 		})
 
