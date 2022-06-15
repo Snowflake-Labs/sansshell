@@ -4,6 +4,6 @@ repos:
   hooks:
     - id: go-fmt
     - id: golangci-lint
-      args: [-Dstaticcheck]
+      args: [--timeout=5m -Dstaticcheck]
     - id: go-build
     - id: go-mod-tidy
