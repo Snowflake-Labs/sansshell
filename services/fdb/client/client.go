@@ -340,40 +340,20 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	c = setupFDBCLI(f)
 
 	args = append(args, r.req)
-	var cmd []string
 
-	// Join everything back into one string and then resplit. So a command of fdbcli "kill; kill X" will
-	// parse through here one by one.
-	t := strings.Join(f.Args(), " ")
-	for _, a := range strings.Split(t, " ") {
-		if a == ";" || strings.HasSuffix(a, ";") {
-			// Handle standalone ; vs trailing ; on a command item.
-			// For standalone ; we can just ignore this entry.
-			if len(a) > 1 {
-				a = strings.TrimSuffix(a, ";")
-				cmd = append(cmd, a)
-			}
-			f.Parse(cmd)
-			exit := c.Execute(ctx, args...)
-			if exit != subcommands.ExitSuccess {
-				fmt.Fprintln(os.Stderr, "Error parsing command")
-				return exit
-			}
-			cmd = nil
-			continue
-		}
-		cmd = append(cmd, a)
-	}
-	if len(cmd) != 0 {
-		f.Parse(cmd)
+	// Join everything back into one string and then resplit around semi-colon.
+	// A command of fdbcli "kill; kill X" will parse through here one by one.
+	for _, a := range strings.Split(strings.Join(f.Args(), " "), ";") {
+		a = strings.TrimSpace(a)
+		f.Parse(strings.Split(a, " "))
 		exit := c.Execute(ctx, args...)
 		if exit != subcommands.ExitSuccess {
 			fmt.Fprintln(os.Stderr, "Error parsing command")
 			return exit
 		}
 	}
-	state := args[0].(*util.ExecuteState)
 
+	state := args[0].(*util.ExecuteState)
 	return r.runFDBCLI(ctx, state)
 }
 
