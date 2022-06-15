@@ -555,8 +555,10 @@ message FDBCLIUnknownAction {}
 
 // FDBCLIRequest defines the fdbcli command(s) to run.
 // This will replicate fdbcli --exec "command(s)" (where N commands are
-// separated by ;) NEXT: 19 DO NOT USE: 11, 12, 13
+// separated by ;)
+// NEXT: 19
 message FDBCLIRequest {
+  reserved 11, 12, 13;
   // NOTE: Doesn't include status-from-json as that just prints a status
   //       from a given json file which would require uploading and seems
   //       unneeded today.
