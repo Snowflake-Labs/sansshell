@@ -506,6 +506,8 @@ func parseFDBCLIBlobrange(req *pb.FDBCLIBlobrange) ([]string, []captureLogs, err
 		}
 		begin, end = s.BeginKey, s.EndKey
 		args = append(args, "stop")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 
 	args = append(args, begin, end)
@@ -535,6 +537,8 @@ func parseFDBCLICacheRange(req *pb.FDBCLICacheRange) ([]string, []captureLogs, e
 		}
 		begin, end = s.BeginKey, s.EndKey
 		args = append(args, "set")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 
 	args = append(args, begin, end)
@@ -594,6 +598,8 @@ func parseFDBCLIChangefeed(req *pb.FDBCLIChangefeed) ([]string, []captureLogs, e
 			return nil, nil, status.Error(codes.InvalidArgument, "changefeed destroy requires range_id to be set")
 		}
 		args = append(args, "pop", p.RangeId, fmt.Sprintf("%d", p.Version))
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 
 	return args, nil, nil
@@ -704,6 +710,8 @@ func parseFDBCLIDatadistribution(req *pb.FDBCLIDatadistribution) ([]string, []ca
 			return nil, nil, status.Error(codes.InvalidArgument, "datadistribution disable requires option to be set")
 		}
 		args = append(args, "disable", d.Option)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -750,6 +758,8 @@ func parseFDBCLIExpensiveDataCheck(req *pb.FDBCLIExpensiveDataCheck) ([]string, 
 			return nil, nil, status.Error(codes.InvalidArgument, "expensive_data_check check requires addresses to be filled in")
 		}
 		args = append(args, c.Addresses...)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -851,6 +861,8 @@ func parseFDBCLIInclude(req *pb.FDBCLIInclude) ([]string, []captureLogs, error) 
 			return nil, nil, status.Error(codes.InvalidArgument, "include without all requires addresses to be filled in")
 		}
 		args = append(args, addr...)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -874,6 +886,8 @@ func parseFDBCLIKill(req *pb.FDBCLIKill) ([]string, []captureLogs, error) {
 			return nil, nil, status.Error(codes.InvalidArgument, "kill requires targets")
 		}
 		args = append(args, t.Addresses...)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 
 	return args, nil, nil
@@ -911,6 +925,8 @@ func parseFDBCLIMaintenance(req *pb.FDBCLIMaintenance) ([]string, []captureLogs,
 		args = append(args, "on", on.Zoneid, fmt.Sprintf("%d", on.Seconds))
 	case *pb.FDBCLIMaintenance_Off:
 		args = append(args, "off")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -936,6 +952,8 @@ func parseFDBCLIOption(req *pb.FDBCLIOption) ([]string, []captureLogs, error) {
 		args = append(args, arg.State)
 		args = append(args, arg.Option)
 		args = stringFlag(args, arg.Arg, "")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -1016,6 +1034,8 @@ func parseFDBCLIProfile(req *pb.FDBCLIProfile) ([]string, []captureLogs, error) 
 			return nil, nil, status.Error(codes.InvalidArgument, "profile heap requires process to be filled in")
 		}
 		args = append(args, "heap", heap.Process)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, logs, nil
 }
@@ -1053,6 +1073,8 @@ func parseFDBCLISetclass(req *pb.FDBCLISetclass) ([]string, []captureLogs, error
 			return nil, nil, status.Error(codes.InvalidArgument, "setclass requires class to be filled in when specifying arg")
 		}
 		args = append(args, arg.Address, arg.Class)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -1098,6 +1120,8 @@ func parseFDBCLISuspend(req *pb.FDBCLISuspend) ([]string, []captureLogs, error) 
 		}
 		args = append(args, fmt.Sprintf("%g", s.Seconds))
 		args = append(args, s.Addresses...)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -1133,6 +1157,8 @@ func parseFDBCLIThrottle(req *pb.FDBCLIThrottle) ([]string, []captureLogs, error
 		args = append(args, "list")
 		args = stringFlag(args, list.Type, "")
 		args = uint32Flag(args, list.Limit, "")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -1163,6 +1189,8 @@ func parseFDBCLITssq(req *pb.FDBCLITssq) ([]string, []captureLogs, error) {
 		args = append(args, "stop", stop.StorageUid)
 	case *pb.FDBCLITssq_List:
 		args = append(args, "list")
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
@@ -1207,6 +1235,8 @@ func parseFDBCLIVersionepoch(req *pb.FDBCLIVersionepoch) ([]string, []captureLog
 		args = append(args, "commit")
 	case *pb.FDBCLIVersionepoch_Set:
 		args = append(args, "set", fmt.Sprintf("%d", req.GetSet().Epoch))
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
 	return args, nil, nil
 }
