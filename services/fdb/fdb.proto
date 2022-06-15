@@ -546,11 +546,6 @@ message FDBCLICommand {
   }
 }
 
-message FDBCLITransaction {
-  // Has an implied begin prepended and commit appended.
-  repeated FDBCLICommand commands = 1;
-}
-
 message FDBCLIUnknownAction {}
 
 // FDBCLIRequest defines the fdbcli command(s) to run.
