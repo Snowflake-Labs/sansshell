@@ -4,6 +4,7 @@ repos:
   hooks:
     - id: go-fmt
     - id: go-vet
+      args: [-v]
     - id: golangci-lint
       args: [-Dstaticcheck]
     - id: go-build
