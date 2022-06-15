@@ -3,16 +3,6 @@ name: PR
 on:
   - pull_request
 jobs:
-  check:
-    - repo: git://github.com/dnephin/pre-commit-golang
-        rev: v0.4.0
-        hooks:
-          - id: go-fmt
-          - id: go-vet
-          - id: go-imports
-          - id: go-mod-tidy
-          - id: golangci-lint
-          - id: go-build
   test:
     name: Unit tests
     runs-on: ubuntu-20.04
