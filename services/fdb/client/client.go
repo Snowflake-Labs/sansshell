@@ -348,7 +348,10 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	// A command of fdbcli "kill; kill X" will parse through here one by one.
 	for _, a := range strings.Split(strings.Join(f.Args(), " "), ";") {
 		a = strings.TrimSpace(a)
-		f.Parse(strings.Split(a, " "))
+		if err := f.Parse(strings.Split(a, " ")); err != nil {
+			fmt.Fprintf(os.Stderr, "command parse error: %v\n", err)
+			return subcommands.ExitFailure
+		}
 		exit := c.Execute(ctx, args...)
 		if exit != subcommands.ExitSuccess {
 			fmt.Fprintln(os.Stderr, "Error parsing command")
