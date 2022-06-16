@@ -237,13 +237,13 @@ func TestLoadClientServerCredentials(t *testing.T) {
 			server, err := LoadServerCredentials(context.Background(), tc.loader)
 			testutil.WantErr("server", err, tc.wantErr, t)
 			if !tc.wantErr {
-				err = server.OverrideServerName("server")
+				err = server.OverrideServerName("server") //nolint:staticcheck
 				testutil.FatalOnErr("OverrideServerName", err, t)
 			}
 			client, err := LoadClientCredentials(context.Background(), tc.loader)
 			testutil.WantErr("client", err, tc.wantErr, t)
 			if !tc.wantErr {
-				err = client.OverrideServerName("server")
+				err = client.OverrideServerName("server") //nolint:staticcheck
 				testutil.FatalOnErr("OverrideServerName", err, t)
 			}
 		})
@@ -258,7 +258,7 @@ func TestHealthCheck(t *testing.T) {
 	testutil.FatalOnErr("Register", err, t)
 	creds, err := LoadClientCredentials(ctx, "refresh")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
-	err = creds.OverrideServerName("bufnet")
+	err = creds.OverrideServerName("bufnet") //nolint:staticcheck
 	testutil.FatalOnErr("OverrideServerName", err, t)
 	for _, tc := range []struct {
 		name   string

@@ -82,7 +82,7 @@ func (w *WrappedTransportCredentials) checkRefresh() error {
 		}
 		w.creds = newCreds
 		if w.serverName != "" {
-			return w.creds.OverrideServerName(w.serverName)
+			return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
 		}
 	}
 	return nil
@@ -130,7 +130,7 @@ func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
 		return err
 	}
 	w.serverName = s
-	return w.creds.OverrideServerName(s)
+	return w.creds.OverrideServerName(s) //nolint:staticcheck
 }
 
 // Register associates a name with a mechanism for loading credentials.
