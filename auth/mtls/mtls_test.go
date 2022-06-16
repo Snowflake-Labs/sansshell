@@ -288,6 +288,7 @@ func TestHealthCheck(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			unregisterAll()
 			l, s := serverWithPolicy(t, tc.policy)
 			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
 			testutil.FatalOnErr("Failed to dial bufnet", err, t)
