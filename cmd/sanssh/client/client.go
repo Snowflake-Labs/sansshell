@@ -77,7 +77,7 @@ func Run(ctx context.Context, rs RunState) {
 	for _, f := range flag.Args() {
 		switch f {
 		case "help", "flags", "commands":
-			os.Exit(int(subcommands.Execute(ctx)))
+			os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
 		}
 	}
 

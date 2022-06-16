@@ -44,7 +44,7 @@ func SetupSubpackage(name string, f *flag.FlagSet) *subcommands.Commander {
 // unless you're a subcommand of a subcommand and then you'll want more.
 func GenerateSynopsis(c *subcommands.Commander, leading int) string {
 	b := &bytes.Buffer{}
-	w := tabwriter.NewWriter(b, 2, 8, 2, '\t', 0)
+	w := tabwriter.NewWriter(b, 8, 0, 2, ' ', 0)
 	w.Write([]byte("\n"))
 	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
 		switch comm.Name() {
