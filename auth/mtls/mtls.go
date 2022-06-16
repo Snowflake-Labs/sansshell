@@ -106,13 +106,15 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 
 // Info -- see credentials.Info
 func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
-	w.checkRefresh()
+	// We have no way to process an error with this API
+	_ = w.checkRefresh()
 	return w.creds.Info()
 }
 
 // Clone -- see credentials.Clone
 func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
-	w.checkRefresh()
+	// We have no way to process an error with this API
+	_ = w.checkRefresh()
 	wrapped := &WrappedTransportCredentials{
 		creds:      w.creds.Clone(),
 		loaderName: w.loaderName,

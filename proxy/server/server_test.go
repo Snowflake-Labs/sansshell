@@ -51,7 +51,7 @@ func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[stri
 	go func() {
 		// Don't care about errors here as they might come on shutdown and we
 		// can't log through t at that point anyways.
-		grpcServer.Serve(lis)
+		_ = grpcServer.Serve(lis)
 	}()
 	t.Cleanup(func() {
 		grpcServer.Stop()

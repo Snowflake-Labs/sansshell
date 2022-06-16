@@ -152,9 +152,11 @@ func (e *EchoTestDataServer) TestServerStream(req *tdpb.TestRequest, stream tdpb
 		return errors.New("error")
 	}
 	for i := 0; i < 5; i++ {
-		stream.Send(&tdpb.TestResponse{
+		if err := stream.Send(&tdpb.TestResponse{
 			Output: fmt.Sprintf("%s %d %s", e.serverName, i, req.Input),
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -272,7 +274,7 @@ func StartTestDataServer(t *testing.T, serverName string) *bufconn.Listener {
 	go func() {
 		// Don't care about errors here as they might come on shutdown and we
 		// can't log through t at that point anyways.
-		rpcServer.Serve(lis)
+		_ = rpcServer.Serve(lis)
 	}()
 	t.Cleanup(func() {
 		rpcServer.Stop()

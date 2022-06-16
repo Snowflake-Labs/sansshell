@@ -312,7 +312,10 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		// We want this to still use the parser so move the string from --exec in as Args to the flagset
 		f = flag.NewFlagSet("", flag.ContinueOnError)
 		args := strings.Fields(r.exec)
-		f.Parse(args)
+		if err := f.Parse(args); err != nil {
+			fmt.Fprintf(os.Stderr, "command parse error: %v\n", err)
+			return subcommands.ExitFailure
+		}
 	}
 	c := setupFDBCLI(f)
 	args = append(args, r.req)

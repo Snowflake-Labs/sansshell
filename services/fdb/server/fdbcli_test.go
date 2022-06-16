@@ -40,7 +40,8 @@ type logDef struct {
 	perms    fs.FileMode
 }
 
-func fixupLogs(logs []captureLogs, def logDef) []captureLogs {
+func fixupLogs(t *testing.T, logs []captureLogs, def logDef) []captureLogs {
+	t.Helper()
 	// Replace each log with our own pattern instead and generate logs so the RPC
 	// can process them.
 	for i := range logs {
@@ -49,13 +50,16 @@ func fixupLogs(logs []captureLogs, def logDef) []captureLogs {
 		if logs[i].IsDir {
 			logs[i].Path = path.Join(def.basePath, def.subdir)
 			// Create one with a suffix and one without.
-			os.WriteFile(path.Join(logs[i].Path, "file"), def.contents, def.perms)
+			err := os.WriteFile(path.Join(logs[i].Path, "file"), def.contents, def.perms)
+			testutil.FatalOnErr("WriteFile", err, t)
 			if logs[i].Suffix != "" {
-				os.WriteFile(path.Join(logs[i].Path, "file"+logs[i].Suffix), def.contents, def.perms)
+				err = os.WriteFile(path.Join(logs[i].Path, "file"+logs[i].Suffix), def.contents, def.perms)
+				testutil.FatalOnErr("WriteFile", err, t)
 			}
 			continue
 		}
-		os.WriteFile(fp, def.contents, def.perms)
+		err := os.WriteFile(fp, def.contents, def.perms)
+		testutil.FatalOnErr("WriteFile", err, t)
 	}
 	return logs
 }
@@ -2363,7 +2367,7 @@ func TestFDBCLI(t *testing.T) {
 
 			generateFDBCLIArgs = func(req *pb.FDBCLIRequest) ([]string, []captureLogs, error) {
 				generatedOpts, logs, err = origGen(req)
-				logs = fixupLogs(logs, logDef{
+				logs = fixupLogs(t, logs, logDef{
 					basePath: temp,
 					subdir:   tc.subdir,
 					contents: contents,

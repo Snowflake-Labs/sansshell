@@ -214,7 +214,8 @@ func TestTail(t *testing.T) {
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("can't create tmpfile", err, t)
 	data := "Some data\n"
-	f1.WriteString(data)
+	_, err = f1.WriteString(data)
+	testutil.FatalOnErr("WriteString", err, t)
 	name := f1.Name()
 	err = f1.Close()
 	testutil.FatalOnErr("closing file", err, t)
@@ -522,7 +523,8 @@ func TestSetFileAttributes(t *testing.T) {
 	// Construct a directory with no perms. We'll put
 	// a file in there which should make chmod fail on it.
 	badDir := filepath.Join(t.TempDir(), "/foo")
-	os.Mkdir(badDir, fs.ModePerm)
+	err = os.Mkdir(badDir, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
 	f2, err := os.CreateTemp(badDir, "testfile.*")
 	testutil.FatalOnErr("os.CreateTemp", err, t)
 	err = unix.Chmod(badDir, 0)
@@ -562,7 +564,8 @@ func TestSetFileAttributes(t *testing.T) {
 		chown = savedChown
 		changeImmutableOS = savedChangeImmutableOS
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
-		unix.Chmod(badDir, uint32(fs.ModePerm))
+		err = unix.Chmod(badDir, uint32(fs.ModePerm))
+		testutil.FatalOnErr("Chmod", err, t)
 	})
 
 	nobody, err := user.Lookup("nobody")
@@ -912,7 +915,8 @@ func TestList(t *testing.T) {
 	// Construct a directory with no perms. We should be able
 	// to stat this but then fail to readdir on it.
 	badDir := filepath.Join(t.TempDir(), "/foo")
-	os.Mkdir(badDir, 0)
+	err = os.Mkdir(badDir, 0)
+	testutil.FatalOnErr("Mkdir", err, t)
 
 	origOsStat := osStat
 
@@ -1709,7 +1713,8 @@ func TestRm(t *testing.T) {
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
-		unix.Chmod(badDir, uint32(fs.ModePerm))
+		err = unix.Chmod(badDir, uint32(fs.ModePerm))
+		testutil.FatalOnErr("Chmod", err, t)
 	})
 
 	for _, tc := range []struct {
@@ -1762,7 +1767,8 @@ func TestRmdir(t *testing.T) {
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
-		unix.Chmod(badDir, uint32(fs.ModePerm))
+		err = unix.Chmod(badDir, uint32(fs.ModePerm))
+		testutil.FatalOnErr("Chmod", err, t)
 	})
 
 	for _, tc := range []struct {
@@ -1810,7 +1816,8 @@ func TestRename(t *testing.T) {
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
-		unix.Chmod(badDir, uint32(fs.ModePerm))
+		err = unix.Chmod(badDir, uint32(fs.ModePerm))
+		testutil.FatalOnErr("Chmod", err, t)
 	})
 
 	for _, tc := range []struct {
@@ -1858,10 +1865,11 @@ func TestRename(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			os.WriteFile(path.Join(temp, "file"), []byte("contents"), 0644)
+			err := os.WriteFile(path.Join(temp, "file"), []byte("contents"), 0644)
+			testutil.FatalOnErr("WriteFile", err, t)
 			defer os.Remove(path.Join(temp, "file"))
 			client := pb.NewLocalFileClient(conn)
-			_, err := client.Rename(ctx, tc.req)
+			_, err = client.Rename(ctx, tc.req)
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
 			if tc.wantErr {
 				return

@@ -45,7 +45,9 @@ func SetupSubpackage(name string, f *flag.FlagSet) *subcommands.Commander {
 func GenerateSynopsis(c *subcommands.Commander, leading int) string {
 	b := &bytes.Buffer{}
 	w := tabwriter.NewWriter(b, 2, 8, 2, '\t', 0)
-	w.Write([]byte("\n"))
+	if _, err := w.Write([]byte("\n")); err != nil {
+		panic(fmt.Sprintf("buffer write failed: %v", err))
+	}
 	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
 		switch comm.Name() {
 		case "help", "flags", "commands":
