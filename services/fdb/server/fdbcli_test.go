@@ -40,7 +40,7 @@ type logDef struct {
 	perms    fs.FileMode
 }
 
-func fixupLogs(logs []captureLogs, def logDef) []captureLogs {
+func fixupLogs(logs []captureLogs, def logDef) ([]captureLogs, error) {
 	// Replace each log with our own pattern instead and generate logs so the RPC
 	// can process them.
 	for i := range logs {
@@ -49,15 +49,21 @@ func fixupLogs(logs []captureLogs, def logDef) []captureLogs {
 		if logs[i].IsDir {
 			logs[i].Path = path.Join(def.basePath, def.subdir)
 			// Create one with a suffix and one without.
-			os.WriteFile(path.Join(logs[i].Path, "file"), def.contents, def.perms)
+			if err := os.WriteFile(path.Join(logs[i].Path, "file"), def.contents, def.perms); err != nil {
+				return nil, err
+			}
 			if logs[i].Suffix != "" {
-				os.WriteFile(path.Join(logs[i].Path, "file"+logs[i].Suffix), def.contents, def.perms)
+				if err := os.WriteFile(path.Join(logs[i].Path, "file"+logs[i].Suffix), def.contents, def.perms); err != nil {
+					return nil, err
+				}
 			}
 			continue
 		}
-		os.WriteFile(fp, def.contents, def.perms)
+		if err := os.WriteFile(fp, def.contents, def.perms); err != nil {
+			return nil, err
+		}
 	}
-	return logs
+	return logs, nil
 }
 
 func TestFDBCLI(t *testing.T) {
@@ -3578,12 +3584,19 @@ func TestFDBCLI(t *testing.T) {
 
 			generateFDBCLIArgs = func(req *pb.FDBCLIRequest) ([]string, []captureLogs, error) {
 				generatedOpts, logs, err = origGen(req)
-				logs = fixupLogs(logs, logDef{
+				var logErr error
+				logs, logErr = fixupLogs(logs, logDef{
 					basePath: temp,
 					subdir:   tc.subdir,
 					contents: contents,
 					perms:    tc.perms,
 				})
+				if logErr != nil {
+					// Can't error out here since this is executing in the server thread and that won't
+					// roll up to our test thread.
+					t.Logf("error from fixupLogs: %v", logErr)
+					err = logErr
+				}
 				if tc.ignoreOpts {
 					return []string{tc.bin}, logs, err
 				}

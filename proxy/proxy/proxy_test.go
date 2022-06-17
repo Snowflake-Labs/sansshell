@@ -52,7 +52,7 @@ func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufco
 	go func() {
 		// Don't care about errors here as they might come on shutdown and we
 		// can't log through t at that point anyways.
-		grpcServer.Serve(lis)
+		_ = grpcServer.Serve(lis)
 	}()
 	t.Cleanup(func() {
 		grpcServer.Stop()
@@ -388,7 +388,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 	go func() {
 		// Don't care about errors here as they might come on shutdown and we
 		// can't log through t at that point anyways.
-		grpcServer.Serve(lis)
+		_ = grpcServer.Serve(lis)
 	}()
 	t.Cleanup(func() {
 		grpcServer.Stop()
@@ -404,7 +404,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StartStreamReply{
 				StartStreamReply: &proxypb.StartStreamReply{
 					Target: req.GetStartStream().Target,
@@ -415,6 +415,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	replyWithBadNonce := func(stream proxypb.Proxy_ProxyServer) error {
@@ -422,7 +423,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StartStreamReply{
 				StartStreamReply: &proxypb.StartStreamReply{
 					Target: req.GetStartStream().Target,
@@ -433,19 +434,22 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	setupThenError := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
 		return errors.New("error")
 	}
 	setupThenEOF := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
@@ -457,9 +461,10 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_ServerClose{},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	nonMatchingData := func(stream proxypb.Proxy_ProxyServer) error {
@@ -467,20 +472,22 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StartStreamReply{
 				StartStreamReply: &proxypb.StartStreamReply{},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	dataPacketWrongID := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StreamData{
 				StreamData: &proxypb.StreamData{
 					StreamIds: []uint64{1},
@@ -488,21 +495,25 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
+
 		return nil
 	}
 	closePacketWrongID := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_ServerClose{
 				ServerClose: &proxypb.ServerClose{
 					StreamIds: []uint64{1},
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	closePacketNil := func(stream proxypb.Proxy_ProxyServer) error {
@@ -510,11 +521,12 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_ServerClose{
 				ServerClose: nil,
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	closeInvalidStream := func(stream proxypb.Proxy_ProxyServer) error {
@@ -522,7 +534,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_ServerClose{
 				ServerClose: &proxypb.ServerClose{
 					StreamIds: []uint64{1},
@@ -533,6 +545,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	badReply := func(stream proxypb.Proxy_ProxyServer) error {
@@ -540,23 +553,27 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StreamData{},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	badPacket := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{})
+		err = stream.Send(&proxypb.ProxyReply{})
+		tu.FatalOnErr("stream.Send", err, t)
 		return nil
 	}
 	validReplyThenCloseError := func(stream proxypb.Proxy_ProxyServer) error {
-		channelSetup(stream)
-		_, err := stream.Recv()
+		err := channelSetup(stream)
+		tu.FatalOnErr("channelSetup", err, t)
+		_, err = stream.Recv()
 		if err != nil {
 			return err
 		}
@@ -564,7 +581,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		stream.Send(&proxypb.ProxyReply{
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_StreamData{
 				StreamData: &proxypb.StreamData{
 					Payload:   payload,
@@ -572,7 +589,8 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
-		stream.Send(&proxypb.ProxyReply{
+		tu.FatalOnErr("stream.Send", err, t)
+		err = stream.Send(&proxypb.ProxyReply{
 			Reply: &proxypb.ProxyReply_ServerClose{
 				ServerClose: &proxypb.ServerClose{
 					Status: &proxypb.Status{
@@ -582,6 +600,7 @@ func TestWithFakeServerForErrors(t *testing.T) {
 				},
 			},
 		})
+		tu.FatalOnErr("stream.Send", err, t)
 		_, err = stream.Recv()
 		if err != nil {
 			return err

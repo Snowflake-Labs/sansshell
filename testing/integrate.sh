@@ -334,28 +334,15 @@ if [ "${broke}" == "true" ]; then
 fi
 
 echo
-echo "Checking formatting"
-echo
-find . -type f -name \*.go | xargs gofmt -l >${LOGS}/gofmt
-check_status $? /dev/null gofmt
-if [ -s ${LOGS}/gofmt ]; then
-  cat ${LOGS}/gofmt
-  echo
-  check_status 1 /dev/null "Files listed need gofmt run on them"
-fi
-
-echo
 echo "Checking with go vet"
 echo
 go vet ./...
 check_status $? /dev/null go vet
 
-# Build everything (this won't rebuild the binaries but the generate will)
+# Build binaries including support for version checks
 echo
 echo "Running builds"
 echo
-go build -v ./...
-check_status $? /dev/null build
 go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2p" -o bin/proxy-server ./cmd/proxy-server
 check_status $? /dev/null build proxy
 go build -o bin/sanssh ./cmd/sanssh

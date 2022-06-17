@@ -170,7 +170,8 @@ func TestTargetStreamAddNonBlocking(t *testing.T) {
 		MethodName: "/Testdata.TestService/TestUnary",
 	}
 	go func() {
-		ss.Add(ctx, req, replyChan, nil)
+		err := ss.Add(ctx, req, replyChan, nil)
+		testutil.FatalOnErr("ss.Add", err, t)
 		close(doneChan)
 	}()
 	select {

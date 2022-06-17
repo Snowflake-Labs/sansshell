@@ -1,0 +1,7 @@
+{
+    "go.coverOnSave": true,
+    "go.coverOnSingleTest": true,
+    "go.coverOnSingleTestFile": true,
+    "go.lintOnSave": "workspace",
+    "go.lintTool": "golangci-lint",
+}

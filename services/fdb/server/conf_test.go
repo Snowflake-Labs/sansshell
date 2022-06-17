@@ -77,9 +77,10 @@ func TestWrite(t *testing.T) {
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("can't create tmpfile", err, t)
-	f1.WriteString(`
+	_, err = f1.WriteString(`
 [general]
 cluster_file = /etc/foundatindb/fdb.cluster`)
+	testutil.FatalOnErr("WriteString", err, t)
 	name := f1.Name()
 	err = f1.Close()
 	testutil.FatalOnErr("can't close tmpfile", err, t)
@@ -143,7 +144,7 @@ func TestDelete(t *testing.T) {
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("can't create tmpfile", err, t)
-	f1.WriteString(`[general]
+	_, err = f1.WriteString(`[general]
 cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
@@ -151,6 +152,7 @@ bar = baz
 
 [foo.2]
 bar = baz`)
+	testutil.FatalOnErr("WriteString", err, t)
 	name := f1.Name()
 	err = f1.Close()
 	testutil.FatalOnErr("can't close tmpfile", err, t)

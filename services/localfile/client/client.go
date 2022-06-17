@@ -249,27 +249,35 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	waitc := make(chan error)
+	waitc := make(chan subcommands.ExitStatus)
 
 	// Push all the sends into their own routine so we're receiving replies
 	// at the same time. This way we can't deadlock if we send so much this
 	// blocks which makes the server block its sends waiting on us to receive.
 	go func() {
-		var err error
+		e := subcommands.ExitSuccess
 		for _, filename := range f.Args() {
-			if err = stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
+			if err := stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
 				// Emit this to every error file as it's not specific to a given target.
 				for _, e := range state.Err {
 					fmt.Fprintf(e, "All targets - stat: send error: %v\n", err)
 				}
+				e = subcommands.ExitFailure
 				break
 			}
 		}
 		// Close the sending stream to notify the server not to expect any further data.
 		// We'll process below but this let's the server politely know we're done sending
 		// as otherwise it'll see this as a cancellation.
-		stream.CloseSend()
-		waitc <- err
+		if err := stream.CloseSend(); err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "All targets - stat: CloseSend error: %v\n", err)
+			}
+			e = subcommands.ExitFailure
+		}
+
+		waitc <- e
 		close(waitc)
 	}()
 
@@ -314,10 +322,8 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			fmt.Fprintf(state.Out[r.Index], outTmpl, r.Resp.Filename, r.Resp.Size, fileTypeString(mode), mode, r.Resp.Uid, r.Resp.Gid, r.Resp.Modtime.AsTime(), r.Resp.Immutable)
 		}
 	}
-	for err := range waitc {
-		if err != nil {
-			retCode = subcommands.ExitFailure
-		}
+	for e := range waitc {
+		retCode = e
 	}
 
 	return retCode
@@ -398,27 +404,34 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		return subcommands.ExitFailure
 	}
 
-	waitc := make(chan error)
+	waitc := make(chan subcommands.ExitStatus)
 
 	// Push all the sends into their own routine so we're receiving replies
 	// at the same time. This way we can't deadlock if we send so much this
 	// blocks which makes the server block its sends waiting on us to receive.
 	go func() {
-		var err error
+		e := subcommands.ExitSuccess
 		for _, filename := range f.Args() {
-			if err = stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
+			if err := stream.Send(&pb.SumRequest{Filename: filename, SumType: sumType}); err != nil {
 				// Emit this to every error file as it's not specific to a given target.
 				for _, e := range state.Err {
 					fmt.Fprintf(e, "All targets - sum: send error: %v\n", err)
 				}
+				e = subcommands.ExitFailure
 				break
 			}
 		}
 		// Close the sending stream to notify the server not to expect any further data.
 		// We'll process below but this let's the server politely know we're done sending
 		// as otherwise it'll see this as a cancellation.
-		stream.CloseSend()
-		waitc <- err
+		if err := stream.CloseSend(); err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "All targets - sum: CloseSend error: %v\n", err)
+			}
+			e = subcommands.ExitFailure
+		}
+		waitc <- e
 		close(waitc)
 	}()
 
@@ -462,10 +475,8 @@ func (s *sumCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 	}
 
-	for err := range waitc {
-		if err != nil {
-			retCode = subcommands.ExitFailure
-		}
+	for e := range waitc {
+		retCode = e
 	}
 	return retCode
 }

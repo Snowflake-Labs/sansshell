@@ -82,7 +82,7 @@ func (w *WrappedTransportCredentials) checkRefresh() error {
 		}
 		w.creds = newCreds
 		if w.serverName != "" {
-			return w.creds.OverrideServerName(w.serverName)
+			return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
 		}
 	}
 	return nil
@@ -106,13 +106,15 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 
 // Info -- see credentials.Info
 func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
-	w.checkRefresh()
+	// We have no way to process an error with this API
+	_ = w.checkRefresh()
 	return w.creds.Info()
 }
 
 // Clone -- see credentials.Clone
 func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
-	w.checkRefresh()
+	// We have no way to process an error with this API
+	_ = w.checkRefresh()
 	wrapped := &WrappedTransportCredentials{
 		creds:      w.creds.Clone(),
 		loaderName: w.loaderName,
@@ -128,7 +130,7 @@ func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
 		return err
 	}
 	w.serverName = s
-	return w.creds.OverrideServerName(s)
+	return w.creds.OverrideServerName(s) //nolint:staticcheck
 }
 
 // Register associates a name with a mechanism for loading credentials.

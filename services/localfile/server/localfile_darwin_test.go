@@ -43,7 +43,8 @@ func TestTailDarwin(t *testing.T) {
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("can't create tmpfile", err, t)
 	data := "Some data\n"
-	f1.WriteString(data)
+	_, err = f1.WriteString(data)
+	testutil.FatalOnErr("WriteString", err, t)
 	name := f1.Name()
 	err = f1.Close()
 	testutil.FatalOnErr("closing file", err, t)

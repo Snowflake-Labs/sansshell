@@ -1,0 +1,9 @@
+repos:
+- repo: https://github.com/dnephin/pre-commit-golang
+  rev: v0.5.0
+  hooks:
+    - id: go-fmt
+    - id: golangci-lint
+      args: [--timeout=5m]
+    - id: go-build
+    - id: go-mod-tidy

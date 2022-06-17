@@ -133,7 +133,8 @@ func (s *simpleLoader) CertsRefreshed() bool {
 
 func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Server) {
 	t.Helper()
-	Register("refresh", &simpleLoader{name: "refresh"})
+	err := Register("refresh", &simpleLoader{name: "refresh"})
+	testutil.FatalOnErr("Register", err, t)
 	creds, err := LoadServerCredentials(context.Background(), "refresh")
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
@@ -193,10 +194,14 @@ func TestLoadRootOfTrust(t *testing.T) {
 
 func TestLoadClientServerCredentials(t *testing.T) {
 	unregisterAll()
-	Register("simple", &simpleLoader{name: "simple"})
-	Register("errorCA", &simpleLoader{name: "errorCA"})
-	Register("errorCert", &simpleLoader{name: "errorCert"})
-	Register("refresh", &simpleLoader{name: "refresh"})
+	err := Register("simple", &simpleLoader{name: "simple"})
+	testutil.FatalOnErr("Register", err, t)
+	err = Register("errorCA", &simpleLoader{name: "errorCA"})
+	testutil.FatalOnErr("Register", err, t)
+	err = Register("errorCert", &simpleLoader{name: "errorCert"})
+	testutil.FatalOnErr("Register", err, t)
+	err = Register("refresh", &simpleLoader{name: "refresh"})
+	testutil.FatalOnErr("Register", err, t)
 
 	for _, tc := range []struct {
 		name    string
@@ -232,12 +237,14 @@ func TestLoadClientServerCredentials(t *testing.T) {
 			server, err := LoadServerCredentials(context.Background(), tc.loader)
 			testutil.WantErr("server", err, tc.wantErr, t)
 			if !tc.wantErr {
-				server.OverrideServerName("server")
+				err = server.OverrideServerName("server") //nolint:staticcheck
+				testutil.FatalOnErr("OverrideServerName", err, t)
 			}
 			client, err := LoadClientCredentials(context.Background(), tc.loader)
 			testutil.WantErr("client", err, tc.wantErr, t)
 			if !tc.wantErr {
-				client.OverrideServerName("server")
+				err = client.OverrideServerName("server") //nolint:staticcheck
+				testutil.FatalOnErr("OverrideServerName", err, t)
 			}
 		})
 	}
@@ -247,10 +254,12 @@ func TestHealthCheck(t *testing.T) {
 	var err error
 	ctx := context.Background()
 	unregisterAll()
-	Register("refresh", &simpleLoader{name: "refresh"})
+	err = Register("refresh", &simpleLoader{name: "refresh"})
+	testutil.FatalOnErr("Register", err, t)
 	creds, err := LoadClientCredentials(ctx, "refresh")
-	creds.OverrideServerName("bufnet")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
+	err = creds.OverrideServerName("bufnet") //nolint:staticcheck
+	testutil.FatalOnErr("OverrideServerName", err, t)
 	for _, tc := range []struct {
 		name   string
 		policy string
@@ -279,6 +288,7 @@ func TestHealthCheck(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			unregisterAll()
 			l, s := serverWithPolicy(t, tc.policy)
 			conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer(l)), grpc.WithTransportCredentials(creds))
 			testutil.FatalOnErr("Failed to dial bufnet", err, t)
