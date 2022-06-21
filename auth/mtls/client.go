@@ -49,6 +49,7 @@ func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.
 }
 
 func internalLoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	loader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
@@ -58,10 +59,12 @@ func internalLoadClientCredentials(ctx context.Context, loaderName string) (cred
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("loading new client cert")
 	cert, err := loader.LoadClientCertificate(ctx)
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("loaded new client cert", "error", err)
 	return NewClientCredentials(cert, pool), nil
 }
 
