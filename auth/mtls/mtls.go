@@ -67,7 +67,8 @@ type CredentialsLoader interface {
 }
 
 type WrappedTransportCredentials struct {
-	creds      credentials.TransportCredentials
+	mu         sync.Mutex
+	creds      credentials.TransportCredentials // GUARDED_BY(mu)
 	loaderName string
 	serverName string
 	mtlsLoader CredentialsLoader
@@ -83,6 +84,8 @@ func (w *WrappedTransportCredentials) checkRefresh() error {
 		if err != nil {
 			return err
 		}
+		w.mu.Lock()
+		defer w.mu.Unlock()
 		w.creds = newCreds
 		if w.serverName != "" {
 			return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
