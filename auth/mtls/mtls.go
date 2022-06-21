@@ -67,7 +67,14 @@ type CredentialsLoader interface {
 	CertsRefreshed() bool
 }
 
+// WrappedTransportCredentials wraps a credentials.TransportCredentials and
+// monitors any access to the underlying credentials are up to date by calling
+// CertsRefreshed before continuing.
 type WrappedTransportCredentials struct {
+	// The loaderName, mtlsLoader and loader function
+	// are only ever set on startup which is single threaded by definition so don't
+	// need mutex protection.
+
 	mu         sync.Mutex
 	creds      credentials.TransportCredentials // GUARDED_BY(mu)
 	loaderName string
@@ -104,6 +111,8 @@ func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s str
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.creds.ClientHandshake(ctx, s, n)
 }
 
@@ -112,6 +121,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.creds.ServerHandshake(n)
 }
 
@@ -119,6 +130,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 	// We have no way to process an error with this API
 	_ = w.checkRefresh()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.creds.Info()
 }
 
