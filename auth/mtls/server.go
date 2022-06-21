@@ -51,15 +51,18 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 func internalLoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	fmt.Printf("Loading creds for %s\n", loaderName)
 	loader, err := Loader(loaderName)
+	fmt.Printf("loader: %+v err: %v\n", loader, err)
 	if err != nil {
 		return nil, err
 	}
 
 	pool, err := loader.LoadClientCA(ctx)
+	fmt.Printf("pool: %+v err: %v\n", pool, err)
 	if err != nil {
 		return nil, err
 	}
 	cert, err := loader.LoadServerCertificate(ctx)
+	fmt.Printf("cert: %+v err: %v\n", cert, err)
 	if err != nil {
 		return nil, err
 	}
