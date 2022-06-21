@@ -24,6 +24,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -193,8 +194,11 @@ func TestLoadRootOfTrust(t *testing.T) {
 }
 
 func TestLoadClientServerCredentials(t *testing.T) {
+	l, _ := serverWithPolicy(t, allowPolicy)
+	c, err := l.Dial()
+	testutil.FatalOnErr("Dial", err, t)
 	unregisterAll()
-	err := Register("simple", &simpleLoader{name: "simple"})
+	err = Register("simple", &simpleLoader{name: "simple"})
 	testutil.FatalOnErr("Register", err, t)
 	err = Register("errorCA", &simpleLoader{name: "errorCA"})
 	testutil.FatalOnErr("Register", err, t)
@@ -245,6 +249,28 @@ func TestLoadClientServerCredentials(t *testing.T) {
 			if !tc.wantErr {
 				err = client.OverrideServerName("server") //nolint:staticcheck
 				testutil.FatalOnErr("OverrideServerName", err, t)
+			}
+
+			if !tc.wantErr {
+				// Now take the credentials and run them in parallel for the otherops
+				// to ensure tsan is happy with internal access and any races.
+				var wg sync.WaitGroup
+				for i := 1; i <= 10; i++ {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						_ = server.Clone()
+						_ = server.Info()
+						_, _, _ = server.ClientHandshake(context.Background(), "foo", c)
+						_, _, _ = server.ServerHandshake(c)
+						_ = client.Clone()
+						_ = client.Info()
+						_, _, _ = client.ClientHandshake(context.Background(), "foo", c)
+						_, _, _ = client.ServerHandshake(c)
+					}()
+				}
+
+				wg.Wait()
 			}
 		})
 	}

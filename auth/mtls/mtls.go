@@ -27,6 +27,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -66,20 +67,37 @@ type CredentialsLoader interface {
 	CertsRefreshed() bool
 }
 
+// WrappedTransportCredentials wraps a credentials.TransportCredentials and
+// monitors any access to the underlying credentials are up to date by calling
+// CertsRefreshed before continuing.
 type WrappedTransportCredentials struct {
-	creds      credentials.TransportCredentials
+	// The loaderName, mtlsLoader and loader function
+	// are only ever set on startup which is single threaded by definition so don't
+	// need mutex protection.
+
+	mu         sync.RWMutex
+	creds      credentials.TransportCredentials // GUARDED_BY(mu)
 	loaderName string
-	serverName string
+	serverName string // GUARDED_BY(mu)
 	mtlsLoader CredentialsLoader
 	loader     func(context.Context, string) (credentials.TransportCredentials, error)
+	logger     logr.Logger
 }
 
 func (w *WrappedTransportCredentials) checkRefresh() error {
 	if w.mtlsLoader.CertsRefreshed() {
-		newCreds, err := w.loader(context.Background(), w.loaderName)
+		w.logger.Info("certs need reloading")
+		// At least provide the logger we saved before we call into the loader
+		// or we lose all debugability.
+		ctx := context.Background()
+		ctx = logr.NewContext(ctx, w.logger)
+		newCreds, err := w.loader(ctx, w.loaderName)
+		w.logger.V(1).Info("newCreds", "creds", newCreds, "error", err)
 		if err != nil {
 			return err
 		}
+		w.mu.Lock()
+		defer w.mu.Unlock()
 		w.creds = newCreds
 		if w.serverName != "" {
 			return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
@@ -93,6 +111,8 @@ func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s str
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.ClientHandshake(ctx, s, n)
 }
 
@@ -101,6 +121,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.ServerHandshake(n)
 }
 
@@ -108,6 +130,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 	// We have no way to process an error with this API
 	_ = w.checkRefresh()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.Info()
 }
 
@@ -115,11 +139,14 @@ func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
 	// We have no way to process an error with this API
 	_ = w.checkRefresh()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	wrapped := &WrappedTransportCredentials{
 		creds:      w.creds.Clone(),
 		loaderName: w.loaderName,
 		loader:     w.loader,
 		mtlsLoader: w.mtlsLoader,
+		logger:     w.logger,
 	}
 	return wrapped
 }
@@ -129,6 +156,8 @@ func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
 	if err := w.checkRefresh(); err != nil {
 		return err
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.serverName = s
 	return w.creds.OverrideServerName(s) //nolint:staticcheck
 }
