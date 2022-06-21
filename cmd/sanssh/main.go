@@ -71,7 +71,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	targetsFile      = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
 	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
 	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
-	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
+	verbosity        = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
