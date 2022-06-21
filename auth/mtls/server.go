@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -31,6 +32,7 @@ import (
 // as the TransportCredentials returned are a WrappedTransportCredentials which
 // will check at call time if new certificates are available.
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	mtlsLoader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
@@ -44,14 +46,13 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 		loaderName: loaderName,
 		loader:     internalLoadServerCredentials,
 		mtlsLoader: mtlsLoader,
+		logger:     logger,
 	}
 	return wrapped, nil
 }
 
 func internalLoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
-	fmt.Printf("Loading creds for %s\n", loaderName)
 	loader, err := Loader(loaderName)
-	fmt.Printf("loader: %+v err: %v\n", loader, err)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +63,6 @@ func internalLoadServerCredentials(ctx context.Context, loaderName string) (cred
 		return nil, err
 	}
 	cert, err := loader.LoadServerCertificate(ctx)
-	c, _ := x509.ParseCertificate(cert.Certificate[0])
-	fmt.Printf("cert: %+v err: %v\n", c, err)
 	if err != nil {
 		return nil, err
 	}

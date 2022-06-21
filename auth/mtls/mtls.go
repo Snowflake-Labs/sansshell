@@ -27,6 +27,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -70,17 +71,21 @@ type WrappedTransportCredentials struct {
 	mu         sync.Mutex
 	creds      credentials.TransportCredentials // GUARDED_BY(mu)
 	loaderName string
-	serverName string
+	serverName string // GUARDED_BY(mu)
 	mtlsLoader CredentialsLoader
 	loader     func(context.Context, string) (credentials.TransportCredentials, error)
+	logger     logr.Logger
 }
 
 func (w *WrappedTransportCredentials) checkRefresh() error {
 	if w.mtlsLoader.CertsRefreshed() {
-		fmt.Println("certs need reloading")
-		fmt.Printf("Wrapped: %+v\n", w)
-		newCreds, err := w.loader(context.Background(), w.loaderName)
-		fmt.Printf("newCreds: %+v err: %v\n", newCreds, err)
+		w.logger.Info("certs need reloading", "Wrapped: %+v\n", w)
+		// At least provide the logger we saved before we call into the loader
+		// or we lose all debugability.
+		ctx := context.Background()
+		ctx = logr.NewContext(ctx, w.logger)
+		newCreds, err := w.loader(ctx, w.loaderName)
+		w.logger.Info("newCreds", "creds", newCreds, "error", err)
 		if err != nil {
 			return err
 		}
@@ -121,11 +126,14 @@ func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 func (w *WrappedTransportCredentials) Clone() credentials.TransportCredentials {
 	// We have no way to process an error with this API
 	_ = w.checkRefresh()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	wrapped := &WrappedTransportCredentials{
 		creds:      w.creds.Clone(),
 		loaderName: w.loaderName,
 		loader:     w.loader,
 		mtlsLoader: w.mtlsLoader,
+		logger:     w.logger,
 	}
 	return wrapped
 }
@@ -135,6 +143,8 @@ func (w *WrappedTransportCredentials) OverrideServerName(s string) error {
 	if err := w.checkRefresh(); err != nil {
 		return err
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.serverName = s
 	return w.creds.OverrideServerName(s) //nolint:staticcheck
 }

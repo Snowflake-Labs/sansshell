@@ -22,12 +22,14 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
 )
 
 // LoadClientCredentials returns transport credentials for SansShell clients,
 // based on the provided `loaderName`
 func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	logger := logr.FromContextOrDiscard(ctx)
 	mtlsLoader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
@@ -41,6 +43,7 @@ func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.
 		loaderName: loaderName,
 		loader:     internalLoadClientCredentials,
 		mtlsLoader: mtlsLoader,
+		logger:     logger,
 	}
 	return wrapped, nil
 }
