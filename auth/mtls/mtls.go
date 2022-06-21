@@ -76,6 +76,8 @@ type WrappedTransportCredentials struct {
 
 func (w *WrappedTransportCredentials) checkRefresh() error {
 	if w.mtlsLoader.CertsRefreshed() {
+		fmt.Println("certs need reloading")
+		fmt.Printf("Wrapped: %+v\n", w)
 		newCreds, err := w.loader(context.Background(), w.loaderName)
 		if err != nil {
 			return err
