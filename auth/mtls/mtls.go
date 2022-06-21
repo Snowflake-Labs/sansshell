@@ -75,7 +75,7 @@ type WrappedTransportCredentials struct {
 	// are only ever set on startup which is single threaded by definition so don't
 	// need mutex protection.
 
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	creds      credentials.TransportCredentials // GUARDED_BY(mu)
 	loaderName string
 	serverName string // GUARDED_BY(mu)
@@ -111,8 +111,8 @@ func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s str
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.ClientHandshake(ctx, s, n)
 }
 
@@ -121,8 +121,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 	if err := w.checkRefresh(); err != nil {
 		return nil, nil, err
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.ServerHandshake(n)
 }
 
@@ -130,8 +130,8 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 func (w *WrappedTransportCredentials) Info() credentials.ProtocolInfo {
 	// We have no way to process an error with this API
 	_ = w.checkRefresh()
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	return w.creds.Info()
 }
 
