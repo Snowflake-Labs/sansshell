@@ -79,6 +79,7 @@ func (w *WrappedTransportCredentials) checkRefresh() error {
 		fmt.Println("certs need reloading")
 		fmt.Printf("Wrapped: %+v\n", w)
 		newCreds, err := w.loader(context.Background(), w.loaderName)
+		fmt.Printf("newCreds: %+v err: %v\n", newCreds, err)
 		if err != nil {
 			return err
 		}
