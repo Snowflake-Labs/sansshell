@@ -21,7 +21,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -146,14 +145,13 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	for _, o := range opts {
 		if err := o.apply(rs); err != nil {
-			fmt.Fprintf(os.Stderr, "error applying option: %v\n", err)
+			rs.logger.Error(err, "error applying option")
 			os.Exit(1)
 		}
 	}
 
 	creds, err := mtls.LoadServerCredentials(ctx, rs.credSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading server creds: %v\n", err)
 		rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
 		os.Exit(1)
 	}
@@ -177,7 +175,6 @@ func Run(ctx context.Context, opts ...Option) {
 		serverOpts = append(serverOpts, server.WithStreamInterceptor(s))
 	}
 	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
-		fmt.Fprintf(os.Stderr, "Can't serve: %v\n", err)
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
 		os.Exit(1)
 	}

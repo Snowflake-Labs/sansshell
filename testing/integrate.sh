@@ -343,11 +343,11 @@ check_status $? /dev/null go vet
 echo
 echo "Running builds"
 echo
-go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2p" -o bin/proxy-server ./cmd/proxy-server
+go build -tags integration -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2p" -o bin/proxy-server ./cmd/proxy-server
 check_status $? /dev/null build proxy
-go build -o bin/sanssh ./cmd/sanssh
+go build -tags integration -o bin/sanssh ./cmd/sanssh
 check_status $? /dev/null build sanssh
-go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2s" -o bin/sansshell-server ./cmd/sansshell-server
+go build -tags integration -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=2s" -o bin/sansshell-server ./cmd/sansshell-server
 check_status $? /dev/null build server
 
 # Test everything
