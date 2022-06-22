@@ -22,7 +22,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"os"
 
@@ -184,27 +183,24 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	for _, o := range opts {
 		if err := o.apply(rs); err != nil {
-			fmt.Fprintf(os.Stderr, "error applying option: %v\n", err)
+			rs.logger.Error(err, "error applying option")
 			os.Exit(1)
 		}
 	}
 
 	serverCreds, err := mtls.LoadServerCredentials(ctx, rs.credSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading server creds: %v\n", err)
 		rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
 		os.Exit(1)
 	}
 	clientCreds, err := mtls.LoadClientCredentials(ctx, rs.credSource)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading client creds: %v\n", err)
 		rs.logger.Error(err, "mtls.LoadClientCredentials", "credsource", rs.credSource)
 		os.Exit(1)
 	}
 
 	lis, err := net.Listen("tcp", rs.hostport)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "can't listen: %v\n", err)
 		rs.logger.Error(err, "net.Listen", "hostport", rs.hostport)
 		os.Exit(1)
 	}
@@ -221,7 +217,6 @@ func Run(ctx context.Context, opts ...Option) {
 	h = append(h, rs.authzHooks...)
 	authz, err := rpcauth.NewWithPolicy(ctx, rs.policy, h...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "can't setup authz: %v\n", err)
 		rs.logger.Error(err, "rpcauth.NewWithPolicy")
 		os.Exit(1)
 	}
@@ -230,7 +225,6 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.clientPolicy != "" {
 		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.clientPolicy)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "can't install client policy: %v\n", err)
 			rs.logger.Error(err, "client rpcauth.NewWithPolicy")
 			os.Exit(1)
 		}
@@ -289,7 +283,6 @@ func Run(ctx context.Context, opts ...Option) {
 	rs.logger.Info("serving..")
 
 	if err := g.Serve(lis); err != nil {
-		fmt.Fprintf(os.Stderr, "Can't serve: %v\n", err)
 		rs.logger.Error(err, "grpcserver.Serve()")
 		os.Exit(1)
 	}
