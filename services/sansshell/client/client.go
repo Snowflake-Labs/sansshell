@@ -275,6 +275,7 @@ func (g *proxyVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	state := args[0].(*util.ExecuteState)
 	if len(state.Out) > 1 {
 		fmt.Fprintln(os.Stderr, "can't call proxy version with multiple targets")
+		return subcommands.ExitFailure
 	}
 	// Get a real connection to the proxy
 	c := pb.NewStateClient(state.Conn.Proxy())
