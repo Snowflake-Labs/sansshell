@@ -110,7 +110,7 @@ func (s *cserver) Register(gs *grpc.Server) {
 }
 
 func init() {
-	services.RegisterSansShellService(&server{})
+	services.RegisterSansShellService(&cserver{})
 }
 
 func atomicSaveTo(f *ini.File, filename string) error {
