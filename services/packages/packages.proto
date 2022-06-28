@@ -44,6 +44,8 @@ message InstallRequest {
   string version = 3;
   // If set enables this repo for resolving package/version.
   string repo = 4;
+  // If set disables this repo before resolving package/version.
+  string disable_repo = 5;
 }
 
 message InstallReply { string debug_output = 1; }
@@ -57,6 +59,8 @@ message UpdateRequest {
   string new_version = 4;
   // If set enables this repo as well for resolving package/version.
   string repo = 5;
+  // If set disables this repo before resolving package/version.
+  string disable_repo = 6;
 }
 
 message UpdateReply { string debug_output = 1; }
