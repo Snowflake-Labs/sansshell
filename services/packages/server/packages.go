@@ -49,10 +49,18 @@ func genCmd(p pb.PackageSystem, m map[pb.PackageSystem][]string) ([]string, erro
 	return out, nil
 }
 
+type repoData struct {
+	enable  string
+	disable string
+}
+
 // Optionally add the repo arg and then append the full package name to the list.
-func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version string, repo string) []string {
-	if repo != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
-		out = append(out, fmt.Sprintf("--enablerepo=%s", repo))
+func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version string, repos *repoData) []string {
+	if repos.enable != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
+		out = append(out, fmt.Sprintf("--enablerepo=%s", repos.enable))
+	}
+	if repos.disable != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
+		out = append(out, fmt.Sprintf("--disablerepo=%s", repos.disable))
 	}
 	// Tack the fully qualfied package name on. This assumes any vetting of args has already been done.
 	out = append(out, fmt.Sprintf("%s-%s", name, version))
@@ -74,7 +82,11 @@ var (
 		if err != nil {
 			return nil, err
 		}
-		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.Version, p.Repo), nil
+		repos := &repoData{
+			enable:  p.Repo,
+			disable: p.DisableRepo,
+		}
+		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.Version, repos), nil
 	}
 
 	generateValidate = func(p *pb.UpdateRequest) ([]string, error) {
@@ -88,7 +100,7 @@ var (
 		if err != nil {
 			return nil, err
 		}
-		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.OldVersion, ""), nil
+		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.OldVersion, &repoData{}), nil
 	}
 
 	generateUpdate = func(p *pb.UpdateRequest) ([]string, error) {
@@ -102,7 +114,11 @@ var (
 		if err != nil {
 			return nil, err
 		}
-		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.NewVersion, p.Repo), nil
+		repos := &repoData{
+			enable:  p.Repo,
+			disable: p.DisableRepo,
+		}
+		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.NewVersion, repos), nil
 	}
 
 	generateListInstalled = func(p pb.PackageSystem) ([]string, error) {
