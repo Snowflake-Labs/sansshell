@@ -91,7 +91,7 @@ type installCmd struct {
 func (*installCmd) Name() string     { return "install" }
 func (*installCmd) Synopsis() string { return "Install a new package" }
 func (*installCmd) Usage() string {
-	return `install:
+	return `install [--package_system=P] --name=X --version=Y [--repo=Z]:
   Install a new package on the remote machine.
 `
 }
@@ -107,6 +107,15 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	ps, err := flagToType(i.packageSystem)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", i.packageSystem)
+		return subcommands.ExitFailure
+	}
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
+	if i.name == "" || i.version == "" {
+		fmt.Fprintln(os.Stderr, "Both --name and --version must be filled in")
 		return subcommands.ExitFailure
 	}
 
@@ -152,7 +161,7 @@ type updateCmd struct {
 func (*updateCmd) Name() string     { return "update" }
 func (*updateCmd) Synopsis() string { return "Update an existing package" }
 func (*updateCmd) Usage() string {
-	return `update:
+	return `update [--package_system=P] --name=X --old_version=Y --new_version=Z [--repo=A]:
   Update a package on the remote machine. The package must already be installed at a known version.
 `
 }
@@ -166,6 +175,10 @@ func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
 	if u.name == "" || u.oldVersion == "" || u.newVersion == "" {
 		fmt.Fprintln(os.Stderr, "--name, --old_version and --new_version must be supplied")
 		return subcommands.ExitFailure
@@ -216,7 +229,7 @@ type listCmd struct {
 func (*listCmd) Name() string     { return "list" }
 func (*listCmd) Synopsis() string { return "List installed packages" }
 func (*listCmd) Usage() string {
-	return `list:
+	return `list [--package_system=P]:
   List the installed packages on the remote machine.
 `
 }
@@ -226,6 +239,10 @@ func (l *listCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
 	ps, err := flagToType(l.packageSystem)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", l.packageSystem)
@@ -270,7 +287,7 @@ type repoListCmd struct {
 func (*repoListCmd) Name() string     { return "repolist" }
 func (*repoListCmd) Synopsis() string { return "List repos defined on machine" }
 func (*repoListCmd) Usage() string {
-	return `repolist:
+	return `repolist [--package_system=P]:
   List the repos defined on the remote machine.
 `
 }
@@ -281,6 +298,10 @@ func (r *repoListCmd) SetFlags(f *flag.FlagSet) {
 }
 
 func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
 	ps, err := flagToType(r.packageSystem)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", r.packageSystem)
