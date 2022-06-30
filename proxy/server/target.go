@@ -212,7 +212,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			return err
 		}
 
-		// We've successfully connected and can replace the intial unconnected stream
+		// We've successfully connected and can replace the initial unconnected stream
 		// with the target stream.
 		s.setStream(grpcStream)
 
