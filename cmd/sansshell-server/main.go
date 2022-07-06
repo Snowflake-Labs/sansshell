@@ -31,6 +31,9 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	"google.golang.org/grpc"
+	channelz "google.golang.org/grpc/channelz/service"
+	"google.golang.org/grpc/reflection"
 
 	_ "gocloud.dev/blob/azureblob" // Pull in Azure blob support
 	_ "gocloud.dev/blob/fileblob"  // Pull in file blob support
@@ -137,5 +140,7 @@ func main() {
 		server.WithHostPort(*hostport),
 		server.WithPolicy(policy),
 		server.WithJustification(*justification),
+		server.WithAdditionalRPCService(func(s *grpc.Server) { reflection.Register(s) }),
+		server.WithAdditionalRPCService(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 	)
 }

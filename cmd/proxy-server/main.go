@@ -31,8 +31,12 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	"google.golang.org/grpc"
+	channelz "google.golang.org/grpc/channelz/service"
+	"google.golang.org/grpc/reflection"
 
 	// Import services here to make them proxy-able
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
@@ -101,6 +105,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Create a an instance of logging/version for the proxy server itself.
+	srv := &ss.Server{}
+
 	server.Run(ctx,
 		server.WithLogger(logger),
 		server.WithPolicy(policy),
@@ -108,5 +115,8 @@ func main() {
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
 		server.WithJustification(*justification),
+		server.WithAdditionalRPCService(func(s *grpc.Server) { reflection.Register(s) }),
+		server.WithAdditionalRPCService(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
+		server.WithAdditionalRPCService(srv.Register),
 	)
 }
