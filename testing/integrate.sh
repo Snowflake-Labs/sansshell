@@ -968,7 +968,7 @@ for i in "${LOGS}"/parallel/*; do
 done
 
 errors=$(cat "${LOGS}"/parallel/*.error | wc -l)
-healthy=$(cat "${LOGS}"/parallel/? | grep -c -h -E "Target.*healthy")
+healthy=$(cat "${LOGS}"/parallel/* | grep -c -h -E "Target.*healthy")
 if [ "${errors}" != 2 ]; then
   check_status 1 /dev/null 2 "targets should be unhealthy for various reasons"
 fi
