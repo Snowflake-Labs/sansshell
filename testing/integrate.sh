@@ -608,10 +608,16 @@ run_a_test false 1 exec run /usr/bin/echo Hello World
 mkdir -p ${LOGS}/exec-testdir
 ${SANSSH_PROXY} ${MULTI_TARGETS} --output-dir=${LOGS}/exec-testdir exec run /bin/sh -c "echo foo >&2"
 check_status $? /dev/null exec failed emitting to stderr
-if [ -s ${LOGS}/exec-testdir/0 ] || [ -s ${LOGS}/exec-testdir/1 ]; then
+if [ ! -f ${LOGS}/exec-testdir/0-localhost ] || [ ! -f ${LOGS}/exec-testdir/1-localhost:50042 ]; then
+  check_status 1 /dev/null exec output files do not exist
+fi
+if [ -s ${LOGS}/exec-testdir/0-localhost ] || [ -s ${LOGS}/exec-testdir/1-localhost:50042 ]; then
   check_status 1 /dev/null exec output appeared in normal output files in ${LOGS}/exec-testdir
 fi
-if [ ! -s ${LOGS}/exec-testdir/0.error ] || [ ! -s ${LOGS}/exec-testdir/1.error ]; then
+if [ ! -f ${LOGS}/exec-testdir/0-localhost.error ] || [ ! -f ${LOGS}/exec-testdir/1-localhost:50042.error ]; then
+  check_status 1 /dev/null exec error output files do not exist
+fi
+if [ ! -s ${LOGS}/exec-testdir/0-localhost.error ] || [ ! -s ${LOGS}/exec-testdir/1-localhost:50042.error ]; then
   check_status 1 /dev/null exec error output did not appear in ${LOGS}/exec-testdir error files
 fi
 
