@@ -380,6 +380,7 @@ func (r *fdbCLICmd) runFDBCLI(ctx context.Context, state *util.ExecuteState) sub
 
 	retCode := subcommands.ExitSuccess
 	openFiles := make(map[string]*os.File)
+	targetsDone := make(map[int]bool)
 	for {
 		resp, err := stream.Recv()
 		if err == io.EOF {
@@ -387,34 +388,49 @@ func (r *fdbCLICmd) runFDBCLI(ctx context.Context, state *util.ExecuteState) sub
 		}
 		if err != nil {
 			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "Stream error: %v\n", err)
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "Stream error: %v\n", err)
+				}
 			}
 			retCode = subcommands.ExitFailure
 			break
 		}
 		for _, r := range resp {
-			if r.Error != nil {
+			if r.Error != nil && r.Error != io.EOF {
 				fmt.Fprintf(state.Err[r.Index], "fdbcli error: %v\n", r.Error)
+				targetsDone[r.Index] = true
 				// If any target had errors it needs to be reported for that target but we still
 				// need to process responses off the channel. Final return code though should
 				// indicate something failed.
 				retCode = subcommands.ExitFailure
 				continue
 			}
-			switch t := r.Resp.Response.(type) {
-			case *pb.FDBCLIResponse_Output:
-				fmt.Fprintf(state.Out[r.Index], "%s", t.Output.Stdout)
-				fmt.Fprintf(state.Err[r.Index], "%s", t.Output.Stderr)
-				// If it was non-zero we should exit non-zero
-				if t.Output.RetCode != 0 {
-					retCode = subcommands.ExitFailure
-				}
-			case *pb.FDBCLIResponse_Log:
-				retCode, openFiles = processLog(state, r.Index, t.Log, openFiles)
-				if retCode == subcommands.ExitSuccess {
-					if _, err := openFiles[t.Log.Filename].Write(t.Log.Contents); err != nil {
-						fmt.Fprintf(state.Err[r.Index], "error writing to logfile %s: %v\n", t.Log.Filename, err)
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			// If we haven't previously had a problem keep writing. Otherwise we drop this and just keep processing.
+			if !targetsDone[r.Index] {
+				switch t := r.Resp.Response.(type) {
+				case *pb.FDBCLIResponse_Output:
+					fmt.Fprintf(state.Out[r.Index], "%s", t.Output.Stdout)
+					fmt.Fprintf(state.Err[r.Index], "%s", t.Output.Stderr)
+					// If it was non-zero we should exit non-zero
+					if t.Output.RetCode != 0 {
+						retCode = subcommands.ExitFailure
+					}
+				case *pb.FDBCLIResponse_Log:
+					retCode, openFiles = processLog(state, r.Index, t.Log, openFiles)
+					if retCode == subcommands.ExitSuccess {
+						if _, err := openFiles[t.Log.Filename].Write(t.Log.Contents); err != nil {
+							fmt.Fprintf(state.Err[r.Index], "error writing to logfile %s: %v\n", t.Log.Filename, err)
+						}
 					}
 				}
 			}
