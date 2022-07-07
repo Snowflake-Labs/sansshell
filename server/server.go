@@ -109,10 +109,9 @@ func WithStreamInterceptor(stream grpc.StreamServerInterceptor) Option {
 	})
 }
 
-// WithAdditionalRPCService adds additional registration functions for RPC services
-// to be done before starting the server. The services listed from services.ListServices() are
-// always registered.
-func WithAdditionalRPCService(s func(*grpc.Server)) Option {
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
 	return optionFunc(func(r *serveSetup) error {
 		r.services = append(r.services, s)
 		return nil

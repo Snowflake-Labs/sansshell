@@ -138,10 +138,9 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	})
 }
 
-// WithAdditionalRPCService adds additional registration functions for RPC services
-// to be done before starting the sansshell server. The services registered via blank imports
-// are always registered.
-func WithAdditionalRPCService(s func(*grpc.Server)) Option {
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
 	return optionFunc(func(r *runState) error {
 		r.services = append(r.services, s)
 		return nil
@@ -186,7 +185,7 @@ func Run(ctx context.Context, opts ...Option) {
 		serverOpts = append(serverOpts, server.WithStreamInterceptor(s))
 	}
 	for _, s := range rs.services {
-		serverOpts = append(serverOpts, server.WithAdditionalRPCService(s))
+		serverOpts = append(serverOpts, server.WithRawServerOption(s))
 	}
 	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)

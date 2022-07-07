@@ -172,7 +172,9 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	})
 }
 
-func WithAdditionalRPCService(s func(*grpc.Server)) Option {
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
 	return optionFunc(func(r *runState) error {
 		r.services = append(r.services, s)
 		return nil

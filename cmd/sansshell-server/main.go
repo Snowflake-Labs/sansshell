@@ -140,7 +140,7 @@ func main() {
 		server.WithHostPort(*hostport),
 		server.WithPolicy(policy),
 		server.WithJustification(*justification),
-		server.WithAdditionalRPCService(func(s *grpc.Server) { reflection.Register(s) }),
-		server.WithAdditionalRPCService(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
+		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
+		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 	)
 }
