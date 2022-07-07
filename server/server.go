@@ -25,9 +25,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
-	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/reflection"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -49,6 +47,7 @@ type serveSetup struct {
 	authzHooks         []rpcauth.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
+	services           []func(*grpc.Server)
 }
 
 type Option interface {
@@ -106,6 +105,15 @@ func WithUnaryInterceptor(unary grpc.UnaryServerInterceptor) Option {
 func WithStreamInterceptor(stream grpc.StreamServerInterceptor) Option {
 	return optionFunc(func(s *serveSetup) error {
 		s.streamInterceptors = append(s.streamInterceptors, stream)
+		return nil
+	})
+}
+
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
+	return optionFunc(func(r *serveSetup) error {
+		r.services = append(r.services, s)
 		return nil
 	})
 }
@@ -172,12 +180,19 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 		grpc.ChainUnaryInterceptor(unary...),
 		grpc.ChainStreamInterceptor(streaming...),
 	}
-	s := grpc.NewServer(serverOpts...)
-	reflection.Register(s)
-	channelz.RegisterChannelzServiceToServer(s)
 
+	s := grpc.NewServer(serverOpts...)
+
+	// Always register anything which is in the list as it was pulled in there
+	// via import and intended.
 	for _, sansShellService := range services.ListServices() {
 		sansShellService.Register(s)
 	}
+
+	// Now loop over any other registered and call them.
+	for _, srv := range ss.services {
+		srv(s)
+	}
+
 	return s, nil
 }

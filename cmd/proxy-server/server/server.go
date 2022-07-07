@@ -28,12 +28,9 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
-	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
-	channelz "google.golang.org/grpc/channelz/service"
-	"google.golang.org/grpc/reflection"
 )
 
 // runState encapsulates all of the variable state needed
@@ -52,6 +49,7 @@ type runState struct {
 	streamInterceptors       []grpc.StreamServerInterceptor
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	authzHooks               []rpcauth.RPCAuthzHook
+	services                 []func(*grpc.Server)
 }
 
 type Option interface {
@@ -174,6 +172,15 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	})
 }
 
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
+	return optionFunc(func(r *runState) error {
+		r.services = append(r.services, s)
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -273,12 +280,14 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	g := grpc.NewServer(serverOpts...)
 
+	// We always register the proxy.
 	server.Register(g)
-	reflection.Register(g)
-	channelz.RegisterChannelzServiceToServer(g)
-	// Create a an instance of logging for the proxy server itself.
-	s := &ss.Server{}
-	s.Register(g)
+
+	// Now loop over any other registered and call them.
+	for _, s := range rs.services {
+		s(g)
+	}
+
 	rs.logger.Info("initialized proxy service", "credsource", rs.credSource)
 	rs.logger.Info("serving..")
 

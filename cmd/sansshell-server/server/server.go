@@ -43,6 +43,7 @@ type runState struct {
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
 	authzHooks         []rpcauth.RPCAuthzHook
+	services           []func(*grpc.Server)
 }
 
 type Option interface {
@@ -137,6 +138,15 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	})
 }
 
+// WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
+// registration functions for RPC services to be done before starting the server.
+func WithRawServerOption(s func(*grpc.Server)) Option {
+	return optionFunc(func(r *runState) error {
+		r.services = append(r.services, s)
+		return nil
+	})
+}
+
 // Run takes the given context and RunState and starts up a sansshell server.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, opts ...Option) {
@@ -173,6 +183,9 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	for _, s := range rs.streamInterceptors {
 		serverOpts = append(serverOpts, server.WithStreamInterceptor(s))
+	}
+	for _, s := range rs.services {
+		serverOpts = append(serverOpts, server.WithRawServerOption(s))
 	}
 	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
