@@ -108,9 +108,11 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "%s: is not a directory\n", rs.OutputsDir)
 			os.Exit(1)
 		}
-		// Generate outputs from output-dir and the target count.
-		for i := range rs.Targets {
-			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d", i)))
+		// Generate outputs from output-dir and the target count. The final filename is $output-dir/NUM-TARGET
+		// as often one wants to correlate specific output back to a given target and there's no guarentee the
+		// output will have this information in it. So instead supply it as metadata via the filename.
+		for i, t := range rs.Targets {
+			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d-%s", i, t)))
 		}
 		dir = rs.OutputsDir
 	} else {
