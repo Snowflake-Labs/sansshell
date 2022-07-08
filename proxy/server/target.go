@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -273,9 +274,11 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				s.CloseWith(err)
 				return err
 			}
-			streamPeerInfo := s.PeerAuthInfo()
-			authinput.Host = &rpcauth.HostAuthInput{
-				Net: streamPeerInfo.Net,
+			peerInfo, ok := peer.FromContext(grpcStream.Context())
+			if ok {
+				authinput.Host = &rpcauth.HostAuthInput{
+					Net: rpcauth.NetInputFromAddr(peerInfo.Addr),
+				}
 			}
 			s.logger.Info("authinput", "input", authinput)
 			// If authz fails, close immediately with an error
