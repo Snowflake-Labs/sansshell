@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"sync"
 	"time"
 
@@ -206,7 +207,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			s.cancelFunc()
 			return err
 		}
-		grpcStream, err := s.grpcConn.NewStream(context.Background(), s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
+		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
@@ -222,8 +223,6 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			for {
 				msg := s.serviceMethod.NewReply()
 				err := grpcStream.RecvMsg(msg)
-				peerInfo, _ := peer.FromContext(grpcStream.Context())
-				s.logger.Info("rec peer", "info", peerInfo.Addr.String())
 				if err == io.EOF {
 					return nil
 				}
@@ -276,11 +275,14 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				s.CloseWith(err)
 				return err
 			}
-			peerInfo, ok := peer.FromContext(grpcStream.Context())
-			s.logger.Info("peer", "info", peerInfo.Addr.String())
-			if ok {
+			addr, err := net.ResolveTCPAddr("tcp", s.target)
+			if err != nil {
 				authinput.Host = &rpcauth.HostAuthInput{
-					Net: rpcauth.NetInputFromAddr(peerInfo.Addr),
+					Net: &rpcauth.NetAuthInput{
+						Network: "tcp",
+						Address: addr.IP.String(),
+						Port:    fmt.Sprintf("%d", addr.Port),
+					},
 				}
 			}
 			s.logger.Info("authinput", "input", authinput)
