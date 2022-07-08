@@ -206,7 +206,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			s.cancelFunc()
 			return err
 		}
-		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
+		grpcStream, err := s.grpcConn.NewStream(context.Background(), s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
