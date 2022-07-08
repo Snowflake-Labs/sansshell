@@ -275,6 +275,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				return err
 			}
 			peerInfo, ok := peer.FromContext(grpcStream.Context())
+			s.logger.Info("peer", "info", peerInfo.Addr.String())
 			if ok {
 				authinput.Host = &rpcauth.HostAuthInput{
 					Net: rpcauth.NetInputFromAddr(peerInfo.Addr),
