@@ -275,7 +275,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				return err
 			}
 			addr, err := net.ResolveTCPAddr("tcp", s.target)
-			if err != nil {
+			if err == nil {
 				authinput.Host = &rpcauth.HostAuthInput{
 					Net: &rpcauth.NetAuthInput{
 						Network: "tcp",
