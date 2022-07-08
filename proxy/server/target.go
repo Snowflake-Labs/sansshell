@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -302,8 +301,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			if err == io.EOF {
 				return nil
 			}
-			peerInfo, _ = peer.FromContext(grpcStream.Context())
-			s.logger.Info("peer2", "info", peerInfo.Addr.String())
+
 			// Otherwise, this is the 'final' error. The underlying
 			// stream will be torn down automatically, but we
 			// can return the error here, where it will be returned
