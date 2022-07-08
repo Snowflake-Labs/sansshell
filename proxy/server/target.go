@@ -222,6 +222,8 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			for {
 				msg := s.serviceMethod.NewReply()
 				err := grpcStream.RecvMsg(msg)
+				peerInfo, _ := peer.FromContext(grpcStream.Context())
+				s.logger.Info("rec peer", "info", peerInfo.Addr.String())
 				if err == io.EOF {
 					return nil
 				}
