@@ -298,6 +298,8 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			if err == io.EOF {
 				return nil
 			}
+			peerInfo, _ = peer.FromContext(grpcStream.Context())
+			s.logger.Info("peer2", "info", peerInfo.Addr.String())
 			// Otherwise, this is the 'final' error. The underlying
 			// stream will be torn down automatically, but we
 			// can return the error here, where it will be returned
