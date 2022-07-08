@@ -277,7 +277,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			authinput.Host = &rpcauth.HostAuthInput{
 				Net: streamPeerInfo.Net,
 			}
-
+			s.logger.Info("authinput", "input", authinput)
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
 				s.CloseWith(err)
