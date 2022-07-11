@@ -278,7 +278,8 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			s.logger.Info("Peer data", "peer", streamPeerInfo)
 			direct := grpcStream.Context()
 			p, _ := peer.FromContext(direct)
-			s.logger.Info("Direct peer", "peer", p)
+			s.logger.Info("Direct peer", "peer", p.Addr)
+			fmt.Printf("\n\nTypes: %T %+v\n\n", grpcStream, grpcStream)
 			authinput.Host = &rpcauth.HostAuthInput{
 				Net: streamPeerInfo.Net,
 			}
