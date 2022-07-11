@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -275,6 +276,9 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			}
 			streamPeerInfo := s.PeerAuthInfo()
 			s.logger.Info("Peer data", "peer", streamPeerInfo)
+			direct := grpcStream.Context()
+			p, _ := peer.FromContext(direct)
+			s.logger.Info("Direct peer", "peer", p)
 			authinput.Host = &rpcauth.HostAuthInput{
 				Net: streamPeerInfo.Net,
 			}
