@@ -274,6 +274,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				return err
 			}
 			streamPeerInfo := s.PeerAuthInfo()
+			s.logger.Info("Peer data", "peer", streamPeerInfo)
 			authinput.Host = &rpcauth.HostAuthInput{
 				Net: streamPeerInfo.Net,
 			}
