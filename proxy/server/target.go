@@ -274,6 +274,10 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				s.CloseWith(err)
 				return err
 			}
+
+			// The returned peer info from context (either ours or the stream)
+			// is always the remote peer calling into the proxy. So craft up the
+			// host information directly from the target we have.
 			addr, err := net.ResolveTCPAddr("tcp", s.target)
 			if err == nil {
 				authinput.Host = &rpcauth.HostAuthInput{
@@ -284,7 +288,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					},
 				}
 			}
-			s.logger.Info("authinput", "input", authinput)
+
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
 				s.CloseWith(err)
