@@ -68,7 +68,6 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 		}
 		return &loggedClientStream{
 			ClientStream: stream,
-			ctx:          logCtx,
 			logger:       l,
 		}, nil
 	}
@@ -107,13 +106,15 @@ func passAlongMetadata(ctx context.Context) context.Context {
 
 type loggedClientStream struct {
 	grpc.ClientStream
-	ctx    context.Context
 	logger logr.Logger
 }
 
 // See: grpc.ClientStream.Context()
 func (l *loggedClientStream) Context() context.Context {
-	return l.ctx
+	// Get the stream context and make sure our logger is attached.
+	ctx := l.ClientStream.Context()
+	ctx = logr.NewContext(ctx, l.logger)
+	return ctx
 }
 
 // See: grpc.ClientStream.SendMsg()
@@ -184,7 +185,6 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 		stream := &loggedStream{
 			ServerStream: ss,
 			logger:       l,
-			logCtx:       logr.NewContext(ss.Context(), l),
 		}
 		err := handler(srv, stream)
 		if err != nil {
@@ -198,11 +198,13 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 type loggedStream struct {
 	grpc.ServerStream
 	logger logr.Logger
-	logCtx context.Context
 }
 
 func (l *loggedStream) Context() context.Context {
-	return l.logCtx
+	// Get the stream context and make sure our logger is attached.
+	ctx := l.ServerStream.Context()
+	ctx = logr.NewContext(ctx, l.logger)
+	return ctx
 }
 
 func (l *loggedStream) SendMsg(m interface{}) error {
