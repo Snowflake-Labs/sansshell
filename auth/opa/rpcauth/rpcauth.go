@@ -19,6 +19,7 @@
 package rpcauth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -85,7 +86,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			if err != nil {
 				logger.V(2).Info("marshal", "can't marshal input", err)
 			} else {
-				logger.V(2).Info("evaluating authz policy", "input", b)
+				buf := &bytes.Buffer{}
+				buf.Write(b)
+				logger.V(2).Info("evaluating authz policy", "input", buf.String())
 			}
 		}
 	}
@@ -106,7 +109,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		if err != nil {
 			logger.V(1).Info("marshal", "can't marshal input", err)
 		} else {
-			logger.V(1).Info("evaluating authz policy post hooks", "input", b)
+			buf := &bytes.Buffer{}
+			buf.Write(b)
+			logger.V(1).Info("evaluating authz policy post hooks", "input", buf.String())
 		}
 	}
 	allowed, err := g.policy.Eval(ctx, input)
