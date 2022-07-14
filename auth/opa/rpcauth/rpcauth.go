@@ -85,7 +85,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			if err != nil {
 				logger.V(2).Info("marshal", "can't marshal input", err)
 			} else {
-				logger.V(2).Info("evaluating authz policy", "input", string(b))
+				logger.V(2).Info("evaluating authz policy", "input", b)
 			}
 		}
 	}
@@ -106,7 +106,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		if err != nil {
 			logger.V(1).Info("marshal", "can't marshal input", err)
 		} else {
-			logger.V(1).Info("evaluating authz policy post hooks", "input", string(b))
+			logger.V(1).Info("evaluating authz policy post hooks", "input", b)
 		}
 	}
 	allowed, err := g.policy.Eval(ctx, input)
