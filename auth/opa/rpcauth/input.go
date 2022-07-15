@@ -55,6 +55,33 @@ type RPCAuthInput struct {
 	Extensions json.RawMessage `json:"extensions"`
 }
 
+type RPCAuthInputForLogging struct {
+	Method      string         `json:"method"`
+	Message     string         `json:"message"`
+	MessageType string         `json:"type"`
+	Metadata    metadata.MD    `json:"metadata"`
+	Peer        *PeerAuthInput `json:"peer"`
+	Host        *HostAuthInput `json:"host"`
+	Extensions  string         `json:"extensions"`
+}
+
+func (r RPCAuthInput) MarshalLog() interface{} {
+	// Transform for logging by forcing the types
+	// for raw JSON into string. Otherwise logr
+	// will print them as strings of bytes. If we
+	// cast to string for the whole object then
+	// we end up with string escaping.
+	return RPCAuthInputForLogging{
+		Method:      r.Method,
+		Message:     string(r.Message),
+		MessageType: r.MessageType,
+		Metadata:    r.Metadata,
+		Peer:        r.Peer,
+		Host:        r.Host,
+		Extensions:  string(r.Extensions),
+	}
+}
+
 // PeerAuthInput contains policy-relevant information about an RPC peer.
 type PeerAuthInput struct {
 	// Network information about the peer

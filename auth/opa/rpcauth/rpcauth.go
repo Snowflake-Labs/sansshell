@@ -102,11 +102,11 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		}
 	}
 	if logger.V(1).Enabled() {
-		b, err := json.Marshal(input)
+		_, err := json.Marshal(input)
 		if err != nil {
 			logger.V(1).Info("marshal", "can't marshal input", err)
 		} else {
-			logger.V(1).Info("evaluating authz policy post hooks", "input", string(b))
+			logger.V(1).Info("evaluating authz policy post hooks", "input", input)
 		}
 	}
 	allowed, err := g.policy.Eval(ctx, input)
