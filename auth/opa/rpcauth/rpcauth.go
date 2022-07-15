@@ -88,7 +88,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			} else {
 				buf := &bytes.Buffer{}
 				buf.Write(b)
-				logger.V(2).Info("evaluating authz policy", "input", buf.String())
+				logger.V(2).Info("evaluating authz policy", "input", input)
 			}
 		}
 	}
@@ -111,7 +111,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		} else {
 			buf := &bytes.Buffer{}
 			buf.Write(b)
-			logger.V(1).Info("evaluating authz policy post hooks", "input", buf.String())
+			logger.V(1).Info("evaluating authz policy post hooks", "input", input)
 		}
 	}
 	allowed, err := g.policy.Eval(ctx, input)
