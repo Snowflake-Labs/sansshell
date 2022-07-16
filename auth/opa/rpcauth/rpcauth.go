@@ -20,7 +20,6 @@ package rpcauth
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -81,12 +80,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	if input != nil {
 		if logger.V(2).Enabled() {
-			b, err := json.Marshal(input)
-			if err != nil {
-				logger.V(2).Info("marshal", "can't marshal input", err)
-			} else {
-				logger.V(2).Info("evaluating authz policy", "input", string(b))
-			}
+			logger.V(2).Info("evaluating authz policy", "input", input)
 		}
 	}
 	if input == nil {
@@ -102,12 +96,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		}
 	}
 	if logger.V(1).Enabled() {
-		_, err := json.Marshal(input)
-		if err != nil {
-			logger.V(1).Info("marshal", "can't marshal input", err)
-		} else {
-			logger.V(1).Info("evaluating authz policy post hooks", "input", input)
-		}
+		logger.V(1).Info("evaluating authz policy post hooks", "input", input)
 	}
 	allowed, err := g.policy.Eval(ctx, input)
 	if err != nil {

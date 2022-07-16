@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/x509/pkix"
 	"encoding/json"
+	"fmt"
 	"net"
+	"reflect"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -32,6 +34,7 @@ import (
 )
 
 // RPCAuthInput is used as policy input to validate Sansshell RPCs
+// NOTE: RPCAuthInputForLogging must be updated when this changes.
 type RPCAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
@@ -55,6 +58,10 @@ type RPCAuthInput struct {
 	Extensions json.RawMessage `json:"extensions"`
 }
 
+// RPCAuthInputForLogging is a mirror struct for RPCAuthInput which
+// translates the json.RawMessage fields into strings type wise.
+// This allows logging as human readable values vs [xx, yy, zz] style
+// NOTE: This must be updated when RPCAuthInput changes.
 type RPCAuthInputForLogging struct {
 	Method      string         `json:"method"`
 	Message     string         `json:"message"`
@@ -62,7 +69,7 @@ type RPCAuthInputForLogging struct {
 	Metadata    metadata.MD    `json:"metadata"`
 	Peer        *PeerAuthInput `json:"peer"`
 	Host        *HostAuthInput `json:"host"`
-	Extensions  string         `json:"extensions"`
+	Extensions  string         `json:"extensions,string"`
 }
 
 func (r RPCAuthInput) MarshalLog() interface{} {
@@ -79,6 +86,26 @@ func (r RPCAuthInput) MarshalLog() interface{} {
 		Peer:        r.Peer,
 		Host:        r.Host,
 		Extensions:  string(r.Extensions),
+	}
+}
+
+func init() {
+	// Sanity check we didn't get the 2 structs out of sync.
+	r := reflect.TypeOf(RPCAuthInput{})
+	rl := reflect.TypeOf(RPCAuthInputForLogging{})
+
+	rFields := reflect.VisibleFields(r)
+	rlFields := reflect.VisibleFields(rl)
+	m := make(map[string]bool)
+	ml := make(map[string]bool)
+	for _, f := range rFields {
+		m[f.Name] = true
+	}
+	for _, f := range rlFields {
+		ml[f.Name] = true
+	}
+	if !reflect.DeepEqual(m, ml) {
+		panic(fmt.Sprintf("fields from RPCAuthInput (%v) do not match fields from RPCAuthInputForLogging (%v)", m, ml))
 	}
 }
 
