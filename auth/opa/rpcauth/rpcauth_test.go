@@ -141,7 +141,7 @@ func TestAuthzHook(t *testing.T) {
 			name:  "single hook, create allow",
 			input: &RPCAuthInput{},
 			hooks: []RPCAuthzHook{
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.MessageType = "Foo.BazRequest"
 					return nil
@@ -153,7 +153,7 @@ func TestAuthzHook(t *testing.T) {
 			name:  "extension hook",
 			input: &RPCAuthInput{},
 			hooks: []RPCAuthzHook{
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Extensions = extensions
 					return nil
 				}),
@@ -164,11 +164,11 @@ func TestAuthzHook(t *testing.T) {
 			name:  "multiple hooks, create allow",
 			input: &RPCAuthInput{},
 			hooks: []RPCAuthzHook{
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					return nil
 				}),
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.MessageType = "Foo.BazRequest"
 					return nil
 				}),
@@ -226,12 +226,12 @@ func TestAuthzHook(t *testing.T) {
 			name:  "hook ordering",
 			input: &RPCAuthInput{},
 			hooks: []RPCAuthzHook{
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.MessageType = "Foo.BarRequest"
 					return nil
 				}),
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.MessageType = "Foo.BazRequest"
 					return nil
 				}),
@@ -242,7 +242,7 @@ func TestAuthzHook(t *testing.T) {
 			name:  "synthesize data, allow",
 			input: &RPCAuthInput{Method: "/Foo.Bar/Foo"},
 			hooks: []RPCAuthzHook{
-				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					if input.Peer == nil {
 						input.Peer = &PeerAuthInput{
 							Principal: &PrincipalAuthInput{
@@ -321,7 +321,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &RPCAuthInput{Method: "/Some.Random/Method"},
 			// Set principal to admin if method = "/Some.Random/Method"
 			hooks: []RPCAuthzHook{
-				HookIf(RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				HookIf(RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Peer = &PeerAuthInput{
 						Principal: &PrincipalAuthInput{
 							ID: "admin@foo",
@@ -339,7 +339,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &RPCAuthInput{Method: "/Some.Other/Method"},
 			// Set principal to admin if method = "/Some.Random/Method"
 			hooks: []RPCAuthzHook{
-				HookIf(RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+				HookIf(RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Peer = &PeerAuthInput{
 						Principal: &PrincipalAuthInput{
 							ID: "admin@foo",
