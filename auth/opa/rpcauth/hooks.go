@@ -58,7 +58,7 @@ func (c *conditionalHook) Hook(ctx context.Context, input *RPCAuthInput) error {
 
 // HostNetHook returns an RPCAuthzHook that sets host networking information.
 func HostNetHook(addr net.Addr) RPCAuthzHook {
-	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 		if input.Host == nil {
 			input.Host = &HostAuthInput{}
 		}
@@ -82,7 +82,7 @@ var (
 // that validates if justification was included. If it is required and passes the optional validation function
 // it will return nil, otherwise an error.
 func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
-	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 		// See if we got any metadata and if it contains the justification
 		var j string
 		v := input.Metadata[ReqJustKey]
