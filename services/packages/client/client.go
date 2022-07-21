@@ -86,12 +86,13 @@ type installCmd struct {
 	name          string
 	version       string
 	repo          string
+	disable       string
 }
 
 func (*installCmd) Name() string     { return "install" }
 func (*installCmd) Synopsis() string { return "Install a new package" }
 func (*installCmd) Usage() string {
-	return `install [--package_system=P] --name=X --version=Y [--repo=Z]:
+	return `install [--package_system=P] --name=X --version=Y [--disablerepo=A] [--repo|enablerepo=Z]:
   Install a new package on the remote machine.
 `
 }
@@ -100,7 +101,9 @@ func (i *installCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&i.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&i.name, "name", "", "Name of package to install")
 	f.StringVar(&i.version, "version", "", "Version of package to install. For YUM this must be a full nevra version")
-	f.StringVar(&i.repo, "repo", "", "If set also enable this repo when resolving packages.")
+	f.StringVar(&i.repo, "repo", "", "If set also enables this repo when resolving packages.")
+	f.StringVar(&i.repo, "enablerepo", "", "If set also enables this repo when resolving packages.")
+	f.StringVar(&i.disable, "disablerepo", "", "If set also disables this repo when resolving packages.")
 }
 
 func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -127,6 +130,7 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		Name:          i.name,
 		Version:       i.version,
 		Repo:          i.repo,
+		DisableRepo:   i.disable,
 	}
 
 	resp, err := c.InstallOneMany(ctx, req)
@@ -156,12 +160,13 @@ type updateCmd struct {
 	oldVersion    string
 	newVersion    string
 	repo          string
+	disable       string
 }
 
 func (*updateCmd) Name() string     { return "update" }
 func (*updateCmd) Synopsis() string { return "Update an existing package" }
 func (*updateCmd) Usage() string {
-	return `update [--package_system=P] --name=X --old_version=Y --new_version=Z [--repo=A]:
+	return `update [--package_system=P] --name=X --old_version=Y --new_version=Z [--disablerepo=B] [--repo|enablerepo=A]:
   Update a package on the remote machine. The package must already be installed at a known version.
 `
 }
@@ -171,7 +176,9 @@ func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&u.name, "name", "", "Name of package to install")
 	f.StringVar(&u.oldVersion, "old_version", "", "Old version of package which must be on the system. For YUM this must be a full nevra version")
 	f.StringVar(&u.newVersion, "new_version", "", "New version of package to update. For YUM this must be a full nevra version")
-	f.StringVar(&u.repo, "repo", "", "If set also enable this repo when resolving packages.")
+	f.StringVar(&u.repo, "repo", "", "If set also enables this repo when resolving packages.")
+	f.StringVar(&u.repo, "enablerepo", "", "If set also enables this repo when resolving packages.")
+	f.StringVar(&u.disable, "disablerepo", "", "If set also disables this repo when resolving packages.")
 }
 
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -199,6 +206,7 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		OldVersion:    u.oldVersion,
 		NewVersion:    u.newVersion,
 		Repo:          u.repo,
+		DisableRepo:   u.disable,
 	}
 
 	resp, err := c.UpdateOneMany(ctx, req)
