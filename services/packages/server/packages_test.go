@@ -164,7 +164,7 @@ func TestInstall(t *testing.T) {
 	// Test 2: A clean install. Validate we got expected output back.
 	// This is assuming yum based installs for testing command builder.
 	YumBin = "yum"
-	wantCmdLine := fmt.Sprintf("%s install-nevra -y --enablerepo=somerepo --disablerepo=otherrepo package-1.2.3", YumBin)
+	wantCmdLine := fmt.Sprintf("%s install-nevra -y --disablerepo=otherrepo --enablerepo=somerepo package-1.2.3", YumBin)
 
 	resp, err := client.Install(ctx, req)
 	testutil.FatalOnErr("clean install request", err, t)
@@ -385,7 +385,7 @@ func TestUpdate(t *testing.T) {
 	// This is assuming yum based installs for testing command builder.
 	YumBin = "yum"
 	wantValidateCmdLine := fmt.Sprintf("%s list installed package-0:1-1.2.3", YumBin)
-	wantCmdLine := fmt.Sprintf("%s update-to -y --enablerepo=somerepo --disablerepo=otherrepo package-0:1-4.5.6", YumBin)
+	wantCmdLine := fmt.Sprintf("%s update-to -y --disablerepo=otherrepo --enablerepo=somerepo package-0:1-4.5.6", YumBin)
 
 	resp, err := client.Update(ctx, req)
 	testutil.FatalOnErr("clean update request", err, t)
