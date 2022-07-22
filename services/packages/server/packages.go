@@ -56,11 +56,12 @@ type repoData struct {
 
 // Optionally add the repo arg and then append the full package name to the list.
 func addRepoAndPackage(out []string, p pb.PackageSystem, name string, version string, repos *repoData) []string {
-	if repos.enable != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
-		out = append(out, fmt.Sprintf("--enablerepo=%s", repos.enable))
-	}
+	// Disable must go first since it'll over enable otherwise and leave no repos potentially
 	if repos.disable != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
 		out = append(out, fmt.Sprintf("--disablerepo=%s", repos.disable))
+	}
+	if repos.enable != "" && p == pb.PackageSystem_PACKAGE_SYSTEM_YUM {
+		out = append(out, fmt.Sprintf("--enablerepo=%s", repos.enable))
 	}
 	// Tack the fully qualfied package name on. This assumes any vetting of args has already been done.
 	out = append(out, fmt.Sprintf("%s-%s", name, version))
