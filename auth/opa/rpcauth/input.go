@@ -52,6 +52,10 @@ type RPCAuthInput struct {
 	// Information about the host serving the RPC.
 	Host *HostAuthInput `json:"host"`
 
+	// Whether this RPCAuthInput was generated via a proxy
+	// or directly in the RPC interceptor.
+	FromProxy bool `json:"from_proxy"`
+
 	// Implementation specific extensions.
 	Extensions json.RawMessage `json:"extensions"`
 }
