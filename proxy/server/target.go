@@ -279,7 +279,9 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				Cert:      streamPeerInfo.Cert,
 				Principal: streamPeerInfo.Principal,
 			}
-			authinput.FromProxy = true
+			authinput.Environment = &rpcauth.EnvironmentInput{
+				NonHostPolicyCheck: true,
+			}
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {

@@ -52,12 +52,20 @@ type RPCAuthInput struct {
 	// Information about the host serving the RPC.
 	Host *HostAuthInput `json:"host"`
 
-	// Whether this RPCAuthInput was generated via a proxy
-	// or directly in the RPC interceptor.
-	FromProxy bool `json:"from_proxy"`
+	// Information about the environment in which the policy evaluation is
+	// happening.
+	Environment *EnvironmentInput `json:"environment"`
 
 	// Implementation specific extensions.
 	Extensions json.RawMessage `json:"extensions"`
+}
+
+// EnvironmentInput contains information about the environment in which the policy evaluation is
+// happening.
+type EnvironmentInput struct {
+	// True if the policy evaluation is being performed by some entity other than the host
+	// (for example, policy checks performed by an authorizing proxy or other agent)
+	NonHostPolicyCheck bool `json:"non_host_policy_check"`
 }
 
 // PeerAuthInput contains policy-relevant information about an RPC peer.
