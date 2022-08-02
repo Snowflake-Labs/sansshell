@@ -229,7 +229,6 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 		opts = append(opts, util.EnvVar(e))
 	}
 
-	fmt.Printf("Execing: %q\n", command)
 	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
 	if err != nil {
 		return status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
