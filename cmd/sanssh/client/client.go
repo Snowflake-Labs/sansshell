@@ -103,6 +103,8 @@ func (p *prefixWriter) Write(b []byte) (n int, err error) {
 		b = b[:len(b)-1]
 	}
 	b = bytes.ReplaceAll(b, []byte{'\n'}, append(append([]byte{}, byte('\n')), p.prefix...))
+	// If start got set above we need to add back the newline we dropped so output looks correct.
+	// Thankfully b is now a new slice as Write() isn't supposed to directly modify the incoming one.
 	if p.start {
 		b = append(b, '\n')
 	}
