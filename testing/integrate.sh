@@ -598,6 +598,14 @@ ${SANSSH_PROXY} sansshell proxy-version >${LOGS}/version-proxy.log
 grep -E -q -e "Proxy version 2p" ${LOGS}/version-proxy.log
 check_status $? /dev/null cant find proxy version in logs
 
+echo "Checking prefix option functions"
+${SANSSH_PROXY} -h ${SINGLE_TARGET} file read /etc/hosts >&${LOGS}/prefix-test
+prefix_lines=$(grep -E -c -e '^0-localhost:50042: ' ${LOGS}/prefix-test)
+total_lines=$(wc -l /etc/hosts | awk '{print $1}')
+if [ "${prefix_lines}" != "${total_lines}" ]; then
+  check_status 1 "line count different for prefix check - prefix log ${LOGS}/prefix-test ${prefix_lines} vs /etc/hosts ${total_lines}"
+fi
+
 run_a_test false 1 sansshell get-verbosity
 
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/

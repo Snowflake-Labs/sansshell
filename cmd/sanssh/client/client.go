@@ -20,9 +20,11 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -64,11 +66,52 @@ type RunState struct {
 	Timeout time.Duration
 	// ClientPolicy is an optional OPA policy for determining outbound decisions.
 	ClientPolicy string
+	// PrefixOutput if true will prefix every line of output with '<index>-<target>: '
+	PrefixOutput bool
 }
 
 const (
 	defaultOutput = "-"
 )
+
+type prefixWriter struct {
+	prefix []byte
+	start  bool
+	dest   io.Writer
+}
+
+func (p *prefixWriter) Write(b []byte) (n int, err error) {
+	// Keep track of the size of the incoming buf as we'll print more
+	// but clients want to know we wrote what they asked for.
+	tot := len(b)
+
+	// If we just started emit a prefix
+	if p.start {
+		n, err = p.dest.Write(p.prefix)
+		if err != nil {
+			return n, err
+		}
+		p.start = false
+	}
+
+	// Find any newlines and augment them with the prefix appended onto them.
+
+	// If the last byte is a newline we don't want to add a prefix yet as this may be the end of output.
+	// Instead we'll remark start so the next one prints and remove the newline for now.
+	if n := bytes.LastIndex(b, []byte{'\n'}); n == len(b)-1 {
+		p.start = true
+		b = b[:len(b)-1]
+	}
+	b = bytes.ReplaceAll(b, []byte{'\n'}, append(append([]byte{}, byte('\n')), p.prefix...))
+	if p.start {
+		b = append(b, '\n')
+	}
+	n, err = p.dest.Write(b)
+	if err != nil {
+		return n, err
+	}
+	return tot, nil
+}
 
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -183,10 +226,22 @@ func Run(ctx context.Context, rs RunState) {
 		Conn: conn,
 		Dir:  dir,
 	}
-	for _, out := range rs.Outputs {
+
+	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {
+		if prefix {
+			dest = &prefixWriter{
+				start:  true,
+				dest:   dest,
+				prefix: []byte(fmt.Sprintf("%d-%s: ", i, rs.Targets[i])),
+			}
+		}
+		return dest
+	}
+
+	for i, out := range rs.Outputs {
 		if out == "-" {
-			state.Out = append(state.Out, os.Stdout)
-			state.Err = append(state.Err, os.Stderr)
+			state.Out = append(state.Out, makeWriter(rs.PrefixOutput, i, os.Stdout))
+			state.Err = append(state.Err, makeWriter(rs.PrefixOutput, i, os.Stderr))
 			continue
 		}
 		file, err := os.Create(out)
@@ -203,8 +258,8 @@ func Run(ctx context.Context, rs RunState) {
 		}
 		defer errF.Close()
 
-		state.Out = append(state.Out, file)
-		state.Err = append(state.Err, errF)
+		state.Out = append(state.Out, makeWriter(rs.PrefixOutput, i, file))
+		state.Err = append(state.Err, makeWriter(rs.PrefixOutput, i, errF))
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
