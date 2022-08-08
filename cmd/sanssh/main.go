@@ -72,6 +72,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
 	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
 	verbosity        = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
+	prefixHeader     = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceFlag
@@ -160,6 +161,7 @@ func main() {
 		CredSource:   *credSource,
 		Timeout:      *timeout,
 		ClientPolicy: clientPolicy,
+		PrefixOutput: *prefixHeader,
 	}
 	ctx := logr.NewContext(context.Background(), logger)
 
