@@ -236,6 +236,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	if run.Error != nil {
 		return status.Errorf(codes.Internal, "can't exec fdbcli: %v - %s", run.Error, run.Stderr)
 	}
+	if run.ExitCode != 0 {
+		return status.Errorf(codes.Internal, "fdbcli returned non-zero: %d - %v - %s", run.ExitCode, run.Error, run.Stderr)
+	}
 
 	// Make sure we always remove logs even if errors happen below.
 	defer func() {

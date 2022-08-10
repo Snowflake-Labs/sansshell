@@ -36,6 +36,9 @@ func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResp
 		return nil, err
 	}
 
+	if run.Error != nil {
+		return nil, run.Error
+	}
 	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: int32(run.ExitCode)}, nil
 }
 

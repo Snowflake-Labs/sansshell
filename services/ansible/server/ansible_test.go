@@ -103,7 +103,6 @@ func TestRun(t *testing.T) {
 		returnCodeNonZero bool
 		stdout            string
 		stderr            string
-		stderrNocmp       bool
 	}{
 		{
 			name:    "A non-absolute bin path",
@@ -116,11 +115,10 @@ func TestRun(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:              "A bad command that doesn't exec",
-			bin:               "/non-existant-command",
-			path:              path,
-			returnCodeNonZero: true,
-			stderrNocmp:       true, // can't guarentee error message cross platform
+			name:    "A bad command that doesn't exec",
+			bin:     "/non-existant-command",
+			path:    path,
+			wantErr: true,
 		},
 		{
 			name:              "A command that exits non-zero",
@@ -213,14 +211,8 @@ func TestRun(t *testing.T) {
 			if got, want := resp.Stdout, tc.stdout; got != want {
 				t.Fatalf("%s: Stdout doesn't match. Want %q Got %q", tc.name, want, got)
 			}
-			if !tc.stderrNocmp {
-				if got, want := resp.Stderr, tc.stderr; got != want {
-					t.Fatalf("%s: Stderr doesn't match. Want %q Got %q", tc.name, want, got)
-				}
-			} else {
-				if resp.Stderr == "" {
-					t.Fatalf("%s: got empty stderr when we should have something", tc.name)
-				}
+			if got, want := resp.Stderr, tc.stderr; got != want {
+				t.Fatalf("%s: Stderr doesn't match. Want %q Got %q", tc.name, want, got)
 			}
 		})
 	}

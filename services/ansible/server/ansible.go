@@ -108,6 +108,9 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	if err != nil {
 		return nil, err
 	}
+	if run.Error != nil {
+		return nil, err
+	}
 
 	return &pb.RunReply{
 		Stdout:     run.Stdout.String(),

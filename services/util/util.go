@@ -251,12 +251,10 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
 	// If this was an error it could be two different things. Just exiting non-zero results in an exec.ExitError
-	// so we can assume the command wrote anything relevant. If instead it's an error from exec itself it'll
-	// be a different type and we should emit that to the stderr output.
-	// i.e. simply getting an error from exec isn't an error from RunCommand itself so we need to wrap this.
+	// and we can suppress that as exit code is enough. Otherwise we leave run.Error for callers to use.
 	if run.Error != nil {
-		if _, ok := run.Error.(*exec.ExitError); !ok {
-			run.Stderr.buf.WriteString(fmt.Sprintf("%v\n", run.Error))
+		if _, ok := run.Error.(*exec.ExitError); ok {
+			run.Error = nil
 		}
 	}
 	if options.failOnStderr && len(run.Stderr.String()) != 0 {

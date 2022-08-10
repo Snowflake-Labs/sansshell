@@ -30,12 +30,12 @@ func TestRunCommand(t *testing.T) {
 		bin               string
 		args              []string
 		wantErr           bool
+		wantRunErr        bool
 		returnCodeNonZero bool
 		uid               uint32
 		gid               uint32
 		stdout            string
 		stderr            string
-		stderrNocmp       bool
 		stderrIsError     bool
 		env               []string
 	}{
@@ -53,7 +53,7 @@ func TestRunCommand(t *testing.T) {
 			name:              "non-existant binary",
 			bin:               "/non-existant-path",
 			returnCodeNonZero: true,
-			stderrNocmp:       true, // can't guarentee error message cross platform
+			wantRunErr:        true,
 		},
 		{
 			name:   "Command with stdout and stderr",
@@ -92,14 +92,14 @@ func TestRunCommand(t *testing.T) {
 			bin:               testutil.ResolvePath(t, "env"),
 			uid:               99,
 			returnCodeNonZero: true,
-			stderrNocmp:       true, // can't guarentee error message cross platform
+			wantRunErr:        true,
 		},
 		{
 			name:              "set gid (will fail)",
 			bin:               testutil.ResolvePath(t, "env"),
 			gid:               99,
 			returnCodeNonZero: true,
-			stderrNocmp:       true, // can't guarentee error message cross platform
+			wantRunErr:        true,
 		},
 	} {
 		tc := tc
@@ -129,17 +129,12 @@ func TestRunCommand(t *testing.T) {
 				}
 				return
 			}
+			testutil.WantErr(tc.name, run.Error, tc.wantRunErr, t)
 			if got, want := run.Stdout.String(), tc.stdout; got != want {
 				t.Fatalf("%s: Stdout differs. Want %q Got %q", tc.name, want, got)
 			}
-			if !tc.stderrNocmp {
-				if got, want := run.Stderr.String(), tc.stderr; got != want {
-					t.Fatalf("%s: Stderr differs. Want %q Got %q", tc.name, want, got)
-				}
-			} else {
-				if run.Stderr.String() == "" {
-					t.Fatalf("%s: got empty stderr when we should have something", tc.name)
-				}
+			if got, want := run.Stderr.String(), tc.stderr; got != want {
+				t.Fatalf("%s: Stderr differs. Want %q Got %q", tc.name, want, got)
 			}
 			if tc.returnCodeNonZero && run.ExitCode == 0 {
 				t.Fatalf("%s: Asked for non-zero return code and got 0", tc.name)
