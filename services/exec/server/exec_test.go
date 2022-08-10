@@ -84,9 +84,9 @@ func TestExec(t *testing.T) {
 			returnCodeNonZero: true,
 		},
 		{
-			name:              "Non-existant program",
-			bin:               "/something/non-existant",
-			returnCodeNonZero: true,
+			name:    "Non-existant program",
+			bin:     "/something/non-existant",
+			wantErr: true,
 		},
 		{
 			name:    "non-absolute path",

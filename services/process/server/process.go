@@ -119,8 +119,8 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 		return nil, err
 	}
 
-	if err := run.Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	entries, err := parser(run.Stdout)
@@ -177,8 +177,8 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		return nil, err
 	}
 
-	if err := run.Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	scanner := bufio.NewScanner(run.Stdout)
@@ -248,8 +248,8 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		return nil, err
 	}
 
-	if err := run.Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	scanner := bufio.NewScanner(run.Stdout)
@@ -429,8 +429,8 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		return err
 	}
 
-	if err := run.Error; err != nil {
-		return status.Errorf(codes.Internal, "command exited with error: %v\n%s", err, util.TrimString(run.Stderr.String()))
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		return status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	f, err := os.Open(file)

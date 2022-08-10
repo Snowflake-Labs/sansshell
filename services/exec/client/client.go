@@ -105,6 +105,9 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
 		}
 		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if r.Resp.RetCode != 0 {
+			returnCode = subcommands.ExitFailure
+		}
 	}
 	return returnCode
 }

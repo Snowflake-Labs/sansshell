@@ -115,10 +115,10 @@ func TestRun(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:              "A bad command that doesn't exec",
-			bin:               "/non-existant-command",
-			path:              path,
-			returnCodeNonZero: true,
+			name:    "A bad command that doesn't exec",
+			bin:     "/non-existant-command",
+			path:    path,
+			wantErr: true,
 		},
 		{
 			name:              "A command that exits non-zero",

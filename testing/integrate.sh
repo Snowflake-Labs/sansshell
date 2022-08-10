@@ -544,6 +544,7 @@ if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
+echo "Testing client policy"
 cat >${LOGS}/client-policy.rego <<EOF
 package sansshell.authz
 
@@ -554,7 +555,7 @@ allow {
   input.peer.cert.subject.organization[i] = "foo"
 }
 EOF
-${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate
+${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego --timeout=10s healthcheck validate
 if [ $? != 1 ]; then
   check_status 1 /dev/null policy check did not fail
 fi
@@ -611,6 +612,12 @@ run_a_test false 1 sansshell get-verbosity
 run_a_test false 50 ansible playbook --playbook=$PWD/services/ansible/server/testdata/test.yml --vars=path=/tmp,path2=/
 
 run_a_test false 1 exec run /usr/bin/echo Hello World
+
+# Test exec with a bad path doesn't work and emits errors
+echo "Checking exec fails for bad path"
+if ${SANSSH_PROXY} ${MULTI_TARGETS} exec run /bin/nosuchfile; then
+  check_status 1 /dev/null exec not erroring as expected
+fi
 
 # Test that outputs/errors go where expected and --output-dir works.
 mkdir -p ${LOGS}/exec-testdir

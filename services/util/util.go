@@ -250,7 +250,13 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()
 	run.ExitCode = cmd.ProcessState.ExitCode()
-
+	// If this was an error it could be two different things. Just exiting non-zero results in an exec.ExitError
+	// and we can suppress that as exit code is enough. Otherwise we leave run.Error for callers to use.
+	if run.Error != nil {
+		if _, ok := run.Error.(*exec.ExitError); ok {
+			run.Error = nil
+		}
+	}
 	if options.failOnStderr && len(run.Stderr.String()) != 0 {
 		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", TrimString(run.Stderr.String()))
 	}

@@ -129,6 +129,9 @@ func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 			continue
 		}
 		fmt.Fprintf(state.Out[r.Index], "Return code: %d\nStdout:%s\nStderr:%s\n", r.Resp.ReturnCode, r.Resp.Stdout, r.Resp.Stderr)
+		if r.Resp.ReturnCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
 	}
 	return retCode
 }

@@ -30,6 +30,7 @@ func TestRunCommand(t *testing.T) {
 		bin               string
 		args              []string
 		wantErr           bool
+		wantRunErr        bool
 		returnCodeNonZero bool
 		uid               uint32
 		gid               uint32
@@ -52,6 +53,7 @@ func TestRunCommand(t *testing.T) {
 			name:              "non-existant binary",
 			bin:               "/non-existant-path",
 			returnCodeNonZero: true,
+			wantRunErr:        true,
 		},
 		{
 			name:   "Command with stdout and stderr",
@@ -90,12 +92,14 @@ func TestRunCommand(t *testing.T) {
 			bin:               testutil.ResolvePath(t, "env"),
 			uid:               99,
 			returnCodeNonZero: true,
+			wantRunErr:        true,
 		},
 		{
 			name:              "set gid (will fail)",
 			bin:               testutil.ResolvePath(t, "env"),
 			gid:               99,
 			returnCodeNonZero: true,
+			wantRunErr:        true,
 		},
 	} {
 		tc := tc
@@ -125,6 +129,7 @@ func TestRunCommand(t *testing.T) {
 				}
 				return
 			}
+			testutil.WantErr(tc.name, run.Error, tc.wantRunErr, t)
 			if got, want := run.Stdout.String(), tc.stdout; got != want {
 				t.Fatalf("%s: Stdout differs. Want %q Got %q", tc.name, want, got)
 			}

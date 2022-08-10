@@ -36,15 +36,10 @@ func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResp
 		return nil, err
 	}
 
-	if err := run.Error; err != nil {
-		return &pb.ExecResponse{
-			Stdout:  run.Stdout.Bytes(),
-			Stderr:  run.Stderr.Bytes(),
-			RetCode: int32(run.ExitCode),
-		}, nil
+	if run.Error != nil {
+		return nil, run.Error
 	}
-
-	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: 0}, nil
+	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: int32(run.ExitCode)}, nil
 }
 
 // Register is called to expose this handler to the gRPC server
