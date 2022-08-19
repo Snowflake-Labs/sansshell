@@ -267,7 +267,10 @@ func Run(ctx context.Context, rs RunState) {
 	output := state.Out
 	errors := state.Err
 
-	batchCnt := len(rs.Targets) / rs.BatchSize
+	batchCnt := 0
+	if len(rs.Targets) > 0 {
+		batchCnt = len(rs.Targets) / rs.BatchSize
+	}
 	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
 		// Set up a connection to the sansshell-server (possibly via proxy).
