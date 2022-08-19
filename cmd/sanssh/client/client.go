@@ -68,6 +68,9 @@ type RunState struct {
 	ClientPolicy string
 	// PrefixOutput if true will prefix every line of output with '<index>-<target>: '
 	PrefixOutput bool
+	// BatchSize if non-zero will do the requested operation to the targets but in
+	// N calls to the proxy where N is the target list size divided by BatchSize.
+	BatchSize int
 }
 
 const (
@@ -212,21 +215,8 @@ func Run(ctx context.Context, rs RunState) {
 		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
 	}
 
-	// Set up a connection to the sansshell-server (possibly via proxy).
-	conn, err := proxy.Dial(rs.Proxy, rs.Targets, ops...)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) %v: %v\n", rs.Proxy, rs.Targets, err)
-		os.Exit(1)
-	}
-	defer func() {
-		if err := conn.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
-		}
-	}()
-
 	state := &util.ExecuteState{
-		Conn: conn,
-		Dir:  dir,
+		Dir: dir,
 	}
 
 	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {
@@ -267,6 +257,58 @@ func Run(ctx context.Context, rs RunState) {
 	ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
 	defer cancel()
 
+	exitCode := subcommands.ExitSuccess
+
+	// If there's no batch size set then it'll be the whole thing so we can use one loop below.
+	if rs.BatchSize == 0 {
+		rs.BatchSize = len(rs.Targets)
+	}
+	// Save original lists since we'll replace rs with sub slices
+	output := state.Out
+	errors := state.Err
+
+	batchCnt := len(rs.Targets) / rs.BatchSize
+	// How many batches? Integer math truncates so we have to do one more after for remainder.
+	for i := 0; i < batchCnt; i++ {
+		// Set up a connection to the sansshell-server (possibly via proxy).
+		conn, err := proxy.Dial(rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := conn.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
+			}
+		}()
+		state.Conn = conn
+		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
+		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
+		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
+			exitCode = subcommands.ExitFailure
+		}
+	}
+
+	// Remainder or the fall through case of no targets (i.e. a proxy command).
+	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
+		conn, err := proxy.Dial(rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := conn.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
+			}
+		}()
+		state.Conn = conn
+		state.Out = output[batchCnt*rs.BatchSize:]
+		state.Err = errors[batchCnt*rs.BatchSize:]
+		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
+			exitCode = subcommands.ExitFailure
+		}
+	}
+
 	// Invoke the subcommand, passing the dialed connection object
-	os.Exit(int(subcommands.Execute(ctx, state)))
+	os.Exit(int(exitCode))
 }

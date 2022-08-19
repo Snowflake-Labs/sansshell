@@ -509,7 +509,7 @@ fi
 SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
 SANSSH_NOPROXY="${SANSSH_NOPROXY_NO_JUSTIFY} --justification=yes"
 SANSSH_PROXY_NOPORT="${SANSSH_NOPROXY} --proxy=localhost"
-SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043"
+SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043 --batch-size=1"
 SINGLE_TARGET_NOPORT="--targets=localhost"
 SINGLE_TARGET="${SINGLE_TARGET_NOPORT}:50042"
 MULTI_TARGETS="--targets=localhost,localhost:50042"
@@ -644,7 +644,8 @@ cp /etc/hosts ${LOGS}/hosts
 echo "tail checks"
 
 echo "tail proxy to 2 hosts"
-${SANSSH_PROXY} ${MULTI_TARGETS} --outputs=${LOGS}/1.tail,${LOGS}/2.tail file tail ${LOGS}/hosts &
+# Reset batch size to 0 since this hangs and monitors so it's only doing one host otherwise..
+${SANSSH_PROXY} ${MULTI_TARGETS} --batch-size=0 --outputs=${LOGS}/1.tail,${LOGS}/2.tail file tail ${LOGS}/hosts &
 tail_execute $!
 diff ${LOGS}/1.tail ${LOGS}/2.tail >${LOGS}/tail.diff
 check_status $? ${LOGS}/tail.diff "tail: output files differ"
@@ -810,6 +811,10 @@ fi
 run_a_test false 50 process ps
 run_a_test false 0 process kill --pid=$$ --signal=0
 
+# Set batch-size back to 0 to force errors by running in parallel.
+oSANSSH_PROXY=${SANSSH_PROXY}
+SANSSH_PROXY="${SANSSH_PROXY} --batch-size=0"
+
 # Skip if on github (pstack randomly fails)
 if [ -z "${ON_GITHUB}" ]; then
   run_a_test true 20 process pstack --pid=${PROXY_PID}
@@ -820,6 +825,7 @@ fi
 echo
 echo "Expect an error about ptrace failing when we do 2 hosts"
 run_a_test true 20 process dump --pid=$$ --dump-type=GCORE
+
 # Cores get their own additional checks.
 for i in ${LOGS}/?.process-dump*; do
   # Skip the .error files
@@ -849,6 +855,8 @@ if [ -z "${ON_GITHUB}" ]; then
 else
   echo "Skipping s3 dump tests on Github"
 fi
+
+SANSSH_PROXY=${oSANSSH_PROXY}
 
 echo "Querying systemd for service status"
 run_a_test false 10 service list --system-type systemd
