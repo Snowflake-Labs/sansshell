@@ -70,7 +70,7 @@ default allow = false
 allow {
     input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.peer.cert.subject.SerialNumber = "255288720161934708870254561641453151839"
+		input.peer.cert.subject.SerialNumber = "18469474828185269013890292403630281187"
 }
 `
 	denyPeerSerialPolicy = `
