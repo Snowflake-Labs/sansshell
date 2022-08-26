@@ -317,8 +317,8 @@ func TestProxyServerServerStreamBadData(t *testing.T) {
 	}
 	_, err = proxyStream.Recv()
 	t.Log(err)
-	if got, want := status.Code(err), codes.InvalidArgument; got != want {
-		t.Fatalf("didn't get expected stream error code. got %s want %s", codes.Code(got), codes.Code(want))
+	if got, want, want2 := status.Code(err), codes.InvalidArgument, codes.Canceled; got != want && got != want2 {
+		t.Fatalf("didn't get expected stream error code. got %s want %s or %s", codes.Code(got), codes.Code(want), codes.Code(want2))
 	}
 }
 
