@@ -279,16 +279,14 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
-		defer func() {
-			if err := conn.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
-			}
-		}()
 		state.Conn = conn
 		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
 		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
 		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
 			exitCode = subcommands.ExitFailure
+		}
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
 		}
 	}
 
@@ -299,16 +297,14 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
 			os.Exit(1)
 		}
-		defer func() {
-			if err := conn.Close(); err != nil {
-				fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
-			}
-		}()
 		state.Conn = conn
 		state.Out = output[batchCnt*rs.BatchSize:]
 		state.Err = errors[batchCnt*rs.BatchSize:]
 		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
 			exitCode = subcommands.ExitFailure
+		}
+		if err := conn.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
 		}
 	}
 
