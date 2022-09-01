@@ -11,9 +11,6 @@ jobs:
     - uses: actions/setup-go@v3
       with:
         go-version-file: 'go.mod'
-    - name: Install tools
-      run: |
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.46.2
     - uses: actions/setup-python@v3
     - uses: pre-commit/action@v3.0.0
   test:
