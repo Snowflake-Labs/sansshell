@@ -21,6 +21,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -28,6 +29,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // runState encapsulates all of the variable state needed
@@ -36,6 +38,7 @@ import (
 type runState struct {
 	logger             logr.Logger
 	credSource         string
+	tlsConfig          *tls.Config
 	hostport           string
 	policy             string
 	justification      bool
@@ -69,6 +72,14 @@ func WithLogger(l logr.Logger) Option {
 func WithPolicy(policy string) Option {
 	return optionFunc(func(r *runState) error {
 		r.policy = policy
+		return nil
+	})
+}
+
+// WithTlsConfig applies a supplied tls.Config object to the gRPC server.
+func WithTlsConfig(tlsConfig *tls.Config) Option {
+	return optionFunc(func(r *runState) error {
+		r.tlsConfig = tlsConfig
 		return nil
 	})
 }
@@ -159,12 +170,7 @@ func Run(ctx context.Context, opts ...Option) {
 			os.Exit(1)
 		}
 	}
-
-	creds, err := mtls.LoadServerCredentials(ctx, rs.credSource)
-	if err != nil {
-		rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
-		os.Exit(1)
-	}
+	creds := extractTransportCredentialsFromRunState(ctx, rs)
 
 	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
 		return rs.justification
@@ -191,4 +197,23 @@ func Run(ctx context.Context, opts ...Option) {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
 		os.Exit(1)
 	}
+}
+
+// extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
+func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) credentials.TransportCredentials {
+	var creds credentials.TransportCredentials
+	var err error
+	if rs.credSource != "" && rs.tlsConfig != nil {
+		rs.logger.Error(nil, "both credSource and tlsConfig are defined", "credSource", rs.credSource)
+		os.Exit(1)
+	} else if rs.credSource != "" {
+		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
+		if err != nil {
+			rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
+			os.Exit(1)
+		}
+	} else {
+		creds = credentials.NewTLS(rs.tlsConfig)
+	}
+	return creds
 }

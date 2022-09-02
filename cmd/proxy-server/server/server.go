@@ -22,6 +22,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"os"
 
@@ -41,6 +42,7 @@ type runState struct {
 	policy                   string
 	clientPolicy             string
 	credSource               string
+	tlsConfig                *tls.Config
 	hostport                 string
 	justification            bool
 	justificationFunc        func(string) error
@@ -83,6 +85,14 @@ func WithPolicy(policy string) Option {
 func WithClientPolicy(policy string) Option {
 	return optionFunc(func(r *runState) error {
 		r.clientPolicy = policy
+		return nil
+	})
+}
+
+// WithTlsConfig applies a supplied tls.Config object to the gRPC server.
+func WithTlsConfig(tlsConfig *tls.Config) Option {
+	return optionFunc(func(r *runState) error {
+		r.tlsConfig = tlsConfig
 		return nil
 	})
 }
