@@ -21,12 +21,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 )
 
 var (

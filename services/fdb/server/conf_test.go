@@ -25,10 +25,11 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestRead(t *testing.T) {

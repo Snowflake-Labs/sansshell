@@ -27,11 +27,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/subcommands"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"github.com/Snowflake-Labs/sansshell/services/util"
-	"github.com/google/subcommands"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 const subPackage = "fdb"

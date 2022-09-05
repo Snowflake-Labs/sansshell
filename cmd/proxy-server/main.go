@@ -25,6 +25,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
+	"google.golang.org/grpc"
+	channelz "google.golang.org/grpc/channelz/service"
+	"google.golang.org/grpc/reflection"
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
@@ -32,11 +38,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
-	"google.golang.org/grpc"
-	channelz "google.golang.org/grpc/channelz/service"
-	"google.golang.org/grpc/reflection"
 
 	// Import services here to make them proxy-able
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible"

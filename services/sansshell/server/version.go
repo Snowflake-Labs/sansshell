@@ -19,8 +19,9 @@ package server
 import (
 	"context"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 )
 
 func (s *Server) Version(ctx context.Context, req *emptypb.Empty) (*pb.VersionResponse, error) {

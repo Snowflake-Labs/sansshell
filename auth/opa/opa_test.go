@@ -21,8 +21,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/open-policy-agent/opa/ast"
+
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestNewAuthzPolicy(t *testing.T) {

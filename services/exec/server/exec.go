@@ -20,10 +20,11 @@ package server
 import (
 	"context"
 
+	"google.golang.org/grpc"
+
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
-	"google.golang.org/grpc"
 )
 
 // server is used to implement the gRPC server

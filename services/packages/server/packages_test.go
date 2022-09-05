@@ -25,13 +25,14 @@ import (
 	"strings"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/packages"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/packages"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (

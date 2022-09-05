@@ -25,11 +25,12 @@ import (
 	"os"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestTailDarwin(t *testing.T) {

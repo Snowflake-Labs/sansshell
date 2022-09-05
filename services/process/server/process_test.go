@@ -30,8 +30,6 @@ import (
 	"syscall"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/process"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"gocloud.dev/blob"
 	_ "gocloud.dev/blob/fileblob"
 	"google.golang.org/grpc"
@@ -39,6 +37,9 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (

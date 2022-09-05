@@ -23,11 +23,12 @@ import (
 	"os"
 	"syscall"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
 const (

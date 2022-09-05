@@ -34,14 +34,15 @@ import (
 	"testing"
 	"time"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
-	"github.com/Snowflake-Labs/sansshell/services/util"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	_ "gocloud.dev/blob/fileblob"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (

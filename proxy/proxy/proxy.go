@@ -36,8 +36,9 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 	"github.com/go-logr/logr"
+
+	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
 // Conn is a grpc.ClientConnInterface which is connected to the proxy

@@ -22,11 +22,13 @@ package server
 import (
 	"os"
 	"syscall"
+	"time"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
 // osStat is the platform agnostic version which uses basic os.Stat.

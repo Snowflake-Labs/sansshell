@@ -21,13 +21,14 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/ini.v1"
+
+	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 )
 
 // TODO add section name validator https://apple.github.io/foundationdb/configuration.html#foundationdb-conf
