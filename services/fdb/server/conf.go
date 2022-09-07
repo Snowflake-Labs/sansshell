@@ -18,7 +18,6 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 
 	"google.golang.org/grpc"
@@ -115,7 +114,7 @@ func init() {
 }
 
 func atomicSaveTo(f *ini.File, filename string) error {
-	tf, err := ioutil.TempFile("", "fdb_conf")
+	tf, err := os.CreateTemp("", "fdb_conf")
 	if err != nil {
 		return err
 	}
