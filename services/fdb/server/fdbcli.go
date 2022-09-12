@@ -26,13 +26,14 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
-	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 var (

@@ -27,7 +27,7 @@ for Go and Go-GRPC
 
 On MacOS, the protocol buffer can be installed via homebrew using
 ```
-brew install protoc
+brew install protobuf
 ```
 
 On Linux, protoc can be installed using either the OS package manager, or by

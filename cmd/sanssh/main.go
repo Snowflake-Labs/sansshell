@@ -27,16 +27,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/go-logr/stdr"
+	"github.com/google/subcommands"
+	"google.golang.org/grpc/metadata"
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
-	"github.com/google/subcommands"
-	"google.golang.org/grpc/metadata"
 
 	// Import services here to make them accessible for CLI
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible/client"

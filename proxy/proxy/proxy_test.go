@@ -26,12 +26,6 @@ import (
 	"net"
 	"testing"
 
-	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
-	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
-	"github.com/Snowflake-Labs/sansshell/proxy/server"
-	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
-	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
-	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -39,6 +33,13 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
+	"github.com/Snowflake-Labs/sansshell/proxy/server"
+	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
+	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
+	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) map[string]*bufconn.Listener {

@@ -25,7 +25,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 	"github.com/google/go-cmp/cmp"
@@ -34,6 +33,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (
