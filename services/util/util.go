@@ -153,10 +153,12 @@ func NewLimitedBuffer(max uint) *LimitedBuffer {
 // Write acts exactly as a bytes.Buffer defines except if the underlying
 // buffer has reached the max size no more bytes will be added.
 // TODO: Implement remaining bytes.Buffer methods if needed.
-// NOTE: This is not an error condition and instead no more bytes
-//       will be written and normal return will happen so writes
-//       do not fail. Use the Truncated() method
-//       to determine if this has happened.
+// NOTE:
+//
+//	This is not an error condition and instead no more bytes
+//	will be written and normal return will happen so writes
+//	do not fail. Use the Truncated() method
+//	to determine if this has happened.
 func (l *LimitedBuffer) Write(p []byte) (int, error) {
 	if l.full || uint(len(p)+l.buf.Len()) > l.max {
 		if !l.full {
