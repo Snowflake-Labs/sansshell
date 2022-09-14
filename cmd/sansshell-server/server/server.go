@@ -22,6 +22,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"os"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -170,7 +171,11 @@ func Run(ctx context.Context, opts ...Option) {
 			os.Exit(1)
 		}
 	}
-	creds := extractTransportCredentialsFromRunState(ctx, rs)
+	creds, err := extractTransportCredentialsFromRunState(ctx, rs)
+
+	if err != nil {
+		rs.logger.Error(err, "unable to extract transport credentials from runstate", "credsource", rs.credSource)
+	}
 
 	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
 		return rs.justification
@@ -200,20 +205,18 @@ func Run(ctx context.Context, opts ...Option) {
 }
 
 // extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
-func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) credentials.TransportCredentials {
+func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	if rs.credSource != "" && rs.tlsConfig != nil {
-		rs.logger.Error(nil, "both credSource and tlsConfig are defined", "credSource", rs.credSource)
-		os.Exit(1)
+		return nil, fmt.Errorf("both credSource and tlsConfig are defined")
 	} else if rs.credSource != "" {
 		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
 		if err != nil {
-			rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
-			os.Exit(1)
+			return nil, err
 		}
 	} else {
 		creds = credentials.NewTLS(rs.tlsConfig)
 	}
-	return creds
+	return creds, nil
 }

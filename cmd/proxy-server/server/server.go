@@ -23,6 +23,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"os"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // runState encapsulates all of the variable state needed
@@ -205,14 +207,17 @@ func Run(ctx context.Context, opts ...Option) {
 		}
 	}
 
-	serverCreds, err := mtls.LoadServerCredentials(ctx, rs.credSource)
+	serverCreds, err := extractServerTransportCredentialsFromRunState(ctx, rs)
+
 	if err != nil {
-		rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
+		rs.logger.Error(err, "unable to extract transport credentials from runstate for the server", "credsource", rs.credSource)
 		os.Exit(1)
 	}
-	clientCreds, err := mtls.LoadClientCredentials(ctx, rs.credSource)
+
+	clientCreds, err := extractClientTransportCredentialsFromRunState(ctx, rs)
+
 	if err != nil {
-		rs.logger.Error(err, "mtls.LoadClientCredentials", "credsource", rs.credSource)
+		rs.logger.Error(err, "unable to extract transport credentials from runstate for the client", "credsource", rs.credSource)
 		os.Exit(1)
 	}
 
@@ -305,4 +310,38 @@ func Run(ctx context.Context, opts ...Option) {
 		rs.logger.Error(err, "grpcserver.Serve()")
 		os.Exit(1)
 	}
+}
+
+// extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
+func extractClientTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
+	var creds credentials.TransportCredentials
+	var err error
+	if rs.credSource != "" && rs.tlsConfig != nil {
+		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the client")
+	} else if rs.credSource != "" {
+		creds, err = mtls.LoadClientCredentials(ctx, rs.credSource)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		creds = credentials.NewTLS(rs.tlsConfig)
+	}
+	return creds, nil
+}
+
+// extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
+func extractServerTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
+	var creds credentials.TransportCredentials
+	var err error
+	if rs.credSource != "" && rs.tlsConfig != nil {
+		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the server")
+	} else if rs.credSource != "" {
+		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		creds = credentials.NewTLS(rs.tlsConfig)
+	}
+	return creds, nil
 }
