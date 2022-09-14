@@ -25,11 +25,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/go-logr/logr"
+	"google.golang.org/grpc"
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
-	"github.com/go-logr/logr"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
 

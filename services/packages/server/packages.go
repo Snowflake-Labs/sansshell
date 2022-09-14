@@ -25,12 +25,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/packages"
-	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/packages"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 // Internal helper to generate the command list. The map must contain the enum.

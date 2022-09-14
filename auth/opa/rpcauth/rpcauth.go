@@ -53,7 +53,8 @@ type RPCAuthzHook interface {
 // New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
-//       distinct policy for client vs server, create 2 Authorizer's.
+//
+//	distinct policy for client vs server, create 2 Authorizer's.
 func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
 	return &Authorizer{policy: policy, hooks: authzHooks}
 }
@@ -62,7 +63,8 @@ func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
 // authorization hooks will be executed, in the order provided, on each policy
 // evaluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
-//       distinct policy for client vs server, create 2 Authorizer's.
+//
+//	distinct policy for client vs server, create 2 Authorizer's.
 func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHook) (*Authorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {

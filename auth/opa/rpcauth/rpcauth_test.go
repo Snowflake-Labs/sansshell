@@ -37,10 +37,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var policyString = `

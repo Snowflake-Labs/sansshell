@@ -30,12 +30,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (

@@ -23,10 +23,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/google/subcommands"
+
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
-	"github.com/google/subcommands"
 )
 
 const subPackage = "exec"

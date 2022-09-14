@@ -19,16 +19,16 @@ package server
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestRead(t *testing.T) {
@@ -130,7 +130,7 @@ test = badcoffee`,
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Write(ctx, tc.req)
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
-			got, err := ioutil.ReadFile(name)
+			got, err := os.ReadFile(name)
 			testutil.FatalOnErr("failed reading config file", err, t)
 			sGot := strings.TrimSpace(string(got))
 			if sGot != tc.expected {
@@ -205,7 +205,7 @@ cluster_file = /etc/foundatindb/fdb.cluster`,
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Delete(ctx, tc.req)
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
-			got, err := ioutil.ReadFile(name)
+			got, err := os.ReadFile(name)
 			testutil.FatalOnErr("failed reading config file", err, t)
 			sGot, sExpected := strings.TrimSpace(string(got)), strings.TrimSpace(tc.expected)
 			if sGot != sExpected {

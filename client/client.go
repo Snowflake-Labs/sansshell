@@ -48,7 +48,7 @@ func GenerateSynopsis(c *subcommands.Commander, leading int) string {
 	if _, err := w.Write([]byte("\n")); err != nil {
 		panic(fmt.Sprintf("buffer write failed: %v", err))
 	}
-	fn := func(c *subcommands.CommandGroup, comm subcommands.Command) {
+	fn := func(_ *subcommands.CommandGroup, comm subcommands.Command) {
 		switch comm.Name() {
 		case "help", "flags", "commands":
 			break

@@ -23,11 +23,12 @@ import (
 	"os"
 	"testing"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/exec"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/exec"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (

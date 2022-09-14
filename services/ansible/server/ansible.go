@@ -23,12 +23,13 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/Snowflake-Labs/sansshell/services"
-	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
-	"github.com/Snowflake-Labs/sansshell/services/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/Snowflake-Labs/sansshell/services"
+	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 var (

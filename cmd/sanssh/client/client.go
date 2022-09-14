@@ -29,11 +29,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/google/subcommands"
+	"google.golang.org/grpc"
+
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
-	"github.com/google/subcommands"
-	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )

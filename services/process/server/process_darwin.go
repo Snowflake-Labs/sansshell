@@ -29,9 +29,10 @@ import (
 	"io"
 	"strings"
 
-	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 )
 
 var (
