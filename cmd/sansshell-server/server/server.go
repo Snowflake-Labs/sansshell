@@ -21,6 +21,8 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
 	"os"
 
 	"github.com/go-logr/logr"
@@ -29,6 +31,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
+	"google.golang.org/grpc/credentials"
 )
 
 // runState encapsulates all of the variable state needed
@@ -37,6 +40,7 @@ import (
 type runState struct {
 	logger             logr.Logger
 	credSource         string
+	tlsConfig          *tls.Config
 	hostport           string
 	policy             string
 	justification      bool
@@ -70,6 +74,14 @@ func WithLogger(l logr.Logger) Option {
 func WithPolicy(policy string) Option {
 	return optionFunc(func(r *runState) error {
 		r.policy = policy
+		return nil
+	})
+}
+
+// WithTlsConfig applies a supplied tls.Config object to the gRPC server.
+func WithTlsConfig(tlsConfig *tls.Config) Option {
+	return optionFunc(func(r *runState) error {
+		r.tlsConfig = tlsConfig
 		return nil
 	})
 }
@@ -160,11 +172,10 @@ func Run(ctx context.Context, opts ...Option) {
 			os.Exit(1)
 		}
 	}
+	creds, err := extractTransportCredentialsFromRunState(ctx, rs)
 
-	creds, err := mtls.LoadServerCredentials(ctx, rs.credSource)
 	if err != nil {
-		rs.logger.Error(err, "mtls.LoadServerCredentials", "credsource", rs.credSource)
-		os.Exit(1)
+		rs.logger.Error(err, "unable to extract transport credentials from runstate", "credsource", rs.credSource)
 	}
 
 	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
@@ -192,4 +203,22 @@ func Run(ctx context.Context, opts ...Option) {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
 		os.Exit(1)
 	}
+}
+
+// extractTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
+func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
+	var creds credentials.TransportCredentials
+	var err error
+	if rs.credSource != "" && rs.tlsConfig != nil {
+		return nil, fmt.Errorf("both credSource and tlsConfig are defined")
+	}
+	if rs.credSource != "" {
+		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		creds = credentials.NewTLS(rs.tlsConfig)
+	}
+	return creds, nil
 }
