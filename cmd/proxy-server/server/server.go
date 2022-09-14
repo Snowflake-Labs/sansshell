@@ -313,13 +313,14 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 }
 
-// extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
+// extractClientTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
 func extractClientTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	if rs.credSource != "" && rs.tlsConfig != nil {
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the client")
-	} else if rs.credSource != "" {
+	}
+	if rs.credSource != "" {
 		creds, err = mtls.LoadClientCredentials(ctx, rs.credSource)
 		if err != nil {
 			return nil, err
@@ -330,13 +331,14 @@ func extractClientTransportCredentialsFromRunState(ctx context.Context, rs *runS
 	return creds, nil
 }
 
-// extracts transport credentials from runState. Will error if both credSource and tlsConfig are both specified
+// extractServerTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
 func extractServerTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
 	var creds credentials.TransportCredentials
 	var err error
 	if rs.credSource != "" && rs.tlsConfig != nil {
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the server")
-	} else if rs.credSource != "" {
+	}
+	if rs.credSource != "" {
 		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
 		if err != nil {
 			return nil, err
