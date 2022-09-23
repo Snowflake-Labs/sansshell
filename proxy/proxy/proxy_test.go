@@ -293,6 +293,41 @@ func TestStreaming(t *testing.T) {
 		},
 	} {
 		tc := tc
+		t.Run(tc.name+" direct", func(t *testing.T) {
+			conn, err := proxy.Dial(tc.proxy, tc.targets, testutil.WithBufDialer(bufMap), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			tu.FatalOnErr("Dial", err, t)
+
+			ts := tdpb.NewTestServiceClientProxy(conn)
+			stream, err := ts.TestBidiStream(context.Background())
+			tu.FatalOnErr("getting stream", err, t)
+
+			// We only care about validating Send/Recv work cleanly in 1:1 or error in 1:N
+
+			// Should always be able to Send
+			err = stream.Send(&tdpb.TestRequest{Input: "input"})
+			tu.FatalOnErr("Send", err, t)
+
+			// Now a normal recv should either work or fail depending on > 1 target (or not)
+			_, err = stream.Recv()
+			if len(tc.targets) > 1 {
+				tu.FatalOnNoErr("recv didn't fail for > 1 target", err, t)
+			} else {
+				tu.FatalOnErr("Recv", err, t)
+			}
+
+			// Now test the error case
+			err = stream.Send(&tdpb.TestRequest{Input: "error"})
+			tu.FatalOnErr("Send error", err, t)
+
+			// Shouldn't fail even we close send twice.
+			err = stream.CloseSend()
+			tu.FatalOnErr("CloseSend", err, t)
+			err = stream.CloseSend()
+			tu.FatalOnErr("CloseSend", err, t)
+			_, err = stream.Recv()
+			tu.FatalOnNoErr("recv should get error from send", err, t)
+			t.Log(err)
+		})
 		t.Run(tc.name, func(t *testing.T) {
 			conn, err := proxy.Dial(tc.proxy, tc.targets, testutil.WithBufDialer(bufMap), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			tu.FatalOnErr("Dial", err, t)
