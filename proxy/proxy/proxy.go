@@ -269,18 +269,41 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 	}
 
 	// Since the API is an interface{} we can change what this normally
-	// expects from a proto.Message to a *[]*ProxyRet instead.
+	// expects from a proto.Message to a *[]*Ret instead.
 	//
-	// Anything else is an error.
-	manyRet, ok := m.(*[]*Ret)
-	if !ok {
-		return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*ProxyRet) - got %T", m)
+	// Anything else is an error if we have > 1 target. In the one target
+	// case validate it's a proto.Message and unwrap into that instead.
+	var replyMsg proto.Message
+	var manyRet *[]*Ret
+	switch v := m.(type) {
+	case *[]*Ret:
+		manyRet = v
+	case proto.Message:
+		if len(p.ids) != 1 {
+			return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*Ret) when called in OneMany context - got %T", m)
+		}
+		replyMsg = v
+	default:
+		if len(p.ids) != 1 {
+			return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be a *[]*Ret) when called in OneMany context - got %T", m)
+		}
+		return status.Errorf(codes.InvalidArgument, "args for proxy RecvMsg must be proto.Message when called directly - got %T", m)
 	}
 
 	// If we have any pre-canned errors push them on now.
 	// Only send once or else the user gets spammed with errors for every Recv called.
 	if !p.sentErrors {
-		*manyRet = append(*manyRet, p.errors...)
+		// In non OneMany context just return this directly as an error.
+		// Any other calls to RecvMsg will fall through below and get whatever
+		// the stream returns at that point.
+		if len(p.errors) > 0 {
+			if replyMsg != nil {
+				p.sentErrors = true
+				return p.errors[0].Error
+			} else {
+				*manyRet = append(*manyRet, p.errors...)
+			}
+		}
 		p.sentErrors = true
 	}
 
@@ -302,7 +325,17 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 			}
 			p.ids[id].Resp = d.Payload
 			p.ids[id].Error = nil
-			*manyRet = append(*manyRet, p.ids[id])
+			if manyRet != nil {
+				*manyRet = append(*manyRet, p.ids[id])
+			}
+			if replyMsg != nil {
+				if err := d.Payload.UnmarshalTo(replyMsg); err != nil {
+					return status.Errorf(codes.Internal, "can't unmarshal reply: %v", err)
+				}
+				// We know there's only one due to the precheck when we construct
+				// replyMsg.
+				return nil
+			}
 		}
 	case cl != nil:
 		code := codes.Code(cl.GetStatus().GetCode())
@@ -324,6 +357,10 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 
 		if streamStatus.Code() != codes.OK {
 			closedErr = streamStatus.Err()
+		}
+		if replyMsg != nil {
+			// Easy case for Recv()
+			return closedErr
 		}
 		for _, id := range cl.StreamIds {
 			p.ids[id].Error = closedErr
