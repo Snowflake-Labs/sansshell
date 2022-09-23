@@ -19,32 +19,13 @@ package server
 
 import (
 	"context"
-	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 )
-
-var (
-	// Version is the value returned by the Version RPC service.
-	// This should likely be set as a linker option from external
-	// input such as a git SHA or RPM version number.
-	// go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=..."
-	//
-	// NOTE: This is a var so the linker can set it but in reality it's a const so treat as such.
-	Version string
-)
-
-// Server is used to implement the gRPC Server
-type Server struct {
-	mu      sync.RWMutex
-	lastVal int32
-}
 
 // SetVerbosity sets the logging level and returns the last value before this was called.
 func (s *Server) SetVerbosity(ctx context.Context, req *pb.SetVerbosityRequest) (*pb.VerbosityReply, error) {
@@ -65,14 +46,4 @@ func (s *Server) GetVerbosity(ctx context.Context, req *emptypb.Empty) (*pb.Verb
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return &pb.VerbosityReply{Level: s.lastVal}, nil
-}
-
-// Register is called to expose this handler to the gRPC server
-func (s *Server) Register(gs *grpc.Server) {
-	pb.RegisterLoggingServer(gs, s)
-	pb.RegisterStateServer(gs, s)
-}
-
-func init() {
-	services.RegisterSansShellService(&Server{})
 }

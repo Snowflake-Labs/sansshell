@@ -14,28 +14,30 @@
    under the License.
 */
 
+// Package server implements the sansshell 'Logging' service.
 package server
 
 import (
-	"context"
+	"sync"
 
-	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/grpc"
 
+	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 )
 
-var (
-	// Version is the value returned by the Version RPC service.
-	// This should likely be set as a linker option from external
-	// input such as a git SHA or RPM version number.
-	// go build -ldflags="-X github.com/Snowflake-Labs/sansshell/services/sansshell/server.Version=..."
-	//
-	// NOTE: This is a var so the linker can set it but in reality it's a const so treat as such.
-	Version string
-)
+// Server is used to implement the gRPC Server
+type Server struct {
+	mu      sync.RWMutex
+	lastVal int32
+}
 
-func (s *Server) Version(ctx context.Context, req *emptypb.Empty) (*pb.VersionResponse, error) {
-	return &pb.VersionResponse{
-		Version: Version,
-	}, nil
+// Register is called to expose this handler to the gRPC server
+func (s *Server) Register(gs *grpc.Server) {
+	pb.RegisterLoggingServer(gs, s)
+	pb.RegisterStateServer(gs, s)
+}
+
+func init() {
+	services.RegisterSansShellService(&Server{})
 }
