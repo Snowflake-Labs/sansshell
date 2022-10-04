@@ -12,7 +12,7 @@ import (
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
 func ExecRemoteCommand(ctx context.Context, conn *proxy.Conn, binary string, args ...string) (*pb.ExecResponse, error) {
 	if len(conn.Targets) != 1 {
-		return nil, errors.New("ReadRemoteFile only supports single targets")
+		return nil, errors.New("ExecRemoteCommand only supports single targets")
 	}
 
 	c := pb.NewExecClient(conn)
