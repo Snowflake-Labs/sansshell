@@ -124,6 +124,23 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 	return nil
 }
 
+// RemoveRemoteFile is a helper function for removing a file on a remote host
+// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+func RemoveRemoteFile(ctx context.Context, conn *proxy.Conn, path string) error {
+	if len(conn.Targets) != 1 {
+		return errors.New("RemoveRemoteFile only supports single targets")
+	}
+
+	c := pb.NewLocalFileClient(conn)
+	_, err := c.Rm(ctx, &pb.RmRequest{
+		Filename: path,
+	})
+	if err != nil {
+		return fmt.Errorf("remove problem - %v", err)
+	}
+	return nil
+}
+
 // CopyRemoteFile is a helper function for copying a file on a remote host
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
 func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destination *FileConfig) error {
@@ -164,7 +181,7 @@ func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destin
 	}
 	_, err := c.Copy(ctx, req)
 	if err != nil {
-		return fmt.Errorf("Copy problem for %s -> %s: %v", source, destination.Filename, err)
+		return fmt.Errorf("copy problem for %s -> %s: %v", source, destination.Filename, err)
 	}
 	return nil
 }
