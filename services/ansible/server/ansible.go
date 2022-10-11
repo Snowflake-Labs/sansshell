@@ -109,8 +109,8 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	if err != nil {
 		return nil, err
 	}
-	if run.Error != nil {
-		return nil, err
+	if err := run.Error; err != nil {
+		return nil, status.Errorf(codes.Internal, "command exited with error: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	return &pb.RunReply{
