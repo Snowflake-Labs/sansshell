@@ -21,7 +21,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -109,6 +108,8 @@ type systemdConnection interface {
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	DisableUnitFilesContext(ctx context.Context, files []string, runtime bool) ([]dbus.DisableUnitFileChange, error)
+	EnableUnitFiles(files []string, runtime bool, force bool) (bool, []dbus.EnableUnitFileChange, error)
 	Close()
 }
 
@@ -177,7 +178,6 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 		if !strings.HasSuffix(u.Name, unitSuffixService) {
 			continue
 		}
-		fmt.Printf("status: %+v\n", u)
 		resp.Services = append(resp.Services, &pb.ServiceStatus{
 			ServiceName: strings.TrimSuffix(u.Name, unitSuffixService),
 			Status:      unitStateToStatus(u),
@@ -258,6 +258,10 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 		_, err = conn.RestartUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_STOP:
 		_, err = conn.StopUnitContext(ctx, unitName, modeReplace, resultChan)
+	case pb.Action_ACTION_ENABLE:
+		_, _, err := conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
+	case pb.Action_ACTION_DISABLE:
+		_, err := conn.DisableUnitFilesContext(ctx, []string{unitName}, false, true)
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v", req.Action)
 	}

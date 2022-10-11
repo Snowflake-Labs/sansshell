@@ -14,7 +14,7 @@
    under the License.
 */
 
-syntax="proto3";
+syntax = "proto3";
 
 package Service;
 option go_package = "github.com/Snowflake-Labs/sansshell/services/service";
@@ -24,7 +24,8 @@ service Service {
   rpc List(ListRequest) returns (ListReply) {}
   // Status requests the status of a single service.
   rpc Status(StatusRequest) returns (StatusReply) {}
-  // Action alters the status of a single service.
+  // Action alters the status of a single service. This will always force the
+  // requested state to happen regardless of current state.
   rpc Action(ActionRequest) returns (ActionReply) {}
 }
 
@@ -52,6 +53,8 @@ enum Action {
   ACTION_START = 1;
   ACTION_STOP = 2;
   ACTION_RESTART = 3;
+  ACTION_ENABLE = 4;
+  ACTION_DISABLE = 5;
 }
 
 // ServiceStatus pairs a service with it's current status.
@@ -62,9 +65,7 @@ message ServiceStatus {
 
 // A request to list all configured services for a single
 // system type.
-message ListRequest {
-  SystemType system_type = 1;
-}
+message ListRequest { SystemType system_type = 1; }
 
 // A list of all configured services, with their attendent
 // status.
