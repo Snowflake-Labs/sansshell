@@ -176,6 +176,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 		if !strings.HasSuffix(u.Name, unitSuffixService) {
 			continue
 		}
+		fmt.Printf("status: %+v\n", u)
 		resp.Services = append(resp.Services, &pb.ServiceStatus{
 			ServiceName: strings.TrimSuffix(u.Name, unitSuffixService),
 			Status:      unitStateToStatus(u),
