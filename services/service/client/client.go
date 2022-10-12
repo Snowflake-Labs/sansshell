@@ -170,12 +170,12 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		out := state.Out[resp.Index]
 		output := fmt.Sprintf("[%s] %s %v: OK", systemTypeString(system), serviceName, as)
 		if resp.Error != nil && err != io.EOF {
-			lastErr = fmt.Errorf("target %s (%d) returned error %w", resp.Target, resp.Index, resp.Error)
+			lastErr = fmt.Errorf("target %s (%d) returned error %w\n", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
-			lastErr = fmt.Errorf("target %s (%d) output write error %w", resp.Target, resp.Index, err)
+			lastErr = fmt.Errorf("target %s (%d) output write error %w\n", resp.Target, resp.Index, err)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 		}
 	}
@@ -247,12 +247,12 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		system, status := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus()
 		output := fmt.Sprintf("[%s] %s : %s", systemTypeString(system), serviceName, statusString(status))
 		if resp.Error != nil {
-			lastErr = fmt.Errorf("target %s [%d] error: %w", resp.Target, resp.Index, resp.Error)
+			lastErr = fmt.Errorf("target %s [%d] error: %w\n", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 			continue
 		}
 		if _, err := fmt.Fprintln(out, output); err != nil {
-			lastErr = fmt.Errorf("target %s [%d] write error: %w", resp.Target, resp.Index, err)
+			lastErr = fmt.Errorf("target %s [%d] write error: %w\n", resp.Target, resp.Index, err)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
 		}
 	}
@@ -321,7 +321,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		system := systemTypeString(resp.Resp.GetSystemType())
 		for _, svc := range resp.Resp.Services {
 			if _, err := fmt.Fprintf(out, "[%s] %s : %s\n", system, svc.GetServiceName(), statusString(svc.GetStatus())); err != nil {
-				lastErr = fmt.Errorf("target %s [%d] writer error: %w", resp.Target, resp.Index, err)
+				lastErr = fmt.Errorf("target %s [%d] writer error: %w\n", resp.Target, resp.Index, err)
 				fmt.Fprintln(state.Err[resp.Index], lastErr)
 			}
 		}
