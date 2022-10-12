@@ -272,14 +272,20 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	// NB: delivery of a value on resultchan respects context cancellation, and will
 	// deliver a value of 'cancelled' if the ctx is cancelled by a client disconnect,
 	// so it's safe to do a simple recv.
-	// Enable/disable don't use this method so we skip in that case.
+	// Enable/disable don't use this method so we skip the channel (since it would hang)
+	// and instead force a reload which is what systemctl does when it enables/disables.
 	switch req.Action {
 	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
 		result := <-resultChan
 		if result != operationResultDone {
 			return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
 		}
+	case pb.Action_ACTION_ENABLE, pb.Action_ACTION_DISABLE:
+		if err := conn.ReloadContext(ctx); err != nil {
+			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
+		}
 	}
+
 	return &pb.ActionReply{
 		SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 		ServiceName: req.GetServiceName(),
