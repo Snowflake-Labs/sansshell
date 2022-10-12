@@ -259,7 +259,8 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_STOP:
 		_, err = conn.StopUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_ENABLE:
-		_, _, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
+		a, b, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
+		fmt.Printf("enable: %v - %v - %v\n", a, b, err)
 	case pb.Action_ACTION_DISABLE:
 		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
 	default:
