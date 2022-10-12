@@ -21,7 +21,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -260,8 +259,7 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_STOP:
 		_, err = conn.StopUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_ENABLE:
-		a, b, err := conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
-		fmt.Printf("enable: %v - %v - %v\n", a, b, err)
+		_, _, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
 	case pb.Action_ACTION_DISABLE:
 		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
 	default:
@@ -274,9 +272,13 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	// NB: delivery of a value on resultchan respects context cancellation, and will
 	// deliver a value of 'cancelled' if the ctx is cancelled by a client disconnect,
 	// so it's safe to do a simple recv.
-	result := <-resultChan
-	if result != operationResultDone {
-		return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
+	// Enable/disable don't use this method so we skip in that case.
+	switch req.Action {
+	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
+		result := <-resultChan
+		if result != operationResultDone {
+			return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
+		}
 	}
 	return &pb.ActionReply{
 		SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
