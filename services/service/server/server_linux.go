@@ -110,6 +110,7 @@ type systemdConnection interface {
 	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	DisableUnitFilesContext(ctx context.Context, files []string, runtime bool) ([]dbus.DisableUnitFileChange, error)
 	EnableUnitFilesContext(ctx context.Context, files []string, runtime bool, force bool) (bool, []dbus.EnableUnitFileChange, error)
+	ReloadContext(ctx context.Context) error
 	Close()
 }
 
