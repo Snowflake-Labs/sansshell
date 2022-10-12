@@ -46,6 +46,8 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&actionCmd{action: pb.Action_ACTION_START}, "")
 	c.Register(&statusCmd{}, "")
 	c.Register(&actionCmd{action: pb.Action_ACTION_STOP}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_ENABLE}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_DISABLE}, "")
 	return c
 }
 
