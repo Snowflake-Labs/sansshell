@@ -108,6 +108,9 @@ type systemdConnection interface {
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
+	DisableUnitFilesContext(ctx context.Context, files []string, runtime bool) ([]dbus.DisableUnitFileChange, error)
+	EnableUnitFilesContext(ctx context.Context, files []string, runtime bool, force bool) (bool, []dbus.EnableUnitFileChange, error)
+	ReloadContext(ctx context.Context) error
 	Close()
 }
 
@@ -256,6 +259,10 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 		_, err = conn.RestartUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_STOP:
 		_, err = conn.StopUnitContext(ctx, unitName, modeReplace, resultChan)
+	case pb.Action_ACTION_ENABLE:
+		_, _, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
+	case pb.Action_ACTION_DISABLE:
+		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v", req.Action)
 	}
@@ -266,10 +273,22 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	// NB: delivery of a value on resultchan respects context cancellation, and will
 	// deliver a value of 'cancelled' if the ctx is cancelled by a client disconnect,
 	// so it's safe to do a simple recv.
-	result := <-resultChan
-	if result != operationResultDone {
-		return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
+	// Enable/disable don't use this method so we skip the channel (since it would hang)
+	// and instead force a reload which is what systemctl does when it enables/disables.
+	switch req.Action {
+	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
+		result := <-resultChan
+		if result != operationResultDone {
+			return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
+		}
+	case pb.Action_ACTION_ENABLE, pb.Action_ACTION_DISABLE:
+		if err := conn.ReloadContext(ctx); err != nil {
+			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
+		}
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v for post actions", req.Action)
 	}
+
 	return &pb.ActionReply{
 		SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 		ServiceName: req.GetServiceName(),

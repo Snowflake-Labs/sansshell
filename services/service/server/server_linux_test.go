@@ -48,6 +48,15 @@ func (e errConn) StopUnitContext(context.Context, string, string, chan<- string)
 func (e errConn) RestartUnitContext(context.Context, string, string, chan<- string) (int, error) {
 	return 0, errors.New(string(e))
 }
+func (e errConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbus.DisableUnitFileChange, error) {
+	return nil, errors.New(string(e))
+}
+func (e errConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
+	return false, nil, errors.New(string(e))
+}
+func (e errConn) ReloadContext(ctx context.Context) error {
+	return errors.New(string(e))
+}
 func (errConn) Close() {}
 
 func TestDialError(t *testing.T) {
@@ -96,6 +105,15 @@ func (l listConn) StopUnitContext(context.Context, string, string, chan<- string
 }
 func (l listConn) RestartUnitContext(context.Context, string, string, chan<- string) (int, error) {
 	return 0, notImplementedError
+}
+func (l listConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbus.DisableUnitFileChange, error) {
+	return nil, notImplementedError
+}
+func (l listConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
+	return false, nil, notImplementedError
+}
+func (l listConn) ReloadContext(ctx context.Context) error {
+	return notImplementedError
 }
 func (listConn) Close() {}
 
@@ -339,28 +357,53 @@ func TestStatus(t *testing.T) {
 
 // actionConn is a systemd connection that delivers a given string as the
 // final result of all actions
-type actionConn string
+type actionConn struct {
+	action    string
+	err       error
+	reloadErr error
+}
 
 func (a actionConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
-	return []dbus.UnitStatus{}, nil
+	return nil, nil
 }
 func (a actionConn) StartUnitContext(ctx context.Context, name string, mode string, c chan<- string) (int, error) {
 	go func() {
-		c <- string(a)
+		c <- string(a.action)
 	}()
-	return 1, nil
+	return 1, a.err
 }
 func (a actionConn) StopUnitContext(ctx context.Context, name string, mode string, c chan<- string) (int, error) {
 	go func() {
-		c <- string(a)
+		c <- string(a.action)
 	}()
-	return 1, nil
+	return 1, a.err
 }
 func (a actionConn) RestartUnitContext(ctx context.Context, name string, mode string, c chan<- string) (int, error) {
 	go func() {
-		c <- string(a)
+		c <- string(a.action)
 	}()
-	return 1, nil
+	return 1, a.err
+}
+func (a actionConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbus.DisableUnitFileChange, error) {
+	return []dbus.DisableUnitFileChange{
+		{
+			Type:        string(a.action),
+			Filename:    string(a.action),
+			Destination: string(a.action),
+		},
+	}, a.err
+}
+func (a actionConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
+	return false, []dbus.EnableUnitFileChange{
+		{
+			Type:        string(a.action),
+			Filename:    string(a.action),
+			Destination: string(a.action),
+		},
+	}, a.err
+}
+func (a actionConn) ReloadContext(ctx context.Context) error {
+	return a.reloadErr
 }
 func (actionConn) Close() {}
 
@@ -414,14 +457,14 @@ func TestAction(t *testing.T) {
 			conn: errConn("not returned"),
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
-				Action:      pb.Action(5),
+				Action:      pb.Action(-1),
 			},
 			want:    nil,
 			errFunc: wantStatusErr(codes.InvalidArgument, "action"),
 		},
 		{
 			name: "start failed",
-			conn: actionConn("failed"),
+			conn: actionConn{"failed", nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_START,
@@ -431,7 +474,7 @@ func TestAction(t *testing.T) {
 		},
 		{
 			name: "stop failed",
-			conn: actionConn("failed"),
+			conn: actionConn{"failed", nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_STOP,
@@ -441,7 +484,7 @@ func TestAction(t *testing.T) {
 		},
 		{
 			name: "restart failed",
-			conn: actionConn("failed"),
+			conn: actionConn{"failed", nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_RESTART,
@@ -450,8 +493,38 @@ func TestAction(t *testing.T) {
 			errFunc: wantStatusErr(codes.Internal, "error performing action"),
 		},
 		{
+			name: "enable failed",
+			conn: actionConn{operationResultDone, errors.New("error"), nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_ENABLE,
+			},
+			want:    nil,
+			errFunc: wantStatusErr(codes.Internal, "error performing action"),
+		},
+		{
+			name: "disable failed",
+			conn: actionConn{operationResultDone, errors.New("error"), nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_DISABLE,
+			},
+			want:    nil,
+			errFunc: wantStatusErr(codes.Internal, "error performing action"),
+		},
+		{
+			name: "disable failed due to reload fail",
+			conn: actionConn{operationResultDone, nil, errors.New("error")},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_DISABLE,
+			},
+			want:    nil,
+			errFunc: wantStatusErr(codes.Internal, "error reloading"),
+		},
+		{
 			name: "start success",
-			conn: actionConn(operationResultDone),
+			conn: actionConn{operationResultDone, nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_START,
@@ -464,7 +537,7 @@ func TestAction(t *testing.T) {
 		},
 		{
 			name: "stop success",
-			conn: actionConn(operationResultDone),
+			conn: actionConn{operationResultDone, nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_STOP,
@@ -477,10 +550,36 @@ func TestAction(t *testing.T) {
 		},
 		{
 			name: "restart success",
-			conn: actionConn(operationResultDone),
+			conn: actionConn{operationResultDone, nil, nil},
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_RESTART,
+			},
+			want: &pb.ActionReply{
+				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceName: "foo",
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "enable success",
+			conn: actionConn{operationResultDone, nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_ENABLE,
+			},
+			want: &pb.ActionReply{
+				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceName: "foo",
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "disable success",
+			conn: actionConn{operationResultDone, nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_DISABLE,
 			},
 			want: &pb.ActionReply{
 				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,

@@ -22,7 +22,8 @@ type ServiceClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListReply, error)
 	// Status requests the status of a single service.
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusReply, error)
-	// Action alters the status of a single service.
+	// Action alters the status of a single service. This will always force the
+	// requested state to happen regardless of current state.
 	Action(ctx context.Context, in *ActionRequest, opts ...grpc.CallOption) (*ActionReply, error)
 }
 
@@ -69,7 +70,8 @@ type ServiceServer interface {
 	List(context.Context, *ListRequest) (*ListReply, error)
 	// Status requests the status of a single service.
 	Status(context.Context, *StatusRequest) (*StatusReply, error)
-	// Action alters the status of a single service.
+	// Action alters the status of a single service. This will always force the
+	// requested state to happen regardless of current state.
 	Action(context.Context, *ActionRequest) (*ActionReply, error)
 }
 
