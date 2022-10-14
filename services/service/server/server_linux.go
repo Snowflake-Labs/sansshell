@@ -285,6 +285,8 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 		if err := conn.ReloadContext(ctx); err != nil {
 			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
 		}
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v for post actions", req.Action)
 	}
 
 	return &pb.ActionReply{
