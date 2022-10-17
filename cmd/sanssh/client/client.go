@@ -123,10 +123,16 @@ func (p *prefixWriter) Write(b []byte) (n int, err error) {
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
 	// If we're running internal commands we don't need anything else.
-	for _, f := range flag.Args() {
+	for i, f := range flag.Args() {
 		switch f {
 		case "help", "flags", "commands":
-			os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
+			// Only do this if it's in the first couple positions.
+			// Otherwise we end up doing - sanssh service enable help
+			// which then tries to actually run the enable command without
+			// a conn and blows up.
+			if i < 2 {
+				os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
+			}
 		}
 	}
 
