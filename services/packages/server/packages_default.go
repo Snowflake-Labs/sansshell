@@ -22,4 +22,6 @@ package server
 var (
 	// YumBin is the location of the yum binary. On non-linux this is blank as it's likely unsupported.
 	YumBin string
+	// YumCleanup is the location of the yum-complete-transaction binary. On non-linux this is blank as it's likely unsupported.
+	YumCleanup string
 )
