@@ -121,7 +121,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
+		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	entries, err := parser(run.Stdout)

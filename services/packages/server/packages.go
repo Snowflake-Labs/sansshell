@@ -196,14 +196,12 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	if err != nil {
 		return nil, err
 	}
-
 	if err := run.Error; run.ExitCode != 0 || err != nil {
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
-	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.InstallReply{
-		DebugOutput: run.Stdout.String(),
+		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
 	}, nil
 }
 
@@ -247,7 +245,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nStderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stderr.String()))
+		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nstdout:\n%s\nstderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	// A 0 return means we're ok to proceed.
@@ -256,12 +254,11 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %q: %v", updateCommand, err)
+		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
-	// This may return stderr output about repos but unless return code was non-zero we don't care.
 	return &pb.UpdateReply{
-		DebugOutput: run.Stdout.String(),
+		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
 	}, nil
 }
 
@@ -352,7 +349,7 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		return nil, status.Errorf(codes.Internal, "error from running %q: %v", command, err)
+		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return parseListInstallOutput(req.PackageSystem, run.Stdout)
