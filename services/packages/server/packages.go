@@ -142,6 +142,21 @@ var (
 		}
 		return genCmd(p, repoOpts)
 	}
+
+	generateCleanup = func(p pb.PackageSystem) ([]string, error) {
+		var out []string
+		switch p {
+		case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
+			if YumCleanup == "" {
+				return nil, status.Errorf(codes.Unimplemented, "no support for yum-complete-transaction")
+			}
+			out = append(out, YumCleanup)
+			out = append(out, "--cleanup-only")
+		default:
+			return nil, status.Errorf(codes.Unimplemented, "no support for package system enum %d", p)
+		}
+		return out, nil
+	}
 )
 
 // server is used to implement the gRPC server
@@ -442,6 +457,29 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 	}
 
 	return parseRepoListOutput(req.PackageSystem, run.Stdout)
+}
+
+func (s *server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.CleanupResponse, error) {
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	command, err := generateCleanup(req.PackageSystem)
+	if err != nil {
+		return nil, err
+	}
+
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		return nil, err
+	}
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+	}
+	return &pb.CleanupResponse{
+		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
+	}, nil
 }
 
 // Install is called to expose this handler to the gRPC server

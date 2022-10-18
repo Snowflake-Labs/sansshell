@@ -44,6 +44,7 @@ func setup(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&listCmd{}, "")
 	c.Register(&repoListCmd{}, "")
 	c.Register(&updateCmd{}, "")
+	c.Register(&cleanupCmd{}, "")
 	return c
 }
 
@@ -368,4 +369,57 @@ func getStatus(s pb.RepoStatus) string {
 		status = "enabled"
 	}
 	return status
+}
+
+type cleanupCmd struct {
+	packageSystem string
+}
+
+func (*cleanupCmd) Name() string     { return "cleanup" }
+func (*cleanupCmd) Synopsis() string { return "Run cleanup on machine" }
+func (*cleanupCmd) Usage() string {
+	return `cleanup [--package_system=P]:
+  Run cleanup on remote machine
+`
+}
+
+func (r *cleanupCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&r.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+}
+
+func (r *cleanupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
+	ps, err := flagToType(r.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", r.packageSystem)
+		return subcommands.ExitFailure
+	}
+
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClientProxy(state.Conn)
+
+	resp, err := c.CleanupOneMany(ctx, &pb.CleanupRequest{
+		PackageSystem: ps,
+	})
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - Cleanup returned error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for s := range resp {
+		if s.Error != nil {
+			fmt.Fprintf(state.Err[s.Index], "Cleanup for target %s (%d) returned error: %v\n", s.Target, s.Index, s.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[s.Index], "%s", s.Resp.DebugOutput)
+	}
+	return retCode
 }

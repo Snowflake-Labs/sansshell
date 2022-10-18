@@ -22,4 +22,6 @@ package server
 var (
 	// YumBin is the location of the yum binary. Binding this to a flag is often useful.
 	YumBin = "/usr/bin/yum"
+	// YumCleanup is the location of the yum-complete-transaction binary. Binding this to a flag is often useful.
+	YumCleanup = "/sbin/yum-complete-transaction"
 )

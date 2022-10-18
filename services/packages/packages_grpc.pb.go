@@ -22,6 +22,10 @@ type PackagesClient interface {
 	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateReply, error)
 	ListInstalled(ctx context.Context, in *ListInstalledRequest, opts ...grpc.CallOption) (*ListInstalledReply, error)
 	RepoList(ctx context.Context, in *RepoListRequest, opts ...grpc.CallOption) (*RepoListReply, error)
+	// Cleanup executes any package system specific cleanup such as
+	// yum-complete-transaction for YUM systems. If a given package system doesn't
+	// have this API this is a no-op.
+	Cleanup(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error)
 }
 
 type packagesClient struct {
@@ -68,6 +72,15 @@ func (c *packagesClient) RepoList(ctx context.Context, in *RepoListRequest, opts
 	return out, nil
 }
 
+func (c *packagesClient) Cleanup(ctx context.Context, in *CleanupRequest, opts ...grpc.CallOption) (*CleanupResponse, error) {
+	out := new(CleanupResponse)
+	err := c.cc.Invoke(ctx, "/Packages.Packages/Cleanup", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PackagesServer is the server API for Packages service.
 // All implementations should embed UnimplementedPackagesServer
 // for forward compatibility
@@ -76,6 +89,10 @@ type PackagesServer interface {
 	Update(context.Context, *UpdateRequest) (*UpdateReply, error)
 	ListInstalled(context.Context, *ListInstalledRequest) (*ListInstalledReply, error)
 	RepoList(context.Context, *RepoListRequest) (*RepoListReply, error)
+	// Cleanup executes any package system specific cleanup such as
+	// yum-complete-transaction for YUM systems. If a given package system doesn't
+	// have this API this is a no-op.
+	Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error)
 }
 
 // UnimplementedPackagesServer should be embedded to have forward compatible implementations.
@@ -93,6 +110,9 @@ func (UnimplementedPackagesServer) ListInstalled(context.Context, *ListInstalled
 }
 func (UnimplementedPackagesServer) RepoList(context.Context, *RepoListRequest) (*RepoListReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RepoList not implemented")
+}
+func (UnimplementedPackagesServer) Cleanup(context.Context, *CleanupRequest) (*CleanupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Cleanup not implemented")
 }
 
 // UnsafePackagesServer may be embedded to opt out of forward compatibility for this service.
@@ -178,6 +198,24 @@ func _Packages_RepoList_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Packages_Cleanup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CleanupRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PackagesServer).Cleanup(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/Packages.Packages/Cleanup",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PackagesServer).Cleanup(ctx, req.(*CleanupRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Packages_ServiceDesc is the grpc.ServiceDesc for Packages service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -200,6 +238,10 @@ var Packages_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RepoList",
 			Handler:    _Packages_RepoList_Handler,
+		},
+		{
+			MethodName: "Cleanup",
+			Handler:    _Packages_Cleanup_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
