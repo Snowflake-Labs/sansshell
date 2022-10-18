@@ -91,7 +91,7 @@ func TestInstall(t *testing.T) {
 		{
 			name: "bad package system",
 			req: &pb.InstallRequest{
-				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
 				Name:          "package",
 				Version:       "1.2.3",
 			},
@@ -267,7 +267,7 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "bad package system",
 			req: &pb.UpdateRequest{
-				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
 				Name:          "package",
 				OldVersion:    "0:1-1.2.3",
 				NewVersion:    "0:1-4.5.6",
@@ -276,7 +276,7 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "bad old version - nevra",
 			req: &pb.UpdateRequest{
-				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
 				Name:          "package",
 				OldVersion:    "1.2.3",
 				NewVersion:    "0:1-4.5.6",
@@ -285,7 +285,7 @@ func TestUpdate(t *testing.T) {
 		{
 			name: "bad new version - nevra",
 			req: &pb.UpdateRequest{
-				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM,
 				Name:          "package",
 				OldVersion:    "0:1-1.2.3",
 				NewVersion:    "4.5.6",
@@ -503,7 +503,7 @@ func TestListInstalled(t *testing.T) {
 
 	// Test 0: Specify a bad package system and get an error.
 	resp, err := client.ListInstalled(ctx, &pb.ListInstalledRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
 	})
 	if err == nil {
 		t.Fatalf("didn't get an error as expected for a bad package enum. Instead got %+v", resp)
@@ -625,7 +625,7 @@ func TestRepoList(t *testing.T) {
 
 	// Test 0: Specify a bad package system and get an error.
 	resp, err := client.RepoList(ctx, &pb.RepoListRequest{
-		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 1,
+		PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
 	})
 	testutil.FatalOnNoErr(fmt.Sprintf("bad package enum - resp %v", resp), err, t)
 	t.Log(err)
@@ -689,5 +689,123 @@ func TestRepoList(t *testing.T) {
 			t.Log(err)
 		})
 		generateRepoList = saveGenerate
+	}
+}
+
+func TestCleanup(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	savedGenerateCleanup := generateCleanup
+	t.Cleanup(func() {
+		generateCleanup = savedGenerateCleanup
+	})
+	var cmdLine string
+
+	for _, tc := range []struct {
+		name     string
+		pkg      pb.PackageSystem
+		cleanup  string
+		generate func(pb.PackageSystem) ([]string, error)
+		wantErr  bool
+		output   string
+	}{
+		{
+			name:    "No package system",
+			pkg:     pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN,
+			cleanup: "yum-complete-transaction",
+			generate: func(p pb.PackageSystem) ([]string, error) {
+				// Capture what was generated so we can validate it.
+				out, err := savedGenerateCleanup(p)
+				if err != nil {
+					return nil, err
+				}
+				cmdLine = strings.Join(out, " ")
+				return []string{testutil.ResolvePath(t, "echo"), "output"}, nil
+			},
+			output: "output\n",
+		},
+		{
+			name:    "yum package system",
+			pkg:     pb.PackageSystem_PACKAGE_SYSTEM_YUM,
+			cleanup: "yum-complete-transaction",
+			generate: func(p pb.PackageSystem) ([]string, error) {
+				// Capture what was generated so we can validate it.
+				out, err := savedGenerateCleanup(p)
+				if err != nil {
+					return nil, err
+				}
+				cmdLine = strings.Join(out, " ")
+				return []string{testutil.ResolvePath(t, "echo"), "output"}, nil
+			},
+			output: "output\n",
+		},
+		{
+			name:     "missing cleanup binary",
+			pkg:      pb.PackageSystem_PACKAGE_SYSTEM_YUM,
+			generate: savedGenerateCleanup,
+			wantErr:  true,
+		},
+		{
+			name:     "bad package system",
+			pkg:      pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
+			cleanup:  "yum-complete-transaction",
+			generate: savedGenerateCleanup,
+			wantErr:  true,
+		},
+		{
+			name: "non-existant binary",
+			generate: func(pb.PackageSystem) ([]string, error) {
+				return []string{"/non-existant-binary"}, nil
+			},
+			wantErr: true,
+		},
+		{
+			name: "bad path",
+			generate: func(pb.PackageSystem) ([]string, error) {
+				return []string{"non-existant-binary"}, nil
+			},
+			wantErr: true,
+		},
+		{
+			name: "non-zero exit",
+			generate: func(pb.PackageSystem) ([]string, error) {
+				return []string{testutil.ResolvePath(t, "false")}, nil
+			},
+			wantErr: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			saveGenerateCleanup := generateCleanup
+			savedYumCleanup := YumCleanup
+			t.Cleanup(func() {
+				generateCleanup = saveGenerateCleanup
+				YumCleanup = savedYumCleanup
+			})
+			generateCleanup = tc.generate
+			YumCleanup = tc.cleanup
+
+			client := pb.NewPackagesClient(conn)
+
+			resp, err := client.Cleanup(ctx, &pb.CleanupRequest{
+				PackageSystem: tc.pkg,
+			})
+			t.Log(err)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+			if !tc.wantErr {
+				wantCmdLine := fmt.Sprintf("%s --cleanup-only", YumCleanup)
+				if got, want := cmdLine, wantCmdLine; got != want {
+					t.Fatalf("command lines differ. Got %q Want %q", got, want)
+				}
+				if got, want := resp.DebugOutput, tc.output; got != want {
+					t.Fatalf("command output differs. Got %q want %q", got, want)
+				}
+
+			}
+		})
 	}
 }

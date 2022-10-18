@@ -26,6 +26,10 @@ service Packages {
   rpc Update(UpdateRequest) returns (UpdateReply) {}
   rpc ListInstalled(ListInstalledRequest) returns (ListInstalledReply) {}
   rpc RepoList(RepoListRequest) returns (RepoListReply) {}
+  // Cleanup executes any package system specific cleanup such as
+  // yum-complete-transaction for YUM systems. If a given package system doesn't
+  // have this API this is a no-op.
+  rpc Cleanup(CleanupRequest) returns (CleanupResponse) {}
 }
 
 // Allow different package systems as future proofing.
@@ -92,3 +96,7 @@ message Repo {
 }
 
 message RepoListReply { repeated Repo repos = 1; }
+
+message CleanupRequest { PackageSystem package_system = 1; }
+
+message CleanupResponse { string debug_output = 1; }
