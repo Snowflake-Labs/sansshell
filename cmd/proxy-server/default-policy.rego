@@ -25,6 +25,11 @@ allow {
 	input.method = "/HealthCheck.HealthCheck/Ok"
 }
 
+# Allow anyone to issue DNS queries
+allow {
+	input.method = "/Dns.Lookup/Lookup"
+}
+
 # Allow anyone to read /etc/hosts on any host
 allow {
 	input.method = "/LocalFile.LocalFile/Read"
