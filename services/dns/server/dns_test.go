@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -66,18 +67,16 @@ func TestDnsLookup(t *testing.T) {
 
 	tests := map[string]struct {
 		testee  string
-		want    string
+		want    []string
 		wantErr bool
 	}{
-		"dns lookup succeeds": {testee: "gotest.com", want: "1.3.3.7\n", wantErr: false},
+		"dns lookup succeeds": {testee: "gotest.com", want: []string{"1.3.3.7"}, wantErr: false},
 		"invalid hostname":    {testee: "gotest", wantErr: true},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			defaultResolver = func() Resolver {
-				return mockResolver{shouldFail: tc.wantErr}
-			}
+			resolver = mockResolver{shouldFail: tc.wantErr}.LookupIP
 
 			got, err := client.Lookup(ctx, &pb.LookupRequest{
 				Hostname: tc.testee,
@@ -86,7 +85,8 @@ func TestDnsLookup(t *testing.T) {
 				testutil.WantErr(name, err, tc.wantErr, t)
 				return
 			}
-			if got, want := string(got.Result), tc.want; got != want {
+
+			if got, want := got.Result, tc.want; !cmp.Equal(got, want) {
 				t.Fatalf("%s: stdout doesn't match. Want %q Got %q", name, want, got)
 			}
 		})

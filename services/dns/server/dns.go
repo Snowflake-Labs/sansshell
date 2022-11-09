@@ -19,7 +19,6 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net"
 
 	"github.com/go-logr/logr"
@@ -33,23 +32,11 @@ import (
 
 var (
 	// Create package level resolver such that it can be replaced during testing
-	defaultResolver = func() Resolver {
-		return resolver{}
-	}
+	resolver = net.DefaultResolver.LookupIP
 )
 
 // Server is used to implement the gRPC Server
 type server struct{}
-
-type Resolver interface {
-	LookupIP(ctx context.Context, network, hostname string) ([]net.IP, error)
-}
-
-type resolver struct{}
-
-func (resolver) LookupIP(ctx context.Context, network, hostname string) ([]net.IP, error) {
-	return net.DefaultResolver.LookupIP(ctx, network, hostname)
-}
 
 func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
@@ -57,18 +44,18 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 
 	logger.Info("dns request", "hostname", hostname)
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
-	ips, err := defaultResolver().LookupIP(ctx, "ip4", hostname)
+	ips, err := resolver(ctx, "ip4", hostname)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 
-	var outString string
+	out := []string{}
 	for _, ip := range ips {
-		outString += fmt.Sprintf("%s\n", ip.String())
+		out = append(out, ip.String())
 	}
 
 	reply := &pb.LookupReply{
-		Result: []byte(outString),
+		Result: out,
 	}
 
 	return reply, nil

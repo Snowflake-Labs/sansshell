@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/subcommands"
 
@@ -72,16 +73,15 @@ func (p *lookupCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *lookupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
-	if f.NArg() == 0 {
+	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "Please specify a hostname to lookup.")
 		return subcommands.ExitUsageError
 	}
 
 	c := pb.NewLookupClientProxy(state.Conn)
 
-	hostname := f.Args()[0]
 	req := &pb.LookupRequest{
-		Hostname: hostname,
+		Hostname: f.Args()[0],
 	}
 
 	resp, err := c.LookupOneMany(ctx, req)
@@ -97,7 +97,7 @@ func (p *lookupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			fmt.Fprintf(state.Err[r.Index], "Dns lookup failure for target %s (%d) - error - %v\n", r.Target, r.Index, r.Error)
 			continue
 		}
-		fmt.Fprint(state.Out[r.Index], string(r.Resp.Result))
+		fmt.Fprint(state.Out[r.Index], strings.Join(r.Resp.Result, "\n"))
 	}
 	return subcommands.ExitSuccess
 

@@ -34,5 +34,5 @@ message LookupRequest {
 
 // LookupReply describes the result of a DNS query
 message LookupReply {
-  bytes result = 1;
+  repeated string result = 1;
 }
