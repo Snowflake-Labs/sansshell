@@ -12,6 +12,10 @@ allow {
 }
 
 allow {
+	input.method = "/Dns.Lookup/Lookup"
+}
+
+allow {
 	input.type = "LocalFile.ReadActionRequest"
 	input.message.file.filename = "/etc/hosts"
 }

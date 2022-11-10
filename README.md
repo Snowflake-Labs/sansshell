@@ -70,7 +70,7 @@ Or copy the test certificates from auth/mtls/testdata to ~/.sanshell
 Then you can build and run the server, in separate terminal windows:
 ```
 $ cd cmd/sansshell-server && go build && ./sansshell-server
-$ cd cmd/sanssh && go build && ./sanssh read /etc/hosts
+$ cd cmd/sanssh && go build && ./sanssh --targets=localhost file read /etc/hosts
 ```
 
 ## Debugging
