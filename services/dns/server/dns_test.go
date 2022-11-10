@@ -75,7 +75,12 @@ func TestDnsLookup(t *testing.T) {
 	}
 
 	for name, tc := range tests {
+		tc := tc
 		t.Run(name, func(t *testing.T) {
+			origResolver := resolver
+			t.Cleanup(func() {
+				resolver = origResolver
+			})
 			resolver = mockResolver{shouldFail: tc.wantErr}.LookupIP
 
 			got, err := client.Lookup(ctx, &pb.LookupRequest{

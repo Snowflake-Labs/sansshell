@@ -97,7 +97,7 @@ func (p *lookupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			fmt.Fprintf(state.Err[r.Index], "Dns lookup failure for target %s (%d) - error - %v\n", r.Target, r.Index, r.Error)
 			continue
 		}
-		fmt.Fprint(state.Out[r.Index], strings.Join(r.Resp.Result, "\n"))
+		fmt.Fprintf(state.Out[r.Index], "%s\n", strings.Join(r.Resp.Result, "\n"))
 	}
 	return subcommands.ExitSuccess
 

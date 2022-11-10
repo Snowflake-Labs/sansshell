@@ -49,13 +49,9 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 
-	out := []string{}
+	reply := &pb.LookupReply{}
 	for _, ip := range ips {
-		out = append(out, ip.String())
-	}
-
-	reply := &pb.LookupReply{
-		Result: out,
+		reply.Result = append(reply.Result, ip.String())
 	}
 
 	return reply, nil
