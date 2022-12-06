@@ -3180,6 +3180,7 @@ func (r *fdbConfReadCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 			fmt.Fprintf(state.Err[r.Index], "fdb config read error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
+		fmt.Fprintf(state.Out[r.Index], "%s: %s\n", key, r.Resp.Value)
 	}
 
 	return retCode
