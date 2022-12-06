@@ -568,12 +568,16 @@ func TestSetFileAttributes(t *testing.T) {
 		err = unix.Chmod(badDir, uint32(fs.ModePerm))
 		testutil.FatalOnErr("Chmod", err, t)
 	})
-
-	nobody, err := user.Lookup("nobody")
+	// Tests below set user to nobody.
+	// group has to be looked up because on some systems it's
+	// named "nogroup" and on others "nobody" so just look up
+	// name of nobody's primary group.
+	nobodyUname := "nobody"
+	nobody, err := user.Lookup(nobodyUname)
 	testutil.FatalOnErr("nobody uid", err, t)
 	nobodyUid, err := strconv.Atoi(nobody.Uid)
 	testutil.FatalOnErr("nobody uid conv", err, t)
-	nobodyGroup, err := user.LookupGroup("nobody")
+	nobodyGroup, err := user.LookupGroupId(nobody.Gid)
 	testutil.FatalOnErr("nobody gid", err, t)
 	nobodyGid, err := strconv.Atoi(nobodyGroup.Gid)
 	testutil.FatalOnErr("nobody uid conv", err, t)
@@ -784,12 +788,12 @@ func TestSetFileAttributes(t *testing.T) {
 					Attributes: []*pb.FileAttribute{
 						{
 							Value: &pb.FileAttribute_Username{
-								Username: "nobody",
+								Username: nobodyUname,
 							},
 						},
 						{
 							Value: &pb.FileAttribute_Group{
-								Group: "nobody",
+								Group: nobodyGroup.Name,
 							},
 						},
 					},
