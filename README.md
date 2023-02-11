@@ -1,6 +1,46 @@
 # SansShell
 A non-interactive daemon for host management
 
+```mermaid
+flowchart LR;
+ 
+subgraph sanssh ["sansshell client (sanssh)"]
+    cli;
+    client;
+    subgraph client modules
+      package([package]);
+      file([file]);
+      exec([exec]);
+    end
+    cli --> package --> client;
+    cli --> file --> client;
+    cli --> exec --> client;
+end
+subgraph proxy ["proxy (optional)"]
+    proxy_server[proxy-server];
+    opa_policy[(opa policy)];
+    proxy_server --> opa_policy --> proxy_server
+end
+subgraph sansshell server ["sanshell server (on each host)"]
+    server[sansshell-server];
+    host_apis;
+    s_opa_policy[(opa policy)];
+    subgraph service modules
+      s_package([package]);
+      s_file([file]);
+      s_exec([exec]);
+    end
+    server --> s_package --> host_apis;
+    server --> s_file --> host_apis;
+    server --> s_exec --> host_apis;
+    server --> s_opa_policy --> server
+end
+user{user};
+user --> cli;
+client --"gRPC (mTLS)"--> proxy_server
+proxy_server --"grpc (mTLS)"---> server
+```
+
 SansShell is primarily a gRPC server with a variety of options for localhost
 debugging and management. Its goal is to replace the need to use an
 interactive shell for emergency debugging and recovery with a much safer
