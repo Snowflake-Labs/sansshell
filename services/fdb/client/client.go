@@ -94,7 +94,7 @@ func processLog(state *util.ExecuteState, index int, log *pb.Log, openFiles map[
 	return subcommands.ExitSuccess, openFiles
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*fdbCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&fdbCLICmd{}, "")
 	c.Register(&fdbConfCmd{}, "")
@@ -106,21 +106,21 @@ type fdbCmd struct{}
 
 func (*fdbCmd) Name() string             { return subPackage }
 func (*fdbCmd) SetFlags(_ *flag.FlagSet) {}
-func (*fdbCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+func (p *fdbCmd) Synopsis() string {
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *fdbCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
 }
 
 func (p *fdbCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 
 const fdbCLIPackage = "fdbcli"
 
-func setupFDBCLI(f *flag.FlagSet) *subcommands.Commander {
+func (*fdbCLICmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbCLIPackage, f)
 	c.Register(&fdbCLIAdvanceversionCmd{}, "")
 	c.Register(&fdbCLIBeginCmd{}, "")
@@ -180,8 +180,8 @@ type fdbCLICmd struct {
 }
 
 func (*fdbCLICmd) Name() string { return fdbCLIPackage }
-func (*fdbCLICmd) Synopsis() string {
-	return "Run a fdbcli command on the given host.\n" + client.GenerateSynopsis(setupFDBCLI(flag.NewFlagSet("", flag.ContinueOnError)), 4)
+func (p *fdbCLICmd) Synopsis() string {
+	return "Run a fdbcli command on the given host.\n" + client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
 func (p *fdbCLICmd) Usage() string {
 	return `fdbcli [--cluster-file|-C=X] [--log] [--trace-format=X] [–-tls_certificate_file=X] [–-tls_ca_file=X] [–-tls_key_file=X] [–-tls_password=X] [--tls_verify_peers=X] [--debug-tls] [--version|-v] [--log-group=X] [--no-status] [--memory=X] [--build-flags] [--timeout=N] [--status-from-json] --exec "<command> <options>"
@@ -316,7 +316,7 @@ func (r *fdbCLICmd) SetFlags(f *flag.FlagSet) {
 // It does pass along the top level request since any top level flags need to be filled in there and available
 // for the final request. Sub commands will implement the specific oneof Command and any command specific flags.
 func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setupFDBCLI(f)
+	c := r.GetSubpackage(f)
 	// If it's just asking for flags or commands run those and exit. Help is special since we have that
 	// as its own subcommand which executes remotely.
 	if f.Arg(0) == "flags" || f.Arg(0) == "commands" || f.Arg(0) == "help" {
@@ -341,7 +341,7 @@ func (r *fdbCLICmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		}
 	}
 
-	c = setupFDBCLI(f)
+	c = r.GetSubpackage(f)
 
 	args = append(args, r.req)
 
@@ -545,6 +545,10 @@ func (r *fdbCLIBlobrangeCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIBlobrange{}
 }
 
+func (r *fdbCLIBlobrangeCmd) PredictArgs(prefix string) []string {
+	return []string{"start", "stop"}
+}
+
 func (r *fdbCLIBlobrangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
@@ -595,6 +599,10 @@ func (r *fdbCLICacheRangeCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLICacheRange{}
 }
 
+func (r *fdbCLICacheRangeCmd) PredictArgs(prefix string) []string {
+	return []string{"set", "clear"}
+}
+
 func (r *fdbCLICacheRangeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
@@ -643,6 +651,10 @@ func (p *fdbCLIChangefeedCmd) Usage() string {
 
 func (r *fdbCLIChangefeedCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIChangefeed{}
+}
+
+func (r *fdbCLIChangefeedCmd) PredictArgs(prefix string) []string {
+	return []string{"list", "register", "destroy", "stop", "stream", "pop"}
 }
 
 func (r *fdbCLIChangefeedCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -1046,6 +1058,10 @@ func (r *fdbCLIConsistencycheckCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIConsistencycheck{}
 }
 
+func (r *fdbCLIConsistencycheckCmd) PredictArgs(prefix string) []string {
+	return []string{"on", "off"}
+}
+
 func (r *fdbCLIConsistencycheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
@@ -1209,6 +1225,10 @@ func (p *fdbCLIDatadistributionCmd) Usage() string {
 
 func (r *fdbCLIDatadistributionCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIDatadistribution{}
+}
+
+func (r *fdbCLIDatadistributionCmd) PredictArgs(prefix string) []string {
+	return []string{"on", "off", "disable", "enable"}
 }
 
 func (r *fdbCLIDatadistributionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {

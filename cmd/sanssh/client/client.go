@@ -135,6 +135,11 @@ func Run(ctx context.Context, rs RunState) {
 			}
 		}
 	}
+	if len(flag.Args()) <= 1 {
+		// If there's no flags or only one flag, whoever's running this is probably still learning how
+		// to invoke the tool and not trying to run the command.
+		os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
+	}
 
 	// Bunch of flag sanity checking
 	if len(rs.Targets) == 0 && rs.Proxy == "" {

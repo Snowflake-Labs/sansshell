@@ -41,7 +41,7 @@ func init() {
 	subcommands.Register(&fileCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&chgrpCmd{}, "")
 	c.Register(&chmodCmd{}, "")
@@ -63,7 +63,7 @@ type fileCmd struct{}
 
 func (*fileCmd) Name() string { return subPackage }
 func (p *fileCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *fileCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -71,7 +71,7 @@ func (p *fileCmd) Usage() string {
 func (*fileCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *fileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

@@ -36,7 +36,7 @@ func init() {
 	subcommands.Register(&ansibleCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*ansibleCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&playbookCmd{}, "")
 	return c
@@ -46,7 +46,7 @@ type ansibleCmd struct{}
 
 func (*ansibleCmd) Name() string { return subPackage }
 func (p *ansibleCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *ansibleCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -54,7 +54,7 @@ func (p *ansibleCmd) Usage() string {
 func (*ansibleCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

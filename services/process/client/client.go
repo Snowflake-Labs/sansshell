@@ -39,7 +39,7 @@ func init() {
 	subcommands.Register(&processCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*processCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&dumpCmd{}, "")
 	c.Register(&jstackCmd{}, "")
@@ -53,7 +53,7 @@ type processCmd struct{}
 
 func (*processCmd) Name() string { return subPackage }
 func (p *processCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *processCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -61,7 +61,7 @@ func (p *processCmd) Usage() string {
 func (*processCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *processCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 
