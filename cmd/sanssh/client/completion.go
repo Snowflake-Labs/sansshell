@@ -115,7 +115,9 @@ type subCompleter struct {
 func (c *subCompleter) ListCommandsAndEssentialFlags() []string {
 	s, ok := c.command.(client.HasSubpackage)
 	if !ok {
-		return nil
+		// If there's no subcommands, it's probably useful to
+		// suggest all the flags of the command.
+		return c.ListFlags()
 	}
 	return fromSubpackage(s).ListCommandsAndEssentialFlags()
 }
@@ -173,12 +175,20 @@ func predict(c completer, args []string) []string {
 		flagName := strings.TrimLeft(args[0], "-")
 		switch len(args) {
 		case 1:
+			if strings.Contains(flagName, "=") {
+				split := strings.SplitN(args[0], "=", 2)
+				var suggestions []string
+				for _, s := range filterToPrefix(c.GetFlag(strings.TrimLeft(split[0], "-"), split[1]), split[1]) {
+					suggestions = append(suggestions, split[0]+"="+s)
+				}
+				return filterToPrefix(suggestions, args[0])
+			}
 			return filterToPrefix(c.ListFlags(), args[0])
 		case 2:
 			if c.IsBoolFlag(flagName) {
 				return predict(c, args[1:])
 			}
-			return c.GetFlag(flagName, args[1])
+			return filterToPrefix(c.GetFlag(flagName, args[1]), args[1])
 		default:
 			if strings.Contains(flagName, "=") || (c.IsBoolFlag(flagName) && !validBools[args[1]]) {
 				return predict(c, args[1:])
@@ -186,15 +196,30 @@ func predict(c completer, args []string) []string {
 			return predict(c, args[2:])
 		}
 	}
+
 	if len(args) > 1 {
 		next := c.GetCommandCompleter(args[0])
 		if next == nil {
 			prefix := strings.Join(args, " ")
+			fmt.Fprintln(os.Stderr, prefix)
 			return filterToPrefix(c.GetArgs(prefix), prefix)
 		}
 		return predict(next, args[1:])
 	}
-	return filterToPrefix(c.ListCommandsAndEssentialFlags(), args[0])
+	return filterToPrefix(append(c.ListCommandsAndEssentialFlags(), c.GetArgs(args[0])...), args[0])
+}
+
+func predictLine(c completer, line string) []string {
+	args := strings.Fields(line)
+	if len(args) < 1 {
+		return nil
+	}
+	args = args[1:] // Skip the self-arg
+	if line[len(line)-1] == ' ' {
+		args = append(args, "") // Append a blank arg at the end when we're starting a new word
+	}
+
+	return predict(c, args)
 }
 
 // Predictor can provide suggested values based on a provided prefix.
@@ -213,13 +238,8 @@ func AddCommandLineCompletion(topLevelFlagPredictions map[string]Predictor) {
 	}
 
 	c := &cmdCompleter{commander: subcommands.DefaultCommander, flagPredictions: topLevelFlagPredictions}
-	args := strings.Fields(compLine)
-	args = args[1:] // Skip the self-arg
-	if compLine[len(compLine)-1] == ' ' {
-		args = append(args, "") // Append a blank arg at the end when we're starting a new word
-	}
 
-	for _, prediction := range predict(c, args) {
+	for _, prediction := range predictLine(c, compLine) {
 		fmt.Println(prediction)
 	}
 
