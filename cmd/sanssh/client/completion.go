@@ -94,7 +94,7 @@ func (c *cmdCompleter) GetFlag(flag, prefix string) []string {
 	if predictor := c.flagPredictions[flag]; predictor != nil {
 		return predictor(prefix)
 	}
-	return []string{prefix}
+	return nil
 }
 func (c *cmdCompleter) GetArgs(prefix string) []string {
 	return nil
@@ -139,7 +139,7 @@ func (c *subCompleter) ListFlags() []string {
 }
 
 func (c *subCompleter) GetFlag(flag, prefix string) []string {
-	return []string{prefix}
+	return nil
 }
 
 func (c *subCompleter) IsBoolFlag(fl string) bool {

@@ -194,11 +194,11 @@ the appropriate line in your shell configuration.
 
 ```shell
 # In .bashrc
-complete -C /path/to/sanssh sanssh
+complete -C /path/to/sanssh -o dirnames sanssh
 # Or in .zshrc
 autoload -Uz compinit && compinit
 autoload -U +X bashcompinit && bashcompinit
-complete -C /path/to/sanssh sanssh
+complete -C /path/to/sanssh -o dirnames sanssh
 ```
 
 # Extending SansShell

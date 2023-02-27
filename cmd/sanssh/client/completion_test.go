@@ -24,7 +24,7 @@ func (s *subCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	return client.SetupSubpackage(s.name, f)
 }
 
-type emptyCmd struct{ name string }
+type emptyCmd struct{}
 
 func (*emptyCmd) Name() string             { return "empty" }
 func (*emptyCmd) Synopsis() string         { return "" }
@@ -76,7 +76,7 @@ func TestPredict(t *testing.T) {
 		{
 			desc: "choosing flag values, no prediction",
 			line: "sanssh --important s",
-			want: []string{"s"},
+			want: nil,
 		},
 		{
 			desc: "choosing flag values, equals",
@@ -106,7 +106,7 @@ func TestPredict(t *testing.T) {
 		{
 			desc: "subcommand flag val",
 			line: "sanssh sub --foo bar",
-			want: []string{"bar"},
+			want: nil,
 		},
 		{
 			desc: "finished subsubcommand",
