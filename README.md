@@ -1,4 +1,10 @@
 # SansShell
+
+[![Build Status](https://github.com/Snowflake-Labs/sansshell/workflows/Build%20and%20Test/badge.svg?branch=main)](https://github.com/Snowflake-Labs/sansshell/actions?query=workflow%3A%22Build+and+Test%229)
+[![License](https://img.shields.io/:license-Apache%202-brightgreen.svg)](https://github.com/Snowflake-Labs/sansshell/blob/main/LICENSE)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Snowflake-Labs/sansshell.svg)](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell)
+[![Report Card](https://goreportcard.com/badge/github.com/Snowflake-Labs/sansshell)](https://goreportcard.com/report/github.com/Snowflake-Labs/sansshell)
+
 A non-interactive daemon for host management
 
 ```mermaid

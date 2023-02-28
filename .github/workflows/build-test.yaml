@@ -1,7 +1,14 @@
 ---
-name: PR
+name: Build and Test
 on:
-  - pull_request
+  push:
+    braches:
+      - main
+    tags:
+      - v*
+  pull_request:
+  schedule:
+    - cron:  '7 3 * * *'
 jobs:
   pre-commit:
     name: Pre commit
