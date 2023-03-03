@@ -25,9 +25,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/pprof"
 	"os"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -47,6 +50,8 @@ type runState struct {
 	credSource               string
 	tlsConfig                *tls.Config
 	hostport                 string
+	debugport                string
+	debughandler             *http.ServeMux
 	justification            bool
 	justificationFunc        func(string) error
 	unaryInterceptors        []grpc.UnaryServerInterceptor
@@ -194,6 +199,37 @@ func WithRawServerOption(s func(*grpc.Server)) Option {
 	})
 }
 
+// WithDebugPort opens an additional port for a http debug page.
+//
+// This is meant for humans. The format of the debug pages may change over time.
+func WithDebugPort(addr string) Option {
+	return optionFunc(func(r *runState) error {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				fmt.Fprintln(w, `<!DOCTYPE html>
+			Hi, I'm a sansshell proxy. Maybe you want one of the following pages.
+			<ul>
+			<li><a href="/debug/pprof">/debug/pprof</a></li>
+			<li><a href="/metrics">/metrics</a></li>
+			</ul>`)
+			} else {
+				http.NotFound(w, r)
+				return
+			}
+		})
+		mux.Handle("/metrics", promhttp.Handler())
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		r.debugport = addr
+		r.debughandler = mux
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -206,6 +242,13 @@ func Run(ctx context.Context, opts ...Option) {
 			rs.logger.Error(err, "error applying option")
 			os.Exit(1)
 		}
+	}
+
+	// If there's a debug port, we want to start it early
+	if rs.debughandler != nil {
+		go func() {
+			rs.logger.Error(http.ListenAndServe(rs.debugport, rs.debughandler), "Debug handler unexpectedly exited")
+		}()
 	}
 
 	serverCreds, err := extractServerTransportCredentialsFromRunState(ctx, rs)

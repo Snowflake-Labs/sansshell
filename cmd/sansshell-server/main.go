@@ -74,6 +74,7 @@ var (
 	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
 	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
 	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
+	debugport     = flag.String("debugport", "localhost:50044", "A separate port for http debug pages.")
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
@@ -143,5 +144,6 @@ func main() {
 		server.WithJustification(*justification),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
+		server.WithDebugPort(*debugport),
 	)
 }
