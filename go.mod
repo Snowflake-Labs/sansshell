@@ -3,7 +3,7 @@ module github.com/Snowflake-Labs/sansshell
 go 1.19
 
 require (
-	github.com/coreos/go-systemd/v22 v22.4.0
+	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.5.9
