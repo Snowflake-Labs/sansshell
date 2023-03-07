@@ -11,7 +11,7 @@ require (
 	github.com/open-policy-agent/opa v0.45.0
 	github.com/prometheus/client_golang v1.13.0
 	gocloud.dev v0.27.0
-	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0
+	golang.org/x/sync v0.1.0
 	golang.org/x/sys v0.0.0-20221010170243-090e33056c14
 	google.golang.org/grpc v1.50.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
