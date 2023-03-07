@@ -245,7 +245,7 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 
 	// If there's a debug port, we want to start it early
-	if rs.debughandler != nil {
+	if rs.debughandler != nil && rs.debugport != "" {
 		go func() {
 			rs.logger.Error(http.ListenAndServe(rs.debugport, rs.debughandler), "Debug handler unexpectedly exited")
 		}()
