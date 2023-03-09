@@ -36,7 +36,7 @@ func init() {
 	subcommands.Register(&execCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*execCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&runCmd{}, "")
 	return c
@@ -46,7 +46,7 @@ type execCmd struct{}
 
 func (*execCmd) Name() string { return subPackage }
 func (p *execCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *execCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -54,7 +54,7 @@ func (p *execCmd) Usage() string {
 func (*execCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

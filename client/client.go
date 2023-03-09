@@ -27,6 +27,12 @@ import (
 	"github.com/google/subcommands"
 )
 
+// HasSubpackage should be implemented by users of SetupSubpackage to
+// help with introspecting subpackages of subcommands.
+type HasSubpackage interface {
+	GetSubpackage(f *flag.FlagSet) *subcommands.Commander
+}
+
 // SetupSubpackage is a helper to create a Commander to hold the actual
 // commands run inside of a top-level command. The returned Commander should
 // then have the relevant sub-commands registered within it.
@@ -68,4 +74,14 @@ func GenerateSynopsis(c *subcommands.Commander, leading int) string {
 // sub-commands contained within it.
 func GenerateUsage(name string, synopsis string) string {
 	return fmt.Sprintf("%s has several subcommands. Pick one to perform the action you wish:\n%s", name, synopsis)
+}
+
+// PredictArgs can optionally be implemented to help with command-line completion. It will typically be implemented
+// on a type that already implements subcommands.Command.
+type PredictArgs interface {
+	// PredictArgs returns prediction options for a given prefix. The prefix is
+	// the subcommand arguments that have been typed so far (possibly nothing)
+	// and can be used as a hint for what to return. The returned values will be
+	// automatically filtered by the prefix when needed.
+	PredictArgs(prefix string) []string
 }

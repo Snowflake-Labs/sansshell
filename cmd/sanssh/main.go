@@ -118,6 +118,10 @@ func main() {
 	// as that means just talk to --targets[0] instead.
 	// If the flag itself was set that will override.
 	*proxyAddr = os.Getenv(proxyEnv)
+
+	client.AddCommandLineCompletion(map[string]client.Predictor{
+		"targets": func(string) []string { return []string{"localhost"} },
+	})
 	flag.Parse()
 
 	// If we're given a --targets-file read it in and stuff into targetsFlag

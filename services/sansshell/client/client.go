@@ -37,7 +37,7 @@ func init() {
 	subcommands.Register(&sansshellCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*sansshellCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&setVerbosityCmd{}, "")
 	c.Register(&getVerbosityCmd{}, "")
@@ -53,7 +53,7 @@ type sansshellCmd struct{}
 
 func (*sansshellCmd) Name() string { return subPackage }
 func (p *sansshellCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *sansshellCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -61,7 +61,7 @@ func (p *sansshellCmd) Usage() string {
 func (*sansshellCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *sansshellCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

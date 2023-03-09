@@ -36,7 +36,7 @@ func init() {
 	subcommands.Register(&healthcheckCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*healthcheckCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&validateCmd{}, "")
 	return c
@@ -46,7 +46,7 @@ type healthcheckCmd struct{}
 
 func (*healthcheckCmd) Name() string { return subPackage }
 func (p *healthcheckCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *healthcheckCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -54,7 +54,7 @@ func (p *healthcheckCmd) Usage() string {
 func (*healthcheckCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *healthcheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

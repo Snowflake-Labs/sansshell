@@ -37,7 +37,7 @@ func init() {
 	subcommands.Register(&dnsCmd{}, subPackage)
 }
 
-func setup(f *flag.FlagSet) *subcommands.Commander {
+func (*dnsCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&lookupCmd{}, "")
 	return c
@@ -47,7 +47,7 @@ type dnsCmd struct{}
 
 func (*dnsCmd) Name() string { return subPackage }
 func (p *dnsCmd) Synopsis() string {
-	return client.GenerateSynopsis(setup(flag.NewFlagSet("", flag.ContinueOnError)), 2)
+	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
 func (p *dnsCmd) Usage() string {
 	return client.GenerateUsage(subPackage, p.Synopsis())
@@ -55,7 +55,7 @@ func (p *dnsCmd) Usage() string {
 func (*dnsCmd) SetFlags(f *flag.FlagSet) {}
 
 func (p *dnsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := setup(f)
+	c := p.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 

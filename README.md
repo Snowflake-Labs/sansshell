@@ -189,6 +189,18 @@ There is a reference implementation of a SansShell CLI Client in
 as a way to implement "convenience" commands which chain together a series of
 actions.
 
+It also demonstrates how to set up command line completion. To use this, set
+the appropriate line in your shell configuration.
+
+```shell
+# In .bashrc
+complete -C /path/to/sanssh -o dirnames sanssh
+# Or in .zshrc
+autoload -Uz compinit && compinit
+autoload -U +X bashcompinit && bashcompinit
+complete -C /path/to/sanssh -o dirnames sanssh
+```
+
 # Extending SansShell
 SansShell is built on a principle of "Don't pay for what you don't use".  This
 is advantageous in both minimizing the resources of SansShell server (binary
