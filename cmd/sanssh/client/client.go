@@ -281,7 +281,7 @@ func Run(ctx context.Context, rs RunState) {
 	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
 		// Set up a connection to the sansshell-server (possibly via proxy).
-		conn, err := proxy.Dial(rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
+		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
@@ -299,7 +299,7 @@ func Run(ctx context.Context, rs RunState) {
 
 	// Remainder or the fall through case of no targets (i.e. a proxy command).
 	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
-		conn, err := proxy.Dial(rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
+		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
 			os.Exit(1)
