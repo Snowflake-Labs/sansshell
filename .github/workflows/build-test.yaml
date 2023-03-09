@@ -2,7 +2,7 @@
 name: Build and Test
 on:
   push:
-    braches:
+    branches:
       - main
     tags:
       - v*
