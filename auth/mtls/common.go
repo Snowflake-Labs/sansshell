@@ -30,37 +30,31 @@ import (
 // If the file is a directory, LoadRootOfTrust will load all files
 // in that directory.
 func LoadRootOfTrust(path string) (*x509.CertPool, error) {
-	capool := x509.NewCertPool()
-
-	loadRoot := func(filename string) error {
-		ca, err := os.ReadFile(filename)
-		if err != nil {
-			return fmt.Errorf("could not read %q: %w", filename, err)
-		}
-		if !capool.AppendCertsFromPEM(ca) {
-			return fmt.Errorf("could not add CA cert from %q to pool: %w", filename, err)
-		}
-		return nil
-	}
-
 	fi, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("could not stat CA cert path %q: %w", path, err)
 	}
+	var certfiles []string
 	if fi.IsDir() {
 		files, err := os.ReadDir(path)
 		if err != nil {
 			return nil, fmt.Errorf("could not read  CA cert directory %q: %w", path, err)
 		}
 		for _, f := range files {
-			if err := loadRoot(filepath.Join(path, f.Name())); err != nil {
-				return nil, err
-			}
+			certfiles = append(certfiles, filepath.Join(path, f.Name()))
 		}
 	} else {
-		err := loadRoot(path)
+		certfiles = []string{path}
+	}
+
+	capool := x509.NewCertPool()
+	for _, filename := range certfiles {
+		ca, err := os.ReadFile(filename)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("could not read %q: %w", filename, err)
+		}
+		if !capool.AppendCertsFromPEM(ca) {
+			return nil, fmt.Errorf("could not add CA cert from %q to pool: %w", filename, err)
 		}
 	}
 	return capool, nil
