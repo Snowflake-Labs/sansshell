@@ -110,11 +110,10 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
 	logger = logger.WithValues("authorizationResult", result)
+	logger.V(1).Info("authz policy evaluation result")
 	if !result {
-		logger.V(1).Info("authz policy evaluation result")
 		return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
 	}
-	logger.V(1).Info("authz policy evaluation result")
 
 	return nil
 }
