@@ -355,7 +355,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, di
 		dialTimeout:   dialTimeout,
 	}
 	ts.logger = logger.WithValues("stream", ts.String())
-	ts.logger.Info("created")
+	ts.logger.Info("created target stream")
 	return ts, nil
 }
 
