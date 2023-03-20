@@ -114,7 +114,6 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	if !result {
 		return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
 	}
-
 	return nil
 }
 
