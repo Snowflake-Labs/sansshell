@@ -87,9 +87,8 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		}
 	}
 	if input == nil {
-		errMsg := "policy input cannot be nil"
-		err := status.Error(codes.InvalidArgument, errMsg)
-		logger.V(1).Error(err, errMsg)
+		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
+		logger.V(1).Error(err, "failed to evaluate authz policy")
 		return err
 	}
 	for _, hook := range g.hooks {
