@@ -30,8 +30,16 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
+type contextKey string
+
+func (c contextKey) String() string {
+	return string(c)
+}
+
 const (
-	sansshellMetadata = "sansshell-"
+	sansshellMetadata            = "sansshell-"
+	sansshellSessionIDKey        = "sansshell-session-id"
+	contextKeySansshellSessionID = contextKey(sansshellSessionIDKey)
 )
 
 // UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
@@ -40,6 +48,8 @@ const (
 func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		l := logger.WithValues("method", method, "target", cc.Target())
+		sessionID := ctx.Value(contextKeySansshellSessionID)
+		l = l.WithValues(sansshellSessionIDKey, sessionID)
 		logCtx := logr.NewContext(ctx, l)
 		logCtx = passAlongMetadata(logCtx)
 		l = logMetadata(logCtx, l)
@@ -58,6 +68,8 @@ func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		l := logger.WithValues("method", method, "target", cc.Target())
+		sessionID := ctx.Value(contextKeySansshellSessionID)
+		l = l.WithValues(sansshellSessionIDKey, sessionID)
 		logCtx := logr.NewContext(ctx, l)
 		logCtx = passAlongMetadata(logCtx)
 		l = logMetadata(logCtx, l)
@@ -160,7 +172,7 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 			l = l.WithValues("peer-address", p.Addr)
 		}
 		id := uuid.NewString()
-		l = l.WithValues("sansshell-session-id", id)
+		l = l.WithValues(sansshellSessionIDKey, id)
 		l = logMetadata(ctx, l)
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
@@ -183,11 +195,12 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 		if p, ok := peer.FromContext(ss.Context()); ok {
 			l = l.WithValues("peer-address", p.Addr)
 		}
-		id := uuid.NewString()
-		l = l.WithValues("sansshell-session-id", id)
+		sessionID := uuid.NewString()
+		l = l.WithValues(sansshellSessionIDKey, sessionID)
 		l = logMetadata(ss.Context(), l)
 		l.Info("new stream")
 		stream := &loggedStream{
+			sessionID:    sessionID,
 			ServerStream: ss,
 			logger:       l,
 		}
@@ -201,6 +214,7 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 
 // loggedStream wraps a grpc.ServerStream with additional logging.
 type loggedStream struct {
+	sessionID string
 	grpc.ServerStream
 	logger logr.Logger
 }
@@ -209,6 +223,7 @@ func (l *loggedStream) Context() context.Context {
 	// Get the stream context and make sure our logger is attached.
 	ctx := l.ServerStream.Context()
 	ctx = logr.NewContext(ctx, l.logger)
+	ctx = context.WithValue(ctx, contextKeySansshellSessionID, l.sessionID)
 	return ctx
 }
 
