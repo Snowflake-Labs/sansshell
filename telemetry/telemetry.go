@@ -84,7 +84,7 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 }
 
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
-	// Add any sansshell specific metadata to the logging we do.
+	// Add any sansshell specific metadata from incoming context to the logging we do.
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		for k, v := range md {
@@ -95,6 +95,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
+	// Log session ID obtained from current context
 	sessionID := ctx.Value(contextKeySansshellSessionID)
 	if sessionID == nil {
 		l.V(0).Error(errors.New("session ID is missing in context"), "unable to find session ID")
@@ -117,6 +118,7 @@ func passAlongMetadata(ctx context.Context) context.Context {
 			}
 		}
 	}
+	// Pass session ID obtained from context
 	sessionID := ctx.Value(contextKeySansshellSessionID)
 	if sessionID == nil {
 		l := logr.FromContextOrDiscard(ctx)
@@ -171,6 +173,9 @@ func (l *loggedClientStream) CloseSend() error {
 	return err
 }
 
+// getSessionIDFromIncomingCtx returns the sansshell session id from incoming context
+// if it exists. Otherwise it returns an empty string.
+// It also returns a boolean indicating whether session id exists or not.
 func getSessionIDFromIncomingCtx(ctx context.Context) (string, bool) {
 	var sessionID string
 	incomingCtx, ok := metadata.FromIncomingContext(ctx)
