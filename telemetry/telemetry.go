@@ -20,6 +20,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
@@ -48,8 +49,6 @@ const (
 func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		l := logger.WithValues("method", method, "target", cc.Target())
-		sessionID := ctx.Value(contextKeySansshellSessionID)
-		l = l.WithValues(sansshellSessionIDKey, sessionID)
 		logCtx := logr.NewContext(ctx, l)
 		logCtx = passAlongMetadata(logCtx)
 		l = logMetadata(logCtx, l)
@@ -68,8 +67,6 @@ func UnaryClientLogInterceptor(logger logr.Logger) grpc.UnaryClientInterceptor {
 func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		l := logger.WithValues("method", method, "target", cc.Target())
-		sessionID := ctx.Value(contextKeySansshellSessionID)
-		l = l.WithValues(sansshellSessionIDKey, sessionID)
 		logCtx := logr.NewContext(ctx, l)
 		logCtx = passAlongMetadata(logCtx)
 		l = logMetadata(logCtx, l)
@@ -98,6 +95,12 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
+	sessionID := ctx.Value(contextKeySansshellSessionID)
+	if sessionID == nil {
+		l.V(0).Error(errors.New("session ID is missing in context"), "unable to find session ID")
+	} else {
+		l = l.WithValues(sansshellSessionIDKey, sessionID.(string))
+	}
 	return l
 }
 
@@ -114,6 +117,14 @@ func passAlongMetadata(ctx context.Context) context.Context {
 			}
 		}
 	}
+	sessionID := ctx.Value(contextKeySansshellSessionID)
+	if sessionID == nil {
+		l := logr.FromContextOrDiscard(ctx)
+		l.V(0).Error(errors.New("session ID is missing in context"), "unable to find session ID")
+	} else {
+		ctx = metadata.AppendToOutgoingContext(ctx, sansshellSessionIDKey, sessionID.(string))
+	}
+
 	return ctx
 }
 
@@ -160,6 +171,21 @@ func (l *loggedClientStream) CloseSend() error {
 	return err
 }
 
+func getSessionIDFromIncomingCtx(ctx context.Context) (string, bool) {
+	var sessionID string
+	incomingCtx, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", false
+	} else {
+		vals := incomingCtx.Get(sansshellSessionIDKey)
+		if len(vals) == 0 {
+			return "", false
+		}
+		sessionID = vals[0]
+	}
+	return sessionID, true
+}
+
 // UnaryServerLogInterceptor returns a new gprc.UnaryServerInterceptor that logs
 // incoming requests using the supplied logger, as well as injecting it into the
 // context of downstream handlers. If incoming calls require client side provided justification
@@ -171,8 +197,11 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 		if p, ok := peer.FromContext(ctx); ok {
 			l = l.WithValues("peer-address", p.Addr)
 		}
-		id := uuid.NewString()
-		l = l.WithValues(sansshellSessionIDKey, id)
+		_, ok := getSessionIDFromIncomingCtx(ctx)
+		if !ok {
+			sessionID := uuid.NewString()
+			l = l.WithValues(sansshellSessionIDKey, sessionID)
+		}
 		l = logMetadata(ctx, l)
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
@@ -195,8 +224,11 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 		if p, ok := peer.FromContext(ss.Context()); ok {
 			l = l.WithValues("peer-address", p.Addr)
 		}
-		sessionID := uuid.NewString()
-		l = l.WithValues(sansshellSessionIDKey, sessionID)
+		sessionID, ok := getSessionIDFromIncomingCtx(ss.Context())
+		if !ok {
+			sessionID := uuid.NewString()
+			l = l.WithValues(sansshellSessionIDKey, sessionID)
+		}
 		l = logMetadata(ss.Context(), l)
 		l.Info("new stream")
 		stream := &loggedStream{
