@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
@@ -158,6 +159,8 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 		if p, ok := peer.FromContext(ctx); ok {
 			l = l.WithValues("peer-address", p.Addr)
 		}
+		id := uuid.NewString()
+		l = l.WithValues("sansshell-session-id", id)
 		l = logMetadata(ctx, l)
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
@@ -180,6 +183,8 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 		if p, ok := peer.FromContext(ss.Context()); ok {
 			l = l.WithValues("peer-address", p.Addr)
 		}
+		id := uuid.NewString()
+		l = l.WithValues("sansshell-session-id", id)
 		l = logMetadata(ss.Context(), l)
 		l.Info("new stream")
 		stream := &loggedStream{
