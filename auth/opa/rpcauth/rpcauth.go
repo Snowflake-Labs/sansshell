@@ -80,16 +80,18 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 // the success or failure of policy.
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
+	logger = logger.WithValues("input", input)
 	if input != nil {
-		if logger.V(2).Enabled() {
-			logger.V(2).Info("evaluating authz policy", "input", input)
-		}
+		logger.V(2).Info("evaluating authz policy")
 	}
 	if input == nil {
-		return status.Error(codes.InvalidArgument, "policy input cannot be nil")
+		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
+		logger.V(1).Error(err, "failed to evaluate authz policy")
+		return err
 	}
 	for _, hook := range g.hooks {
 		if err := hook.Hook(ctx, input); err != nil {
+			logger.V(1).Error(err, "authz hook error")
 			if _, ok := status.FromError(err); ok {
 				// error is already an appropriate status.Status
 				return err
@@ -97,15 +99,14 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			return status.Errorf(codes.Internal, "authz hook error: %v", err)
 		}
 	}
-	if logger.V(1).Enabled() {
-		logger.V(1).Info("evaluating authz policy post hooks", "input", input)
-	}
-	allowed, err := g.policy.Eval(ctx, input)
+	logger.V(2).Info("evaluating authz policy post hooks")
+	result, err := g.policy.Eval(ctx, input)
 	if err != nil {
+		logger.V(1).Error(err, "failed to evaluate authz policy")
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
-	if !allowed {
-		logger.V(1).Info("permission denied")
+	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result)
+	if !result {
 		return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
 	}
 	return nil
