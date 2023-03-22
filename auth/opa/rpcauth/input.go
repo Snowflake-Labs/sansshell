@@ -159,7 +159,7 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	out := &PeerAuthInput{}
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return out
+		return nil
 	}
 	out.Net = NetInputFromAddr(p.Addr)
 	out.Cert = CertInputFrom(p.AuthInfo)
