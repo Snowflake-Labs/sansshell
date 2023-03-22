@@ -274,6 +274,11 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				return err
 			}
 			streamPeerInfo := s.PeerAuthInfo()
+			if streamPeerInfo == nil {
+				err := status.Errorf(codes.Internal, "peer auth info cannot be nil")
+				s.CloseWith(err)
+				return err
+			}
 			authinput.Host = &rpcauth.HostAuthInput{
 				Net:       streamPeerInfo.Net,
 				Cert:      streamPeerInfo.Cert,

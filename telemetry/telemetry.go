@@ -23,10 +23,10 @@ import (
 	"io"
 	"strings"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 )
 
 const (
@@ -155,8 +155,9 @@ func (l *loggedClientStream) CloseSend() error {
 func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		l := logger.WithValues("method", info.FullMethod)
-		if p, ok := peer.FromContext(ctx); ok {
-			l = l.WithValues("peer-address", p.Addr)
+		p := rpcauth.PeerInputFromContext(ctx)
+		if p != nil {
+			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ctx, l)
 		l.Info("new request")
@@ -177,8 +178,9 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		l := logger.WithValues("method", info.FullMethod)
-		if p, ok := peer.FromContext(ss.Context()); ok {
-			l = l.WithValues("peer-address", p.Addr)
+		p := rpcauth.PeerInputFromContext(ss.Context())
+		if p != nil {
+			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ss.Context(), l)
 		l.Info("new stream")
