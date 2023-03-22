@@ -403,7 +403,7 @@ func TestRpcAuthInput(t *testing.T) {
 			method: "/AMethod",
 			compare: &RPCAuthInput{
 				Method: "/AMethod",
-				Peer:   &PeerAuthInput{},
+				Peer:   nil,
 			},
 		},
 		{
@@ -413,7 +413,7 @@ func TestRpcAuthInput(t *testing.T) {
 			compare: &RPCAuthInput{
 				Method:   "/AMethod",
 				Metadata: md,
-				Peer:     &PeerAuthInput{},
+				Peer:     nil,
 			},
 		},
 		{
@@ -425,7 +425,7 @@ func TestRpcAuthInput(t *testing.T) {
 				Method:      "/AMethod",
 				Message:     json.RawMessage{0x7b, 0x7d},
 				MessageType: "google.protobuf.Empty",
-				Peer:        &PeerAuthInput{},
+				Peer:        nil,
 			},
 		},
 		{
