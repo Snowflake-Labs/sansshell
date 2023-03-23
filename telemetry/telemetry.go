@@ -20,7 +20,6 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 	"io"
 	"strings"
 
@@ -97,9 +96,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 	}
 	// Log session ID obtained from current context
 	sessionID := ctx.Value(contextKeySansshellSessionID)
-	if sessionID == nil {
-		l.V(0).Error(errors.New("session ID is missing in context"), "unable to find session ID")
-	} else {
+	if sessionID != nil {
 		l = l.WithValues(sansshellSessionIDKey, sessionID.(string))
 	}
 	return l
@@ -120,10 +117,7 @@ func passAlongMetadata(ctx context.Context) context.Context {
 	}
 	// Pass session ID obtained from context
 	sessionID := ctx.Value(contextKeySansshellSessionID)
-	if sessionID == nil {
-		l := logr.FromContextOrDiscard(ctx)
-		l.V(0).Error(errors.New("session ID is missing in context"), "unable to find session ID")
-	} else {
+	if sessionID != nil {
 		ctx = metadata.AppendToOutgoingContext(ctx, sansshellSessionIDKey, sessionID.(string))
 	}
 
