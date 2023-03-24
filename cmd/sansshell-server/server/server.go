@@ -30,9 +30,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	oteltracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -200,6 +197,18 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
+	return optionFunc(func(r *runState) error {
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			otelgrpc.StreamServerInterceptor(interceptorOpt),
+		)
+		return nil
+	})
+}
+
 // Run takes the given context and RunState and starts up a sansshell server.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, opts ...Option) {
@@ -229,18 +238,11 @@ func Run(ctx context.Context, opts ...Option) {
 		return rs.justification
 	})
 
-	tp := oteltracesdk.NewTracerProvider()
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	interceptorOpt := otelgrpc.WithTracerProvider(otel.GetTracerProvider())
-
 	var serverOpts []server.Option
 	serverOpts = append(serverOpts, server.WithCredentials(creds))
 	serverOpts = append(serverOpts, server.WithPolicy(rs.policy))
 	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
 	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
-	serverOpts = append(serverOpts, server.WithStreamInterceptor(otelgrpc.StreamServerInterceptor(interceptorOpt)))
-	serverOpts = append(serverOpts, server.WithUnaryInterceptor(otelgrpc.UnaryServerInterceptor(interceptorOpt)))
 	for _, a := range rs.authzHooks {
 		serverOpts = append(serverOpts, server.WithAuthzHook(a))
 	}
