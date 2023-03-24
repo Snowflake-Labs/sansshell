@@ -31,6 +31,10 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	oteltracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -296,6 +300,12 @@ func Run(ctx context.Context, opts ...Option) {
 		}
 	}
 
+	// TODO(elinardi): ability to attach a tracer provider
+	tp := oteltracesdk.NewTracerProvider()
+	otel.SetTracerProvider(tp)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	interceptorOpt := otelgrpc.WithTracerProvider(otel.GetTracerProvider())
+
 	unaryClient := rs.unaryClientInterceptors
 	streamClient := rs.streamClientInterceptors
 	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
@@ -304,8 +314,8 @@ func Run(ctx context.Context, opts ...Option) {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
-	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
+	unaryClient = append(unaryClient, otelgrpc.UnaryClientInterceptor(interceptorOpt), telemetry.UnaryClientLogInterceptor(rs.logger))
+	streamClient = append(streamClient, otelgrpc.StreamClientInterceptor(interceptorOpt), telemetry.StreamClientLogInterceptor(rs.logger))
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
@@ -321,9 +331,11 @@ func Run(ctx context.Context, opts ...Option) {
 	// also need to properly auth and log.
 	// Apply log interceptor last so that all metadata gets logged
 	unaryServer := rs.unaryInterceptors
-	unaryServer = append(unaryServer, authz.Authorize, telemetry.UnaryServerLogInterceptor(rs.logger))
+	unaryServer = append(unaryServer, authz.Authorize, otelgrpc.UnaryServerInterceptor(interceptorOpt),
+		telemetry.UnaryServerTraceInterceptor(), telemetry.UnaryServerLogInterceptor(rs.logger))
 	streamServer := rs.streamInterceptors
-	streamServer = append(streamServer, authz.AuthorizeStream, telemetry.StreamServerLogInterceptor(rs.logger))
+	streamServer = append(streamServer, authz.AuthorizeStream, otelgrpc.StreamServerInterceptor(interceptorOpt),
+		telemetry.StreamServerTraceInterceptor(), telemetry.StreamServerLogInterceptor(rs.logger))
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(unaryServer...),
