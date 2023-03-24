@@ -24,7 +24,6 @@ func UnaryServerTraceInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		// Get span context and attach trace ID to both current and outgoing context
 		spanctx := trace.SpanContextFromContext(ctx)
-		// ctx = context.WithValue(ctx, sansshellTraceIDContextKey, spanctx.TraceID())
 		ctx = metadata.AppendToOutgoingContext(ctx, sansshellTraceIDKey, spanctx.TraceID().String())
 		resp, err := handler(ctx, req)
 		if err != nil {
@@ -57,7 +56,6 @@ func (t *tracedStream) Context() context.Context {
 	// Get the span context and attach it to both current and outgoing context
 	ctx := t.ServerStream.Context()
 	spanctx := trace.SpanContextFromContext(ctx)
-	// ctx = context.WithValue(ctx, sansshellTraceIDContextKey, spanctx.TraceID())
 	ctx = metadata.AppendToOutgoingContext(ctx, sansshellTraceIDKey, spanctx.TraceID().String())
 	return ctx
 }
