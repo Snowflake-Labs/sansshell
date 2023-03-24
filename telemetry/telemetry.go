@@ -25,6 +25,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -171,7 +172,8 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ctx, l)
-		l.Info("new request")
+		spanCtx := trace.SpanContextFromContext(ctx)
+		l.Info("new request", "spanid", spanCtx.SpanID(), "traceid", spanCtx.TraceID())
 		logCtx := logr.NewContext(ctx, l)
 		resp, err := handler(logCtx, req)
 		if err != nil {
@@ -194,7 +196,9 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ss.Context(), l)
-		l.Info("new stream")
+		spanCtx := trace.SpanContextFromContext(ss.Context())
+		l.Info("new stream", "spanctx.SpanID()", spanCtx.SpanID(), "spanctx.TraceID()", spanCtx.TraceID())
+		//l.Info("new stream")
 		stream := &loggedStream{
 			ServerStream: ss,
 			logger:       l,

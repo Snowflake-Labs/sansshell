@@ -32,9 +32,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	oteltracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -234,6 +231,26 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
+	return optionFunc(func(r *runState) error {
+		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
+			otelgrpc.UnaryClientInterceptor(interceptorOpt),
+		)
+		r.streamClientInterceptors = append(r.streamClientInterceptors,
+			otelgrpc.StreamClientInterceptor(interceptorOpt),
+		)
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+			telemetry.UnaryServerTraceInterceptor(),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			otelgrpc.StreamServerInterceptor(interceptorOpt),
+			telemetry.StreamServerTraceInterceptor(),
+		)
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -300,12 +317,6 @@ func Run(ctx context.Context, opts ...Option) {
 		}
 	}
 
-	// TODO(elinardi): ability to attach a tracer provider
-	tp := oteltracesdk.NewTracerProvider()
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	interceptorOpt := otelgrpc.WithTracerProvider(otel.GetTracerProvider())
-
 	unaryClient := rs.unaryClientInterceptors
 	streamClient := rs.streamClientInterceptors
 	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
@@ -314,8 +325,8 @@ func Run(ctx context.Context, opts ...Option) {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	unaryClient = append(unaryClient, otelgrpc.UnaryClientInterceptor(interceptorOpt), telemetry.UnaryClientLogInterceptor(rs.logger))
-	streamClient = append(streamClient, otelgrpc.StreamClientInterceptor(interceptorOpt), telemetry.StreamClientLogInterceptor(rs.logger))
+	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
+	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
@@ -331,11 +342,17 @@ func Run(ctx context.Context, opts ...Option) {
 	// also need to properly auth and log.
 	// Apply log interceptor last so that all metadata gets logged
 	unaryServer := rs.unaryInterceptors
-	unaryServer = append(unaryServer, authz.Authorize, otelgrpc.UnaryServerInterceptor(interceptorOpt),
-		telemetry.UnaryServerTraceInterceptor(), telemetry.UnaryServerLogInterceptor(rs.logger))
+	unaryServer = append(
+		unaryServer,
+		authz.Authorize,
+		telemetry.UnaryServerLogInterceptor(rs.logger),
+	)
 	streamServer := rs.streamInterceptors
-	streamServer = append(streamServer, authz.AuthorizeStream, otelgrpc.StreamServerInterceptor(interceptorOpt),
-		telemetry.StreamServerTraceInterceptor(), telemetry.StreamServerLogInterceptor(rs.logger))
+	streamServer = append(
+		streamServer,
+		authz.AuthorizeStream,
+		telemetry.StreamServerLogInterceptor(rs.logger),
+	)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(unaryServer...),
