@@ -91,6 +91,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 }
 
 func logTraceID(ctx context.Context, l logr.Logger) logr.Logger {
+	// Grabs span context, and adds traceID to logger if the span exists
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
 		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
