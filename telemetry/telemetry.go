@@ -74,10 +74,21 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 }
 
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
-	// Add any sansshell specific metadata to the logging we do.
-	md, ok := metadata.FromIncomingContext(ctx)
+	// Add any sansshell specific metadata from incoming context to the logging we do.
+	inMD, ok := metadata.FromIncomingContext(ctx)
 	if ok {
-		for k, v := range md {
+		for k, v := range inMD {
+			if strings.HasPrefix(k, sansshellMetadata) {
+				for _, val := range v {
+					l = l.WithValues(k, val)
+				}
+			}
+		}
+	}
+	// Add any sansshell specific metadata from outgoing context to the logging we do.
+	outMD, ok := metadata.FromOutgoingContext(ctx)
+	if ok {
+		for k, v := range outMD {
 			if strings.HasPrefix(k, sansshellMetadata) {
 				for _, val := range v {
 					l = l.WithValues(k, val)

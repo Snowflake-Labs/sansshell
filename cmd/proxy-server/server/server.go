@@ -296,19 +296,16 @@ func Run(ctx context.Context, opts ...Option) {
 		}
 	}
 
+	unaryClient := rs.unaryClientInterceptors
+	streamClient := rs.streamClientInterceptors
 	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
-	unaryClient := []grpc.UnaryClientInterceptor{
-		telemetry.UnaryClientLogInterceptor(rs.logger),
-	}
-	streamClient := []grpc.StreamClientInterceptor{
-		telemetry.StreamClientLogInterceptor(rs.logger),
-	}
+	// Apply log interceptor last so that all metadata gets logged
 	if clientAuthz != nil {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	unaryClient = append(unaryClient, rs.unaryClientInterceptors...)
-	streamClient = append(streamClient, rs.streamClientInterceptors...)
+	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
+	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
@@ -322,16 +319,11 @@ func Run(ctx context.Context, opts ...Option) {
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
-	unaryServer := []grpc.UnaryServerInterceptor{
-		telemetry.UnaryServerLogInterceptor(rs.logger),
-		authz.Authorize,
-	}
-	unaryServer = append(unaryServer, rs.unaryInterceptors...)
-	streamServer := []grpc.StreamServerInterceptor{
-		telemetry.StreamServerLogInterceptor(rs.logger),
-		authz.AuthorizeStream,
-	}
-	streamServer = append(streamServer, rs.streamInterceptors...)
+	// Apply log interceptor last so that all metadata gets logged
+	unaryServer := rs.unaryInterceptors
+	unaryServer = append(unaryServer, authz.Authorize, telemetry.UnaryServerLogInterceptor(rs.logger))
+	streamServer := rs.streamInterceptors
+	streamServer = append(streamServer, authz.AuthorizeStream, telemetry.StreamServerLogInterceptor(rs.logger))
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(unaryServer...),
