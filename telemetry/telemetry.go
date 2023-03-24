@@ -25,12 +25,14 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
 const (
-	sansshellMetadata = "sansshell-"
+	sansshellMetadata   = "sansshell-"
+	sansshellTraceIDKey = sansshellMetadata + "trace-id"
 )
 
 // UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
@@ -75,9 +77,9 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 	// Add any sansshell specific metadata from incoming context to the logging we do.
-	inMD, ok := metadata.FromIncomingContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
-		for k, v := range inMD {
+		for k, v := range md {
 			if strings.HasPrefix(k, sansshellMetadata) {
 				for _, val := range v {
 					l = l.WithValues(k, val)
@@ -85,17 +87,15 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
-	// Add any sansshell specific metadata from outgoing context to the logging we do.
-	outMD, ok := metadata.FromOutgoingContext(ctx)
-	if ok {
-		for k, v := range outMD {
-			if strings.HasPrefix(k, sansshellMetadata) {
-				for _, val := range v {
-					l = l.WithValues(k, val)
-				}
-			}
-		}
+	return l
+}
+
+func logTraceID(ctx context.Context, l logr.Logger) logr.Logger {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
 	}
+
 	return l
 }
 
@@ -171,6 +171,7 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ctx, l)
+		l = logTraceID(ctx, l)
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
 		resp, err := handler(logCtx, req)
@@ -194,6 +195,7 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ss.Context(), l)
+		l = logTraceID(ss.Context(), l)
 		l.Info("new stream")
 		stream := &loggedStream{
 			ServerStream: ss,

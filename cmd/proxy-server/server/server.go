@@ -241,11 +241,9 @@ func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
 		)
 		r.unaryInterceptors = append(r.unaryInterceptors,
 			otelgrpc.UnaryServerInterceptor(interceptorOpt),
-			telemetry.UnaryServerTraceInterceptor(),
 		)
 		r.streamInterceptors = append(r.streamInterceptors,
 			otelgrpc.StreamServerInterceptor(interceptorOpt),
-			telemetry.StreamServerTraceInterceptor(),
 		)
 		return nil
 	})
