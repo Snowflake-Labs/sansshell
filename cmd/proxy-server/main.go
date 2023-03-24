@@ -27,10 +27,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
-	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
-	oteltracesdk "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
 	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/reflection"
@@ -114,11 +110,6 @@ func main() {
 	// Create a an instance of logging/version for the proxy server itself.
 	srv := &ss.Server{}
 
-	tp := oteltracesdk.NewTracerProvider()
-	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-	interceptorOpt := otelgrpc.WithTracerProvider(otel.GetTracerProvider())
-
 	server.Run(ctx,
 		server.WithLogger(logger),
 		server.WithPolicy(policy),
@@ -130,6 +121,5 @@ func main() {
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithRawServerOption(srv.Register),
 		server.WithDebugPort(*debugport),
-		server.WithOtelTracing(interceptorOpt),
 	)
 }
