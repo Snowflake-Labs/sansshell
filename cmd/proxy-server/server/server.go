@@ -317,14 +317,15 @@ func Run(ctx context.Context, opts ...Option) {
 
 	unaryClient := rs.unaryClientInterceptors
 	streamClient := rs.streamClientInterceptors
+	// Execute log interceptor after metadata is made available in the context
+	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
+	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
 	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
-	// Apply log interceptor last so that all metadata gets logged
+	// Execute authz after logger is setup
 	if clientAuthz != nil {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
-	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
@@ -338,17 +339,20 @@ func Run(ctx context.Context, opts ...Option) {
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
-	// Log interceptor should be applied after metadata is made available in the context
 	unaryServer := rs.unaryInterceptors
 	unaryServer = append(
 		unaryServer,
+		// Execute log interceptor after metadata is made available in the context
 		telemetry.UnaryServerLogInterceptor(rs.logger),
+		// Execute authz after logger is setup
 		authz.Authorize,
 	)
 	streamServer := rs.streamInterceptors
 	streamServer = append(
 		streamServer,
+		// Execute log interceptor after metadata is made available in the context
 		telemetry.StreamServerLogInterceptor(rs.logger),
+		// Execute authz after logger is setup
 		authz.AuthorizeStream,
 	)
 	serverOpts := []grpc.ServerOption{

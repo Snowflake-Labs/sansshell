@@ -80,7 +80,7 @@ func hasSpan(ctx context.Context) bool {
 }
 
 // Add trace ID to logger if there's an active span
-func logTraceID(ctx context.Context, l logr.Logger) logr.Logger {
+func logOtelTraceID(ctx context.Context, l logr.Logger) logr.Logger {
 	if hasSpan(ctx) {
 		spanCtx := trace.SpanContextFromContext(ctx)
 		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
@@ -101,7 +101,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
-	l = logTraceID(ctx, l)
+	l = logOtelTraceID(ctx, l)
 	return l
 }
 
