@@ -338,18 +338,18 @@ func Run(ctx context.Context, opts ...Option) {
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
-	// Apply log interceptor last so that all metadata gets logged
+	// Log interceptor should be applied after metadata is made available in the context
 	unaryServer := rs.unaryInterceptors
 	unaryServer = append(
 		unaryServer,
-		authz.Authorize,
 		telemetry.UnaryServerLogInterceptor(rs.logger),
+		authz.Authorize,
 	)
 	streamServer := rs.streamInterceptors
 	streamServer = append(
 		streamServer,
-		authz.AuthorizeStream,
 		telemetry.StreamServerLogInterceptor(rs.logger),
+		authz.AuthorizeStream,
 	)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),

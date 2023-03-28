@@ -165,12 +165,14 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,
+		telemetry.UnaryServerLogInterceptor(ss.logger),
 		authz.Authorize,
-		telemetry.UnaryServerLogInterceptor(ss.logger))
+	)
 	streaming := ss.streamInterceptors
 	streaming = append(streaming,
+		telemetry.StreamServerLogInterceptor(ss.logger),
 		authz.AuthorizeStream,
-		telemetry.StreamServerLogInterceptor(ss.logger))
+	)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(ss.creds),
 		// NB: the order of chained interceptors is meaningful.

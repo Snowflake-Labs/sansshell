@@ -75,6 +75,20 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 	}
 }
 
+func hasSpan(ctx context.Context) bool {
+	return trace.SpanContextFromContext(ctx).IsValid()
+}
+
+// Add trace ID to logger if there's an active span
+func logTraceID(ctx context.Context, l logr.Logger) logr.Logger {
+	if hasSpan(ctx) {
+		spanCtx := trace.SpanContextFromContext(ctx)
+		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
+	}
+
+	return l
+}
+
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 	// Add any sansshell specific metadata from incoming context to the logging we do.
 	md, ok := metadata.FromIncomingContext(ctx)
@@ -87,16 +101,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
-	return l
-}
-
-func logTraceID(ctx context.Context, l logr.Logger) logr.Logger {
-	// Grabs span context, and adds traceID to logger if the span exists
-	spanCtx := trace.SpanContextFromContext(ctx)
-	if spanCtx.HasTraceID() {
-		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
-	}
-
+	l = logTraceID(ctx, l)
 	return l
 }
 
@@ -172,7 +177,6 @@ func UnaryServerLogInterceptor(logger logr.Logger) grpc.UnaryServerInterceptor {
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ctx, l)
-		l = logTraceID(ctx, l)
 		l.Info("new request")
 		logCtx := logr.NewContext(ctx, l)
 		resp, err := handler(logCtx, req)
@@ -196,7 +200,6 @@ func StreamServerLogInterceptor(logger logr.Logger) grpc.StreamServerInterceptor
 			l = l.WithValues("peer", p)
 		}
 		l = logMetadata(ss.Context(), l)
-		l = logTraceID(ss.Context(), l)
 		l.Info("new stream")
 		stream := &loggedStream{
 			ServerStream: ss,
