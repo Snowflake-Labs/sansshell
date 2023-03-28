@@ -317,7 +317,7 @@ func Run(ctx context.Context, opts ...Option) {
 
 	unaryClient := rs.unaryClientInterceptors
 	streamClient := rs.streamClientInterceptors
-	// Execute log interceptor after metadata is made available in the context
+	// Execute log interceptor after other interceptors so that metadata gets logged
 	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
 	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
 	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
@@ -342,7 +342,7 @@ func Run(ctx context.Context, opts ...Option) {
 	unaryServer := rs.unaryInterceptors
 	unaryServer = append(
 		unaryServer,
-		// Execute log interceptor after metadata is made available in the context
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.UnaryServerLogInterceptor(rs.logger),
 		// Execute authz after logger is setup
 		authz.Authorize,
@@ -350,7 +350,7 @@ func Run(ctx context.Context, opts ...Option) {
 	streamServer := rs.streamInterceptors
 	streamServer = append(
 		streamServer,
-		// Execute log interceptor after metadata is made available in the context
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.StreamServerLogInterceptor(rs.logger),
 		// Execute authz after logger is setup
 		authz.AuthorizeStream,

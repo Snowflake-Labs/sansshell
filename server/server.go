@@ -165,14 +165,14 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,
-		// Execute log interceptor after metadata is made available in the context
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.UnaryServerLogInterceptor(ss.logger),
 		// Execute authz after logger is setup
 		authz.Authorize,
 	)
 	streaming := ss.streamInterceptors
 	streaming = append(streaming,
-		// Execute log interceptor after metadata is made available in the context
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.StreamServerLogInterceptor(ss.logger),
 		// Execute authz after logger is setup
 		authz.AuthorizeStream,
