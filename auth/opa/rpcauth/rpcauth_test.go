@@ -284,7 +284,7 @@ func TestAuthzHook(t *testing.T) {
 					},
 					{
 						field:  "\"method\":\"/Foo.Bar/Foo\"",
-						errMsg: "expected logs to contain /Foo.Bar/Foo method",
+						errMsg: "expected logs to contain request method",
 					},
 				},
 			),
