@@ -231,6 +231,8 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+// WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
+// The interceptors collect and export tracing data for gRPC requests and responses
 func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
 	return optionFunc(func(r *runState) error {
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
@@ -320,7 +322,6 @@ func Run(ctx context.Context, opts ...Option) {
 	// Execute log interceptor after other interceptors so that metadata gets logged
 	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
 	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
-	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
 	// Execute authz after logger is setup
 	if clientAuthz != nil {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
