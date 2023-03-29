@@ -280,7 +280,7 @@ func TestAuthzHook(t *testing.T) {
 				[]expectedLog{
 					{
 						field:  "\"principal\":{\"id\":\"admin@foo\",\"groups\":[\"group_bar\"]}}",
-						errMsg: "expected logs to contain peer principal",
+						errMsg: "this test case should pass the authz hook, so its logs should contain peer principal info which is added by the hook",
 					},
 					{
 						field:  "\"method\":\"/Foo.Bar/Foo\"",
