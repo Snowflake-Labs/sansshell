@@ -22,10 +22,9 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"net/url"
-	"os"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -38,7 +37,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/go-logr/logr"
-	"github.com/go-logr/stdr"
+	"github.com/go-logr/logr/funcr"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -90,10 +89,13 @@ type IntExtension struct {
 
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
-	logger := stdr.New(log.New(os.Stderr, "", log.LstdFlags|log.Lshortfile))
+	var logs string
+	fn := func(p, a string) {
+		logs = a
+	}
+	logger := funcr.New(fn, funcr.Options{Verbosity: 2})
 	ctx = logr.NewContext(ctx, logger)
 	// This way the tests exercise the logging code.
-	stdr.SetVerbosity(2)
 	policy, err := opa.NewAuthzPolicy(ctx, policyString)
 	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
@@ -105,6 +107,23 @@ func TestAuthzHook(t *testing.T) {
 			t.Helper()
 			if status.Code(err) != c {
 				t.Errorf("err was %v, want err with code %s", err, c)
+			}
+		}
+	}
+
+	// wantLogs asserts that the outputed log message contains the expected fields.
+	// If any expected field is not present, it will fail out and print the corresponding error message.
+	type expectedLog struct {
+		field  string
+		errMsg string
+	}
+	wantLogs := func(expecteds []expectedLog) func(*testing.T, string) {
+		return func(t *testing.T, actual string) {
+			t.Helper()
+			for _, expected := range expecteds {
+				if !strings.Contains(actual, expected.field) {
+					t.Fatalf("%s. Got %q want %q within it.", expected.errMsg, actual, expected.field)
+				}
 			}
 		}
 	}
@@ -125,6 +144,7 @@ func TestAuthzHook(t *testing.T) {
 		input   *RPCAuthInput
 		hooks   []RPCAuthzHook
 		errFunc func(*testing.T, error)
+		logFunc func(*testing.T, string)
 	}{
 		{
 			name:    "nil input, no hooks",
@@ -247,7 +267,8 @@ func TestAuthzHook(t *testing.T) {
 					if input.Peer == nil {
 						input.Peer = &PeerAuthInput{
 							Principal: &PrincipalAuthInput{
-								ID: "admin@foo",
+								ID:     "admin@foo",
+								Groups: []string{"group_bar"},
 							},
 						}
 					}
@@ -255,6 +276,18 @@ func TestAuthzHook(t *testing.T) {
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+			logFunc: wantLogs(
+				[]expectedLog{
+					{
+						field:  "\"principal\":{\"id\":\"admin@foo\",\"groups\":[\"group_bar\"]}}",
+						errMsg: "expected logs to contain peer principal",
+					},
+					{
+						field:  "\"method\":\"/Foo.Bar/Foo\"",
+						errMsg: "expected logs to contain /Foo.Bar/Foo method",
+					},
+				},
+			),
 		},
 		{
 			name:  "synthesize network data, allow",
@@ -334,6 +367,18 @@ func TestAuthzHook(t *testing.T) {
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+			logFunc: wantLogs(
+				[]expectedLog{
+					{
+						field:  "\"principal\":{\"id\":\"admin@foo\",\"groups\":[]}}",
+						errMsg: "expected logs to contain peer principal",
+					},
+					{
+						field:  "\"method\":\"/Some.Random/Method\"",
+						errMsg: "expected logs to contain /Some.Random/Method method",
+					},
+				},
+			),
 		},
 		{
 			name:  "conditional hook, not-triggered",
@@ -359,6 +404,9 @@ func TestAuthzHook(t *testing.T) {
 			authz := New(policy, tc.hooks...)
 			err := authz.Eval(ctx, tc.input)
 			tc.errFunc(t, err)
+			if tc.logFunc != nil {
+				tc.logFunc(t, logs)
+			}
 		})
 	}
 }
