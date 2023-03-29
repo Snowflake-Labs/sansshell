@@ -197,7 +197,7 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-// WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
+// WithOtelTracing adds the OpenTelemetry gRPC interceptors to both stream and unary servers
 // The interceptors collect and export tracing data for gRPC requests and responses
 func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
 	return optionFunc(func(r *runState) error {
