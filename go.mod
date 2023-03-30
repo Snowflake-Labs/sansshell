@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
-	github.com/go-logr/logr v1.2.3
+	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.5.9
 	github.com/google/subcommands v1.2.0
