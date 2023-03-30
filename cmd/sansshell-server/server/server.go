@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -192,6 +193,20 @@ func WithDebugPort(addr string) Option {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		r.debugport = addr
 		r.debughandler = mux
+		return nil
+	})
+}
+
+// WithOtelTracing adds the OpenTelemetry gRPC interceptors to both stream and unary servers
+// The interceptors collect and export tracing data for gRPC requests and responses
+func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
+	return optionFunc(func(r *runState) error {
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			otelgrpc.StreamServerInterceptor(interceptorOpt),
+		)
 		return nil
 	})
 }

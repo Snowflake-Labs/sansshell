@@ -25,12 +25,14 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
 const (
-	sansshellMetadata = "sansshell-"
+	sansshellMetadata   = "sansshell-"
+	sansshellTraceIDKey = sansshellMetadata + "trace-id"
 )
 
 // UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
@@ -73,8 +75,22 @@ func StreamClientLogInterceptor(logger logr.Logger) grpc.StreamClientInterceptor
 	}
 }
 
+func hasSpan(ctx context.Context) bool {
+	return trace.SpanContextFromContext(ctx).IsValid()
+}
+
+// Add trace ID to logger if there's an active span
+func logOtelTraceID(ctx context.Context, l logr.Logger) logr.Logger {
+	if hasSpan(ctx) {
+		spanCtx := trace.SpanContextFromContext(ctx)
+		l = l.WithValues(sansshellTraceIDKey, spanCtx.TraceID().String())
+	}
+
+	return l
+}
+
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
-	// Add any sansshell specific metadata to the logging we do.
+	// Add any sansshell specific metadata from incoming context to the logging we do.
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		for k, v := range md {
@@ -85,6 +101,7 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 			}
 		}
 	}
+	l = logOtelTraceID(ctx, l)
 	return l
 }
 

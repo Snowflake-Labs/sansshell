@@ -31,6 +31,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -230,6 +231,26 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+// WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
+// The interceptors collect and export tracing data for gRPC requests and responses
+func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
+	return optionFunc(func(r *runState) error {
+		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
+			otelgrpc.UnaryClientInterceptor(interceptorOpt),
+		)
+		r.streamClientInterceptors = append(r.streamClientInterceptors,
+			otelgrpc.StreamClientInterceptor(interceptorOpt),
+		)
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			otelgrpc.StreamServerInterceptor(interceptorOpt),
+		)
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -296,19 +317,16 @@ func Run(ctx context.Context, opts ...Option) {
 		}
 	}
 
-	// We always have the logger but might need to chain if we're also doing client outbound OPA checks.
-	unaryClient := []grpc.UnaryClientInterceptor{
-		telemetry.UnaryClientLogInterceptor(rs.logger),
-	}
-	streamClient := []grpc.StreamClientInterceptor{
-		telemetry.StreamClientLogInterceptor(rs.logger),
-	}
+	unaryClient := rs.unaryClientInterceptors
+	streamClient := rs.streamClientInterceptors
+	// Execute log interceptor after other interceptors so that metadata gets logged
+	unaryClient = append(unaryClient, telemetry.UnaryClientLogInterceptor(rs.logger))
+	streamClient = append(streamClient, telemetry.StreamClientLogInterceptor(rs.logger))
+	// Execute authz after logger is setup
 	if clientAuthz != nil {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	unaryClient = append(unaryClient, rs.unaryClientInterceptors...)
-	streamClient = append(streamClient, rs.streamClientInterceptors...)
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
@@ -322,16 +340,22 @@ func Run(ctx context.Context, opts ...Option) {
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
-	unaryServer := []grpc.UnaryServerInterceptor{
+	unaryServer := rs.unaryInterceptors
+	unaryServer = append(
+		unaryServer,
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.UnaryServerLogInterceptor(rs.logger),
+		// Execute authz after logger is setup
 		authz.Authorize,
-	}
-	unaryServer = append(unaryServer, rs.unaryInterceptors...)
-	streamServer := []grpc.StreamServerInterceptor{
+	)
+	streamServer := rs.streamInterceptors
+	streamServer = append(
+		streamServer,
+		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.StreamServerLogInterceptor(rs.logger),
+		// Execute authz after logger is setup
 		authz.AuthorizeStream,
-	}
-	streamServer = append(streamServer, rs.streamInterceptors...)
+	)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(unaryServer...),
