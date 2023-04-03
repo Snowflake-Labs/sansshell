@@ -653,6 +653,8 @@ func (s *server) Readlink(ctx context.Context, req *pb.ReadlinkRequest) (*pb.Rea
 func (s *server) Symlink(ctx context.Context, req *pb.SymlinkRequest) (*emptypb.Empty, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	logger.Info("symlink", "target", req.Target, "linkname", req.Linkname)
+	// We only check linkname because creating a symbolic link with a relative
+	// target is a valid use case.
 	if err := util.ValidPath(req.Linkname); err != nil {
 		return nil, err
 	}
