@@ -20,6 +20,7 @@
 package server
 
 import (
+	"io/fs"
 	"os"
 	"syscall"
 
