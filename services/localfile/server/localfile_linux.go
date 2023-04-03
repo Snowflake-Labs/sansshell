@@ -87,8 +87,13 @@ func linuxOsStat(path string, useLstat bool) (*pb.StatReply, error) {
 	resp.Uid = statT.Uid
 	resp.Gid = statT.Gid
 
+	statFlags := unix.AT_STATX_SYNC_AS_STAT
+	if useLstat {
+		statFlags |= unix.AT_SYMLINK_NOFOLLOW
+	}
+
 	statx := &unix.Statx_t{}
-	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
+	err = unix.Statx(0, path, statFlags, unix.STATX_ALL, statx)
 	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0 // Can just assign now. If there was an error it gets fixed below.
 	if err != nil {
 		if err.(syscall.Errno) != syscall.ENOSYS {
