@@ -28,7 +28,7 @@ service LocalFile {
   // Read reads a file from the disk and returns it contents.
   rpc Read(ReadActionRequest) returns (stream ReadReply) {}
 
-  // Stat returns metadata about a filesytem path.
+  // Stat returns metadata about a filesystem path.
   rpc Stat(stream StatRequest) returns (stream StatReply) {}
 
   // Sum calculates a sum over the data in a single file.
@@ -59,6 +59,12 @@ service LocalFile {
   // OS restrictions may apply if the old and new names are outside of the same
   // directory.
   rpc Rename(RenameRequest) returns (google.protobuf.Empty) {}
+
+  // Readlink prints the value of a symbolic link
+  rpc Readlink(ReadlinkRequest) returns (ReadlinkReply) {}
+
+  // Symlink creates a symbolic link
+  rpc Symlink(SymlinkRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -96,6 +102,8 @@ message ReadReply { bytes contents = 1; }
 message StatRequest {
   // absolute path to the target file
   string filename = 1;
+  // If true, use stat instead of lstat so that symlinks are followed
+  bool follow_links = 2;
 }
 
 // StatReply contains stat information for a single file.
@@ -243,4 +251,19 @@ message RmdirRequest {
 message RenameRequest {
   string original_name = 1;
   string destination_name = 2;
+}
+
+message ReadlinkRequest {
+  // The fully qualified path to the file to readlink.
+  string filename = 1;
+}
+
+message ReadlinkReply {
+  // The resolved link.
+  string linkvalue = 1;
+}
+
+message SymlinkRequest {
+  string target = 1;
+  string linkname = 2;
 }

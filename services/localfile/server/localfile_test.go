@@ -278,10 +278,10 @@ func TestStat(t *testing.T) {
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("os.CreateTemp", err, t)
-	f1Stat, err := osStat(f1.Name())
+	f1Stat, err := osStat(f1.Name(), false)
 	testutil.FatalOnErr("f1.Stat", err, t)
 
-	dirStat, err := osStat(temp)
+	dirStat, err := osStat(temp, false)
 	testutil.FatalOnErr("os.Stat(tempdir)", err, t)
 
 	for _, tc := range []struct {
@@ -518,7 +518,7 @@ func TestSetFileAttributes(t *testing.T) {
 	temp := t.TempDir()
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("os.CreateTemp", err, t)
-	f1Stat, err := osStat(f1.Name())
+	f1Stat, err := osStat(f1.Name(), false)
 	testutil.FatalOnErr("f1.Stat", err, t)
 
 	// Construct a directory with no perms. We'll put
@@ -886,7 +886,7 @@ func TestSetFileAttributes(t *testing.T) {
 			}
 
 			if tc.setMode {
-				s, err := osStat(f1.Name())
+				s, err := osStat(f1.Name(), false)
 				testutil.FatalOnErr("stat tmp file", err, t)
 				if got, want := s.Mode, tc.expectedMode; got != want {
 					t.Fatalf("%s: didn't use correct mode. Got %O and want %O", tc.name, got, want)
@@ -912,9 +912,14 @@ func TestList(t *testing.T) {
 	f1, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("os.CreateTemp", err, t)
 
-	dirStat, err := osStat(temp)
+	symlink := filepath.Join(temp, "sym")
+	testutil.FatalOnErr("osSymlink", os.Symlink("broken", symlink), t)
+
+	dirStat, err := osStat(temp, false)
 	testutil.FatalOnErr("osStat", err, t)
-	f1Stat, err := osStat(f1.Name())
+	f1Stat, err := osStat(f1.Name(), false)
+	testutil.FatalOnErr("osStat", err, t)
+	symStat, err := osStat(symlink, true)
 	testutil.FatalOnErr("osStat", err, t)
 
 	// Construct a directory with no perms. We should be able
@@ -928,7 +933,7 @@ func TestList(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		req      *pb.ListRequest
-		osStat   func(string) (*pb.StatReply, error)
+		osStat   func(string, bool) (*pb.StatReply, error)
 		wantErr  bool
 		expected []*pb.StatReply
 	}{
@@ -967,6 +972,7 @@ func TestList(t *testing.T) {
 			},
 			expected: []*pb.StatReply{
 				dirStat,
+				symStat,
 				f1Stat,
 			},
 		},
@@ -982,12 +988,12 @@ func TestList(t *testing.T) {
 			req: &pb.ListRequest{
 				Entry: temp,
 			},
-			osStat: func(s string) (*pb.StatReply, error) {
+			osStat: func(s string, b bool) (*pb.StatReply, error) {
 				fmt.Printf("stat: %s - %s\n", s, f1.Name())
 				if s == f1.Name() {
 					return nil, errors.New("stat error")
 				}
-				return origOsStat(s)
+				return origOsStat(s, b)
 			},
 			wantErr: true,
 		},
@@ -1884,6 +1890,120 @@ func TestRename(t *testing.T) {
 			_, err = os.Stat(tc.req.DestinationName)
 			testutil.FatalOnErr("destination doesn't exist", err, t)
 			os.Remove(tc.req.DestinationName)
+		})
+	}
+}
+
+func TestReadlink(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+
+	symlink := filepath.Join(temp, "sym")
+	testutil.FatalOnErr("osSymlink", os.Symlink(f1.Name(), symlink), t)
+	broken := filepath.Join(temp, "broken")
+	testutil.FatalOnErr("osSymlink", os.Symlink("nonexistent", broken), t)
+
+	for _, tc := range []struct {
+		name     string
+		req      *pb.ReadlinkRequest
+		wantErr  bool
+		expected *pb.ReadlinkReply
+	}{
+		{
+			name:    "Blank filename",
+			req:     &pb.ReadlinkRequest{},
+			wantErr: true,
+		},
+		{
+			name: "Non absolute path",
+			req: &pb.ReadlinkRequest{
+				Filename: "/tmp/foo/../../etc/passwd",
+			},
+			wantErr: true,
+		},
+		{
+			name: "Normal file",
+			req: &pb.ReadlinkRequest{
+				Filename: f1.Name(),
+			},
+			wantErr: true,
+		},
+		{
+			name: "Normal symlink",
+			req: &pb.ReadlinkRequest{
+				Filename: symlink,
+			},
+			expected: &pb.ReadlinkReply{
+				Linkvalue: f1.Name(),
+			},
+		},
+		{
+			name: "Broken symlink",
+			req: &pb.ReadlinkRequest{
+				Filename: broken,
+			},
+			expected: &pb.ReadlinkReply{
+				Linkvalue: "nonexistent",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+
+			resp, err := client.Readlink(ctx, tc.req)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+			if !tc.wantErr {
+				testutil.DiffErr(tc.name, resp, tc.expected, t)
+			}
+		})
+	}
+}
+
+func TestSymlink(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	for _, tc := range []struct {
+		name    string
+		req     *pb.SymlinkRequest
+		wantErr bool
+	}{
+		{
+			name:    "Blank filename",
+			req:     &pb.SymlinkRequest{},
+			wantErr: true,
+		},
+		{
+			name: "Non absolute linkname",
+			req: &pb.SymlinkRequest{
+				Target:   "foo",
+				Linkname: "/tmp/../symlink",
+			},
+			wantErr: true,
+		},
+		{
+			name: "Valid request",
+			req: &pb.SymlinkRequest{
+				Target:   "foo",
+				Linkname: filepath.Join(t.TempDir(), "symlink"),
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			client := pb.NewLocalFileClient(conn)
+
+			_, err := client.Symlink(ctx, tc.req)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
 }

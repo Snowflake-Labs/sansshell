@@ -33,10 +33,19 @@ import (
 
 // osStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func osStat(path string) (*pb.StatReply, error) {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+func osStat(path string, useLstat bool) (*pb.StatReply, error) {
+	var stat fs.FileInfo
+	var err error
+	if useLstat {
+		stat, err = os.Lstat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Lstat error %v", err)
+		}
+	} else {
+		stat, err = os.Stat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+		}
 	}
 	// If a system doesn't support this an OS specific version of osStat needs to be
 	// written which simulates stat().
