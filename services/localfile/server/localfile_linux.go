@@ -20,6 +20,7 @@
 package server
 
 import (
+	"io/fs"
 	"os"
 	"syscall"
 
@@ -56,7 +57,7 @@ var (
 
 // osStat is the linux specific version of stat. Depending on OS version
 // returning immutable bits happens in different ways.
-func linuxOsStat(path string) (*pb.StatReply, error) {
+func linuxOsStat(path string, useLstat bool) (*pb.StatReply, error) {
 	resp := &pb.StatReply{
 		Filename: path,
 	}
@@ -64,9 +65,18 @@ func linuxOsStat(path string) (*pb.StatReply, error) {
 	// Use stat for the base state since we want to return a stat.Mode()
 	// which is the go portable representation. Using the one from statX would
 	// require converting.
-	stat, err := os.Stat(path)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+	var stat fs.FileInfo
+	var err error
+	if useLstat {
+		stat, err = os.Lstat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Lstat error %v", err)
+		}
+	} else {
+		stat, err = os.Stat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+		}
 	}
 	// Linux supports stat so we can blindly convert.
 	statT := stat.Sys().(*syscall.Stat_t)
@@ -77,8 +87,13 @@ func linuxOsStat(path string) (*pb.StatReply, error) {
 	resp.Uid = statT.Uid
 	resp.Gid = statT.Gid
 
+	statFlags := unix.AT_STATX_SYNC_AS_STAT
+	if useLstat {
+		statFlags |= unix.AT_SYMLINK_NOFOLLOW
+	}
+
 	statx := &unix.Statx_t{}
-	err = unix.Statx(0, path, unix.AT_STATX_SYNC_AS_STAT, unix.STATX_ALL, statx)
+	err = unix.Statx(0, path, statFlags, unix.STATX_ALL, statx)
 	resp.Immutable = (statx.Attributes_mask & unix.STATX_ATTR_IMMUTABLE) != 0 // Can just assign now. If there was an error it gets fixed below.
 	if err != nil {
 		if err.(syscall.Errno) != syscall.ENOSYS {

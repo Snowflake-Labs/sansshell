@@ -20,6 +20,7 @@
 package server
 
 import (
+	"io/fs"
 	"os"
 	"syscall"
 
@@ -60,10 +61,19 @@ var (
 
 // osStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func darwinOsStat(path string) (*pb.StatReply, error) {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+func darwinOsStat(path string, useLstat bool) (*pb.StatReply, error) {
+	var stat fs.FileInfo
+	var err error
+	if useLstat {
+		stat, err = os.Lstat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Lstat error %v", err)
+		}
+	} else {
+		stat, err = os.Stat(path)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "stat: os.Stat error %v", err)
+		}
 	}
 	// Darwin supports stat so we can blindly convert.
 	stat_t := stat.Sys().(*syscall.Stat_t)

@@ -183,7 +183,7 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 		if err := util.ValidPath(req.Filename); err != nil {
 			return AbsolutePathError
 		}
-		resp, err := osStat(req.Filename)
+		resp, err := osStat(req.Filename, !req.FollowLinks)
 		if err != nil {
 			return err
 		}
@@ -450,7 +450,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 
 	// We always send back the entry first.
 	logger.Info("ls", "filename", req.Entry)
-	resp, err := osStat(req.Entry)
+	resp, err := osStat(req.Entry, false)
 	if err != nil {
 		return err
 	}
@@ -468,7 +468,9 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 		for _, e := range entries {
 			name := filepath.Join(req.Entry, e.Name())
 			logger.Info("ls", "filename", name)
-			resp, err := osStat(name)
+			// Use lstat so that we don't return misleading directory contents from
+			// following symlinks.
+			resp, err := osStat(name, true)
 			if err != nil {
 				return err
 			}
@@ -624,6 +626,41 @@ func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Em
 	err := unix.Rename(req.OriginalName, req.DestinationName)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "rename error: %v", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *server) Readlink(ctx context.Context, req *pb.ReadlinkRequest) (*pb.ReadlinkReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("readlink", "filename", req.Filename)
+	if err := util.ValidPath(req.Filename); err != nil {
+		return nil, err
+	}
+	stat, err := os.Lstat(req.Filename)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "stat error: %v", err)
+	}
+	if stat.Mode()&os.ModeSymlink != os.ModeSymlink {
+		return nil, status.Errorf(codes.FailedPrecondition, "%v is not a symlink", req.Filename)
+	}
+	linkvalue, err := os.Readlink(req.Filename)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "readlink error: %v", err)
+	}
+	return &pb.ReadlinkReply{Linkvalue: linkvalue}, nil
+}
+
+func (s *server) Symlink(ctx context.Context, req *pb.SymlinkRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("symlink", "target", req.Target, "linkname", req.Linkname)
+	// We only check linkname because creating a symbolic link with a relative
+	// target is a valid use case.
+	if err := util.ValidPath(req.Linkname); err != nil {
+		return nil, err
+	}
+	err := os.Symlink(req.Target, req.Linkname)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "symlink error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }

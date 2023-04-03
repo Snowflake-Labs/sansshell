@@ -357,13 +357,13 @@ check_status $? /dev/null build server
 echo
 echo "Running tests (with tsan)"
 echo
-go test -count=10 -race -timeout 5m -v ./... >&${LOGS}/test.log
+go test -count=10 -race -timeout 5m ./... >&${LOGS}/test.log
 check_status $? ${LOGS}/test.log test
 
 echo
 echo "Checking coverage - logs in ${LOGS}/cover.log"
 echo
-go test -timeout 30s -v -coverprofile=/tmp/go-code-cover ./... >&${LOGS}/cover.log
+go test -timeout 30s -coverprofile=/tmp/go-code-cover ./... >&${LOGS}/cover.log
 check_status $? ${LOGS}/cover.log coverage
 
 # Print out coverage stats

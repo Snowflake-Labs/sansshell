@@ -50,10 +50,12 @@ func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&immutableCmd{}, "")
 	c.Register(&lsCmd{}, "")
 	c.Register(&readCmd{}, "")
+	c.Register(&readlinkCmd{}, "")
 	c.Register(&renameCmd{}, "")
 	c.Register(&rmCmd{}, "")
 	c.Register(&rmdirCmd{}, "")
 	c.Register(&statCmd{}, "")
+	c.Register(&symlinkCmd{}, "")
 	c.Register(&sumCmd{}, "")
 	c.Register(&tailCmd{}, "")
 	return c
@@ -183,6 +185,104 @@ func readFile(ctx context.Context, state *util.ExecuteState, req *pb.ReadActionR
 	return exit
 }
 
+type readlinkCmd struct {
+}
+
+func (*readlinkCmd) Name() string { return "readlink" }
+func (*readlinkCmd) Synopsis() string {
+	return "Print the value of a symbolic link or canonical file name."
+}
+func (*readlinkCmd) Usage() string {
+	return `readlink <path>
+  Print the value of a symbolic link or canonical file named by <path>.
+`
+}
+
+func (*readlinkCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *readlinkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "Please specify a filename to read.")
+		return subcommands.ExitUsageError
+	}
+
+	filename := f.Args()[0]
+	req := &pb.ReadlinkRequest{
+		Filename: filename,
+	}
+
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.ReadlinkOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - readlink client error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "readlink client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		} else {
+			fmt.Fprintln(state.Out[r.Index], r.Resp.Linkvalue)
+		}
+	}
+	return retCode
+}
+
+type symlinkCmd struct {
+}
+
+func (*symlinkCmd) Name() string { return "readlink" }
+func (*symlinkCmd) Synopsis() string {
+	return "Create a symbolic link."
+}
+func (*symlinkCmd) Usage() string {
+	return `symlink <target> <linkname>
+  Create a symbolic link from target to linkname, similar to "ln -s <target> <linkname>".
+`
+}
+
+func (*symlinkCmd) SetFlags(f *flag.FlagSet) {}
+
+func (p *symlinkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "Please specify target and linkname.")
+		return subcommands.ExitUsageError
+	}
+
+	target := f.Args()[0]
+	linkname := f.Args()[1]
+	req := &pb.SymlinkRequest{
+		Target:   target,
+		Linkname: linkname,
+	}
+
+	client := pb.NewLocalFileClientProxy(state.Conn)
+	respChan, err := client.SymlinkOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - symlink client error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "symlink client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+}
+
 type tailCmd struct {
 	offset int64
 }
@@ -220,7 +320,9 @@ func (p *tailCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	return readFile(ctx, state, req)
 }
 
-type statCmd struct{}
+type statCmd struct {
+	followLinks bool
+}
 
 func (*statCmd) Name() string     { return "stat" }
 func (*statCmd) Synopsis() string { return "Stat file(s) to stdout." }
@@ -230,7 +332,10 @@ func (*statCmd) Usage() string {
   `
 }
 
-func (*statCmd) SetFlags(f *flag.FlagSet) {}
+func (s *statCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&s.followLinks, "L", false, "Use stat instead of lstat (as stat -L)")
+	f.BoolVar(&s.followLinks, "follow-links", false, "Use stat instead of lstat (as stat -L)")
+}
 
 func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
@@ -257,7 +362,7 @@ func (s *statCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	go func() {
 		e := subcommands.ExitSuccess
 		for _, filename := range f.Args() {
-			if err := stream.Send(&pb.StatRequest{Filename: filename}); err != nil {
+			if err := stream.Send(&pb.StatRequest{Filename: filename, FollowLinks: s.followLinks}); err != nil {
 				// Emit this to every error file as it's not specific to a given target.
 				for _, e := range state.Err {
 					fmt.Fprintf(e, "All targets - stat: send error: %v\n", err)
@@ -757,7 +862,9 @@ func (*lsCmd) Usage() string {
 }
 
 func (p *lsCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&p.long, "l", false, "If true prints out as ls -l would have done")
 	f.BoolVar(&p.long, "long", false, "If true prints out as ls -l would have done")
+	f.BoolVar(&p.directory, "d", false, "If true prints out the entry if it was a directory and nothing else (as ls -d)")
 	f.BoolVar(&p.directory, "directory", false, "If true prints out the entry if it was a directory and nothing else (as ls -d)")
 }
 
