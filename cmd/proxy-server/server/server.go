@@ -32,6 +32,9 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -53,6 +56,8 @@ type runState struct {
 	hostport                 string
 	debugport                string
 	debughandler             *http.ServeMux
+	metricsport              string
+	metricshandler           *http.ServeMux
 	justification            bool
 	justificationFunc        func(string) error
 	unaryInterceptors        []grpc.UnaryServerInterceptor
@@ -219,7 +224,6 @@ func WithDebugPort(addr string) Option {
 				return
 			}
 		})
-		mux.Handle("/metrics", promhttp.Handler())
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -227,6 +231,25 @@ func WithDebugPort(addr string) Option {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		r.debugport = addr
 		r.debughandler = mux
+		return nil
+	})
+}
+
+func WithPrometheusPort(addr string) Option {
+	return optionFunc(func(r *runState) error {
+		prom, err := prometheus.New()
+		if err != nil {
+			return fmt.Errorf("Unable to create prometheus provider: %v", err)
+		}
+		provider := otelmetricsdk.NewMeterProvider(
+			otelmetricsdk.WithReader(prom),
+		)
+		global.SetMeterProvider(provider)
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		r.metricsport = addr
+		r.metricshandler = mux
+
 		return nil
 	})
 }
@@ -269,6 +292,13 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.debughandler != nil && rs.debugport != "" {
 		go func() {
 			rs.logger.Error(http.ListenAndServe(rs.debugport, rs.debughandler), "Debug handler unexpectedly exited")
+		}()
+	}
+
+	// Start metrics endpoint if metrics port is configured
+	if rs.metricshandler != nil && rs.metricsport != "" {
+		go func() {
+			rs.logger.Error(http.ListenAndServe(rs.metricsport, rs.metricshandler), "Metrics handler unexpectedly exited")
 		}()
 	}
 
