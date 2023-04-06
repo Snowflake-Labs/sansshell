@@ -171,6 +171,9 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 			return nil, err
 		}
 	}
+	if ss.policy == nil {
+		return nil, fmt.Errorf("policy was not provided")
+	}
 
 	authz := rpcauth.New(ss.policy, ss.authzHooks...)
 
