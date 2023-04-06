@@ -223,6 +223,7 @@ func WithDebugPort(addr string) Option {
 				return
 			}
 		})
+		mux.Handle("/metrics", promhttp.Handler())
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
 		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
 		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
@@ -234,7 +235,10 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-func WithPrometheusPort(addr string) Option {
+// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+// This endpoint is to be scraped by a Prometheus-style metrics scraper.
+// It can be accessed at http://{addr}/metrics
+func WithMetricsPort(addr string) Option {
 	return optionFunc(func(r *runState) error {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
