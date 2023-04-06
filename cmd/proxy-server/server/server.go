@@ -30,11 +30,10 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/global"
-	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -237,18 +236,36 @@ func WithDebugPort(addr string) Option {
 
 func WithPrometheusPort(addr string) Option {
 	return optionFunc(func(r *runState) error {
-		prom, err := prometheus.New()
-		if err != nil {
-			return fmt.Errorf("Unable to create prometheus provider: %v", err)
-		}
-		provider := otelmetricsdk.NewMeterProvider(
-			otelmetricsdk.WithReader(prom),
-		)
-		global.SetMeterProvider(provider)
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		r.metricsport = addr
 		r.metricshandler = mux
+
+		// Instrument gRPC Client
+		clientMetrics := grpc_prometheus.NewClientMetrics()
+		errRegister := prometheus.Register(clientMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc client prometheus metrics: %s", errRegister)
+		}
+		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
+			clientMetrics.UnaryClientInterceptor(),
+		)
+		r.streamClientInterceptors = append(r.streamClientInterceptors,
+			clientMetrics.StreamClientInterceptor(),
+		)
+
+		// Instrument gRPC Server
+		serverMetrics := grpc_prometheus.NewServerMetrics()
+		errRegister = prometheus.Register(serverMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
+		}
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			serverMetrics.UnaryServerInterceptor(),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			serverMetrics.StreamServerInterceptor(),
+		)
 
 		return nil
 	})
