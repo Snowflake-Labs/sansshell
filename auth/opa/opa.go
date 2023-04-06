@@ -71,7 +71,7 @@ func (o optionFunc) apply(opts *policyOptions) {
 	o(opts)
 }
 
-// WithAllowQuery returns an option to use `query` to evaulate the policy,
+// WithAllowQuery returns an option to use `query` to evaluate the policy,
 // instead of DefaultAuthzQuery. The supplied query should be simple evaluation
 // expressions that creates no binding, and evaluates to 'true' iff the input
 // satisfies the conditions of the policy.
@@ -81,7 +81,7 @@ func WithAllowQuery(query string) Option {
 	})
 }
 
-// WithDenialHintsQuery returns an option to use `query` to evaulate the policy
+// WithDenialHintsQuery returns an option to use `query` to evaluate the policy
 // when the AllowPolicy fails. The supplied query must be a simple evaluation
 // expression that creates no binding and evaluates to an array of strings.
 //

@@ -133,7 +133,6 @@ func main() {
 	}
 
 	if *validate {
-
 		fmt.Println("Policy passes.")
 		os.Exit(0)
 	}

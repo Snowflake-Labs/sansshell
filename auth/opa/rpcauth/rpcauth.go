@@ -105,14 +105,17 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
-	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input)
+	var hints []string
 	if !result {
 		// We've failed so let's see if we can help tell the user what might have failed.
-		hints, err := g.policy.DenialHints(ctx, input)
+		hints, err = g.policy.DenialHints(ctx, input)
 		if err != nil {
 			// We can't do much here besides log that something went wrong
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
 		}
+	}
+	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
+	if !result {
 		if len(hints) > 0 {
 			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", strings.Join(hints, ", "))
 		} else {
