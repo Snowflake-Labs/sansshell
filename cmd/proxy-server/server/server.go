@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
@@ -48,8 +49,8 @@ import (
 // WithXXX function.
 type runState struct {
 	logger                   logr.Logger
-	policy                   string
-	clientPolicy             string
+	policy                   *opa.AuthzPolicy
+	clientPolicy             *opa.AuthzPolicy
 	credSource               string
 	tlsConfig                *tls.Config
 	hostport                 string
@@ -68,19 +69,19 @@ type runState struct {
 }
 
 type Option interface {
-	apply(*runState) error
+	apply(context.Context, *runState) error
 }
 
-type optionFunc func(*runState) error
+type optionFunc func(context.Context, *runState) error
 
-func (o optionFunc) apply(r *runState) error {
-	return o(r)
+func (o optionFunc) apply(ctx context.Context, r *runState) error {
+	return o(ctx, r)
 }
 
 // WithLogger applies a logger that is used for all logging. A discard
 // based one is used if none is supplied.
 func WithLogger(l logr.Logger) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.logger = l
 		return nil
 	})
@@ -88,7 +89,19 @@ func WithLogger(l logr.Logger) Option {
 
 // WithPolicy applies an OPA policy used against incoming RPC requests.
 func WithPolicy(policy string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		p, err := opa.NewAuthzPolicy(ctx, policy)
+		if err != nil {
+			return err
+		}
+		r.policy = p
+		return nil
+	})
+}
+
+// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
+func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.policy = policy
 		return nil
 	})
@@ -96,7 +109,22 @@ func WithPolicy(policy string) Option {
 
 // WithClientPolicy appplies an optional OPA policy for determining outbound decisions.
 func WithClientPolicy(policy string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		if policy == "" {
+			return nil
+		}
+		p, err := opa.NewAuthzPolicy(ctx, policy)
+		if err != nil {
+			return err
+		}
+		r.clientPolicy = p
+		return nil
+	})
+}
+
+// WithParsedClientPolicy appplies an optional OPA policy for determining outbound decisions.
+func WithParsedClientPolicy(policy *opa.AuthzPolicy) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
 		r.clientPolicy = policy
 		return nil
 	})
@@ -104,7 +132,7 @@ func WithClientPolicy(policy string) Option {
 
 // WithTlsConfig applies a supplied tls.Config object to the gRPC server.
 func WithTlsConfig(tlsConfig *tls.Config) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.tlsConfig = tlsConfig
 		return nil
 	})
@@ -112,7 +140,7 @@ func WithTlsConfig(tlsConfig *tls.Config) Option {
 
 // WithCredSource applies a registered credential source with the mtls package.
 func WithCredSource(credSource string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.credSource = credSource
 		return nil
 	})
@@ -120,7 +148,7 @@ func WithCredSource(credSource string) Option {
 
 // WithHostport applies the host:port to run the server.
 func WithHostPort(hostport string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.hostport = hostport
 		return nil
 	})
@@ -130,7 +158,7 @@ func WithHostPort(hostport string) Option {
 // Justification if true requires justification to be set in the
 // incoming RPC context Metadata (to the key defined in the telemetry package).
 func WithJustification(j bool) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.justification = j
 		return nil
 	})
@@ -141,7 +169,7 @@ func WithJustification(j bool) Option {
 // entry is found. The supplied function can then do any validation it wants
 // in order to ensure it's compliant.
 func WithJustificationHook(hook func(string) error) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.justificationFunc = hook
 		return nil
 	})
@@ -151,7 +179,7 @@ func WithJustificationHook(hook func(string) error) Option {
 // These become any additional interceptors to be added to unary RPCs
 // served from this instance. They will be added after logging and authz checks.
 func WithUnaryInterceptor(i grpc.UnaryServerInterceptor) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.unaryInterceptors = append(r.unaryInterceptors, i)
 		return nil
 	})
@@ -161,7 +189,7 @@ func WithUnaryInterceptor(i grpc.UnaryServerInterceptor) Option {
 // These become any additional interceptors to be added to outbound unary RPCs
 // performed from this instance. They will be added after logging and authz checks.
 func WithUnaryClientInterceptor(i grpc.UnaryClientInterceptor) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors, i)
 		return nil
 	})
@@ -171,7 +199,7 @@ func WithUnaryClientInterceptor(i grpc.UnaryClientInterceptor) Option {
 // These become any additional interceptors to be added to streaming RPCs
 // served from this instance. They will be added after logging and authz checks.
 func WithStreamInterceptor(i grpc.StreamServerInterceptor) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.streamInterceptors = append(r.streamInterceptors, i)
 		return nil
 	})
@@ -181,7 +209,7 @@ func WithStreamInterceptor(i grpc.StreamServerInterceptor) Option {
 // These become any additional interceptors to be added to outbound streaming RPCs
 // performed from this instance. They will be added after logging and authz checks.
 func WithStreamClientInterceptor(i grpc.StreamClientInterceptor) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.streamClientInterceptors = append(r.streamClientInterceptors, i)
 		return nil
 	})
@@ -189,7 +217,7 @@ func WithStreamClientInterceptor(i grpc.StreamClientInterceptor) Option {
 
 // WithAuthzHook adds an additional authz hook to be applied to the server.
 func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
 		return nil
 	})
@@ -198,7 +226,7 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 // WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
 // registration functions for RPC services to be done before starting the server.
 func WithRawServerOption(s func(*grpc.Server)) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.services = append(r.services, s)
 		return nil
 	})
@@ -208,7 +236,7 @@ func WithRawServerOption(s func(*grpc.Server)) Option {
 //
 // This is meant for humans. The format of the debug pages may change over time.
 func WithDebugPort(addr string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/" {
@@ -278,7 +306,7 @@ func WithMetricsPort(addr string) Option {
 // WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
 // The interceptors collect and export tracing data for gRPC requests and responses
 func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
 			otelgrpc.UnaryClientInterceptor(interceptorOpt),
 		)
@@ -303,7 +331,7 @@ func Run(ctx context.Context, opts ...Option) {
 		logger: logr.Discard(), // Set a default so we can use below.
 	}
 	for _, o := range opts {
-		if err := o.apply(rs); err != nil {
+		if err := o.apply(ctx, rs); err != nil {
 			rs.logger.Error(err, "error applying option")
 			os.Exit(1)
 		}
@@ -353,19 +381,11 @@ func Run(ctx context.Context, opts ...Option) {
 
 	h := []rpcauth.RPCAuthzHook{addressHook, justificationHook}
 	h = append(h, rs.authzHooks...)
-	authz, err := rpcauth.NewWithPolicy(ctx, rs.policy, h...)
-	if err != nil {
-		rs.logger.Error(err, "rpcauth.NewWithPolicy")
-		os.Exit(1)
-	}
+	authz := rpcauth.New(rs.policy, h...)
 
 	var clientAuthz *rpcauth.Authorizer
-	if rs.clientPolicy != "" {
-		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.clientPolicy)
-		if err != nil {
-			rs.logger.Error(err, "client rpcauth.NewWithPolicy")
-			os.Exit(1)
-		}
+	if rs.clientPolicy != nil {
+		clientAuthz = rpcauth.New(rs.clientPolicy)
 	}
 
 	unaryClient := rs.unaryClientInterceptors

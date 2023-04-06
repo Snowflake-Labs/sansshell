@@ -20,6 +20,7 @@ package rpcauth
 
 import (
 	"context"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -113,7 +114,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
 		}
 		if len(hints) > 0 {
-			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", hints)
+			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", strings.Join(hints, ", "))
 		} else {
 			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
 		}

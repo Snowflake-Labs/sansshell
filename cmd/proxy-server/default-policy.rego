@@ -53,3 +53,12 @@ allow {
 #  some i
 #  input.peer.principal.groups[i] = "admin"
 # }
+
+# Denial reason to help show what went wrong
+denial_hints[msg] {
+	input.message.file.filename != "/etc/hosts"
+	msg := "we only proxy /etc/hosts"
+}
+denial_hints[msg] {
+	msg := "this message always shows up on errors"
+}
