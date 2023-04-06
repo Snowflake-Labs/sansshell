@@ -312,7 +312,7 @@ func Run(ctx context.Context, opts ...Option) {
 		}()
 	}
 
-	// Start metrics endpoint if metrics port is configured
+	// Start metrics endpoint if both metrics port and handler are configured
 	if rs.metricshandler != nil && rs.metricsport != "" {
 		go func() {
 			rs.logger.Error(http.ListenAndServe(rs.metricsport, rs.metricshandler), "Metrics handler unexpectedly exited")
