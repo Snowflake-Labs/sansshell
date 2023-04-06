@@ -59,6 +59,7 @@ denial_hints[msg] {
 	input.message.file.filename != "/etc/hosts"
 	msg := "we only proxy /etc/hosts"
 }
+# You can put multiple denial hints and all of them will be included.
 denial_hints[msg] {
 	msg := "this message always shows up on errors"
 }
