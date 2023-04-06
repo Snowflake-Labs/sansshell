@@ -65,6 +65,7 @@ var (
 	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
 	hostport         = flag.String("hostport", "localhost:50043", "Where to listen for connections.")
 	debugport        = flag.String("debugport", "localhost:50045", "A separate port for http debug pages. Set to an empty string to disable.")
+	metricsport      = flag.String("metricsport", "localhost:50046", "Http endpoint for exposing metrics")
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate         = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
@@ -121,5 +122,6 @@ func main() {
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithRawServerOption(srv.Register),
 		server.WithDebugPort(*debugport),
+		server.WithMetricsPort(*metricsport),
 	)
 }

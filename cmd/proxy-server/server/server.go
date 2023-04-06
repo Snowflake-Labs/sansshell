@@ -30,6 +30,8 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -53,6 +55,8 @@ type runState struct {
 	hostport                 string
 	debugport                string
 	debughandler             *http.ServeMux
+	metricsport              string
+	metricshandler           *http.ServeMux
 	justification            bool
 	justificationFunc        func(string) error
 	unaryInterceptors        []grpc.UnaryServerInterceptor
@@ -231,6 +235,46 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+// This endpoint is to be scraped by a Prometheus-style metrics scraper.
+// It can be accessed at http://{addr}/metrics
+func WithMetricsPort(addr string) Option {
+	return optionFunc(func(r *runState) error {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		r.metricsport = addr
+		r.metricshandler = mux
+
+		// Instrument gRPC Client
+		clientMetrics := grpc_prometheus.NewClientMetrics()
+		errRegister := prometheus.Register(clientMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc client prometheus metrics: %s", errRegister)
+		}
+		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
+			clientMetrics.UnaryClientInterceptor(),
+		)
+		r.streamClientInterceptors = append(r.streamClientInterceptors,
+			clientMetrics.StreamClientInterceptor(),
+		)
+
+		// Instrument gRPC Server
+		serverMetrics := grpc_prometheus.NewServerMetrics()
+		errRegister = prometheus.Register(serverMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
+		}
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			serverMetrics.UnaryServerInterceptor(),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			serverMetrics.StreamServerInterceptor(),
+		)
+
+		return nil
+	})
+}
+
 // WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
 // The interceptors collect and export tracing data for gRPC requests and responses
 func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
@@ -269,6 +313,13 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.debughandler != nil && rs.debugport != "" {
 		go func() {
 			rs.logger.Error(http.ListenAndServe(rs.debugport, rs.debughandler), "Debug handler unexpectedly exited")
+		}()
+	}
+
+	// Start metrics endpoint if both metrics port and handler are configured
+	if rs.metricshandler != nil && rs.metricsport != "" {
+		go func() {
+			rs.logger.Error(http.ListenAndServe(rs.metricsport, rs.metricshandler), "Metrics handler unexpectedly exited")
 		}()
 	}
 
