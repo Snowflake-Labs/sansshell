@@ -267,7 +267,7 @@ func WithDebugPort(addr string) Option {
 // This endpoint is to be scraped by a Prometheus-style metrics scraper.
 // It can be accessed at http://{addr}/metrics
 func WithMetricsPort(addr string) Option {
-	return optionFunc(func(r *runState) error {
+	return optionFunc(func(_ context.Context, r *runState) error {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		r.metricsport = addr
