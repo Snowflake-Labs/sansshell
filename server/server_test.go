@@ -97,6 +97,17 @@ func TestBuildServer(t *testing.T) {
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
 
+func TestBuildServerWithBadPolicy(t *testing.T) {
+	// Make sure a bad policy fails
+	_, err := BuildServer(
+		WithLogger(logr.Discard()),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+		WithPolicy("not a real policy"),
+	)
+	t.Log(err)
+	testutil.FatalOnNoErr("badly formed policy", err, t)
+}
+
 func TestServe(t *testing.T) {
 	// This test should be instant so just wait 5s and blow up
 	// any running server (which should be the last one).

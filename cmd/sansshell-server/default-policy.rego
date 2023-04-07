@@ -63,3 +63,8 @@ allow {
 allow {
 	input.type = "Service.StatusRequest"
 }
+
+denial_hints[msg] {
+	input.message.file.filename != "/etc/hosts"
+	msg := "we only allow /etc/hosts"
+}

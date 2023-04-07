@@ -18,6 +18,7 @@ package opa
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -36,10 +37,11 @@ func TestNewAuthzPolicy(t *testing.T) {
 		testutil.FatalOnErr(t.Name(), err, t)
 	}
 	for _, tc := range []struct {
-		name    string
-		policy  string
-		query   string
-		errFunc func(*testing.T, error)
+		name      string
+		policy    string
+		query     string
+		hintQuery string
+		errFunc   func(*testing.T, error)
 	}{
 		{
 			name:    "good minimal policy",
@@ -61,6 +63,12 @@ func TestNewAuthzPolicy(t *testing.T) {
 					t.Errorf("%s got error %v, want PrepareForEval", t.Name(), err)
 				}
 			},
+		},
+		{
+			name:      "good minimal policy with hints query",
+			policy:    "package sansshell.authz",
+			hintQuery: "data.sansshell.authz.denial_hints",
+			errFunc:   expectNoError,
 		},
 		{
 			name:    "invalid policy",
@@ -87,6 +95,9 @@ func TestNewAuthzPolicy(t *testing.T) {
 			var opts []Option
 			if tc.query != "" {
 				opts = append(opts, WithAllowQuery(tc.query))
+			}
+			if tc.hintQuery != "" {
+				opts = append(opts, WithDenialHintsQuery(tc.hintQuery))
 			}
 			_, err := NewAuthzPolicy(context.Background(), tc.policy, opts...)
 			tc.errFunc(t, err)
@@ -188,6 +199,68 @@ allow {
 				t.Errorf("Eval(), allowed = %v, want %v", allowed, tc.allowed)
 			}
 			tc.errFunc(t, err)
+		})
+	}
+}
+
+func TestAuthzPolicyDenialHints(t *testing.T) {
+	policyString := `
+package sansshell.authz
+
+allow {
+  input.foo = "baz"
+  input.bar = "bazzle"
+}
+
+denial_hints[msg] {
+	not allow
+	msg := "you need to be allowed"
+}
+denial_hints[msg] {
+	input.foo == "baz"
+	not input.bar == "bazzle"
+	msg := "where is your bazzle"
+}
+`
+	ctx := context.Background()
+	policy, err := NewAuthzPolicy(ctx, policyString, WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	testutil.FatalOnErr("NewAuthzPolicy", err, t)
+
+	for _, tc := range []struct {
+		name    string
+		input   interface{}
+		hints   []string
+		errFunc func(*testing.T, error)
+	}{
+		{
+			name:  "empty",
+			input: nil,
+			hints: []string{"you need to be allowed"},
+		},
+		{
+			name:  "unmatched input",
+			input: map[string]string{"no": "match"},
+			hints: []string{"you need to be allowed"},
+		},
+		{
+			name:  "partial match",
+			input: map[string]string{"foo": "baz"},
+			hints: []string{"where is your bazzle", "you need to be allowed"},
+		},
+		{
+			name:  "allowed case",
+			input: map[string]string{"foo": "baz", "bar": "bazzle"},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			hints, err := policy.DenialHints(ctx, tc.input)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(hints, tc.hints) {
+				t.Errorf("Eval(), allowed = %v, want %v", hints, tc.hints)
+			}
 		})
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
@@ -42,7 +43,7 @@ var (
 // Documentation provided below in each WithXXX function.
 type serveSetup struct {
 	creds              credentials.TransportCredentials
-	policy             string
+	policy             *opa.AuthzPolicy
 	logger             logr.Logger
 	authzHooks         []rpcauth.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
@@ -51,18 +52,18 @@ type serveSetup struct {
 }
 
 type Option interface {
-	apply(*serveSetup) error
+	apply(context.Context, *serveSetup) error
 }
 
-type optionFunc func(*serveSetup) error
+type optionFunc func(context.Context, *serveSetup) error
 
-func (o optionFunc) apply(s *serveSetup) error {
-	return o(s)
+func (o optionFunc) apply(ctx context.Context, s *serveSetup) error {
+	return o(ctx, s)
 }
 
 // WithCredentials applies credentials to be used by the RPC server.
 func WithCredentials(c credentials.TransportCredentials) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.creds = c
 		return nil
 	})
@@ -70,7 +71,19 @@ func WithCredentials(c credentials.TransportCredentials) Option {
 
 // WithPolicy applies an OPA policy used against incoming RPC requests.
 func WithPolicy(policy string) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(ctx context.Context, s *serveSetup) error {
+		p, err := opa.NewAuthzPolicy(ctx, policy)
+		if err != nil {
+			return err
+		}
+		s.policy = p
+		return nil
+	})
+}
+
+// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
+func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.policy = policy
 		return nil
 	})
@@ -79,7 +92,7 @@ func WithPolicy(policy string) Option {
 // WithLogger applies a logger that is used for all logging. A discard one is
 // used if none is supplied.
 func WithLogger(l logr.Logger) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.logger = l
 		return nil
 	})
@@ -87,7 +100,7 @@ func WithLogger(l logr.Logger) Option {
 
 // WithAuthzHook adds an authz hook which is checked by the installed authorizer.
 func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.authzHooks = append(s.authzHooks, hook)
 		return nil
 	})
@@ -95,7 +108,7 @@ func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 
 // WithUnaryInterceptor adds an additional unary interceptor installed after telemetry and authz.
 func WithUnaryInterceptor(unary grpc.UnaryServerInterceptor) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.unaryInterceptors = append(s.unaryInterceptors, unary)
 		return nil
 	})
@@ -103,7 +116,7 @@ func WithUnaryInterceptor(unary grpc.UnaryServerInterceptor) Option {
 
 // WithStreamInterceptor adds an additional stream interceptor installed after telemetry and authz.
 func WithStreamInterceptor(stream grpc.StreamServerInterceptor) Option {
-	return optionFunc(func(s *serveSetup) error {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.streamInterceptors = append(s.streamInterceptors, stream)
 		return nil
 	})
@@ -112,7 +125,7 @@ func WithStreamInterceptor(stream grpc.StreamServerInterceptor) Option {
 // WithRawServerOption allows one access to the RPC Server object. Generally this is done to add additional
 // registration functions for RPC services to be done before starting the server.
 func WithRawServerOption(s func(*grpc.Server)) Option {
-	return optionFunc(func(r *serveSetup) error {
+	return optionFunc(func(_ context.Context, r *serveSetup) error {
 		r.services = append(r.services, s)
 		return nil
 	})
@@ -149,19 +162,20 @@ func getSrv() *grpc.Server {
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(opts ...Option) (*grpc.Server, error) {
+	ctx := context.Background()
 	ss := &serveSetup{
 		logger: logr.Discard(),
 	}
 	for _, o := range opts {
-		if err := o.apply(ss); err != nil {
+		if err := o.apply(ctx, ss); err != nil {
 			return nil, err
 		}
 	}
-
-	authz, err := rpcauth.NewWithPolicy(context.Background(), ss.policy, ss.authzHooks...)
-	if err != nil {
-		return nil, err
+	if ss.policy == nil {
+		return nil, fmt.Errorf("policy was not provided")
 	}
+
+	authz := rpcauth.New(ss.policy, ss.authzHooks...)
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,

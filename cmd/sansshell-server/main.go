@@ -127,11 +127,12 @@ func main() {
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	ctx := logr.NewContext(context.Background(), logger)
 
+	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	if err != nil {
+		log.Fatalf("Invalid policy: %v\n", err)
+	}
+
 	if *validate {
-		_, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			log.Fatalf("Invalid policy: %v\n", err)
-		}
 		fmt.Println("Policy passes.")
 		os.Exit(0)
 	}
@@ -140,7 +141,7 @@ func main() {
 		server.WithLogger(logger),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
-		server.WithPolicy(policy),
+		server.WithParsedPolicy(parsed),
 		server.WithJustification(*justification),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),

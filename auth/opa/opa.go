@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/opa/ast"
@@ -49,12 +50,14 @@ var (
 // An AuthzPolicy performs policy checking by evaluating input against
 // a sansshell rego policy file.
 type AuthzPolicy struct {
-	query rego.PreparedEvalQuery
-	b     *bytes.Buffer
+	query            rego.PreparedEvalQuery
+	denialHintsQuery *rego.PreparedEvalQuery
+	b                *bytes.Buffer
 }
 
 type policyOptions struct {
-	query string
+	query            string
+	denialHintsQuery string
 }
 
 // An Option controls the behavior of an AuthzPolicy
@@ -68,13 +71,31 @@ func (o optionFunc) apply(opts *policyOptions) {
 	o(opts)
 }
 
-// WithAllowQuery returns an option to use `query` to evaulate the policy,
+// WithAllowQuery returns an option to use `query` to evaluate the policy,
 // instead of DefaultAuthzQuery. The supplied query should be simple evaluation
 // expressions that creates no binding, and evaluates to 'true' iff the input
 // satisfies the conditions of the policy.
 func WithAllowQuery(query string) Option {
 	return optionFunc(func(o *policyOptions) {
 		o.query = query
+	})
+}
+
+// WithDenialHintsQuery returns an option to use `query` to evaluate the policy
+// when the AllowPolicy fails. The supplied query must be a simple evaluation
+// expression that creates no binding and evaluates to an array of strings.
+//
+// This can be used to give better error messages when Eval returns false.
+// With a value like data.sansshell.authz.denial_hints, you can use a policy
+// with rules like
+//
+//	denial_hints [msg] {
+//	  not allow
+//	  msg :="you need to be allowed"
+//	}
+func WithDenialHintsQuery(query string) Option {
+	return optionFunc(func(o *policyOptions) {
+		o.denialHintsQuery = query
 	})
 }
 
@@ -111,9 +132,22 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (*AuthzP
 	if err != nil {
 		return nil, fmt.Errorf("rego: PrepareForEval() error: %w", err)
 	}
+	var denialHintsQuery *rego.PreparedEvalQuery
+	if options.denialHintsQuery != "" {
+		r := rego.New(
+			rego.Query(options.denialHintsQuery),
+			rego.ParsedModule(module),
+		)
+		hints, err := r.PrepareForEval(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("rego: denial hints PrepareForEval() error: %w", err)
+		}
+		denialHintsQuery = &hints
+	}
 	return &AuthzPolicy{
-		query: prepared,
-		b:     b,
+		query:            prepared,
+		denialHintsQuery: denialHintsQuery,
+		b:                b,
 	}, nil
 }
 
@@ -130,4 +164,41 @@ func (q *AuthzPolicy) Eval(ctx context.Context, input interface{}) (bool, error)
 		logger.V(1).Info("print statements", "buffer", q.b.String())
 	}
 	return results.Allowed(), nil
+}
+
+// DenialHints evaluates this policy using the provided input, returning an array
+// of strings with reasons for the denial. This is typically used after getting
+// a rejection from Eval to give more hints on why the rejection happened.
+// It is a no-op if opa.WithDenialHintsQuery was not used.
+func (q *AuthzPolicy) DenialHints(ctx context.Context, input interface{}) ([]string, error) {
+	if q.denialHintsQuery == nil {
+		return nil, nil
+	}
+	results, err := q.denialHintsQuery.Eval(ctx, rego.EvalInput(input))
+	if err != nil {
+		return nil, fmt.Errorf("authz policy evaluation error: %w", err)
+	}
+	if len(results) != 1 {
+		return nil, fmt.Errorf("expected exactly one result: %v", results)
+	}
+	if len(results[0].Bindings) != 0 {
+		return nil, fmt.Errorf("too many bindings: %v", results)
+	}
+	if len(results[0].Expressions) != 1 {
+		return nil, fmt.Errorf("expected exactly one expression: %v", results[0].Expressions)
+	}
+	vals, ok := results[0].Expressions[0].Value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("expected expression to be an array: %#v", results[0].Expressions[0].Value)
+	}
+	var hints []string
+	for _, v := range vals {
+		h, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("expected expression to be a string: %#v", v)
+		}
+		hints = append(hints, h)
+	}
+	sort.Strings(hints)
+	return hints, nil
 }

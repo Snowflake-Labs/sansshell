@@ -99,11 +99,11 @@ func main() {
 	clientPolicy := util.ChoosePolicy(logger, "", *clientPolicyFlag, *clientPolicyFile)
 	ctx := logr.NewContext(context.Background(), logger)
 
+	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	if err != nil {
+		log.Fatalf("Invalid policy: %v\n", err)
+	}
 	if *validate {
-		_, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			log.Fatalf("Invalid policy: %v\n", err)
-		}
 		fmt.Println("Policy passes.")
 		os.Exit(0)
 	}
@@ -113,7 +113,7 @@ func main() {
 
 	server.Run(ctx,
 		server.WithLogger(logger),
-		server.WithPolicy(policy),
+		server.WithParsedPolicy(parsed),
 		server.WithClientPolicy(clientPolicy),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
