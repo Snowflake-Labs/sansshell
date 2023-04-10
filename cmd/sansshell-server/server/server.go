@@ -247,6 +247,7 @@ func Run(ctx context.Context, opts ...Option) {
 	creds, err := extractTransportCredentialsFromRunState(ctx, rs)
 	if err != nil {
 		rs.logger.Error(err, "unable to extract transport credentials from runstate", "credsource", rs.credSource)
+		os.Exit(1)
 	}
 
 	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
