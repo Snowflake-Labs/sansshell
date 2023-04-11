@@ -2,13 +2,12 @@ package metrics
 
 import (
 	"context"
+	"errors"
 
 	"github.com/go-logr/logr"
-	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/instrument"
-	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 )
 
 const (
@@ -22,11 +21,6 @@ const (
 var (
 	mr MetricsRecorder
 )
-
-type MetricsRecorderExtended struct {
-	MetricsRecorder
-	CloudTagsFailureCounter instrument.Int64Counter
-}
 
 type MetricsRecorder struct {
 	meter        metric.Meter
@@ -50,6 +44,9 @@ func GetRecorder() MetricsRecorder {
 }
 
 func initInstrumentations() error {
+	if !mr.enabled {
+		return errors.New("metrics recorder is not initialized")
+	}
 	var err error
 	mr.AuthzDeniedJustificationCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzDeniedJustificationMetricName)
 	if err != nil {
@@ -75,21 +72,13 @@ func initInstrumentations() error {
 }
 
 func InitProxyMetrics(ctx context.Context) error {
-	// Setup exporter using the default prometheus registry
-	exporter, err := prometheus.New()
-	if err != nil {
-		return err
-	}
-	global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
-		otelmetricsdk.WithReader(exporter),
-	))
 	meter := global.Meter("sansshell-proxy")
 	mr = MetricsRecorder{
 		meter:        meter,
-		metricPrefix: "sansshell-proxy",
+		metricPrefix: "sansshell_proxy",
 		enabled:      true,
 	}
-	err = initInstrumentations()
+	err := initInstrumentations()
 	if err != nil {
 		return err
 	}

@@ -34,6 +34,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -269,7 +272,15 @@ func WithDebugPort(addr string) Option {
 // It can be accessed at http://{addr}/metrics
 func WithMetricsPort(addr string) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		err := metrics.InitProxyMetrics(ctx)
+		// Setup exporter using the default prometheus registry
+		exporter, err := prometheus_exporter.New()
+		if err != nil {
+			return err
+		}
+		global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
+			otelmetricsdk.WithReader(exporter),
+		))
+		err = metrics.InitProxyMetrics(ctx)
 		if err != nil {
 			logger := logr.FromContextOrDiscard(ctx)
 			logger.Error(err, "fail to init proxy metrics")
