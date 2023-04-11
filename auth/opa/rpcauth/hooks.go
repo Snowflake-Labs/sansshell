@@ -20,6 +20,8 @@ import (
 	"context"
 	"net"
 
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -82,7 +84,7 @@ var (
 // that validates if justification was included. If it is required and passes the optional validation function
 // it will return nil, otherwise an error.
 func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
-	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+	return RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 		// See if we got any metadata and if it contains the justification
 		var j string
 		v := input.Metadata[ReqJustKey]
@@ -90,11 +92,18 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 			j = v[0]
 		}
 
+		mr := metrics.GetRecorder()
 		if j == "" {
+			if mr.Enabled() {
+				mr.AuthzDeniedJustificationCounter.Add(ctx, 1, attribute.String("reason", "missing"))
+			}
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
+				if mr.Enabled() {
+					mr.AuthzDeniedJustificationCounter.Add(ctx, 1, attribute.String("reason", "denied"))
+				}
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
 		}

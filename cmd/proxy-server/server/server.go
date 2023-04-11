@@ -41,6 +41,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -267,7 +268,13 @@ func WithDebugPort(addr string) Option {
 // This endpoint is to be scraped by a Prometheus-style metrics scraper.
 // It can be accessed at http://{addr}/metrics
 func WithMetricsPort(addr string) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		err := metrics.InitProxyMetrics(ctx)
+		if err != nil {
+			logger := logr.FromContextOrDiscard(ctx)
+			logger.Error(err, "fail to init proxy metrics")
+		}
+
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		r.metricsport = addr
@@ -287,7 +294,9 @@ func WithMetricsPort(addr string) Option {
 		)
 
 		// Instrument gRPC Server
-		serverMetrics := grpc_prometheus.NewServerMetrics()
+		serverMetrics := grpc_prometheus.NewServerMetrics(
+			grpc_prometheus.WithServerHandlingTimeHistogram(),
+		)
 		errRegister = prometheus.Register(serverMetrics)
 		if errRegister != nil {
 			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
