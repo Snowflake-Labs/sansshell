@@ -195,13 +195,15 @@ func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_Pr
 	logger := logr.FromContextOrDiscard(ctx)
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
-			err = metrics.RegisterInt64Counter(proxyReplyErrorCounterName, "number of failure when sending reply to the client")
-			if err != nil {
-				logger.V(1).Error(err, "failed to register "+proxyReplyErrorCounterName)
-			}
-			err = metrics.AddCount(ctx, proxyReplyErrorCounterName, 1)
-			if err != nil {
-				logger.V(1).Error(err, "failed to add counter "+proxyReplyErrorCounterName)
+			if metrics.Enabled() {
+				errRegister := metrics.RegisterInt64Counter(proxyReplyErrorCounterName, "number of failure when sending reply to the client")
+				if errRegister != nil {
+					logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
+				}
+				errCounter := metrics.AddCount(ctx, proxyReplyErrorCounterName, 1)
+				if errCounter != nil {
+					logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounterName)
+				}
 			}
 			return err
 		}
@@ -234,13 +236,13 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 			return nil
 		}
 		if err != nil {
-			err = metrics.RegisterInt64Counter(proxyReceiveErrorCounterName, "number of failure when receiving messages from the target")
-			if err != nil {
-				logger.V(1).Error(err, "failed to register "+proxyReceiveErrorCounterName)
+			errRegister := metrics.RegisterInt64Counter(proxyReceiveErrorCounterName, "number of failure when receiving messages from the target")
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+proxyReceiveErrorCounterName)
 			}
-			err = metrics.AddCount(ctx, proxyReceiveErrorCounterName, 1)
-			if err != nil {
-				logger.V(1).Error(err, "failed to add counter "+proxyReceiveErrorCounterName)
+			errCounter := metrics.AddCount(ctx, proxyReceiveErrorCounterName, 1)
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+proxyReceiveErrorCounterName)
 			}
 			return err
 		}
@@ -304,13 +306,13 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
-				err := metrics.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, "number of dispatch failure due to unknown proxy request type")
-				if err != nil {
-					logger.V(1).Error(err, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
+				errRegister := metrics.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, "number of dispatch failure due to unknown proxy request type")
+				if errRegister != nil {
+					logger.V(1).Error(errRegister, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
 				}
-				err = metrics.AddCount(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
-				if err != nil {
-					logger.V(1).Error(err, "failed to add counter "+proxyDispatchUnknownReqtypeCounterName)
+				errCounter := metrics.AddCount(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
+				if errCounter != nil {
+					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounterName)
 				}
 				return fmt.Errorf("unhandled request type %T", req.Request)
 			}
