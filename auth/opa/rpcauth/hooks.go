@@ -21,6 +21,7 @@ import (
 	"net"
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -95,19 +96,31 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 		if len(v) > 0 {
 			j = v[0]
 		}
-
+		logger := logr.FromContextOrDiscard(ctx)
 		if j == "" {
 			if metrics.Enabled() {
-				metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
-				metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+				err := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+				if err != nil {
+					logger.V(1).Error(err, "failed to register "+authzDeniedJustificationMetricName)
+				}
+				err = metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+				if err != nil {
+					logger.V(1).Error(err, "failed to add counter "+authzDeniedJustificationMetricName)
+				}
 			}
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
 				if metrics.Enabled() {
-					metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
-					metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+					err = metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+					if err != nil {
+						logger.V(1).Error(err, "failed to register "+authzDeniedJustificationMetricName)
+					}
+					err = metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+					if err != nil {
+						logger.V(1).Error(err, "failed to add counter "+authzDeniedJustificationMetricName)
+					}
 				}
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
