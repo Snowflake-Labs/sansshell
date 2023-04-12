@@ -2,9 +2,10 @@ package metrics
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/pkg/errors"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -13,17 +14,24 @@ import (
 )
 
 var (
+	// Singelton for instrumenting metrics
 	m *Metrics
+
+	errNotInitialized error = errors.New("metrics is not initialized. please call InitMetrics() before anything else")
 )
 
 type Metrics struct {
-	enabled       bool
-	prefix        string
-	Meter         metric.Meter
+	enabled bool
+	prefix  string
+	Meter   metric.Meter
+
+	// type: map[string]Int64Counter
 	Int64Counters sync.Map
-	Int64Gauges   sync.Map
+	// type: map[string]Int64Gauge
+	Int64Gauges sync.Map
 }
 
+// Enabled returns true if this package is initialized
 func Enabled() bool {
 	return m.enabled
 }
@@ -38,6 +46,7 @@ func (o optionFunc) apply(m *Metrics) error {
 	return o(m)
 }
 
+// WithMetricNamePrefix stores the given prefix to the Metrics singleton
 func WithMetricNamePrefix(prefix string) Option {
 	return optionFunc(func(m *Metrics) error {
 		m.prefix = prefix
@@ -45,6 +54,17 @@ func WithMetricNamePrefix(prefix string) Option {
 	})
 }
 
+// addPrefix returns prefix + "_" + name if prefix is not empty
+// otherwise, it returns unaltered name
+func addPrefix(prefix, name string) string {
+	if prefix != "" {
+		name = fmt.Sprintf("%s_%s", m.prefix, name)
+	}
+	return name
+}
+
+// InitMetrics initializes this package by creating the Metrics singleton
+// and applying options
 func InitMetrics(opts ...Option) error {
 	meter := global.Meter("sansshell-proxy")
 	m = &Metrics{
@@ -55,32 +75,39 @@ func InitMetrics(opts ...Option) error {
 	}
 	for _, o := range opts {
 		if err := o.apply(m); err != nil {
-			return err
+			return errors.Wrap(err, "failed to apply option")
 		}
 	}
 	return nil
 }
 
+// RegisterInt64Coungter creates an Int64Counter and saves it to the register.
+// If there is an existing counter with the same name, it's a no-op.
 func RegisterInt64Counter(name, description string) error {
 	if !Enabled() {
-		return errors.New("metrics is not initialized")
+		return errNotInitialized
 	}
-	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	name = addPrefix(m.prefix, name)
 	if _, exists := m.Int64Counters.Load(name); exists {
 		return nil
 	}
 
 	counter, err := m.Meter.Int64Counter(name, instrument.WithDescription(description))
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create Int64counter")
 	}
 
 	m.Int64Counters.Store(name, counter)
 	return nil
 }
 
+// AddCount increments the counter by the given value
+// It will return an error if the counter is not registered
 func AddCount(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
-	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	if !Enabled() {
+		return errNotInitialized
+	}
+	name = addPrefix(m.prefix, name)
 	counter, exists := m.Int64Counters.Load(name)
 	if !exists {
 		return errors.New("counter " + name + " doesn't exist")
@@ -90,8 +117,13 @@ func AddCount(ctx context.Context, name string, value int64, attributes ...attri
 	return nil
 }
 
+// RegisterInt64Coungter creates an Int64Gauge and saves it to the register.
+// If there is an existing counter with the same name, it's a no-op.
 func RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
-	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	if !Enabled() {
+		return errNotInitialized
+	}
+	name = addPrefix(m.prefix, name)
 	if _, exists := m.Int64Gauges.Load(name); exists {
 		return nil
 	}
