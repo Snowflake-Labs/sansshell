@@ -35,9 +35,13 @@ import (
 // Metrics
 const (
 	authzDeniedPolicyCounterName        = "authz_denied_policy"
+	authzDeniedPolicyCounterDesc        = "number of authorization denied by policy"
 	authzDenialHintErrorCounterName     = "authz_denial_hint_error"
+	authzDenialHintErrorCounterDesc     = "number of failure to get denial hint"
 	authzFailureInputMissingCounterName = "authz_failure_input_missing"
+	authzFailureInputMissingCounterDesc = "number of authorization failure due to missing input"
 	authzFailureEvalErrorCounterName    = "authz_failure_eval_error"
+	authzFailureEvalErrorCounterDesc    = "number of authorization failure due to policy evaluation error"
 )
 
 // An Authorizer performs authorization of Sanshsell RPCs based on
@@ -97,7 +101,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
 		if metrics.Enabled() {
-			errRegister := metrics.RegisterInt64Counter(authzFailureInputMissingCounterName, "number of authorization failure due to missing input")
+			errRegister := metrics.RegisterInt64Counter(authzFailureInputMissingCounterName, authzFailureInputMissingCounterDesc)
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+authzFailureInputMissingCounterName)
 			}
@@ -123,7 +127,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	if err != nil {
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
 		if metrics.Enabled() {
-			errRegister := metrics.RegisterInt64Counter(authzFailureEvalErrorCounterName, "number of authorization failure due to policy evaluation error")
+			errRegister := metrics.RegisterInt64Counter(authzFailureEvalErrorCounterName, authzFailureEvalErrorCounterDesc)
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+authzFailureEvalErrorCounterName)
 			}
@@ -140,7 +144,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		hints, err = g.policy.DenialHints(ctx, input)
 		if err != nil {
 			if metrics.Enabled() {
-				errRegister := metrics.RegisterInt64Counter(authzDenialHintErrorCounterName, "number of failure to get denial hint")
+				errRegister := metrics.RegisterInt64Counter(authzDenialHintErrorCounterName, authzDenialHintErrorCounterDesc)
 				if errRegister != nil {
 					logger.V(1).Error(errRegister, "failed to register "+authzDenialHintErrorCounterName)
 				}
@@ -156,7 +160,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
 	if !result {
 		if metrics.Enabled() {
-			errRegister := metrics.RegisterInt64Counter(authzDeniedPolicyCounterName, "number of authorization denied by policy")
+			errRegister := metrics.RegisterInt64Counter(authzDeniedPolicyCounterName, authzDeniedPolicyCounterDesc)
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+authzDeniedPolicyCounterName)
 			}

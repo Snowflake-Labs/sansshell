@@ -102,7 +102,7 @@ func Enabled() bool {
 	return false
 }
 
-// RegisterInt64Coungter creates an Int64Counter and saves it to the register.
+// RegisterInt64Counter creates an Int64Counter and saves it to the register.
 // If there is an existing counter with the same name, it's a no-op.
 func RegisterInt64Counter(name, description string) error {
 	if !Enabled() {

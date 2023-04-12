@@ -22,6 +22,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -29,6 +30,7 @@ import (
 // Metrics
 const (
 	authzDeniedJustificationMetricName = "authz_denied_justification"
+	authzDeniedJustificationMetricDesc = "authorization denied due to justification"
 )
 
 // RPCAuthzHookFunc implements RpcAuthzHook for a simple function
@@ -99,11 +101,11 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 		logger := logr.FromContextOrDiscard(ctx)
 		if j == "" {
 			if metrics.Enabled() {
-				errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+				errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
 				if errRegister != nil {
 					logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
 				}
-				errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+				errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "missing_justification"))
 				if errCounter != nil {
 					logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
 				}
@@ -113,11 +115,11 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
 				if metrics.Enabled() {
-					errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+					errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
 					if errRegister != nil {
 						logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
 					}
-					errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
+					errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "denied"))
 					if errCounter != nil {
 						logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
 					}

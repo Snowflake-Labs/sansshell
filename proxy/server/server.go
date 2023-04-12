@@ -35,8 +35,11 @@ import (
 // Metrics
 const (
 	proxyReplyErrorCounterName             = "proxy_reply_error"
+	proxyReplyErrorCounterDesc             = "number of failure when sending reply to the client"
 	proxyReceiveErrorCounterName           = "proxy_receive_error"
+	proxyReceiveErrorCounterDesc           = "number of failure when receiving messages from the target"
 	proxyDispatchUnknownReqtypeCounterName = "proxy_dispatch_unknown_reqtype"
+	proxyDispatchUnknownReqtypeCounterDesc = "number of dispatch failure due to unknown proxy request type"
 )
 
 // A TargetDialer is used by the proxy server to make connections
@@ -196,7 +199,7 @@ func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_Pr
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
 			if metrics.Enabled() {
-				errRegister := metrics.RegisterInt64Counter(proxyReplyErrorCounterName, "number of failure when sending reply to the client")
+				errRegister := metrics.RegisterInt64Counter(proxyReplyErrorCounterName, proxyReplyErrorCounterDesc)
 				if errRegister != nil {
 					logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
 				}
@@ -236,7 +239,7 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 			return nil
 		}
 		if err != nil {
-			errRegister := metrics.RegisterInt64Counter(proxyReceiveErrorCounterName, "number of failure when receiving messages from the target")
+			errRegister := metrics.RegisterInt64Counter(proxyReceiveErrorCounterName, proxyReceiveErrorCounterDesc)
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+proxyReceiveErrorCounterName)
 			}
@@ -306,7 +309,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
-				errRegister := metrics.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, "number of dispatch failure due to unknown proxy request type")
+				errRegister := metrics.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, proxyDispatchUnknownReqtypeCounterDesc)
 				if errRegister != nil {
 					logger.V(1).Error(errRegister, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
 				}
