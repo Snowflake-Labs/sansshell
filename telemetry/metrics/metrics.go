@@ -33,7 +33,10 @@ type Metrics struct {
 
 // Enabled returns true if this package is initialized
 func Enabled() bool {
-	return m.enabled
+	if m != nil {
+		return m.enabled
+	}
+	return false
 }
 
 type Option interface {
