@@ -12,15 +12,6 @@ import (
 	"go.opentelemetry.io/otel/metric/instrument"
 )
 
-/*
-const (
-	authzDeniedJustificationMetricName = "authz_denied_justification"
-	authzDeniedPolicyMetricName        = "authz_denied_policy"
-	authzDenialHintErrorMetricName     = "authz_denial_hint_error"
-	authzFailureInputMissingMetricName = "authz_failure_input_missing"
-	authzFailureEvalErrorMetricName    = "authz_failure_eval_error"
-)*/
-
 var (
 	m *Metrics
 )
