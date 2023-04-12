@@ -280,7 +280,7 @@ func WithMetricsPort(addr string) Option {
 		global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
 			otelmetricsdk.WithReader(exporter),
 		))
-		err = metrics.InitProxyMetrics(ctx)
+		err = metrics.InitMetrics(metrics.WithMetricNamePrefix("sansshell_proxy"))
 		if err != nil {
 			logger := logr.FromContextOrDiscard(ctx)
 			logger.Error(err, "fail to init proxy metrics")

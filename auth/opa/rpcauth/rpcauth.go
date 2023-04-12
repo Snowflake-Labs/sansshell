@@ -32,6 +32,14 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
+// Metrics
+const (
+	authzDeniedPolicyMetricName        = "authz_denied_policy"
+	authzDenialHintErrorMetricName     = "authz_denial_hint_error"
+	authzFailureInputMissingMetricName = "authz_failure_input_missing"
+	authzFailureEvalErrorMetricName    = "authz_failure_eval_error"
+)
+
 // An Authorizer performs authorization of Sanshsell RPCs based on
 // an OPA/Rego policy.
 //
@@ -82,15 +90,15 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 // the success or failure of policy.
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
-	mr := metrics.GetRecorder()
 	if input != nil {
 		logger.V(2).Info("evaluating authz policy", "input", input)
 	}
 	if input == nil {
 		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		if mr.Enabled() {
-			mr.AuthzFailureInputMissingCounter.Add(ctx, 1)
+		if metrics.Enabled() {
+			metrics.RegisterInt64Counter(authzFailureInputMissingMetricName, "authorization failure due to missing input")
+			metrics.AddCount(ctx, authzFailureInputMissingMetricName, 1)
 		}
 		return err
 	}
@@ -108,8 +116,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	result, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		if mr.Enabled() {
-			mr.AuthzFailureEvalErrorCounter.Add(ctx, 1)
+		if metrics.Enabled() {
+			metrics.RegisterInt64Counter(authzFailureEvalErrorMetricName, "authorization failure due to policy evaluation error")
+			metrics.AddCount(ctx, authzFailureEvalErrorMetricName, 1)
 		}
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
@@ -118,8 +127,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		// We've failed so let's see if we can help tell the user what might have failed.
 		hints, err = g.policy.DenialHints(ctx, input)
 		if err != nil {
-			if mr.Enabled() {
-				mr.AuthzDenialHintErrorCounter.Add(ctx, 1)
+			if metrics.Enabled() {
+				metrics.RegisterInt64Counter(authzDenialHintErrorMetricName, "failure to get denial hint")
+				metrics.AddCount(ctx, authzDenialHintErrorMetricName, 1)
 			}
 			// We can't do much here besides log that something went wrong
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
@@ -127,8 +137,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	}
 	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
 	if !result {
-		if mr.Enabled() {
-			mr.AuthzDeniedPolicyCounter.Add(ctx, 1)
+		if metrics.Enabled() {
+			metrics.RegisterInt64Counter(authzDeniedPolicyMetricName, "authorization denied by policy")
+			metrics.AddCount(ctx, authzDeniedPolicyMetricName, 1)
 		}
 		if len(hints) > 0 {
 			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", strings.Join(hints, ", "))

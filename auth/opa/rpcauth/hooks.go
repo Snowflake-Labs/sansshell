@@ -21,9 +21,13 @@ import (
 	"net"
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+// Metrics
+const (
+	authzDeniedJustificationMetricName = "authz_denied_justification"
 )
 
 // RPCAuthzHookFunc implements RpcAuthzHook for a simple function
@@ -92,17 +96,18 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 			j = v[0]
 		}
 
-		mr := metrics.GetRecorder()
 		if j == "" {
-			if mr.Enabled() {
-				mr.AuthzDeniedJustificationCounter.Add(ctx, 1, attribute.String("reason", "missing"))
+			if metrics.Enabled() {
+				metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+				metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
 			}
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
-				if mr.Enabled() {
-					mr.AuthzDeniedJustificationCounter.Add(ctx, 1, attribute.String("reason", "denied"))
+				if metrics.Enabled() {
+					metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, "authorization denied due to justification")
+					metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1)
 				}
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}

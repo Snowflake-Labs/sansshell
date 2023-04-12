@@ -3,104 +3,112 @@ package metrics
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 
-	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/metric/instrument"
 )
 
+/*
 const (
 	authzDeniedJustificationMetricName = "authz_denied_justification"
 	authzDeniedPolicyMetricName        = "authz_denied_policy"
 	authzDenialHintErrorMetricName     = "authz_denial_hint_error"
 	authzFailureInputMissingMetricName = "authz_failure_input_missing"
 	authzFailureEvalErrorMetricName    = "authz_failure_eval_error"
-)
+)*/
 
 var (
-	mr MetricsRecorder
+	m *Metrics
 )
 
-type MetricsRecorder struct {
-	meter        metric.Meter
-	metricPrefix string
-	enabled      bool
-
-	// instrumentations
-	AuthzDeniedJustificationCounter instrument.Int64Counter
-	AuthzDeniedPolicyCounter        instrument.Int64Counter
-	AuthzFailureInputMissingCounter instrument.Int64Counter
-	AuthzFailureEvalErrorCounter    instrument.Int64Counter
-	AuthzDenialHintErrorCounter     instrument.Int64Counter
+type Metrics struct {
+	enabled       bool
+	prefix        string
+	Meter         metric.Meter
+	Int64Counters sync.Map
+	Int64Gauges   sync.Map
 }
 
-func (m MetricsRecorder) Enabled() bool {
-	return mr.enabled
+func Enabled() bool {
+	return m.enabled
 }
 
-func GetRecorder() MetricsRecorder {
-	return mr
+type Option interface {
+	apply(*Metrics) error
 }
 
-func initInstrumentations() error {
-	if !mr.enabled {
-		return errors.New("metrics recorder is not initialized")
-	}
-	var err error
-	mr.AuthzDeniedJustificationCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzDeniedJustificationMetricName)
-	if err != nil {
-		return err
-	}
-	mr.AuthzFailureInputMissingCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzFailureInputMissingMetricName)
-	if err != nil {
-		return err
-	}
-	mr.AuthzFailureEvalErrorCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzFailureEvalErrorMetricName)
-	if err != nil {
-		return err
-	}
-	mr.AuthzDenialHintErrorCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzDenialHintErrorMetricName)
-	if err != nil {
-		return err
-	}
-	mr.AuthzDeniedPolicyCounter, err = mr.meter.Int64Counter(mr.metricPrefix + "_" + authzDeniedPolicyMetricName)
-	if err != nil {
-		return err
-	}
-	return nil
+type optionFunc func(*Metrics) error
+
+func (o optionFunc) apply(m *Metrics) error {
+	return o(m)
 }
 
-func InitProxyMetrics(ctx context.Context) error {
+func WithMetricNamePrefix(prefix string) Option {
+	return optionFunc(func(m *Metrics) error {
+		m.prefix = prefix
+		return nil
+	})
+}
+
+func InitMetrics(opts ...Option) error {
 	meter := global.Meter("sansshell-proxy")
-	mr = MetricsRecorder{
-		meter:        meter,
-		metricPrefix: "sansshell_proxy",
-		enabled:      true,
+	m = &Metrics{
+		enabled:       true,
+		Meter:         meter,
+		Int64Counters: sync.Map{},
+		Int64Gauges:   sync.Map{},
 	}
-	err := initInstrumentations()
+	for _, o := range opts {
+		if err := o.apply(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func RegisterInt64Counter(name, description string) error {
+	if !Enabled() {
+		return errors.New("metrics is not initialized")
+	}
+	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	if _, exists := m.Int64Counters.Load(name); exists {
+		return nil
+	}
+
+	counter, err := m.Meter.Int64Counter(name, instrument.WithDescription(description))
 	if err != nil {
 		return err
 	}
-	logger := logr.FromContextOrDiscard(ctx)
-	logger.Info("initialized proxy metrics")
+
+	m.Int64Counters.Store(name, counter)
+	return nil
+}
+
+func AddCount(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
+	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	counter, exists := m.Int64Counters.Load(name)
+	if !exists {
+		return errors.New("counter " + name + " doesn't exist")
+	}
+	counter.(instrument.Int64Counter).Add(ctx, value, attributes...)
 
 	return nil
 }
 
-func InitServerMetrics(ctx context.Context) error {
-	meter := global.Meter("sansshell-server")
-	mr = MetricsRecorder{
-		meter:        meter,
-		metricPrefix: "sansshell-server",
-		enabled:      true,
+func RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
+	name = fmt.Sprintf("%s_%s", m.prefix, name)
+	if _, exists := m.Int64Gauges.Load(name); exists {
+		return nil
 	}
-	err := initInstrumentations()
+	gauge, err := m.Meter.Int64ObservableGauge(name, instrument.WithDescription(description), instrument.WithInt64Callback(callback))
 	if err != nil {
 		return err
 	}
-	logger := logr.FromContextOrDiscard(ctx)
-	logger.Info("initialized server metrics")
 
+	m.Int64Gauges.Store(name, gauge)
 	return nil
 }
