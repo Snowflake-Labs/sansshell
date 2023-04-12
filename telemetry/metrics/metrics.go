@@ -1,3 +1,20 @@
+/* Copyright (c) 2023 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+// package metrics contains code for adding
+// metric instrumentations to Sansshell processes
 package metrics
 
 import (
@@ -31,14 +48,6 @@ type Metrics struct {
 	Int64Gauges sync.Map
 }
 
-// Enabled returns true if this package is initialized
-func Enabled() bool {
-	if m != nil {
-		return m.enabled
-	}
-	return false
-}
-
 type Option interface {
 	apply(*Metrics) error
 }
@@ -47,14 +56,6 @@ type optionFunc func(*Metrics) error
 
 func (o optionFunc) apply(m *Metrics) error {
 	return o(m)
-}
-
-// WithMetricNamePrefix stores the given prefix to the Metrics singleton
-func WithMetricNamePrefix(prefix string) Option {
-	return optionFunc(func(m *Metrics) error {
-		m.prefix = prefix
-		return nil
-	})
 }
 
 // addPrefix returns prefix + "_" + name if prefix is not empty
@@ -66,8 +67,17 @@ func addPrefix(prefix, name string) string {
 	return name
 }
 
+// WithMetricNamePrefix stores the given prefix to the Metrics singleton
+func WithMetricNamePrefix(prefix string) Option {
+	return optionFunc(func(m *Metrics) error {
+		m.prefix = prefix
+		return nil
+	})
+}
+
 // InitMetrics initializes this package by creating the Metrics singleton
-// and applying options
+// and applying options.
+// IMPORTANT: you need to call this before adding instrumentations
 func InitMetrics(opts ...Option) error {
 	meter := global.Meter("sansshell-proxy")
 	m = &Metrics{
@@ -82,6 +92,14 @@ func InitMetrics(opts ...Option) error {
 		}
 	}
 	return nil
+}
+
+// Enabled returns true if this package is initialized
+func Enabled() bool {
+	if m != nil {
+		return m.enabled
+	}
+	return false
 }
 
 // RegisterInt64Coungter creates an Int64Counter and saves it to the register.

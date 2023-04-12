@@ -268,6 +268,7 @@ func WithDebugPort(addr string) Option {
 }
 
 // WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+// and initializes metrics exporter.
 // This endpoint is to be scraped by a Prometheus-style metrics scraper.
 // It can be accessed at http://{addr}/metrics
 func WithMetricsPort(addr string) Option {
