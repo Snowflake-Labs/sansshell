@@ -36,8 +36,6 @@ import (
 const (
 	proxyReplyErrorCounterName             = "proxy_reply_error"
 	proxyReplyErrorCounterDesc             = "number of failure when sending reply to the client"
-	proxyReceiveErrorCounterName           = "proxy_receive_error"
-	proxyReceiveErrorCounterDesc           = "number of failure when receiving messages from the target"
 	proxyDispatchUnknownReqtypeCounterName = "proxy_dispatch_unknown_reqtype"
 	proxyDispatchUnknownReqtypeCounterDesc = "number of dispatch failure due to unknown proxy request type"
 )
@@ -196,17 +194,16 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 // send relays messages from `replyChan` to the provided stream
 func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
 	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
-			if metrics.Enabled() {
-				errRegister := metrics.RegisterInt64Counter(proxyReplyErrorCounterName, proxyReplyErrorCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
-				}
-				errCounter := metrics.AddCount(ctx, proxyReplyErrorCounterName, 1)
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounterName)
-				}
+			errRegister := recorder.RegisterInt64Counter(proxyReplyErrorCounterName, proxyReplyErrorCounterDesc)
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
+			}
+			errCounter := recorder.AddInt64Counter(ctx, proxyReplyErrorCounterName, 1)
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounterName)
 			}
 			return err
 		}
@@ -223,7 +220,6 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 	// This can be used by the dispatching goroutine as a single
 	// to CloseSend on the target streams
 	defer close(requestChan)
-	logger := logr.FromContextOrDiscard(ctx)
 	for {
 		// Receive from the client stream
 		// This will block, but can return early
@@ -239,14 +235,6 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 			return nil
 		}
 		if err != nil {
-			errRegister := metrics.RegisterInt64Counter(proxyReceiveErrorCounterName, proxyReceiveErrorCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+proxyReceiveErrorCounterName)
-			}
-			errCounter := metrics.AddCount(ctx, proxyReceiveErrorCounterName, 1)
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+proxyReceiveErrorCounterName)
-			}
 			return err
 		}
 		select {
@@ -263,7 +251,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 	// be removed from the stream set
 	doneChan := make(chan uint64)
 	logger := logr.FromContextOrDiscard(ctx)
-
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -309,11 +297,11 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
-				errRegister := metrics.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, proxyDispatchUnknownReqtypeCounterDesc)
+				errRegister := recorder.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, proxyDispatchUnknownReqtypeCounterDesc)
 				if errRegister != nil {
 					logger.V(1).Error(errRegister, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
 				}
-				errCounter := metrics.AddCount(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
+				errCounter := recorder.AddInt64Counter(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
 				if errCounter != nil {
 					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounterName)
 				}

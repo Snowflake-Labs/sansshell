@@ -34,9 +34,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/global"
-	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -70,6 +67,7 @@ type runState struct {
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
+	metricsRecorder          *metrics.OtelRecorder
 }
 
 type Option interface {
@@ -267,58 +265,51 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
-// and initializes metrics exporter.
-// This endpoint is to be scraped by a Prometheus-style metrics scraper.
-// It can be accessed at http://{addr}/metrics
-func WithMetricsPort(addr string) Option {
+func WithMetricsRecorder(recorder *metrics.OtelRecorder) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		// Setup exporter using the default prometheus registry
-		exporter, err := prometheus_exporter.New()
-		if err != nil {
-			return err
-		}
-		global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
-			otelmetricsdk.WithReader(exporter),
-		))
-		errInit := metrics.InitMetrics(metrics.WithMetricNamePrefix("sansshell_proxy"))
-		if errInit != nil {
-			logger := logr.FromContextOrDiscard(ctx)
-			logger.Error(errInit, "fail to init proxy metrics")
-		}
-
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.Handler())
-		r.metricsport = addr
-		r.metricshandler = mux
-
+		r.metricsRecorder = recorder
 		// Instrument gRPC Client
-		clientMetrics := grpc_prometheus.NewClientMetrics()
-		errRegister := prometheus.Register(clientMetrics)
+		grpcClientMetrics := grpc_prometheus.NewClientMetrics()
+		errRegister := prometheus.Register(grpcClientMetrics)
 		if errRegister != nil {
 			return fmt.Errorf("fail to register grpc client prometheus metrics: %s", errRegister)
 		}
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
-			clientMetrics.UnaryClientInterceptor(),
+			metrics.UnaryClientMetricsInterceptor(recorder),
+			grpcClientMetrics.UnaryClientInterceptor(),
 		)
 		r.streamClientInterceptors = append(r.streamClientInterceptors,
-			clientMetrics.StreamClientInterceptor(),
+			metrics.StreamClientMetricsInterceptor(recorder),
+			grpcClientMetrics.StreamClientInterceptor(),
 		)
 
 		// Instrument gRPC Server
-		serverMetrics := grpc_prometheus.NewServerMetrics(
+		grpcServerMetrics := grpc_prometheus.NewServerMetrics(
 			grpc_prometheus.WithServerHandlingTimeHistogram(),
 		)
-		errRegister = prometheus.Register(serverMetrics)
+		errRegister = prometheus.Register(grpcServerMetrics)
 		if errRegister != nil {
 			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
 		}
 		r.unaryInterceptors = append(r.unaryInterceptors,
-			serverMetrics.UnaryServerInterceptor(),
+			metrics.UnaryServerMetricsInterceptor(recorder),
+			grpcServerMetrics.UnaryServerInterceptor(),
 		)
 		r.streamInterceptors = append(r.streamInterceptors,
-			serverMetrics.StreamServerInterceptor(),
+			metrics.StreamServerMetricsInterceptor(recorder),
+			grpcServerMetrics.StreamServerInterceptor(),
 		)
+		return nil
+	})
+}
+
+// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+func WithMetricsPort(addr string) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		r.metricsport = addr
+		r.metricshandler = mux
 
 		return nil
 	})

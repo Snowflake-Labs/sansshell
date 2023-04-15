@@ -99,30 +99,27 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 			j = v[0]
 		}
 		logger := logr.FromContextOrDiscard(ctx)
+		recorder := metrics.RecorderFromContextOrNoop(ctx)
 		if j == "" {
-			if metrics.Enabled() {
-				errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
-				}
-				errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "missing_justification"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
-				}
+			errRegister := recorder.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
+			}
+			errCounter := recorder.AddInt64Counter(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "missing_justification"))
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
 			}
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
-				if metrics.Enabled() {
-					errRegister := metrics.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
-					if errRegister != nil {
-						logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
-					}
-					errCounter := metrics.AddCount(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "denied"))
-					if errCounter != nil {
-						logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
-					}
+				errRegister := recorder.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
+				if errRegister != nil {
+					logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
+				}
+				errCounter := recorder.AddInt64Counter(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "denied"))
+				if errCounter != nil {
+					logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
 				}
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
