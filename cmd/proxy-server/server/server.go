@@ -67,7 +67,7 @@ type runState struct {
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
-	metricsRecorder          *metrics.OtelRecorder
+	metricsRecorder          metrics.MetricsRecorder
 }
 
 type Option interface {
@@ -265,14 +265,16 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-func WithMetricsRecorder(recorder *metrics.OtelRecorder) Option {
+// WithMetricsRecorder enables metric instrumentaitons by inserting grpc metric interceptors
+// and attaching recorder to the server runstate
+func WithMetricsRecorder(recorder metrics.MetricsRecorder) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
 		r.metricsRecorder = recorder
 		// Instrument gRPC Client
 		grpcClientMetrics := grpc_prometheus.NewClientMetrics()
 		errRegister := prometheus.Register(grpcClientMetrics)
 		if errRegister != nil {
-			return fmt.Errorf("fail to register grpc client prometheus metrics: %s", errRegister)
+			return fmt.Errorf("fail to register grpc client metrics: %s", errRegister)
 		}
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
 			metrics.UnaryClientMetricsInterceptor(recorder),
@@ -289,7 +291,7 @@ func WithMetricsRecorder(recorder *metrics.OtelRecorder) Option {
 		)
 		errRegister = prometheus.Register(grpcServerMetrics)
 		if errRegister != nil {
-			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
+			return fmt.Errorf("fail to register grpc server metrics: %s", errRegister)
 		}
 		r.unaryInterceptors = append(r.unaryInterceptors,
 			metrics.UnaryServerMetricsInterceptor(recorder),

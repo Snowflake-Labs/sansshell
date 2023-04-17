@@ -36,7 +36,7 @@ type MetricsRecorder interface {
 	AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error
 }
 
-// contextKey is how we find Metrics in a context.Context.
+// contextKey is how we find MetricsRecorder in a context.Context.
 type contextKey struct{}
 
 // NewContextWithRecorder returns the context with embedded MetricsRecorder.
