@@ -56,9 +56,9 @@ func RecorderFromContext(ctx context.Context) MetricsRecorder {
 // RecorderFromContextOrNoop returns the MetricsRecorder object in the context if exists
 // Otherwise it returns a noOpRecorder object
 func RecorderFromContextOrNoop(ctx context.Context) MetricsRecorder {
-	mr := RecorderFromContext(ctx)
-	if mr != nil {
-		return mr
+	recorder := RecorderFromContext(ctx)
+	if recorder != nil {
+		return recorder
 	}
 
 	return noOpRecorder{}
@@ -107,7 +107,7 @@ type observedClientStream struct {
 	metricsRecorder MetricsRecorder
 }
 
-// *observedClientStream.Context returns the client stream context attached with a MetricsRecorder
+// *observedClientStream.Context returns the client stream context with the MetricsRecorder attached
 func (o *observedClientStream) Context() context.Context {
 	ctx := o.ClientStream.Context()
 	ctx = NewContextWithRecorder(ctx, o.metricsRecorder)
