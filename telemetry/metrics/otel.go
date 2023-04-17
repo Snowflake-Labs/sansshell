@@ -42,7 +42,7 @@ func addPrefix(prefix, name string) string {
 	return name
 }
 
-// WithMetricNamePrefix stores the given prefix to the Metrics singleton
+// WithMetricNamePrefix adds metric name prefix to the OtelRecorder
 func WithMetricNamePrefix(prefix string) Option {
 	return optionFunc(func(m *OtelRecorder) error {
 		m.prefix = prefix
