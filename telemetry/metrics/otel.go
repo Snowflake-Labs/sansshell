@@ -49,6 +49,7 @@ func WithMetricNamePrefix(prefix string) Option {
 	})
 }
 
+// NewOtelRecorder returns a new OtelRecorder instance
 func NewOtelRecorder(meter metric.Meter, opts ...Option) (*OtelRecorder, error) {
 	m := &OtelRecorder{
 		Meter:         meter,
