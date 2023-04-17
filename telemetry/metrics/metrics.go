@@ -20,7 +20,6 @@ package metrics
 import (
 	"context"
 
-	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument"
 	"google.golang.org/grpc"
@@ -39,7 +38,7 @@ type MetricsRecorder interface {
 // contextKey is how we find MetricsRecorder in a context.Context.
 type contextKey struct{}
 
-// NewContextWithRecorder returns the context with embedded MetricsRecorder.
+// NewContextWithRecorder returns context with recorder attached.
 func NewContextWithRecorder(ctx context.Context, recorder MetricsRecorder) context.Context {
 	return context.WithValue(ctx, contextKey{}, recorder)
 }
@@ -61,9 +60,6 @@ func RecorderFromContextOrNoop(ctx context.Context) MetricsRecorder {
 	if mr != nil {
 		return mr
 	}
-
-	logger := logr.FromContextOrDiscard(ctx)
-	logger.Info("NOOP")
 
 	return noOpRecorder{}
 }
