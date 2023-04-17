@@ -12,6 +12,7 @@ import (
 )
 
 // OtelRecorder is a struct used for recording metrics with otel
+// It implements MetricsRecorder
 type OtelRecorder struct {
 	prefix string
 	Meter  metric.Meter
@@ -95,12 +96,9 @@ func (m *OtelRecorder) AddInt64Counter(ctx context.Context, name string, value i
 }
 
 // RegisterInt64Coungter creates an Int64Gauge and saves it to the register.
-// If there is an existing counter with the same name, it's a no-op.
+// If there is an existing gauge with the same name, the existing gauge will get overwritten.
 func (m *OtelRecorder) RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
 	name = addPrefix(m.prefix, name)
-	if _, exists := m.Int64Gauges.Load(name); exists {
-		return nil
-	}
 	gauge, err := m.Meter.Int64ObservableGauge(name, instrument.WithDescription(description), instrument.WithInt64Callback(callback))
 	if err != nil {
 		return err
