@@ -82,7 +82,7 @@ func (m *OtelRecorder) RegisterInt64Counter(name, description string) error {
 
 // AddInt64Counter increments the counter by the given value
 // It will return an error if the counter is not registered
-func (m OtelRecorder) AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
+func (m *OtelRecorder) AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
 	name = addPrefix(m.prefix, name)
 	counter, exists := m.Int64Counters.Load(name)
 	if !exists {
@@ -95,8 +95,7 @@ func (m OtelRecorder) AddInt64Counter(ctx context.Context, name string, value in
 
 // RegisterInt64Coungter creates an Int64Gauge and saves it to the register.
 // If there is an existing counter with the same name, it's a no-op.
-func (m *OtelRecorder) RegisterInt64Gauge(name, description string, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
-	//TODO: apply attributes
+func (m *OtelRecorder) RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
 	name = addPrefix(m.prefix, name)
 	if _, exists := m.Int64Gauges.Load(name); exists {
 		return nil
