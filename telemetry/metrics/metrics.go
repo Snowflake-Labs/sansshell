@@ -107,7 +107,7 @@ type observedClientStream struct {
 	metricsRecorder MetricsRecorder
 }
 
-// *observedClientStream.Context returns the client stream context with the MetricsRecorder attached
+// Context returns the client stream context with the MetricsRecorder attached
 func (o *observedClientStream) Context() context.Context {
 	ctx := o.ClientStream.Context()
 	ctx = NewContextWithRecorder(ctx, o.metricsRecorder)
@@ -140,7 +140,7 @@ type observedStream struct {
 	metricsrecorder MetricsRecorder
 }
 
-// *observedStream.Context returns the server stream context attached with a MetricsRecorder
+// Context returns the server stream context attached with a MetricsRecorder
 func (o *observedStream) Context() context.Context {
 	// Get the stream context and make sure our recorder is attached.
 	ctx := o.ServerStream.Context()

@@ -265,7 +265,7 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-// WithMetricsRecorder enables metric instrumentaitons by inserting grpc metric interceptors
+// WithMetricsRecorder enables metric instrumentations by inserting grpc metric interceptors
 // and attaching recorder to the server runstate
 func WithMetricsRecorder(recorder metrics.MetricsRecorder) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
