@@ -41,6 +41,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -66,6 +67,7 @@ type runState struct {
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
+	metricsRecorder          metrics.MetricsRecorder
 }
 
 type Option interface {
@@ -263,41 +265,53 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
+// WithMetricsRecorder enables metric instrumentations by inserting grpc metric interceptors
+// and attaching recorder to the server runstate
+func WithMetricsRecorder(recorder metrics.MetricsRecorder) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		r.metricsRecorder = recorder
+		// Instrument gRPC Client
+		grpcClientMetrics := grpc_prometheus.NewClientMetrics()
+		errRegister := prometheus.Register(grpcClientMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc client metrics: %s", errRegister)
+		}
+		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
+			metrics.UnaryClientMetricsInterceptor(recorder),
+			grpcClientMetrics.UnaryClientInterceptor(),
+		)
+		r.streamClientInterceptors = append(r.streamClientInterceptors,
+			metrics.StreamClientMetricsInterceptor(recorder),
+			grpcClientMetrics.StreamClientInterceptor(),
+		)
+
+		// Instrument gRPC Server
+		grpcServerMetrics := grpc_prometheus.NewServerMetrics(
+			grpc_prometheus.WithServerHandlingTimeHistogram(),
+		)
+		errRegister = prometheus.Register(grpcServerMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc server metrics: %s", errRegister)
+		}
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			metrics.UnaryServerMetricsInterceptor(recorder),
+			grpcServerMetrics.UnaryServerInterceptor(),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			metrics.StreamServerMetricsInterceptor(recorder),
+			grpcServerMetrics.StreamServerInterceptor(),
+		)
+		return nil
+	})
+}
+
 // WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
-// This endpoint is to be scraped by a Prometheus-style metrics scraper.
-// It can be accessed at http://{addr}/metrics
 func WithMetricsPort(addr string) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
+	return optionFunc(func(ctx context.Context, r *runState) error {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		r.metricsport = addr
 		r.metricshandler = mux
-
-		// Instrument gRPC Client
-		clientMetrics := grpc_prometheus.NewClientMetrics()
-		errRegister := prometheus.Register(clientMetrics)
-		if errRegister != nil {
-			return fmt.Errorf("fail to register grpc client prometheus metrics: %s", errRegister)
-		}
-		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
-			clientMetrics.UnaryClientInterceptor(),
-		)
-		r.streamClientInterceptors = append(r.streamClientInterceptors,
-			clientMetrics.StreamClientInterceptor(),
-		)
-
-		// Instrument gRPC Server
-		serverMetrics := grpc_prometheus.NewServerMetrics()
-		errRegister = prometheus.Register(serverMetrics)
-		if errRegister != nil {
-			return fmt.Errorf("fail to register grpc server prometheus metrics: %s", errRegister)
-		}
-		r.unaryInterceptors = append(r.unaryInterceptors,
-			serverMetrics.UnaryServerInterceptor(),
-		)
-		r.streamInterceptors = append(r.streamInterceptors,
-			serverMetrics.StreamServerInterceptor(),
-		)
 
 		return nil
 	})
