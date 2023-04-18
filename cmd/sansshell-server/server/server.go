@@ -28,6 +28,8 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -36,6 +38,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -49,6 +52,9 @@ type runState struct {
 	hostport           string
 	debugport          string
 	debughandler       *http.ServeMux
+	metricsport        string
+	metricshandler     *http.ServeMux
+	metricsRecorder    metrics.MetricsRecorder
 	policy             *opa.AuthzPolicy
 	justification      bool
 	justificationFunc  func(string) error
@@ -206,6 +212,46 @@ func WithDebugPort(addr string) Option {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 		r.debugport = addr
 		r.debughandler = mux
+		return nil
+	})
+}
+
+// WithMetricsRecorder enables metric instrumentations by inserting grpc metric interceptors
+// and attaching recorder to the server runstate
+func WithMetricsRecorder(recorder metrics.MetricsRecorder) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		r.metricsRecorder = recorder
+		// Instrument gRPC Server
+		grpcServerMetrics := grpc_prometheus.NewServerMetrics(
+			grpc_prometheus.WithServerHandlingTimeHistogram(),
+		)
+		errRegister := prometheus.Register(grpcServerMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc server metrics: %s", errRegister)
+		}
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			metrics.UnaryServerMetricsInterceptor(recorder),
+			grpcServerMetrics.UnaryServerInterceptor(),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			metrics.StreamServerMetricsInterceptor(recorder),
+			grpcServerMetrics.StreamServerInterceptor(),
+		)
+		return nil
+	})
+}
+
+// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+// and initializes metrics exporter.
+// This endpoint is to be scraped by a Prometheus-style metrics scraper.
+// It can be accessed at http://{addr}/metrics
+func WithMetricsPort(addr string) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		r.metricsport = addr
+		r.metricshandler = mux
+
 		return nil
 	})
 }
