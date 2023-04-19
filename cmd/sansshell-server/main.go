@@ -137,8 +137,8 @@ func main() {
 	global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
 		otelmetricsdk.WithReader(exporter),
 	))
-	meter := global.Meter("sansshell-proxy")
-	recorder, err := metrics.NewOtelRecorder(meter, metrics.WithMetricNamePrefix("sansshell-proxy"))
+	meter := global.Meter("sansshell-server")
+	recorder, err := metrics.NewOtelRecorder(meter, metrics.WithMetricNamePrefix("sansshell-server"))
 	if err != nil {
 		log.Fatalf("failed to create OtelRecorder: %v\n", err)
 	}
