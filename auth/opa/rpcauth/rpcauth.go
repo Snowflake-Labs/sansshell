@@ -130,7 +130,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		if errRegister != nil {
 			logger.V(1).Error(errRegister, "failed to register "+authzFailureEvalErrorCounterName)
 		}
-		errCounter := recorder.AddInt64Counter(ctx, authzFailureEvalErrorCounterName, 1)
+		errCounter := recorder.AddInt64Counter(ctx, authzFailureEvalErrorCounterName, 1, attribute.String("method", input.Method))
 		if errCounter != nil {
 			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureEvalErrorCounterName)
 		}
@@ -145,7 +145,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+authzDenialHintErrorCounterName)
 			}
-			errCounter := recorder.AddInt64Counter(ctx, authzDenialHintErrorCounterName, 1)
+			errCounter := recorder.AddInt64Counter(ctx, authzDenialHintErrorCounterName, 1, attribute.String("method", input.Method))
 			if errCounter != nil {
 				logger.V(1).Error(errCounter, "failed to add counter "+authzDenialHintErrorCounterName)
 			}
