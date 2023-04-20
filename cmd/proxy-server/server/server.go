@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -319,19 +320,22 @@ func WithMetricsPort(addr string) Option {
 
 // WithOtelTracing adds the OpenTelemetry gRPC interceptors to all servers and clients.
 // The interceptors collect and export tracing data for gRPC requests and responses
-func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
+func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
+		interceptorOpts = append(interceptorOpts,
+			otelgrpc.WithMeterProvider(otelmetric.NewNoopMeterProvider()), // We don't want otel grpc metrics so discard them
+		)
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
-			otelgrpc.UnaryClientInterceptor(interceptorOpt),
+			otelgrpc.UnaryClientInterceptor(interceptorOpts...),
 		)
 		r.streamClientInterceptors = append(r.streamClientInterceptors,
-			otelgrpc.StreamClientInterceptor(interceptorOpt),
+			otelgrpc.StreamClientInterceptor(interceptorOpts...),
 		)
 		r.unaryInterceptors = append(r.unaryInterceptors,
-			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+			otelgrpc.UnaryServerInterceptor(interceptorOpts...),
 		)
 		r.streamInterceptors = append(r.streamInterceptors,
-			otelgrpc.StreamServerInterceptor(interceptorOpt),
+			otelgrpc.StreamServerInterceptor(interceptorOpts...),
 		)
 		return nil
 	})

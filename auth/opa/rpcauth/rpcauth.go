@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -129,7 +130,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		if errRegister != nil {
 			logger.V(1).Error(errRegister, "failed to register "+authzFailureEvalErrorCounterName)
 		}
-		errCounter := recorder.AddInt64Counter(ctx, authzFailureEvalErrorCounterName, 1)
+		errCounter := recorder.AddInt64Counter(ctx, authzFailureEvalErrorCounterName, 1, attribute.String("method", input.Method))
 		if errCounter != nil {
 			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureEvalErrorCounterName)
 		}
@@ -144,7 +145,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			if errRegister != nil {
 				logger.V(1).Error(errRegister, "failed to register "+authzDenialHintErrorCounterName)
 			}
-			errCounter := recorder.AddInt64Counter(ctx, authzDenialHintErrorCounterName, 1)
+			errCounter := recorder.AddInt64Counter(ctx, authzDenialHintErrorCounterName, 1, attribute.String("method", input.Method))
 			if errCounter != nil {
 				logger.V(1).Error(errCounter, "failed to add counter "+authzDenialHintErrorCounterName)
 			}
@@ -158,7 +159,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		if errRegister != nil {
 			logger.V(1).Error(errRegister, "failed to register "+authzDeniedPolicyCounterName)
 		}
-		errCounter := recorder.AddInt64Counter(ctx, authzDeniedPolicyCounterName, 1)
+		errCounter := recorder.AddInt64Counter(ctx, authzDeniedPolicyCounterName, 1, attribute.String("method", input.Method))
 		if errCounter != nil {
 			logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedPolicyCounterName)
 		}
