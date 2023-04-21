@@ -25,10 +25,13 @@ import (
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
 // Systemd deals in 'units', which might be services, devices, sockets,
