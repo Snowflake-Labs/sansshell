@@ -87,6 +87,16 @@ const (
 	operationResultDone = "done"
 )
 
+// Metrics
+const (
+	serviceListFailureCounterName   = "actions_service_list_failure"
+	serviceListFailureCounterDesc   = "number of failures when performing service.List"
+	serviceStatusFailureCounterName = "actions_service_status_failure"
+	serviceStatusFailureCounterDesc = "number of failures when performing service.Status"
+	serviceActionFailureCounterName = "actions_service_action_failure"
+	serviceActionFailureCounterDesc = "number of failures when performing service.Action"
+)
+
 // convert a dbus.UnitStatus to a servicepb.Status
 func unitStateToStatus(u dbus.UnitStatus) pb.Status {
 	switch {
@@ -151,18 +161,36 @@ func checkSupportedSystem(t pb.SystemType) error {
 
 // See: pb.ServiceServer.List
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceListFailureCounterName, serviceListFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceListFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceListFailureCounterName, 1, attribute.String("reason", "dial_systemd_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceListFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
 
 	units, err := conn.ListUnitsContext(ctx)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceListFailureCounterName, serviceListFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceListFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceListFailureCounterName, 1, attribute.String("reason", "list_units_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceListFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "systemd list error %v", err)
 	}
 	sort.Sort(byName(units))
@@ -189,12 +217,22 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
 
 	unitName := req.GetServiceName()
 	if len(unitName) == 0 {
+		errRegister := recorder.RegisterInt64Counter(serviceStatusFailureCounterName, serviceStatusFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceStatusFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceStatusFailureCounterName, 1, attribute.String("reason", "missing_name"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceStatusFailureCounterName)
+		}
 		return nil, status.Error(codes.InvalidArgument, "service name is required")
 	}
 
@@ -205,6 +243,14 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceStatusFailureCounterName, serviceStatusFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceStatusFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceStatusFailureCounterName, 1, attribute.String("reason", "dial_systemd_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceStatusFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
@@ -214,6 +260,14 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	// versions is to retrieve the full list of units, and filter here.
 	units, err := conn.ListUnitsContext(ctx)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceStatusFailureCounterName, serviceStatusFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceStatusFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceStatusFailureCounterName, 1, attribute.String("reason", "list_units_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceStatusFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
 	}
 	for _, u := range units {
@@ -227,17 +281,43 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 			}, nil
 		}
 	}
+	errRegister := recorder.RegisterInt64Counter(serviceStatusFailureCounterName, serviceStatusFailureCounterDesc)
+	if errRegister != nil {
+		logger.V(1).Error(errRegister, "failed to register "+serviceStatusFailureCounterName)
+	}
+	errCounter := recorder.AddInt64Counter(ctx, serviceStatusFailureCounterName, 1, attribute.String("reason", "not_found"))
+	if errCounter != nil {
+		logger.V(1).Error(errCounter, "failed to add counter "+serviceStatusFailureCounterName)
+	}
 	return nil, status.Errorf(codes.NotFound, "service %s was not found", req.GetServiceName())
 }
 
 // See: pb.ServiceServer.Action
 func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "not_supported"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, err
 	}
 
 	unitName := req.GetServiceName()
 	if len(unitName) == 0 {
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "missing_name"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, status.Error(codes.InvalidArgument, "service name is required")
 	}
 	// Accept either 'foo' or 'foo.service'
@@ -247,6 +327,14 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "dial_systemd_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
@@ -264,9 +352,25 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_DISABLE:
 		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
 	default:
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "invalid_action"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v", req.Action)
 	}
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "action_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, err)
 	}
 
@@ -279,13 +383,37 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
 		result := <-resultChan
 		if result != operationResultDone {
+			errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+			}
+			errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "action_err"))
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+			}
 			return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
 		}
 	case pb.Action_ACTION_ENABLE, pb.Action_ACTION_DISABLE:
 		if err := conn.ReloadContext(ctx); err != nil {
+			errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+			}
+			errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "reload_err"))
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+			}
 			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
 		}
 	default:
+		errRegister := recorder.RegisterInt64Counter(serviceActionFailureCounterName, serviceActionFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+serviceActionFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, serviceActionFailureCounterName, 1, attribute.String("reason", "invalid_action"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+serviceActionFailureCounterName)
+		}
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v for post actions", req.Action)
 	}
 

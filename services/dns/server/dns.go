@@ -28,6 +28,13 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/dns"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+)
+
+// Metrics
+const (
+	dnsLookupFailureCounterName = "actions_dns_lookup_failure"
+	dnsLookupFailureCounterDesc = "number of failures when performing dns.Lookup"
 )
 
 var (
@@ -40,12 +47,21 @@ type server struct{}
 
 func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	hostname := req.GetHostname()
 
 	logger.Info("dns request", "hostname", hostname)
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
 	ips, err := resolver(ctx, "ip4", hostname)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(dnsLookupFailureCounterName, dnsLookupFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+dnsLookupFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, dnsLookupFailureCounterName, 1)
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+dnsLookupFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 

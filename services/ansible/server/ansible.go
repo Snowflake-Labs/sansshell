@@ -23,6 +23,7 @@ import (
 	"os"
 	"regexp"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,6 +31,8 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+	"github.com/go-logr/logr"
 )
 
 var (
@@ -42,21 +45,53 @@ var (
 	}
 )
 
+// Metrics
+const (
+	ansibleRunFailureCounterName = "actions_ansible_run_failure"
+	ansibleRunFailureCounterDesc = "number of failures when performing ansible.Run"
+)
+
 // server is used to implement the gRPC server
 type server struct{}
 
 var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Basic sanity checking up front.
 	if AnsiblePlaybookBin == "" {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Playbook == "" {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "missing_playbook"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
 	}
 	if err := util.ValidPath(req.Playbook); err != nil {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "playbook_not_found"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, err
 	}
 
@@ -64,6 +99,14 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	// /some/path && rm -rf /
 	stat, err := os.Stat(req.Playbook)
 	if err != nil || stat.IsDir() {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "playbook_not_found"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a valid file", req.Playbook)
 	}
 
@@ -107,9 +150,25 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs)
 	if err != nil {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "run_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, err
 	}
 	if err := run.Error; err != nil {
+		errRegister := recorder.RegisterInt64Counter(ansibleRunFailureCounterName, ansibleRunFailureCounterDesc)
+		if errRegister != nil {
+			logger.V(1).Error(errRegister, "failed to register "+ansibleRunFailureCounterName)
+		}
+		errCounter := recorder.AddInt64Counter(ctx, ansibleRunFailureCounterName, 1, attribute.String("reason", "run_err"))
+		if errCounter != nil {
+			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounterName)
+		}
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
