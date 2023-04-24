@@ -81,7 +81,7 @@ func NewOtelRecorder(meter metric.Meter, opts ...Option) (*OtelRecorder, error) 
 	return m, nil
 }
 
-// Counter
+// Counter registers the counter if it's not registered, then increments it
 func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
 	if counter, exists := m.Int64Counters.Load(metric.Name); exists {
@@ -99,7 +99,7 @@ func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, val
 	return nil
 }
 
-// Gauge
+// Gauge registers the gauge along with the callback function that updates its value
 func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
 	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, instrument.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
