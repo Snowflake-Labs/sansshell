@@ -109,30 +109,26 @@ var (
 )
 
 // Metrics
-const (
-	processListFailureCounterName          = "actions_process_list_failure"
-	processListFailureCounterDesc          = "number of failures when performing process.List"
-	processKillFailureCounterName          = "actions_process_kill_failure"
-	processKillFailureCounterDesc          = "number of failures when performing process.Kill"
-	processGetStacksFailureCounterName     = "actions_process_getstacks_failure"
-	processGetStacksFailureCounterDesc     = "number of failures when performing process.GetStacks"
-	processGetJavaStacksFailureCounterName = "actions_process_getjavastacks_failure"
-	processGetJavaStacksFailureCounterDesc = "number of failures when performing process.GetJavaStacks"
-	processGetMemoryDumpFailureCounterName = "actions_process_getMemoryDump_failure"
-	processGetMemoryDumpFailureCounterDesc = "number of failures when performing process.GetMemoryDump"
+var (
+	processListFailureCounter = metrics.MetricDefinition{Name: "actions_process_list_failure",
+		Description: "number of failures when performing process.List"}
+	processKillFailureCounter = metrics.MetricDefinition{Name: "actions_process_kill_failure",
+		Description: "number of failures when performing process.Kill"}
+	processGetStacksFailureCounter = metrics.MetricDefinition{Name: "actions_process_getstacks_failure",
+		Description: "number of failures when performing process.GetStacks"}
+	processGetJavaStacksFailureCounter = metrics.MetricDefinition{Name: "actions_process_getjavastacks_failure",
+		Description: "number of failures when performing process.GetJavaStacks"}
+	processGetMemoryDumpFailureCounter = metrics.MetricDefinition{Name: "actions_process_getMemoryDump_failure",
+		Description: "number of failures when performing process.GetMemoryDump"}
 )
 
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if PsBin == "" {
-		errRegister := recorder.RegisterInt64Counter(processListFailureCounterName, processListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+		errCounter := recorder.Counter(ctx, processListFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounter.Name)
 		}
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
@@ -143,25 +139,17 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	// We gather all the processes up and then filter by pid if needed at the end.
 	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processListFailureCounterName, processListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processListFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(processListFailureCounterName, processListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processListFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -169,13 +157,9 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	entries, err := parser(run.Stdout)
 
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processListFailureCounterName, processListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "parse_err"))
+		errCounter := recorder.Counter(ctx, processListFailureCounter, 1, attribute.String("reason", "parse_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "unexpected parsing error: %v", err)
 	}
@@ -184,13 +168,9 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	if len(req.Pids) != 0 {
 		for _, pid := range req.Pids {
 			if _, ok := entries[pid]; !ok {
-				errRegister := recorder.RegisterInt64Counter(processListFailureCounterName, processListFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "invalid_pid"))
+				errCounter := recorder.Counter(ctx, processListFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.InvalidArgument, "pid %d does not exist", pid)
 			}
@@ -211,25 +191,17 @@ func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty,
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Pid == 0 {
-		errRegister := recorder.RegisterInt64Counter(processKillFailureCounterName, processKillFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "invalid_pid"))
+		errCounter := recorder.Counter(ctx, processKillFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processKillFailureCounter.Name)
 		}
 		return nil, status.Error(codes.InvalidArgument, "pid must be positive and non-zero")
 	}
 	err := syscall.Kill(int(req.Pid), syscall.Signal(req.Signal))
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processKillFailureCounterName, processKillFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processListFailureCounterName, 1, attribute.String("reason", "kill_err"))
+		errCounter := recorder.Counter(ctx, processKillFailureCounter, 1, attribute.String("reason", "kill_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processKillFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "kill returned error: %v", err)
 	}
@@ -241,25 +213,17 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// This is tied to pstack so either an OS provides it or it doesn't.
 	if PstackBin == "" {
-		errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+		errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 		}
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Pid <= 0 {
-		errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "invalid_pid"))
+		errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 		}
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
@@ -269,25 +233,17 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 
 	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
@@ -311,13 +267,9 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		if fields[0] == "Thread" {
 			// Depending on wrapper/gdb this may have additional fields but we don't need them.
 			if len(fields) < 6 {
-				errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "parse_err"))
+				errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.Internal, "unparsable pstack output for new thread: %s", text)
 			}
@@ -328,35 +280,23 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 			}
 
 			if n, err := fmt.Sscanf(fields[1], "%d", &stack.ThreadNumber); n != 1 || err != nil {
-				errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "parse_err"))
+				errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.Internal, "can't parse thread number: %s : %v", text, err)
 			}
 			if n, err := fmt.Sscanf(fields[3], "0x%x", &stack.ThreadId); n != 1 || err != nil {
-				errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "parse_err"))
+				errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.Internal, "can't parse thread id: %s : %v", text, err)
 			}
 			if n, err := fmt.Sscanf(fields[5], "%d", &stack.Lwp); n != 1 || err != nil {
-				errRegister := recorder.RegisterInt64Counter(processGetStacksFailureCounterName, processGetStacksFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetStacksFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetStacksFailureCounterName, 1, attribute.String("reason", "parse_err"))
+				errCounter := recorder.Counter(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetStacksFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.Internal, "can't parse lwp: %s : %v", text, err)
 			}
@@ -377,25 +317,17 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if JstackBin == "" {
-		errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+		errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 		}
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Pid <= 0 {
-		errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "invalid_pid"))
+		errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 		}
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
@@ -406,25 +338,17 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
 	run, err := util.RunCommand(ctx, cmdName, options)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
@@ -457,13 +381,9 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		// Find the trailing " character to extact the name.
 		end := strings.Index(text[1:], `"`)
 		if end == -1 {
-			errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "thread_not_found"))
+			errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "thread_not_found"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 			}
 			return nil, status.Errorf(codes.Internal, "can't find thread name in line %q", text)
 		}
@@ -528,13 +448,9 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 				continue
 			}
 			if n, err := fmt.Sscanf(f, format, out); n != 1 || err != nil {
-				errRegister := recorder.RegisterInt64Counter(processGetJavaStacksFailureCounterName, processGetJavaStacksFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetJavaStacksFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetJavaStacksFailureCounterName, 1, attribute.String("reason", "parse_err"))
+				errCounter := recorder.Counter(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetJavaStacksFailureCounter.Name)
 				}
 				return nil, status.Errorf(codes.Internal, "can't parse %q out of text: %q - %v", format, text, err)
 			}
@@ -564,13 +480,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Pid <= 0 {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "invalid_pid"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
@@ -578,13 +490,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	var dest io.WriteCloser
 	p, ok := peer.FromContext(stream.Context())
 	if !ok {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "missing_peer"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "missing_peer"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Error(codes.Internal, "can't get peer from context")
 	}
@@ -597,13 +505,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	case pb.DumpType_DUMP_TYPE_GCORE:
 		// This is tied to gcore so either an OS provides it or it doesn't.
 		if GcoreBin == "" {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "not_implemented"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
@@ -613,13 +517,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	case pb.DumpType_DUMP_TYPE_JMAP:
 		// This is tied to jmap so either an OS provides it or it doesn't.
 		if JmapBin == "" {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "not_implemented"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "not_implemented"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
@@ -627,25 +527,17 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		options, file, err = jmapOptionsAndLocation(req)
 		bucketFile = fmt.Sprintf("%s-heapdump.%d", p.Addr.String(), req.Pid)
 	default:
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "invalid_dump_type"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "invalid_dump_type"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Error(codes.InvalidArgument, "Must specify a valid dump type")
 	}
 
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "generate_dump_err"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "generate_dump_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "can't generate options/dump file location: %v", err)
 	}
@@ -658,26 +550,18 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		// Take the URL and append a filename composed above (either heap or core).
 		dest, err = openBlobForWriting(stream.Context(), req.GetUrl().Url, bucketFile)
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "open_blob_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "open_blob_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.GetUrl().Url, err)
 		}
 		defer func() {
 			err := dest.Close()
 			if err != nil {
-				errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "close_bucket_err"))
+				errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "close_bucket_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 				}
 				logr.FromContextOrDiscard(stream.Context()).Error(err, "bucket Close", "url", req.GetUrl().Url)
 			}
@@ -686,38 +570,26 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	// Don't care about stderr output since jmap produces some debug that way.
 	run, err := util.RunCommand(stream.Context(), cmdName, options)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	f, err := os.Open(file)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "open_file_err"))
+		errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "open_file_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
 	}
@@ -728,48 +600,32 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	if req.GetUrl() != nil {
 		written, err := io.CopyBuffer(dest, f, b)
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "copy_remote_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "copy_remote_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "can't copy to remote URL %s - %v", req.GetUrl().Url, err)
 		}
 		fi, err := f.Stat()
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "stat_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "stat_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "can't stat dump file %s - %v", file, err)
 		}
 		if got, want := written, fi.Size(); got != want {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "write_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "write_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "didn't write correct bytes to URL %s. Expected %d and wrote %d", req.GetUrl().Url, want, got)
 		}
 		// URL so we're done.
 		if err := dest.Close(); err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "bucket_close_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "bucket_close_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "bucket Close - %v", err)
 		}
@@ -784,13 +640,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		}
 
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "read_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "read_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
 		}
@@ -798,13 +650,9 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
 		if err := stream.Send(&pb.GetMemoryDumpReply{Data: b[:n]}); err != nil {
-			errRegister := recorder.RegisterInt64Counter(processGetMemoryDumpFailureCounterName, processGetMemoryDumpFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+processGetMemoryDumpFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, processGetMemoryDumpFailureCounterName, 1, attribute.String("reason", "stream_send_err"))
+			errCounter := recorder.Counter(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+processGetMemoryDumpFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
 		}

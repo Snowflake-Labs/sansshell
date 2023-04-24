@@ -57,9 +57,9 @@ var (
 )
 
 // Metrics
-const (
-	fdbcliFailureCounterName = "actions_fdbcli_failure"
-	fdbcliFailureCounterDesc = "number of failures when performing fdbcli"
+var (
+	fdbcliFailureCounter = metrics.MetricDefinition{Name: "actions_fdbcli_failure",
+		Description: "number of failures when performing fdbcli"}
 )
 
 // server is used to implement the gRPC server
@@ -226,38 +226,26 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if len(req.Commands) == 0 {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "missing_command"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "missing_command"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return status.Error(codes.InvalidArgument, "must fill in at least one command")
 	}
 
 	command, logs, err := generateFDBCLIArgs(req)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "generate_args_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_args_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return err
 	}
 	opts, err := s.generateCommandOpts()
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "generate_opts_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_opts_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return err
 	}
@@ -268,24 +256,16 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 
 	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -309,13 +289,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 		},
 	}
 	if err := stream.Send(resp); err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "stream_send_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "can't send on stream: %v", err)
 	}
@@ -323,13 +299,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	// Process any logs
 	retLogs, err := parseLogs(logs)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "parse_logs_err"))
+		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "parse_logs_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 		}
 		return err
 	}
@@ -337,13 +309,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	for _, log := range retLogs {
 		f, err := os.Open(log.Filename)
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "open_file_err"))
+			errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "open_file_err"))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 			}
 			return status.Errorf(codes.Internal, "can't open file %s: %v", log.Filename, err)
 		}
@@ -359,13 +327,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 			}
 
 			if err != nil {
-				errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "read_file_err"))
+				errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "read_file_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 				}
 				return status.Errorf(codes.Internal, "can't read file %s: %v", log.Filename, err)
 			}
@@ -380,13 +344,9 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 				},
 			}
 			if err := stream.Send(resp); err != nil {
-				errRegister := recorder.RegisterInt64Counter(fdbcliFailureCounterName, fdbcliFailureCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+fdbcliFailureCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, fdbcliFailureCounterName, 1, attribute.String("reason", "stream_send_err"))
+				errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
 				}
 				return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", log.Filename, err)
 			}

@@ -81,45 +81,32 @@ func NewOtelRecorder(meter metric.Meter, opts ...Option) (*OtelRecorder, error) 
 	return m, nil
 }
 
-// RegisterInt64Counter creates an Int64Counter and saves it to the register.
-// If there is an existing counter with the same name, it's a no-op.
-func (m *OtelRecorder) RegisterInt64Counter(name, description string) error {
-	name = addPrefix(m.prefix, name)
-	if _, exists := m.Int64Counters.Load(name); exists {
+// Counter
+func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
+	metric.Name = addPrefix(m.prefix, metric.Name)
+	if counter, exists := m.Int64Counters.Load(metric.Name); exists {
+		counter.(instrument.Int64Counter).Add(ctx, value, attributes...)
 		return nil
 	}
 
-	counter, err := m.Meter.Int64Counter(name, instrument.WithDescription(description))
+	counter, err := m.Meter.Int64Counter(metric.Name, instrument.WithDescription(metric.Description))
 	if err != nil {
 		return errors.Wrap(err, "failed to create Int64counter")
 	}
+	counter.Add(ctx, value, attributes...)
 
-	m.Int64Counters.Store(name, counter)
+	m.Int64Counters.Store(metric.Name, counter)
 	return nil
 }
 
-// AddInt64Counter increments the counter by the given value
-// It will return an error if the counter is not registered
-func (m *OtelRecorder) AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
-	name = addPrefix(m.prefix, name)
-	counter, exists := m.Int64Counters.Load(name)
-	if !exists {
-		return errors.New("counter " + name + " doesn't exist")
-	}
-	counter.(instrument.Int64Counter).Add(ctx, value, attributes...)
-
-	return nil
-}
-
-// RegisterInt64Coungter creates an Int64Gauge and saves it to the register.
-// If there is an existing gauge with the same name, the existing gauge will get overwritten.
-func (m *OtelRecorder) RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
-	name = addPrefix(m.prefix, name)
-	gauge, err := m.Meter.Int64ObservableGauge(name, instrument.WithDescription(description), instrument.WithInt64Callback(callback))
+// Gauge
+func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
+	metric.Name = addPrefix(m.prefix, metric.Name)
+	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, instrument.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
 	if err != nil {
 		return err
 	}
 
-	m.Int64Gauges.Store(name, gauge)
+	m.Int64Gauges.Store(metric.Name, gauge)
 	return nil
 }

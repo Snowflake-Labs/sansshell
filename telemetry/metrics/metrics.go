@@ -27,12 +27,16 @@ import (
 
 // MetricsRecorder contains methods used for collecting metrics.
 type MetricsRecorder interface {
-	// RegisterInt64Counter registers a counter of int64 type
-	RegisterInt64Counter(name, description string) error
-	// RegisterInt64Gauge registers a gauge of int64 type and a callback function for updating the gauge value
-	RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error
-	// AddInt64Counter increments the counter value
-	AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error
+	// Counter increments the counter
+	Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error
+	// Gauge registers a gauge of int64 type and a callback function for updating the gauge value
+	Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error
+}
+
+// MetricDefinition specifies the metric name and description
+type MetricDefinition struct {
+	Name        string
+	Description string
 }
 
 // contextKey is how we find MetricsRecorder in a context.Context.
@@ -68,13 +72,10 @@ func RecorderFromContextOrNoop(ctx context.Context) MetricsRecorder {
 type noOpRecorder struct {
 }
 
-func (n noOpRecorder) RegisterInt64Counter(name, description string) error {
+func (n noOpRecorder) Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
 	return nil
 }
-func (n noOpRecorder) RegisterInt64Gauge(name, description string, callback instrument.Int64Callback) error {
-	return nil
-}
-func (n noOpRecorder) AddInt64Counter(ctx context.Context, name string, value int64, attributes ...attribute.KeyValue) error {
+func (n noOpRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
 	return nil
 }
 

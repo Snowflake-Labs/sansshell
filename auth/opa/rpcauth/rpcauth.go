@@ -34,15 +34,15 @@ import (
 )
 
 // Metrics
-const (
-	authzDeniedPolicyCounterName        = "authz_denied_policy"
-	authzDeniedPolicyCounterDesc        = "number of authorization denied by policy"
-	authzDenialHintErrorCounterName     = "authz_denial_hint_error"
-	authzDenialHintErrorCounterDesc     = "number of failure to get denial hint"
-	authzFailureInputMissingCounterName = "authz_failure_input_missing"
-	authzFailureInputMissingCounterDesc = "number of authorization failure due to missing input"
-	authzFailureEvalErrorCounterName    = "authz_failure_eval_error"
-	authzFailureEvalErrorCounterDesc    = "number of authorization failure due to policy evaluation error"
+var (
+	authzDeniedPolicyCounter = metrics.MetricDefinition{Name: "authz_denied_policy",
+		Description: "number of authorization denied by policy"}
+	authzDenialHintErrorCounter = metrics.MetricDefinition{Name: "authz_denial_hint_error",
+		Description: "number of failure to get denial hint"}
+	authzFailureInputMissingCounter = metrics.MetricDefinition{Name: "authz_failure_input_missing",
+		Description: "number of authorization failure due to missing input"}
+	authzFailureEvalErrorCounter = metrics.MetricDefinition{Name: "authz_failure_eval_error",
+		Description: "number of authorization failure due to policy evaluation error"}
 )
 
 // An Authorizer performs authorization of Sanshsell RPCs based on
@@ -102,13 +102,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	if input == nil {
 		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		errRegister := recorder.RegisterInt64Counter(authzFailureInputMissingCounterName, authzFailureInputMissingCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+authzFailureInputMissingCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, authzFailureInputMissingCounterName, 1)
+		errCounter := recorder.Counter(ctx, authzFailureInputMissingCounter, 1)
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureInputMissingCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureInputMissingCounter.Name)
 		}
 		return err
 	}
@@ -126,13 +122,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	result, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		errRegister := recorder.RegisterInt64Counter(authzFailureEvalErrorCounterName, authzFailureEvalErrorCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+authzFailureEvalErrorCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, authzFailureEvalErrorCounterName, 1, attribute.String("method", input.Method))
+		errCounter := recorder.Counter(ctx, authzFailureEvalErrorCounter, 1, attribute.String("method", input.Method))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureEvalErrorCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureEvalErrorCounter.Name)
 		}
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
@@ -141,13 +133,10 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		// We've failed so let's see if we can help tell the user what might have failed.
 		hints, err = g.policy.DenialHints(ctx, input)
 		if err != nil {
-			errRegister := recorder.RegisterInt64Counter(authzDenialHintErrorCounterName, authzDenialHintErrorCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+authzDenialHintErrorCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, authzDenialHintErrorCounterName, 1, attribute.String("method", input.Method))
+
+			errCounter := recorder.Counter(ctx, authzDenialHintErrorCounter, 1, attribute.String("method", input.Method))
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+authzDenialHintErrorCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+authzDenialHintErrorCounter.Name)
 			}
 			// We can't do much here besides log that something went wrong
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
@@ -155,13 +144,9 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	}
 	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
 	if !result {
-		errRegister := recorder.RegisterInt64Counter(authzDeniedPolicyCounterName, authzDeniedPolicyCounterDesc)
+		errRegister := recorder.Counter(ctx, authzDeniedPolicyCounter, 1, attribute.String("method", input.Method))
 		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+authzDeniedPolicyCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, authzDeniedPolicyCounterName, 1, attribute.String("method", input.Method))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedPolicyCounterName)
+			logger.V(1).Error(errRegister, "failed to add counter "+authzDeniedPolicyCounter.Name)
 		}
 		if len(hints) > 0 {
 			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", strings.Join(hints, ", "))

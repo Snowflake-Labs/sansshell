@@ -33,11 +33,11 @@ import (
 )
 
 // Metrics
-const (
-	proxyReplyErrorCounterName             = "proxy_reply_error"
-	proxyReplyErrorCounterDesc             = "number of failure when sending reply to the client"
-	proxyDispatchUnknownReqtypeCounterName = "proxy_dispatch_unknown_reqtype"
-	proxyDispatchUnknownReqtypeCounterDesc = "number of dispatch failure due to unknown proxy request type"
+var (
+	proxyReplyErrorCounter = metrics.MetricDefinition{Name: "proxy_reply_error",
+		Description: "number of failure when sending reply to the client"}
+	proxyDispatchUnknownReqtypeCounter = metrics.MetricDefinition{Name: "proxy_dispatch_unknown_reqtype",
+		Description: "number of dispatch failure due to unknown proxy request type"}
 )
 
 // A TargetDialer is used by the proxy server to make connections
@@ -197,13 +197,9 @@ func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_Pr
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
-			errRegister := recorder.RegisterInt64Counter(proxyReplyErrorCounterName, proxyReplyErrorCounterDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, proxyReplyErrorCounterName, 1)
+			errCounter := recorder.Counter(ctx, proxyReplyErrorCounter, 1)
 			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounterName)
+				logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounter.Name)
 			}
 			return err
 		}
@@ -297,13 +293,9 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
-				errRegister := recorder.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, proxyDispatchUnknownReqtypeCounterDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
+				errCounter := recorder.Counter(ctx, proxyDispatchUnknownReqtypeCounter, 1)
 				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounterName)
+					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounter.Name)
 				}
 				return fmt.Errorf("unhandled request type %T", req.Request)
 			}

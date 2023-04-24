@@ -32,9 +32,9 @@ import (
 )
 
 // Metrics
-const (
-	dnsLookupFailureCounterName = "actions_dns_lookup_failure"
-	dnsLookupFailureCounterDesc = "number of failures when performing dns.Lookup"
+var (
+	dnsLookupFailureCounter = metrics.MetricDefinition{Name: "actions_dns_lookup_failure",
+		Description: "number of failures when performing dns.Lookup"}
 )
 
 var (
@@ -54,13 +54,9 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
 	ips, err := resolver(ctx, "ip4", hostname)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(dnsLookupFailureCounterName, dnsLookupFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+dnsLookupFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, dnsLookupFailureCounterName, 1)
+		errCounter := recorder.Counter(ctx, dnsLookupFailureCounter, 1)
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+dnsLookupFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+dnsLookupFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}

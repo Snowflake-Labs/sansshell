@@ -30,9 +30,9 @@ import (
 )
 
 // Metrics
-const (
-	execRunFailureCounterName = "actions_exec_run_failure"
-	execRunFailureCounterDesc = "number of failures when performing exec.Run"
+var (
+	execRunFailureCounter = metrics.MetricDefinition{Name: "actions_exec_run_failure",
+		Description: "number of failures when performing exec.Run"}
 )
 
 // server is used to implement the gRPC server
@@ -44,25 +44,17 @@ func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResp
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	run, err := util.RunCommand(ctx, req.Command, req.Args)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(execRunFailureCounterName, execRunFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+execRunFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, execRunFailureCounterName, 1)
+		errCounter := recorder.Counter(ctx, execRunFailureCounter, 1)
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	if run.Error != nil {
-		errRegister := recorder.RegisterInt64Counter(execRunFailureCounterName, execRunFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+execRunFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, execRunFailureCounterName, 1)
+		errCounter := recorder.Counter(ctx, execRunFailureCounter, 1)
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounter.Name)
 		}
 		return nil, run.Error
 	}

@@ -38,17 +38,17 @@ import (
 )
 
 // Metrics
-const (
-	packagesListInstalledFailureCounterName = "actions_packages_listinstalled_failure"
-	packagesListInstalledFailureCounterDesc = "number of failures when performing packages.ListInstalled"
-	packagesRepoListFailureCounterName      = "actions_packages_repolist_failure"
-	packagesRepoListFailureCounterDesc      = "number of failures when performing packages.RepoList"
-	packagesCleanupFailureCounterName       = "actions_packages_cleanup_failure"
-	packagesCleanupFailureCounterDesc       = "number of failures when performing packages.Cleanup"
-	packagesInstallFailureCounterName       = "actions_packages_install_failure"
-	packagesInstallFailureCounterDesc       = "number of failures when performing packages.Install"
-	packagesUpdateFailureCounterName        = "actions_packages_update_failure"
-	packagesUpdateFailureCounterDesc        = "number of failures when performing packages.Update"
+var (
+	packagesListInstalledFailureCounter = metrics.MetricDefinition{Name: "actions_packages_listinstalled_failure",
+		Description: "number of failures when performing packages.ListInstalled"}
+	packagesRepoListFailureCounter = metrics.MetricDefinition{Name: "actions_packages_repolist_failure",
+		Description: "number of failures when performing packages.RepoList"}
+	packagesCleanupFailureCounter = metrics.MetricDefinition{Name: "actions_packages_cleanup_failure",
+		Description: "number of failures when performing packages.Cleanup"}
+	packagesInstallFailureCounter = metrics.MetricDefinition{Name: "actions_packages_install_failure",
+		Description: "number of failures when performing packages.Install"}
+	packagesUpdateFailureCounter = metrics.MetricDefinition{Name: "actions_packages_update_failure",
+		Description: "number of failures when performing packages.Update"}
 )
 
 // Internal helper to generate the command list. The map must contain the enum.
@@ -196,24 +196,16 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesInstallFailureCounterName, packagesInstallFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesInstallFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesInstallFailureCounterName, 1, attribute.String("reason", "invalid_name"))
+		errCounter := recorder.Counter(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_name"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := validateField("version", req.Version); err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesInstallFailureCounterName, packagesInstallFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesInstallFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesInstallFailureCounterName, 1, attribute.String("reason", "invalid_version"))
+		errCounter := recorder.Counter(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_version"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounter.Name)
 		}
 		return nil, err
 	}
@@ -224,37 +216,25 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	}
 	command, err := generateInstall(req)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesInstallFailureCounterName, packagesInstallFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesInstallFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesInstallFailureCounterName, 1, attribute.String("reason", "generate_cmd_err"))
+		errCounter := recorder.Counter(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesInstallFailureCounterName, packagesInstallFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesInstallFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesInstallFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesInstallFailureCounterName, packagesInstallFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesInstallFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesInstallFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesInstallFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -271,35 +251,23 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "invalid_name"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_name"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := validateField("old_version", req.OldVersion); err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "invalid_old_version"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_old_version"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := validateField("new_version", req.NewVersion); err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "invalid_new_version"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_new_version"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, err
 	}
@@ -311,24 +279,16 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 
 	// Update doesn't require nevra but we do so validate each version is nevra.
 	if !nevraRe.MatchString(req.OldVersion) {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "invalid_old_version"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_old_version"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "old_version %q not in nevra format (n-e:v-r.a)", req.OldVersion)
 	}
 	if !nevraRe.MatchString(req.NewVersion) {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "invalid_new_version"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_new_version"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "new_version %q not in nevra format (n-e:v-r.a)", req.NewVersion)
 	}
@@ -337,13 +297,9 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	validateCommand, valErr := generateValidate(req)
 	updateCommand, upErr := generateUpdate(req)
 	if valErr != nil || upErr != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "generate_cmd_err"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, fmt.Errorf("%v %v", valErr, upErr)
 	}
@@ -351,24 +307,16 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	// First need to validate the old version is what we expect.
 	run, err := util.RunCommand(ctx, validateCommand[0], validateCommand[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nstdout:\n%s\nstderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -376,24 +324,16 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	// A 0 return means we're ok to proceed.
 	run, err = util.RunCommand(ctx, updateCommand[0], updateCommand[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesUpdateFailureCounterName, packagesUpdateFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesUpdateFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesUpdateFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesUpdateFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -483,13 +423,9 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 
 	command, err := generateListInstalled(req.PackageSystem)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesListInstalledFailureCounterName, packagesListInstalledFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesListInstalledFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesListInstalledFailureCounterName, 1, attribute.String("reason", "generate_cmd_err"))
+		errCounter := recorder.Counter(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounter.Name)
 		}
 		return nil, err
 	}
@@ -497,24 +433,16 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	// This may return output to stderr if the lock is held and we wait. That's ok.
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesListInstalledFailureCounterName, packagesListInstalledFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesListInstalledFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesListInstalledFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesListInstalledFailureCounterName, packagesListInstalledFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesListInstalledFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesListInstalledFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesListInstalledFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -614,37 +542,25 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 
 	command, err := generateRepoList(req.PackageSystem)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesRepoListFailureCounterName, packagesRepoListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesRepoListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesRepoListFailureCounterName, 1, attribute.String("reason", "generate_cmd_err"))
+		errCounter := recorder.Counter(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesRepoListFailureCounterName, packagesRepoListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesRepoListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesRepoListFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesRepoListFailureCounterName, packagesRepoListFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesRepoListFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesRepoListFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesRepoListFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
@@ -662,37 +578,25 @@ func (s *server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.Clean
 
 	command, err := generateCleanup(req.PackageSystem)
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesCleanupFailureCounterName, packagesCleanupFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesCleanupFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesCleanupFailureCounterName, 1, attribute.String("reason", "generate_cmd_err"))
+		errCounter := recorder.Counter(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounter.Name)
 		}
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesCleanupFailureCounterName, packagesCleanupFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesCleanupFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesCleanupFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounter.Name)
 		}
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errRegister := recorder.RegisterInt64Counter(packagesCleanupFailureCounterName, packagesCleanupFailureCounterDesc)
-		if errRegister != nil {
-			logger.V(1).Error(errRegister, "failed to register "+packagesCleanupFailureCounterName)
-		}
-		errCounter := recorder.AddInt64Counter(ctx, packagesCleanupFailureCounterName, 1, attribute.String("reason", "run_err"))
+		errCounter := recorder.Counter(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "run_err"))
 		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounterName)
+			logger.V(1).Error(errCounter, "failed to add counter "+packagesCleanupFailureCounter.Name)
 		}
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
