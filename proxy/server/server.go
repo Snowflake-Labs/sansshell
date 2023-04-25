@@ -28,6 +28,16 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+	"github.com/go-logr/logr"
+)
+
+// Metrics
+const (
+	proxyReplyErrorCounterName             = "proxy_reply_error"
+	proxyReplyErrorCounterDesc             = "number of failure when sending reply to the client"
+	proxyDispatchUnknownReqtypeCounterName = "proxy_dispatch_unknown_reqtype"
+	proxyDispatchUnknownReqtypeCounterDesc = "number of dispatch failure due to unknown proxy request type"
 )
 
 // A TargetDialer is used by the proxy server to make connections
@@ -115,7 +125,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 	// simultaneously, it is not safe for multiple goroutines
 	// to call "Send" on the same stream
 	group.Go(func() error {
-		return send(replyChan, stream)
+		return send(ctx, replyChan, stream)
 	})
 
 	// A single go-routine for receiving all incoming requests from
@@ -182,9 +192,19 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 }
 
 // send relays messages from `replyChan` to the provided stream
-func send(replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
+func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
+			errRegister := recorder.RegisterInt64Counter(proxyReplyErrorCounterName, proxyReplyErrorCounterDesc)
+			if errRegister != nil {
+				logger.V(1).Error(errRegister, "failed to register "+proxyReplyErrorCounterName)
+			}
+			errCounter := recorder.AddInt64Counter(ctx, proxyReplyErrorCounterName, 1)
+			if errCounter != nil {
+				logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounterName)
+			}
 			return err
 		}
 	}
@@ -230,7 +250,8 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 	// Channel to track streams that have completed and should
 	// be removed from the stream set
 	doneChan := make(chan uint64)
-
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -276,6 +297,14 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
+				errRegister := recorder.RegisterInt64Counter(proxyDispatchUnknownReqtypeCounterName, proxyDispatchUnknownReqtypeCounterDesc)
+				if errRegister != nil {
+					logger.V(1).Error(errRegister, "failed to register "+proxyDispatchUnknownReqtypeCounterName)
+				}
+				errCounter := recorder.AddInt64Counter(ctx, proxyDispatchUnknownReqtypeCounterName, 1)
+				if errCounter != nil {
+					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounterName)
+				}
 				return fmt.Errorf("unhandled request type %T", req.Request)
 			}
 		}

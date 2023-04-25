@@ -31,6 +31,9 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/reflection"
@@ -46,6 +49,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
 	// Import the server modules you want to expose, they automatically register
 
@@ -75,6 +79,7 @@ var (
 	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
 	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
 	debugport     = flag.String("debugport", "localhost:50044", "A separate port for http debug pages. Set to an empty string to disable.")
+	metricsport   = flag.String("metricsport", "localhost:50047", "A separate port for http debug pages. Set to an empty string to disable.")
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
@@ -124,8 +129,23 @@ func main() {
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")
 	stdr.SetVerbosity(*verbosity)
 
+	// Setup exporter using the default prometheus registry
+	exporter, err := prometheus_exporter.New()
+	if err != nil {
+		log.Fatalf("failed to create prometheus exporter: %v\n", err)
+	}
+	global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
+		otelmetricsdk.WithReader(exporter),
+	))
+	meter := global.Meter("sansshell-server")
+	recorder, err := metrics.NewOtelRecorder(meter, metrics.WithMetricNamePrefix("sansshell-server"))
+	if err != nil {
+		log.Fatalf("failed to create OtelRecorder: %v\n", err)
+	}
+
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	ctx := logr.NewContext(context.Background(), logger)
+	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
 	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
@@ -146,5 +166,7 @@ func main() {
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithDebugPort(*debugport),
+		server.WithMetricsPort(*metricsport),
+		server.WithMetricsRecorder(recorder),
 	)
 }

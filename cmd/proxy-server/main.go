@@ -27,6 +27,9 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 	channelz "google.golang.org/grpc/channelz/service"
 	"google.golang.org/grpc/reflection"
@@ -38,6 +41,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
 	// Import services here to make them proxy-able
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
@@ -95,9 +99,24 @@ func main() {
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-proxy")
 	stdr.SetVerbosity(*verbosity)
 
+	// Setup exporter using the default prometheus registry
+	exporter, err := prometheus_exporter.New()
+	if err != nil {
+		log.Fatalf("failed to create prometheus exporter: %v\n", err)
+	}
+	global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
+		otelmetricsdk.WithReader(exporter),
+	))
+	meter := global.Meter("sansshell-proxy")
+	recorder, err := metrics.NewOtelRecorder(meter, metrics.WithMetricNamePrefix("sansshell-proxy"))
+	if err != nil {
+		log.Fatalf("failed to create OtelRecorder: %v\n", err)
+	}
+
 	policy := util.ChoosePolicy(logger, defaultPolicy, *policyFlag, *policyFile)
 	clientPolicy := util.ChoosePolicy(logger, "", *clientPolicyFlag, *clientPolicyFile)
 	ctx := logr.NewContext(context.Background(), logger)
+	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
 	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
@@ -123,5 +142,6 @@ func main() {
 		server.WithRawServerOption(srv.Register),
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
+		server.WithMetricsRecorder(recorder),
 	)
 }

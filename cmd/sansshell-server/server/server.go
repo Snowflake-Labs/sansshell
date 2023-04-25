@@ -28,14 +28,18 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	otelmetric "go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
 )
 
@@ -49,6 +53,9 @@ type runState struct {
 	hostport           string
 	debugport          string
 	debughandler       *http.ServeMux
+	metricsport        string
+	metricshandler     *http.ServeMux
+	metricsRecorder    metrics.MetricsRecorder
 	policy             *opa.AuthzPolicy
 	justification      bool
 	justificationFunc  func(string) error
@@ -210,15 +217,58 @@ func WithDebugPort(addr string) Option {
 	})
 }
 
-// WithOtelTracing adds the OpenTelemetry gRPC interceptors to both stream and unary servers
-// The interceptors collect and export tracing data for gRPC requests and responses
-func WithOtelTracing(interceptorOpt otelgrpc.Option) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
+// WithMetricsRecorder enables metric instrumentations by inserting grpc metric interceptors
+// and attaching recorder to the server runstate
+func WithMetricsRecorder(recorder metrics.MetricsRecorder) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		r.metricsRecorder = recorder
+		// Instrument gRPC Server
+		grpcServerMetrics := grpc_prometheus.NewServerMetrics(
+			grpc_prometheus.WithServerHandlingTimeHistogram(),
+		)
+		errRegister := prometheus.Register(grpcServerMetrics)
+		if errRegister != nil {
+			return fmt.Errorf("fail to register grpc server metrics: %s", errRegister)
+		}
 		r.unaryInterceptors = append(r.unaryInterceptors,
-			otelgrpc.UnaryServerInterceptor(interceptorOpt),
+			metrics.UnaryServerMetricsInterceptor(recorder),
+			grpcServerMetrics.UnaryServerInterceptor(),
 		)
 		r.streamInterceptors = append(r.streamInterceptors,
-			otelgrpc.StreamServerInterceptor(interceptorOpt),
+			metrics.StreamServerMetricsInterceptor(recorder),
+			grpcServerMetrics.StreamServerInterceptor(),
+		)
+		return nil
+	})
+}
+
+// WithMetricsPort opens a HTTP endpoint for publishing metrics at the given addr
+// and initializes metrics exporter.
+// This endpoint is to be scraped by a Prometheus-style metrics scraper.
+// It can be accessed at http://{addr}/metrics
+func WithMetricsPort(addr string) Option {
+	return optionFunc(func(ctx context.Context, r *runState) error {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		r.metricsport = addr
+		r.metricshandler = mux
+
+		return nil
+	})
+}
+
+// WithOtelTracing adds the OpenTelemetry gRPC interceptors to both stream and unary servers
+// The interceptors collect and export tracing data for gRPC requests and responses
+func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		interceptorOpts = append(interceptorOpts,
+			otelgrpc.WithMeterProvider(otelmetric.NewNoopMeterProvider()), // We don't want otel grpc metrics so discard them
+		)
+		r.unaryInterceptors = append(r.unaryInterceptors,
+			otelgrpc.UnaryServerInterceptor(interceptorOpts...),
+		)
+		r.streamInterceptors = append(r.streamInterceptors,
+			otelgrpc.StreamServerInterceptor(interceptorOpts...),
 		)
 		return nil
 	})
@@ -241,6 +291,13 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.debughandler != nil && rs.debugport != "" {
 		go func() {
 			rs.logger.Error(http.ListenAndServe(rs.debugport, rs.debughandler), "Debug handler unexpectedly exited")
+		}()
+	}
+
+	// Start metrics endpoint if both metrics port and handler are configured
+	if rs.metricshandler != nil && rs.metricsport != "" {
+		go func() {
+			rs.logger.Error(http.ListenAndServe(rs.metricsport, rs.metricshandler), "Metrics handler unexpectedly exited")
 		}()
 	}
 
