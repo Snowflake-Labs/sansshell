@@ -27,6 +27,7 @@ import (
 	"strings"
 	"syscall"
 
+	"go.opentelemetry.io/otel/attribute"
 	"gocloud.dev/blob"
 
 	"github.com/go-logr/logr"
@@ -39,6 +40,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/process"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
 // server is used to implement the gRPC server
@@ -106,8 +108,24 @@ var (
 	}
 )
 
+// Metrics
+var (
+	processListFailureCounter = metrics.MetricDefinition{Name: "actions_process_list_failure",
+		Description: "number of failures when performing process.List"}
+	processKillFailureCounter = metrics.MetricDefinition{Name: "actions_process_kill_failure",
+		Description: "number of failures when performing process.Kill"}
+	processGetStacksFailureCounter = metrics.MetricDefinition{Name: "actions_process_getstacks_failure",
+		Description: "number of failures when performing process.GetStacks"}
+	processGetJavaStacksFailureCounter = metrics.MetricDefinition{Name: "actions_process_getjavastacks_failure",
+		Description: "number of failures when performing process.GetJavaStacks"}
+	processGetMemoryDumpFailureCounter = metrics.MetricDefinition{Name: "actions_process_getMemoryDump_failure",
+		Description: "number of failures when performing process.GetMemoryDump"}
+)
+
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if PsBin == "" {
+		recorder.CounterOrLog(ctx, processListFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
@@ -117,16 +135,19 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	// We gather all the processes up and then filter by pid if needed at the end.
 	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
+		recorder.CounterOrLog(ctx, processListFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, processListFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	entries, err := parser(run.Stdout)
 
 	if err != nil {
+		recorder.CounterOrLog(ctx, processListFailureCounter, 1, attribute.String("reason", "parse_err"))
 		return nil, status.Errorf(codes.Internal, "unexpected parsing error: %v", err)
 	}
 
@@ -134,6 +155,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	if len(req.Pids) != 0 {
 		for _, pid := range req.Pids {
 			if _, ok := entries[pid]; !ok {
+				recorder.CounterOrLog(ctx, processListFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 				return nil, status.Errorf(codes.InvalidArgument, "pid %d does not exist", pid)
 			}
 
@@ -150,23 +172,29 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 }
 
 func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Pid == 0 {
+		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be positive and non-zero")
 	}
 	err := syscall.Kill(int(req.Pid), syscall.Signal(req.Signal))
 	if err != nil {
+		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "kill_err"))
 		return nil, status.Errorf(codes.Internal, "kill returned error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.GetStacksReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// This is tied to pstack so either an OS provides it or it doesn't.
 	if PstackBin == "" {
+		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Pid <= 0 {
+		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
@@ -175,10 +203,12 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 
 	run, err := util.RunCommand(ctx, cmdName, options, util.FailOnStderr())
 	if err != nil {
+		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
@@ -201,6 +231,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		if fields[0] == "Thread" {
 			// Depending on wrapper/gdb this may have additional fields but we don't need them.
 			if len(fields) < 6 {
+				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "unparsable pstack output for new thread: %s", text)
 			}
 
@@ -210,12 +241,15 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 			}
 
 			if n, err := fmt.Sscanf(fields[1], "%d", &stack.ThreadNumber); n != 1 || err != nil {
+				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "can't parse thread number: %s : %v", text, err)
 			}
 			if n, err := fmt.Sscanf(fields[3], "0x%x", &stack.ThreadId); n != 1 || err != nil {
+				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "can't parse thread id: %s : %v", text, err)
 			}
 			if n, err := fmt.Sscanf(fields[5], "%d", &stack.Lwp); n != 1 || err != nil {
+				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "can't parse lwp: %s : %v", text, err)
 			}
 			numEntries++
@@ -232,11 +266,14 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 }
 
 func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest) (*pb.GetJavaStacksReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if JstackBin == "" {
+		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Pid <= 0 {
+		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
@@ -246,10 +283,12 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	// jstack emits stderr output related to environment vars. So only complain on a non-zero exit.
 	run, err := util.RunCommand(ctx, cmdName, options)
 	if err != nil {
+		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
@@ -281,6 +320,7 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		// Find the trailing " character to extact the name.
 		end := strings.Index(text[1:], `"`)
 		if end == -1 {
+			recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "thread_not_found"))
 			return nil, status.Errorf(codes.Internal, "can't find thread name in line %q", text)
 		}
 
@@ -344,6 +384,7 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 				continue
 			}
 			if n, err := fmt.Sscanf(f, format, out); n != 1 || err != nil {
+				recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "can't parse %q out of text: %q - %v", format, text, err)
 			}
 		}
@@ -368,13 +409,17 @@ func openBlobForWriting(ctx context.Context, bucket string, file string) (io.Wri
 }
 
 func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_GetMemoryDumpServer) error {
+	ctx := stream.Context()
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Pid <= 0 {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
 	}
 
 	var dest io.WriteCloser
 	p, ok := peer.FromContext(stream.Context())
 	if !ok {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "missing_peer"))
 		return status.Error(codes.Internal, "can't get peer from context")
 	}
 
@@ -386,6 +431,7 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	case pb.DumpType_DUMP_TYPE_GCORE:
 		// This is tied to gcore so either an OS provides it or it doesn't.
 		if GcoreBin == "" {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "not_implemented"))
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
 		cmdName = GcoreBin
@@ -394,16 +440,19 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	case pb.DumpType_DUMP_TYPE_JMAP:
 		// This is tied to jmap so either an OS provides it or it doesn't.
 		if JmapBin == "" {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "not_implemented"))
 			return status.Error(codes.Unimplemented, "not implemented")
 		}
 		cmdName = JmapBin
 		options, file, err = jmapOptionsAndLocation(req)
 		bucketFile = fmt.Sprintf("%s-heapdump.%d", p.Addr.String(), req.Pid)
 	default:
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "invalid_dump_type"))
 		return status.Error(codes.InvalidArgument, "Must specify a valid dump type")
 	}
 
 	if err != nil {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "generate_dump_err"))
 		return status.Errorf(codes.Internal, "can't generate options/dump file location: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(file)) // clean up
@@ -415,11 +464,13 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		// Take the URL and append a filename composed above (either heap or core).
 		dest, err = openBlobForWriting(stream.Context(), req.GetUrl().Url, bucketFile)
 		if err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "open_blob_err"))
 			return status.Errorf(codes.InvalidArgument, "can't open blob %s in bucket %s for writing: %v", bucketFile, req.GetUrl().Url, err)
 		}
 		defer func() {
 			err := dest.Close()
 			if err != nil {
+				recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "close_bucket_err"))
 				logr.FromContextOrDiscard(stream.Context()).Error(err, "bucket Close", "url", req.GetUrl().Url)
 			}
 		}()
@@ -427,15 +478,18 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	// Don't care about stderr output since jmap produces some debug that way.
 	run, err := util.RunCommand(stream.Context(), cmdName, options)
 	if err != nil {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "run_err"))
 		return err
 	}
 
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "run_err"))
 		return status.Errorf(codes.Internal, "command exited with error/non-zero exit: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 
 	f, err := os.Open(file)
 	if err != nil {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "open_file_err"))
 		return status.Errorf(codes.Internal, "can't open %s for processing: %v", file, err)
 	}
 	defer f.Close()
@@ -445,17 +499,21 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	if req.GetUrl() != nil {
 		written, err := io.CopyBuffer(dest, f, b)
 		if err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "copy_remote_err"))
 			return status.Errorf(codes.Internal, "can't copy to remote URL %s - %v", req.GetUrl().Url, err)
 		}
 		fi, err := f.Stat()
 		if err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "stat_err"))
 			return status.Errorf(codes.Internal, "can't stat dump file %s - %v", file, err)
 		}
 		if got, want := written, fi.Size(); got != want {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "write_err"))
 			return status.Errorf(codes.Internal, "didn't write correct bytes to URL %s. Expected %d and wrote %d", req.GetUrl().Url, want, got)
 		}
 		// URL so we're done.
 		if err := dest.Close(); err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "bucket_close_err"))
 			return status.Errorf(codes.Internal, "bucket Close - %v", err)
 		}
 		return nil
@@ -469,12 +527,14 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 		}
 
 		if err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "read_err"))
 			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
 		}
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
 		if err := stream.Send(&pb.GetMemoryDumpReply{Data: b[:n]}); err != nil {
+			recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 			return status.Errorf(codes.Internal, "can't send on stream: %v", err)
 		}
 	}

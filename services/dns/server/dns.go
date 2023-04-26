@@ -28,6 +28,13 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/dns"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+)
+
+// Metrics
+var (
+	dnsLookupFailureCounter = metrics.MetricDefinition{Name: "actions_dns_lookup_failure",
+		Description: "number of failures when performing dns.Lookup"}
 )
 
 var (
@@ -40,12 +47,14 @@ type server struct{}
 
 func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	hostname := req.GetHostname()
 
 	logger.Info("dns request", "hostname", hostname)
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
 	ips, err := resolver(ctx, "ip4", hostname)
 	if err != nil {
+		recorder.CounterOrLog(ctx, dnsLookupFailureCounter, 1)
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 

@@ -25,6 +25,13 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+)
+
+// Metrics
+var (
+	execRunFailureCounter = metrics.MetricDefinition{Name: "actions_exec_run_failure",
+		Description: "number of failures when performing exec.Run"}
 )
 
 // server is used to implement the gRPC server
@@ -32,12 +39,15 @@ type server struct{}
 
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	run, err := util.RunCommand(ctx, req.Command, req.Args)
 	if err != nil {
+		recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
 		return nil, err
 	}
 
 	if run.Error != nil {
+		recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
 		return nil, run.Error
 	}
 	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: int32(run.ExitCode)}, nil

@@ -21,16 +21,16 @@ import (
 	"net"
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 // Metrics
-const (
-	authzDeniedJustificationMetricName = "authz_denied_justification"
-	authzDeniedJustificationMetricDesc = "authorization denied due to justification"
+var (
+	authzDeniedJustificationMetric = metrics.MetricDefinition{
+		Name: "authz_denied_justification", Description: "authorization denied due to justification",
+	}
 )
 
 // RPCAuthzHookFunc implements RpcAuthzHook for a simple function
@@ -98,29 +98,14 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 		if len(v) > 0 {
 			j = v[0]
 		}
-		logger := logr.FromContextOrDiscard(ctx)
 		recorder := metrics.RecorderFromContextOrNoop(ctx)
 		if j == "" {
-			errRegister := recorder.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
-			if errRegister != nil {
-				logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
-			}
-			errCounter := recorder.AddInt64Counter(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "missing_justification"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
-			}
+			recorder.CounterOrLog(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "missing_justification"))
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
-				errRegister := recorder.RegisterInt64Counter(authzDeniedJustificationMetricName, authzDeniedJustificationMetricDesc)
-				if errRegister != nil {
-					logger.V(1).Error(errRegister, "failed to register "+authzDeniedJustificationMetricName)
-				}
-				errCounter := recorder.AddInt64Counter(ctx, authzDeniedJustificationMetricName, 1, attribute.String("reason", "denied"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetricName)
-				}
+				recorder.CounterOrLog(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "denied"))
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
 		}

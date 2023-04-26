@@ -23,6 +23,7 @@ import (
 	"os"
 	"regexp"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -30,6 +31,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
 var (
@@ -42,21 +44,31 @@ var (
 	}
 )
 
+// Metrics
+var (
+	ansibleRunFailureCounter = metrics.MetricDefinition{Name: "actions_ansible_run_failure",
+		Description: "number of failures when performing ansible.Run"}
+)
+
 // server is used to implement the gRPC server
 type server struct{}
 
 var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Basic sanity checking up front.
 	if AnsiblePlaybookBin == "" {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Playbook == "" {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "missing_playbook"))
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
 	}
 	if err := util.ValidPath(req.Playbook); err != nil {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
 		return nil, err
 	}
 
@@ -64,6 +76,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	// /some/path && rm -rf /
 	stat, err := os.Stat(req.Playbook)
 	if err != nil || stat.IsDir() {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a valid file", req.Playbook)
 	}
 
@@ -107,9 +120,11 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs)
 	if err != nil {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; err != nil {
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 

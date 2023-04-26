@@ -25,10 +25,12 @@ import (
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
 // Systemd deals in 'units', which might be services, devices, sockets,
@@ -85,6 +87,16 @@ const (
 // which describes the result.
 const (
 	operationResultDone = "done"
+)
+
+// Metrics
+var (
+	serviceListFailureCounter = metrics.MetricDefinition{Name: "actions_service_list_failure",
+		Description: "number of failures when performing service.List"}
+	serviceStatusFailureCounter = metrics.MetricDefinition{Name: "actions_service_status_failure",
+		Description: "number of failures when performing service.Status"}
+	serviceActionFailureCounter = metrics.MetricDefinition{Name: "actions_service_action_failure",
+		Description: "number of failures when performing service.Action"}
 )
 
 // convert a dbus.UnitStatus to a servicepb.Status
@@ -151,18 +163,21 @@ func checkSupportedSystem(t pb.SystemType) error {
 
 // See: pb.ServiceServer.List
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceListFailureCounter, 1, attribute.String("reason", "dial_systemd_err"))
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
 
 	units, err := conn.ListUnitsContext(ctx)
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceListFailureCounter, 1, attribute.String("reason", "list_units_err"))
 		return nil, status.Errorf(codes.Internal, "systemd list error %v", err)
 	}
 	sort.Sort(byName(units))
@@ -189,12 +204,14 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
 
 	unitName := req.GetServiceName()
 	if len(unitName) == 0 {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "missing_name"))
 		return nil, status.Error(codes.InvalidArgument, "service name is required")
 	}
 
@@ -205,6 +222,7 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "dial_systemd_err"))
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
@@ -214,6 +232,7 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	// versions is to retrieve the full list of units, and filter here.
 	units, err := conn.ListUnitsContext(ctx)
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
 		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
 	}
 	for _, u := range units {
@@ -227,17 +246,21 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 			}, nil
 		}
 	}
+	recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "not_found"))
 	return nil, status.Errorf(codes.NotFound, "service %s was not found", req.GetServiceName())
 }
 
 // See: pb.ServiceServer.Action
 func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "not_supported"))
 		return nil, err
 	}
 
 	unitName := req.GetServiceName()
 	if len(unitName) == 0 {
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "missing_name"))
 		return nil, status.Error(codes.InvalidArgument, "service name is required")
 	}
 	// Accept either 'foo' or 'foo.service'
@@ -247,6 +270,7 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 
 	conn, err := s.dialSystemd(ctx)
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "dial_systemd_err"))
 		return nil, status.Errorf(codes.Internal, "error establishing systemd connection: %v", err)
 	}
 	defer conn.Close()
@@ -264,9 +288,11 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_DISABLE:
 		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
 	default:
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "invalid_action"))
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v", req.Action)
 	}
 	if err != nil {
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "action_err"))
 		return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, err)
 	}
 
@@ -279,13 +305,16 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
 		result := <-resultChan
 		if result != operationResultDone {
+			recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "action_err"))
 			return nil, status.Errorf(codes.Internal, "error performing action %v: %v", req.Action, result)
 		}
 	case pb.Action_ACTION_ENABLE, pb.Action_ACTION_DISABLE:
 		if err := conn.ReloadContext(ctx); err != nil {
+			recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "reload_err"))
 			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
 		}
 	default:
+		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "invalid_action"))
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v for post actions", req.Action)
 	}
 

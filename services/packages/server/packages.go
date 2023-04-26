@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,6 +33,21 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/packages"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
+)
+
+// Metrics
+var (
+	packagesListInstalledFailureCounter = metrics.MetricDefinition{Name: "actions_packages_listinstalled_failure",
+		Description: "number of failures when performing packages.ListInstalled"}
+	packagesRepoListFailureCounter = metrics.MetricDefinition{Name: "actions_packages_repolist_failure",
+		Description: "number of failures when performing packages.RepoList"}
+	packagesCleanupFailureCounter = metrics.MetricDefinition{Name: "actions_packages_cleanup_failure",
+		Description: "number of failures when performing packages.Cleanup"}
+	packagesInstallFailureCounter = metrics.MetricDefinition{Name: "actions_packages_install_failure",
+		Description: "number of failures when performing packages.Install"}
+	packagesUpdateFailureCounter = metrics.MetricDefinition{Name: "actions_packages_update_failure",
+		Description: "number of failures when performing packages.Update"}
 )
 
 // Internal helper to generate the command list. The map must contain the enum.
@@ -176,10 +192,13 @@ func validateField(param string, name string) error {
 }
 
 func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.InstallReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_name"))
 		return nil, err
 	}
 	if err := validateField("version", req.Version); err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_version"))
 		return nil, err
 	}
 
@@ -189,14 +208,17 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	}
 	command, err := generateInstall(req)
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -209,13 +231,17 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 var nevraRe = regexp.MustCompile(`^([^-]+-)?[^:]+:[^-]+-[^\.]+\..+$`)
 
 func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_name"))
 		return nil, err
 	}
 	if err := validateField("old_version", req.OldVersion); err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_old_version"))
 		return nil, err
 	}
 	if err := validateField("new_version", req.NewVersion); err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_new_version"))
 		return nil, err
 	}
 
@@ -226,9 +252,11 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 
 	// Update doesn't require nevra but we do so validate each version is nevra.
 	if !nevraRe.MatchString(req.OldVersion) {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_old_version"))
 		return nil, status.Errorf(codes.Internal, "old_version %q not in nevra format (n-e:v-r.a)", req.OldVersion)
 	}
 	if !nevraRe.MatchString(req.NewVersion) {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_new_version"))
 		return nil, status.Errorf(codes.Internal, "new_version %q not in nevra format (n-e:v-r.a)", req.NewVersion)
 	}
 
@@ -236,24 +264,29 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	validateCommand, valErr := generateValidate(req)
 	updateCommand, upErr := generateUpdate(req)
 	if valErr != nil || upErr != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		return nil, fmt.Errorf("%v %v", valErr, upErr)
 	}
 
 	// First need to validate the old version is what we expect.
 	run, err := util.RunCommand(ctx, validateCommand[0], validateCommand[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "package %s at version %s doesn't appear to be installed.\nstdout:\n%s\nstderr:\n%s", req.Name, req.OldVersion, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	// A 0 return means we're ok to proceed.
 	run, err = util.RunCommand(ctx, updateCommand[0], updateCommand[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -333,6 +366,7 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 }
 
 func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest) (*pb.ListInstalledReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -340,15 +374,18 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 
 	command, err := generateListInstalled(req.PackageSystem)
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		return nil, err
 	}
 
 	// This may return output to stderr if the lock is held and we wait. That's ok.
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesListInstalledFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -438,6 +475,7 @@ func parseYumRepoListOutput(r io.Reader) (*pb.RepoListReply, error) {
 }
 
 func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.RepoListReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -445,14 +483,17 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 
 	command, err := generateRepoList(req.PackageSystem)
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesRepoListFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -460,6 +501,7 @@ func (s *server) RepoList(ctx context.Context, req *pb.RepoListRequest) (*pb.Rep
 }
 
 func (s *server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.CleanupResponse, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Unset means YUM.
 	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
@@ -467,14 +509,17 @@ func (s *server) Cleanup(ctx context.Context, req *pb.CleanupRequest) (*pb.Clean
 
 	command, err := generateCleanup(req.PackageSystem)
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 		return nil, err
 	}
 
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
+		recorder.CounterOrLog(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesCleanupFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running %q: %v\nstdout:\n%s\nstderr:\n%s", command, err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 	return &pb.CleanupResponse{

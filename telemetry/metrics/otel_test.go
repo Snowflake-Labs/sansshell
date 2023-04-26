@@ -58,40 +58,35 @@ func TestAddPrefix(t *testing.T) {
 	}
 }
 
-func TestRegisterAndAddInt64Counter(t *testing.T) {
+func TestAddInt64Counter(t *testing.T) {
 	recorder, err := NewOtelRecorder(global.Meter("sansshelltesting"))
 	testutil.FatalOnErr("unexpected err on NewOtelRecorder", err, t)
-	counterName := "error_count"
-	errRegister := recorder.RegisterInt64Counter(counterName, "")
-	testutil.FatalOnErr("unexpected err on RegisterInt64Counter", errRegister, t)
+	counterDef := MetricDefinition{Name: "test_counter", Description: "test"}
+	ctx := context.Background()
+	// recording a counter for the first time shouldn't return an error
+	errCounter := recorder.Counter(ctx, counterDef, 1)
+	testutil.FatalOnErr("unexpected err on RegisterInt64Counter", errCounter, t)
 
-	// registering an existing metric shouldn't return an error
-	errRegister = recorder.RegisterInt64Counter(counterName, "")
-	testutil.FatalOnErr("unexpected err on RegisterInt64Counter", errRegister, t)
-
-	// adding a registered metric shouldn't return an error
-	errAdd := recorder.AddInt64Counter(context.Background(), counterName, 1)
-	testutil.FatalOnErr("unexpected err on AddInt64Counter", errAdd, t)
-
-	// adding an unregistered metric should return an error
-	errAdd = recorder.AddInt64Counter(context.Background(), "metricdoesnotexist", 1)
-	t.Log(err)
-	testutil.FatalOnNoErr("expected AddInt64Counter to return an error", errAdd, t)
+	// recording the counter subsequently shouldn't return an error
+	errCounter = recorder.Counter(ctx, counterDef, 1)
+	testutil.FatalOnErr("unexpected err on RegisterInt64Counter", errCounter, t)
 }
 
 func TestRegisterInt64Gauge(t *testing.T) {
 	recorder, err := NewOtelRecorder(global.Meter("sansshelltesting"))
 	testutil.FatalOnErr("unexpected err on NewOtelRecorder", err, t)
-	gaugeName := "disk_usage"
+	gaugeDef := MetricDefinition{Name: "disk_usage", Description: "disk"}
+	ctx := context.Background()
 	diskUsage := int64(50)
-	errRegister := recorder.RegisterInt64Gauge(gaugeName, "", func(_ context.Context, obsrv instrument.Int64Observer) error {
+	// recording a gauge for the first time shouldn't return an error
+	errRegister := recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv instrument.Int64Observer) error {
 		obsrv.Observe(diskUsage)
 		return nil
 	})
 	testutil.FatalOnErr("unexpected err on RegisterInt64Gauge", errRegister, t)
 
-	// registering an existing metric shouldn't return an error
-	errRegister = recorder.RegisterInt64Gauge(gaugeName, "diffdesc", func(_ context.Context, obsrv instrument.Int64Observer) error {
+	// recording a gauge subsequently shouldn't return an error
+	errRegister = recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv instrument.Int64Observer) error {
 		obsrv.Observe(0)
 		return nil
 	})
