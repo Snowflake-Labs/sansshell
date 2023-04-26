@@ -29,7 +29,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 )
 
 // Metrics
@@ -193,14 +192,10 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 
 // send relays messages from `replyChan` to the provided stream
 func send(ctx context.Context, replyChan chan *pb.ProxyReply, stream pb.Proxy_ProxyServer) error {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for msg := range replyChan {
 		if err := stream.Send(msg); err != nil {
-			errCounter := recorder.Counter(ctx, proxyReplyErrorCounter, 1)
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+proxyReplyErrorCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, proxyReplyErrorCounter, 1)
 			return err
 		}
 	}
@@ -246,7 +241,6 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 	// Channel to track streams that have completed and should
 	// be removed from the stream set
 	doneChan := make(chan uint64)
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	for {
 		select {
@@ -293,10 +287,7 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 					return err
 				}
 			default:
-				errCounter := recorder.Counter(ctx, proxyDispatchUnknownReqtypeCounter, 1)
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+proxyDispatchUnknownReqtypeCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, proxyDispatchUnknownReqtypeCounter, 1)
 				return fmt.Errorf("unhandled request type %T", req.Request)
 			}
 		}

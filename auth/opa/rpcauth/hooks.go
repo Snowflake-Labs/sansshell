@@ -21,7 +21,6 @@ import (
 	"net"
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -99,21 +98,14 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 		if len(v) > 0 {
 			j = v[0]
 		}
-		logger := logr.FromContextOrDiscard(ctx)
 		recorder := metrics.RecorderFromContextOrNoop(ctx)
 		if j == "" {
-			errCounter := recorder.Counter(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "missing_justification"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetric.Name)
-			}
+			recorder.CounterOrLog(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "missing_justification"))
 			return ErrJustification
 		}
 		if justificationFunc != nil {
 			if err := justificationFunc(j); err != nil {
-				errCounter := recorder.Counter(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "denied"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+authzDeniedJustificationMetric.Name)
-				}
+				recorder.CounterOrLog(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "denied"))
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
 		}

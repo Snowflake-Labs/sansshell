@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -99,6 +100,15 @@ func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, val
 	return nil
 }
 
+// Counter registers the counter if it's not registered, then increments it
+func (m *OtelRecorder) CounterOrLog(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) {
+	err := m.Counter(ctx, metric, value, attributes...)
+	if err != nil {
+		logger := logr.FromContextOrDiscard(ctx)
+		logger.Error(err, "unable to record counter")
+	}
+}
+
 // Gauge registers the gauge along with the callback function that updates its value
 func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
@@ -109,4 +119,13 @@ func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callb
 
 	m.Int64Gauges.Store(metric.Name, gauge)
 	return nil
+}
+
+// Counter registers the counter if it's not registered, then increments it
+func (m *OtelRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) {
+	err := m.Gauge(ctx, metric, callback, attributes...)
+	if err != nil {
+		logger := logr.FromContextOrDiscard(ctx)
+		logger.Error(err, "unable to record gauge")
+	}
 }

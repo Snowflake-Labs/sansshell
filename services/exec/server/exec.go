@@ -26,7 +26,6 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 )
 
 // Metrics
@@ -40,22 +39,15 @@ type server struct{}
 
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	run, err := util.RunCommand(ctx, req.Command, req.Args)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, execRunFailureCounter, 1)
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
 		return nil, err
 	}
 
 	if run.Error != nil {
-		errCounter := recorder.Counter(ctx, execRunFailureCounter, 1)
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+execRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
 		return nil, run.Error
 	}
 	return &pb.ExecResponse{Stderr: run.Stderr.Bytes(), Stdout: run.Stdout.Bytes(), RetCode: int32(run.ExitCode)}, nil

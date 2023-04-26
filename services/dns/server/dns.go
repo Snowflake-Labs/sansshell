@@ -54,10 +54,7 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
 	ips, err := resolver(ctx, "ip4", hostname)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, dnsLookupFailureCounter, 1)
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+dnsLookupFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, dnsLookupFailureCounter, 1)
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 

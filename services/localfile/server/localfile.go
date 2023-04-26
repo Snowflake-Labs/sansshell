@@ -120,36 +120,24 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 		file = t.Filename
 		offset = t.Offset
 	default:
-		errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_args"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_args"))
 		return status.Error(codes.InvalidArgument, "must supply a ReadRequest or a TailRequest")
 	}
 
 	logger.Info("read request", "filename", file)
 	if err := util.ValidPath(file); err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return err
 	}
 	f, err := os.Open(file)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "open_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "open_err"))
 		return status.Errorf(codes.Internal, "can't open file %s: %v", file, err)
 	}
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "close_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "close_err"))
 			logger.Error(err, "file.Close()", "file", file)
 		}
 	}()
@@ -163,10 +151,7 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 			whence = 2
 		}
 		if _, err := f.Seek(offset, whence); err != nil {
-			errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "seek_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "seek_err"))
 			return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
 		}
 	}
@@ -182,10 +167,7 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 
 	td, closer, err := dataPrep(f)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataprep_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataprep_err"))
 		return err
 	}
 	defer closer()
@@ -199,30 +181,21 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 				break
 			}
 			if err := dataReady(td, stream); err != nil {
-				errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataready_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataready_err"))
 				return err
 			}
 			continue
 		}
 
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "read_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "read_err"))
 			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
 		}
 
 		// Only send over the number of bytes we actually read or
 		// else we'll send over garbage in the last packet potentially.
 		if err := stream.Send(&pb.ReadReply{Contents: buf[:n]}); err != nil {
-			errCounter := recorder.Counter(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileReadFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 		}
 
@@ -246,34 +219,22 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 			return nil
 		}
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileStatFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
 			return status.Errorf(codes.Internal, "stat: recv error %v", err)
 		}
 
 		logger.Info("stat", "filename", req.Filename)
 		if err := util.ValidPath(req.Filename); err != nil {
-			errCounter := recorder.Counter(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "invalid_path"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileStatFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "invalid_path"))
 			return AbsolutePathError
 		}
 		resp, err := osStat(req.Filename, !req.FollowLinks)
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stat_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileStatFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stat_err"))
 			return err
 		}
 		if err := stream.Send(resp); err != nil {
-			errCounter := recorder.Counter(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileStatFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 			return status.Errorf(codes.Internal, "stat: send error %v", err)
 		}
 	}
@@ -289,18 +250,12 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 			return nil
 		}
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "recv_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "recv_err"))
 			return status.Errorf(codes.Internal, "sum: recv error %v", err)
 		}
 		logger.Info("sum request", "file", req.Filename, "sumtype", req.SumType.String())
 		if err := util.ValidPath(req.Filename); err != nil {
-			errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "invalid_path"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "invalid_path"))
 			return AbsolutePathError
 		}
 		out := &pb.SumReply{
@@ -320,44 +275,29 @@ func (s *server) Sum(stream pb.LocalFile_SumServer) error {
 		case pb.SumType_SUM_TYPE_CRC32IEEE:
 			hasher = crc32.NewIEEE()
 		default:
-			errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "invalid_sumtype"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "invalid_sumtype"))
 			return status.Errorf(codes.InvalidArgument, "invalid sum type value %d", req.SumType)
 		}
 		if err := func() error {
 			f, err := os.Open(req.Filename)
 			if err != nil {
-				errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "open_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "open_err"))
 				return err
 			}
 			defer f.Close()
 			if _, err := io.Copy(hasher, f); err != nil {
 				logger.Error(err, "io.Copy", "file", req.Filename)
-				errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "copy_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "copy_err"))
 				return status.Errorf(codes.Internal, "copy/read error: %v", err)
 			}
 			out.Sum = hex.EncodeToString(hasher.Sum(nil))
 			return nil
 		}(); err != nil {
-			errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "sum_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "sum_err"))
 			return status.Errorf(codes.Internal, "can't create sum: %v", err)
 		}
 		if err := stream.Send(out); err != nil {
-			errCounter := recorder.Counter(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileSumFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileSumFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 			return status.Errorf(codes.Internal, "sum: send error %v", err)
 		}
 	}
@@ -433,38 +373,26 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
 	req, err := stream.Recv()
 	// Don't check for EOF here as getting one now is a real error (we haven't gotten any packets)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
 		return status.Errorf(codes.Internal, "write: recv error %v", err)
 	}
 
 	d = req.GetDescription()
 	if d == nil {
-		errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "get_desc_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "get_desc_err"))
 		return status.Errorf(codes.InvalidArgument, "must send a description block first")
 
 	}
 	a := d.GetAttrs()
 	if a == nil {
-		errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "get_attrs_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "get_attrs_err"))
 		return status.Errorf(codes.InvalidArgument, "must send attrs in description")
 	}
 	filename = a.Filename
 	logger.Info("write file", filename)
 	f, immutable, err = setupOutput(a)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "setup_output_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "setup_output_err"))
 		return err
 	}
 
@@ -474,51 +402,33 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
 			break
 		}
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "stream_recv_err"))
 			return status.Errorf(codes.Internal, "write: recv error %v", err)
 		}
 
 		switch {
 		case req.GetDescription() != nil:
-			errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "mult_desc_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "mult_desc_err"))
 			return status.Errorf(codes.InvalidArgument, "can't send multiple description blocks")
 		case req.GetContents() != nil:
 			n, err := f.Write(req.GetContents())
 			if err != nil {
-				errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "write_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "write_err"))
 				return status.Errorf(codes.Internal, "write error: %v", err)
 			}
 			if got, want := n, len(req.GetContents()); got != want {
-				errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "short_write"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "short_write"))
 				return status.Errorf(codes.Internal, "short write. expected %d but only wrote %d", got, want)
 			}
 		default:
-			errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "missing_desc_content"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "missing_desc_content"))
 			return status.Error(codes.InvalidArgument, "Must supply either a Description or Contents")
 		}
 	}
 
 	// Finalize to the final destination and possibly set immutable.
 	if err := finalizeFile(d, f, filename, immutable); err != nil {
-		errCounter := recorder.Counter(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "finalize_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileWriteFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "finalize_err"))
 		return err
 	}
 	return nil
@@ -529,45 +439,30 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
 	if req.GetDestination() == nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_dst"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_dst"))
 		return nil, status.Error(codes.InvalidArgument, "destination must be filled in")
 	}
 	d := req.GetDestination()
 
 	if req.Bucket == "" {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_bucket"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_bucket"))
 		return nil, status.Error(codes.InvalidArgument, "bucket must be filled in")
 	}
 	if req.Key == "" {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_key"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_key"))
 		return nil, status.Error(codes.InvalidArgument, "key must be filled in")
 	}
 
 	a := d.GetAttrs()
 	if a == nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_attrs"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "missing_attrs"))
 		return nil, status.Errorf(codes.InvalidArgument, "must send attrs")
 	}
 	filename := a.Filename
 	logger.Info("copy file", filename)
 	f, immutable, err := setupOutput(a)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "setup_output_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "setup_output_err"))
 		return nil, err
 	}
 	cleanup := func() {
@@ -584,10 +479,7 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	// Copy file over
 	b, err := blob.OpenBucket(ctx, req.Bucket)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "open_bucket_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "open_bucket_err"))
 		return nil, status.Errorf(codes.Internal, "can't open bucket %s - %v", req.Bucket, err)
 	}
 
@@ -600,10 +492,7 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 
 	reader, err := b.NewReader(ctx, req.Key, nil)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "open_bucket_key_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "open_bucket_key_err"))
 		return nil, status.Errorf(codes.Internal, "can't open key %s in bucket %s - %v", req.Key, req.Bucket, err)
 	}
 
@@ -616,19 +505,13 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 
 	written, err := io.Copy(f, reader)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "copy_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "copy_err"))
 		return nil, status.Errorf(codes.Internal, "can't copy from bucket %s/%s Only wrote %d bytes - %v", req.Bucket, req.Key, written, err)
 	}
 
 	// Finalize to the final destination and possibly set immutable.
 	if err := finalizeFile(d, f, filename, immutable); err != nil {
-		errCounter := recorder.Counter(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "finalize_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileCopyFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "finalize_err"))
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
@@ -639,17 +522,11 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Entry == "" {
-		errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
 		return status.Errorf(codes.InvalidArgument, "filename must be filled in")
 	}
 	if err := util.ValidPath(req.Entry); err != nil {
-		errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return err
 	}
 
@@ -657,17 +534,11 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	logger.Info("ls", "filename", req.Entry)
 	resp, err := osStat(req.Entry, false)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
 		return err
 	}
 	if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
-		errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
 		return status.Errorf(codes.Internal, "list: send error %v", err)
 	}
 
@@ -675,10 +546,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	if fs.FileMode(resp.Mode).IsDir() {
 		entries, err := os.ReadDir(req.Entry)
 		if err != nil {
-			errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
 			return status.Errorf(codes.Internal, "readdir: %v", err)
 		}
 		// Only do one level so iterate these and we're done.
@@ -692,10 +560,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 				return err
 			}
 			if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
-				errCounter := recorder.Counter(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+localfileListFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
 				return status.Errorf(codes.Internal, "list: send error %v", err)
 			}
 		}
@@ -791,37 +656,24 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 }
 
 func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttributesRequest) (*emptypb.Empty, error) {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Attrs == nil {
-		errCounter := recorder.Counter(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "missing_attrs"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSetFileAttributesFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "missing_attrs"))
 		return nil, status.Error(codes.InvalidArgument, "attrs must be filled in")
 	}
 	p := req.Attrs.Filename
 	if p == "" {
-		errCounter := recorder.Counter(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "missing_filename"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSetFileAttributesFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "missing_filename"))
 		return nil, status.Error(codes.InvalidArgument, "filename must be filled in")
 	}
 	if err := util.ValidPath(p); err != nil {
-		errCounter := recorder.Counter(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSetFileAttributesFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
 
 	// Don't care about immutable state as we set it if it came across.
 	if _, err := validateAndSetAttrs(p, req.Attrs.Attributes, true); err != nil {
-		errCounter := recorder.Counter(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "set_attrs_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSetFileAttributesFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "set_attrs_err"))
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
@@ -832,18 +684,12 @@ func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, err
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("rm request", "filename", req.Filename)
 	if err := util.ValidPath(req.Filename); err != nil {
-		errCounter := recorder.Counter(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRmFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
 	err := unix.Unlink(req.Filename)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "unlink_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRmFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "unlink_err"))
 		return nil, status.Errorf(codes.Internal, "unlink error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -854,18 +700,12 @@ func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empt
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("rmdir request", "directory", req.Directory)
 	if err := util.ValidPath(req.Directory); err != nil {
-		errCounter := recorder.Counter(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRmDirFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
 	err := unix.Rmdir(req.Directory)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "rmdir_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRmDirFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "rmdir_err"))
 		return nil, status.Errorf(codes.Internal, "rmdir error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -876,25 +716,16 @@ func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Em
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("rename request", "old", req.OriginalName, "new", req.DestinationName)
 	if err := util.ValidPath(req.OriginalName); err != nil {
-		errCounter := recorder.Counter(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "invalid_original_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRenameFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "invalid_original_path"))
 		return nil, err
 	}
 	if err := util.ValidPath(req.DestinationName); err != nil {
-		errCounter := recorder.Counter(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "invalid_dst_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRenameFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "invalid_dst_path"))
 		return nil, err
 	}
 	err := unix.Rename(req.OriginalName, req.DestinationName)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "rename_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileRenameFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "rename_err"))
 		return nil, status.Errorf(codes.Internal, "rename error: %v", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -905,33 +736,21 @@ func (s *server) Readlink(ctx context.Context, req *pb.ReadlinkRequest) (*pb.Rea
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("readlink", "filename", req.Filename)
 	if err := util.ValidPath(req.Filename); err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "invalid_original_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "invalid_original_path"))
 		return nil, err
 	}
 	stat, err := os.Lstat(req.Filename)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "lstat_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "lstat_err"))
 		return nil, status.Errorf(codes.Internal, "stat error: %v", err)
 	}
 	if stat.Mode()&os.ModeSymlink != os.ModeSymlink {
-		errCounter := recorder.Counter(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "not_symlink"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "not_symlink"))
 		return nil, status.Errorf(codes.FailedPrecondition, "%v is not a symlink", req.Filename)
 	}
 	linkvalue, err := os.Readlink(req.Filename)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "readlink_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileReadlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "readlink_err"))
 		return nil, status.Errorf(codes.Internal, "readlink error: %v", err)
 	}
 	return &pb.ReadlinkReply{Linkvalue: linkvalue}, nil
@@ -944,18 +763,12 @@ func (s *server) Symlink(ctx context.Context, req *pb.SymlinkRequest) (*emptypb.
 	// We only check linkname because creating a symbolic link with a relative
 	// target is a valid use case.
 	if err := util.ValidPath(req.Linkname); err != nil {
-		errCounter := recorder.Counter(ctx, localfileSymlinkFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSymlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSymlinkFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
 	err := os.Symlink(req.Target, req.Linkname)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, localfileSymlinkFailureCounter, 1, attribute.String("reason", "symlink_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+localfileSymlinkFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, localfileSymlinkFailureCounter, 1, attribute.String("reason", "symlink_err"))
 		return nil, status.Errorf(codes.Internal, "symlink error: %v", err)
 	}
 	return &emptypb.Empty{}, nil

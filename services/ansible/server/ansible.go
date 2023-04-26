@@ -32,7 +32,6 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/ansible"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 )
 
 var (
@@ -57,29 +56,19 @@ type server struct{}
 var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Basic sanity checking up front.
 	if AnsiblePlaybookBin == "" {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "not_implemented"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "not_implemented"))
 		return nil, status.Error(codes.Unimplemented, "not implemented")
 	}
 
 	if req.Playbook == "" {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "missing_playbook"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "missing_playbook"))
 		return nil, status.Error(codes.InvalidArgument, "playbook path must be filled in")
 	}
 	if err := util.ValidPath(req.Playbook); err != nil {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
 		return nil, err
 	}
 
@@ -87,10 +76,7 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	// /some/path && rm -rf /
 	stat, err := os.Stat(req.Playbook)
 	if err != nil || stat.IsDir() {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "playbook_not_found"))
 		return nil, status.Errorf(codes.InvalidArgument, "%s is not a valid file", req.Playbook)
 	}
 
@@ -134,17 +120,11 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
 	}
 	if err := run.Error; err != nil {
-		errCounter := recorder.Counter(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+ansibleRunFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "command exited with error: %v (%d)\n%s", err, run.ExitCode, util.TrimString(run.Stderr.String()))
 	}
 

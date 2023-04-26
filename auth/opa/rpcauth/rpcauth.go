@@ -102,10 +102,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	if input == nil {
 		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		errCounter := recorder.Counter(ctx, authzFailureInputMissingCounter, 1)
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureInputMissingCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, authzFailureInputMissingCounter, 1)
 		return err
 	}
 	for _, hook := range g.hooks {
@@ -122,10 +119,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	result, err := g.policy.Eval(ctx, input)
 	if err != nil {
 		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
-		errCounter := recorder.Counter(ctx, authzFailureEvalErrorCounter, 1, attribute.String("method", input.Method))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+authzFailureEvalErrorCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, authzFailureEvalErrorCounter, 1, attribute.String("method", input.Method))
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
 	var hints []string
@@ -134,10 +128,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 		hints, err = g.policy.DenialHints(ctx, input)
 		if err != nil {
 
-			errCounter := recorder.Counter(ctx, authzDenialHintErrorCounter, 1, attribute.String("method", input.Method))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+authzDenialHintErrorCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, authzDenialHintErrorCounter, 1, attribute.String("method", input.Method))
 			// We can't do much here besides log that something went wrong
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
 		}

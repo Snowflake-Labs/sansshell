@@ -36,7 +36,6 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 )
 
 var (
@@ -223,30 +222,20 @@ func boolFlag(args []string, flag *wrapperspb.BoolValue, value string) []string 
 
 func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error {
 	ctx := stream.Context()
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if len(req.Commands) == 0 {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "missing_command"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "missing_command"))
 		return status.Error(codes.InvalidArgument, "must fill in at least one command")
 	}
 
 	command, logs, err := generateFDBCLIArgs(req)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_args_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_args_err"))
 		return err
 	}
 	opts, err := s.generateCommandOpts()
 	if err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_opts_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "generate_opts_err"))
 		return err
 	}
 	// Add env vars from flag
@@ -256,17 +245,11 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 
 	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
 		return status.Errorf(codes.Internal, "error running fdbcli cmd (%+v): %v", command, err)
 	}
 	if err := run.Error; run.ExitCode != 0 || err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "run_err"))
 		return status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
@@ -289,30 +272,21 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 		},
 	}
 	if err := stream.Send(resp); err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 		return status.Errorf(codes.Internal, "can't send on stream: %v", err)
 	}
 
 	// Process any logs
 	retLogs, err := parseLogs(logs)
 	if err != nil {
-		errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "parse_logs_err"))
-		if errCounter != nil {
-			logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-		}
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "parse_logs_err"))
 		return err
 	}
 	// We get a list of filenames. So now we go over each and do chunk reads and send them back.
 	for _, log := range retLogs {
 		f, err := os.Open(log.Filename)
 		if err != nil {
-			errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "open_file_err"))
-			if errCounter != nil {
-				logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-			}
+			recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "open_file_err"))
 			return status.Errorf(codes.Internal, "can't open file %s: %v", log.Filename, err)
 		}
 		defer f.Close()
@@ -327,10 +301,7 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 			}
 
 			if err != nil {
-				errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "read_file_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "read_file_err"))
 				return status.Errorf(codes.Internal, "can't read file %s: %v", log.Filename, err)
 			}
 			// Only send over the number of bytes we actually read or
@@ -344,10 +315,7 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 				},
 			}
 			if err := stream.Send(resp); err != nil {
-				errCounter := recorder.Counter(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-				if errCounter != nil {
-					logger.V(1).Error(errCounter, "failed to add counter "+fdbcliFailureCounter.Name)
-				}
+				recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 				return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", log.Filename, err)
 			}
 		}
