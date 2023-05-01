@@ -26,7 +26,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	ometric "go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/instrument"
 )
 
 // OtelRecorder is a struct used for recording metrics with otel
@@ -113,7 +112,7 @@ func (m *OtelRecorder) CounterOrLog(ctx context.Context, metric MetricDefinition
 // Gauge registers the gauge along with the callback function that updates its value
 func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback ometric.Int64Callback, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
-	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, ometric.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
+	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, ometric.WithDescription(metric.Description), ometric.WithInt64Callback(callback))
 	if err != nil {
 		return err
 	}
