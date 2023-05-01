@@ -91,7 +91,7 @@ func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, val
 		return nil
 	}
 
-	counter, err := m.Meter.Int64Counter(metric.Name, instrument.WithDescription(metric.Description))
+	counter, err := m.Meter.Int64Counter(metric.Name, ometric.WithDescription(metric.Description))
 	if err != nil {
 		return errors.Wrap(err, "failed to create Int64counter")
 	}
@@ -111,9 +111,9 @@ func (m *OtelRecorder) CounterOrLog(ctx context.Context, metric MetricDefinition
 }
 
 // Gauge registers the gauge along with the callback function that updates its value
-func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
+func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback ometric.Int64Callback, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
-	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, instrument.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
+	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, ometric.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callb
 }
 
 // Counter registers the counter if it's not registered, then increments it
-func (m *OtelRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) {
+func (m *OtelRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback ometric.Int64Callback, attributes ...attribute.KeyValue) {
 	err := m.Gauge(ctx, metric, callback, attributes...)
 	if err != nil {
 		logger := logr.FromContextOrDiscard(ctx)
