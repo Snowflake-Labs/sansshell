@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	ometric "go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/instrument"
 )
 
@@ -86,7 +87,7 @@ func NewOtelRecorder(meter metric.Meter, opts ...Option) (*OtelRecorder, error) 
 func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
 	if counter, exists := m.Int64Counters.Load(metric.Name); exists {
-		counter.(instrument.Int64Counter).Add(ctx, value, attributes...)
+		counter.(ometric.Int64Counter).Add(ctx, value, ometric.WithAttributes(attributes...))
 		return nil
 	}
 
@@ -94,7 +95,7 @@ func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, val
 	if err != nil {
 		return errors.Wrap(err, "failed to create Int64counter")
 	}
-	counter.Add(ctx, value, attributes...)
+	counter.Add(ctx, value, ometric.WithAttributes(attributes...))
 
 	m.Int64Counters.Store(metric.Name, counter)
 	return nil
