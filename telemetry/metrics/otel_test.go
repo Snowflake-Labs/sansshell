@@ -22,8 +22,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/metric/instrument"
 )
 
 func TestNewOtelRecorderWithInvalidOption(t *testing.T) {
@@ -79,14 +79,14 @@ func TestRegisterInt64Gauge(t *testing.T) {
 	ctx := context.Background()
 	diskUsage := int64(50)
 	// recording a gauge for the first time shouldn't return an error
-	errRegister := recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv instrument.Int64Observer) error {
+	errRegister := recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv metric.Int64Observer) error {
 		obsrv.Observe(diskUsage)
 		return nil
 	})
 	testutil.FatalOnErr("unexpected err on RegisterInt64Gauge", errRegister, t)
 
 	// recording a gauge subsequently shouldn't return an error
-	errRegister = recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv instrument.Int64Observer) error {
+	errRegister = recorder.Gauge(ctx, gaugeDef, func(_ context.Context, obsrv metric.Int64Observer) error {
 		obsrv.Observe(0)
 		return nil
 	})

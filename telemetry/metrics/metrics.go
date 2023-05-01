@@ -21,7 +21,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric/instrument"
+	"go.opentelemetry.io/otel/metric"
 	"google.golang.org/grpc"
 )
 
@@ -32,9 +32,9 @@ type MetricsRecorder interface {
 	// CounterOrLog calls Counter, and log the error if any instead of returning it
 	CounterOrLog(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue)
 	// Gauge registers a gauge of int64 type and a callback function for updating the gauge value
-	Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error
+	Gauge(ctx context.Context, metric MetricDefinition, callback metric.Int64Callback, attributes ...attribute.KeyValue) error
 	// CounterOrLog calls Gauge, and log the error if any instead of returning it
-	GaugeOrLog(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue)
+	GaugeOrLog(ctx context.Context, metric MetricDefinition, callback metric.Int64Callback, attributes ...attribute.KeyValue)
 }
 
 // MetricDefinition specifies the metric name and description
@@ -81,10 +81,10 @@ func (n noOpRecorder) Counter(ctx context.Context, metric MetricDefinition, valu
 }
 func (n noOpRecorder) CounterOrLog(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) {
 }
-func (n noOpRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
+func (n noOpRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback metric.Int64Callback, attributes ...attribute.KeyValue) error {
 	return nil
 }
-func (n noOpRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) {
+func (n noOpRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback metric.Int64Callback, attributes ...attribute.KeyValue) {
 }
 
 // UnaryClientMetricsInterceptor returns an unary client grpc interceptor which adds recorder to the grpc request context

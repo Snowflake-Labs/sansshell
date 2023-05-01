@@ -32,7 +32,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
-	otelmetric "go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
@@ -262,7 +262,7 @@ func WithMetricsPort(addr string) Option {
 func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		interceptorOpts = append(interceptorOpts,
-			otelgrpc.WithMeterProvider(otelmetric.NewNoopMeterProvider()), // We don't want otel grpc metrics so discard them
+			otelgrpc.WithMeterProvider(noop.NewMeterProvider()), // We don't want otel grpc metrics so discard them
 		)
 		r.unaryInterceptors = append(r.unaryInterceptors,
 			otelgrpc.UnaryServerInterceptor(interceptorOpts...),
