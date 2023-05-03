@@ -27,7 +27,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/codes"
@@ -244,11 +243,11 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	// Only do this if it's different than our current ones since
 	// attempting to setuid/gid() to even your current values is EPERM.
 	if options.uid != euid || options.gid != gid {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Credential: &syscall.Credential{},
+		sysProcAddr, err := getSysProcAttr(options)
+		if err != nil {
+			return nil, err
 		}
-		cmd.SysProcAttr.Credential.Uid = options.uid
-		cmd.SysProcAttr.Credential.Gid = options.gid
+		cmd.SysProcAttr = sysProcAddr
 	}
 	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()

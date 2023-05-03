@@ -43,8 +43,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -57,7 +55,7 @@ var (
 	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 
 	// For testing since otherwise tests have to run as root for these.
-	chown             = unix.Chown
+	chown             = os.Chown
 	changeImmutableOS = changeImmutable
 
 	// ReadTimeout is how long tail should wait on a given poll call
@@ -95,7 +93,7 @@ var (
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
 // can set on a file/directory.
-const modeMask = uint32(fs.ModePerm | fs.ModeSticky | fs.ModeSetuid | fs.ModeSetgid)
+const modeMask = fs.ModePerm | fs.ModeSticky | fs.ModeSetuid | fs.ModeSetgid
 
 // server is used to implement the gRPC server
 type server struct{}
@@ -577,7 +575,7 @@ type immutableState struct {
 func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable bool) (*immutableState, error) {
 	uid, gid := int(-1), int(-1)
 	setMode, setImmutable, immutable := false, false, false
-	mode := uint32(0)
+	mode := fs.FileMode(0)
 
 	for _, attr := range attrs {
 		switch a := attr.Value.(type) {
@@ -621,7 +619,7 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 			if setMode {
 				return nil, status.Error(codes.InvalidArgument, "cannot set mode more than once")
 			}
-			mode = a.Mode
+			mode = fs.FileMode(a.Mode)
 			setMode = true
 		case *pb.FileAttribute_Immutable:
 			if setImmutable {
@@ -639,7 +637,7 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 	}
 
 	if setMode {
-		if err := unix.Chmod(filename, mode&modeMask); err != nil {
+		if err := os.Chmod(filename, mode&modeMask); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chmod: %v", err)
 		}
 	}
@@ -687,7 +685,7 @@ func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, err
 		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
-	err := unix.Unlink(req.Filename)
+	err := osAgnosticRm(req.Filename)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "unlink_err"))
 		return nil, status.Errorf(codes.Internal, "unlink error: %v", err)
@@ -703,7 +701,7 @@ func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empt
 		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
 	}
-	err := unix.Rmdir(req.Directory)
+	err := osAgnosticRmdir(req.Directory)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "rmdir_err"))
 		return nil, status.Errorf(codes.Internal, "rmdir error: %v", err)
@@ -723,7 +721,7 @@ func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Em
 		recorder.CounterOrLog(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "invalid_dst_path"))
 		return nil, err
 	}
-	err := unix.Rename(req.OriginalName, req.DestinationName)
+	err := os.Rename(req.OriginalName, req.DestinationName)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileRenameFailureCounter, 1, attribute.String("reason", "rename_err"))
 		return nil, status.Errorf(codes.Internal, "rename error: %v", err)
