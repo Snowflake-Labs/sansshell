@@ -2063,7 +2063,7 @@ func TestFDBCLI(t *testing.T) {
 			command: []string{
 				FDBCLI,
 				"--exec",
-				"kill all",
+				"kill ; kill all",
 			},
 		},
 		{
@@ -2106,7 +2106,7 @@ func TestFDBCLI(t *testing.T) {
 			command: []string{
 				FDBCLI,
 				"--exec",
-				"kill address1 address2",
+				"kill ; kill address1 address2",
 			},
 		},
 		{

@@ -899,12 +899,15 @@ func parseFDBCLIKill(req *pb.FDBCLIKill) ([]string, []captureLogs, error) {
 	case *pb.FDBCLIKill_List:
 		args = append(args, "list")
 	case *pb.FDBCLIKill_All:
-		args = append(args, "all")
+		// First kill allready in args will be used cache list of processes.
+		args = append(args, ";", "kill", "all")
 	case *pb.FDBCLIKill_Targets:
 		t := req.GetTargets()
 		if len(t.Addresses) == 0 {
 			return nil, nil, status.Error(codes.InvalidArgument, "kill requires targets")
 		}
+		// First kill allready in args will be used cache list of processes.
+		args = append(args, ";", "kill")
 		args = append(args, t.Addresses...)
 	default:
 		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
