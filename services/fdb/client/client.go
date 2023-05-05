@@ -1903,7 +1903,7 @@ type fdbCLIKillCmd struct {
 
 func (*fdbCLIKillCmd) Name() string { return "kill" }
 func (*fdbCLIKillCmd) Synopsis() string {
-	return "The kill command attempts to kill one or more processes in the cluster."
+	return "Attempt to kill one or more processes in the cluster"
 }
 func (p *fdbCLIKillCmd) Usage() string {
 	return `kill [list|all|address...]
