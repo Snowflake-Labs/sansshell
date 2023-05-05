@@ -28,6 +28,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
@@ -2107,6 +2108,35 @@ func TestFDBCLI(t *testing.T) {
 				FDBCLI,
 				"--exec",
 				"kill ; kill address1 address2",
+			},
+		},
+		{
+			name: "kill targets with sleep",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Kill{
+							Kill: &pb.FDBCLIKill{
+								Request: &pb.FDBCLIKill_Targets{
+									Targets: &pb.FDBCLIKillTargets{
+										Addresses: []string{"address1", "address2"},
+									},
+								},
+								Sleep: &durationpb.Duration{
+									Seconds: 5,
+									Nanos:   42,
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"kill ; kill address1 address2 ; sleep 5",
 			},
 		},
 		{

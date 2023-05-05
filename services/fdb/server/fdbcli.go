@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
@@ -911,6 +912,10 @@ func parseFDBCLIKill(req *pb.FDBCLIKill) ([]string, []captureLogs, error) {
 		args = append(args, t.Addresses...)
 	default:
 		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
+	}
+
+	if req.Sleep.AsDuration().Round(time.Second) > 0 {
+		args = append(args, ";", "sleep", strconv.Itoa(int(req.Sleep.AsDuration().Round(time.Second).Seconds())))
 	}
 
 	return args, nil, nil

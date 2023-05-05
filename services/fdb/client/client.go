@@ -26,8 +26,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/Snowflake-Labs/sansshell/client"
@@ -1914,6 +1916,8 @@ NOTE: Internally this will be converted to kill; kill <address...> to do the req
 
 func (r *fdbCLIKillCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIKill{}
+	var d = f.Duration("sleep", time.Duration(0), "Sleep after attempting to kill. Example: -sleep 3s. May be useful to work around lack of https://github.com/apple/foundationdb/pull/9526")
+	r.req.Sleep = durationpb.New(*d)
 }
 
 func (r *fdbCLIKillCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
