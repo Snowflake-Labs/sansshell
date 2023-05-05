@@ -4,4 +4,16 @@
     "go.coverOnSingleTestFile": true,
     "go.lintOnSave": "workspace",
     "go.lintTool": "golangci-lint",
+    "cSpell.words": [
+        "arity",
+        "fdbcli",
+        "logr",
+        "opentelemetry",
+        "otel",
+        "protobuf",
+        "sansshell",
+        "stdr",
+        "testutil",
+        "wrapperspb"
+    ],
 }
