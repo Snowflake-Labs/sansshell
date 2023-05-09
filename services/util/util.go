@@ -312,6 +312,33 @@ func (s *StringSliceFlag) String() string {
 	return strings.Join(*s.Target, ",")
 }
 
+// StringSliceCommaOrWhitespaceFlag is the parsed form of a flag accepting
+// either "foo,bar,baz" or "foo bar baz" style. This is useful in cases where
+// we want to be more flexible in the input values we accept.
+type StringSliceCommaOrWhitespaceFlag struct {
+	Target *[]string
+}
+
+// Set - see flag.Value
+func (s *StringSliceCommaOrWhitespaceFlag) Set(val string) error {
+	if s.Target == nil {
+		s.Target = new([]string)
+	}
+	for _, vals := range strings.Fields(val) {
+
+		*s.Target = append(*s.Target, strings.Split(vals, ",")...)
+	}
+	return nil
+}
+
+// String - see flag.String
+func (s *StringSliceCommaOrWhitespaceFlag) String() string {
+	if s.Target == nil {
+		return ""
+	}
+	return strings.Join(*s.Target, ",")
+}
+
 // KeyValue is used below with KeyValueSliceFlag to construct foo=bar,baz=foo type of flags.
 type KeyValue struct {
 	Key   string
