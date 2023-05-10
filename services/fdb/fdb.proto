@@ -277,6 +277,8 @@ message FDBCLIKill {
     FDBCLIKillAll all = 3;
     FDBCLIKillTargets targets = 4;
   }
+  // Duration to sleep after sending the kill command.
+  //
   // fdbcli may return before message is actually sent.
   // See https://github.com/apple/foundationdb/pull/9526
   google.protobuf.Duration sleep = 5;

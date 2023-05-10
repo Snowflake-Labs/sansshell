@@ -6,6 +6,8 @@
     "go.lintTool": "golangci-lint",
     "cSpell.words": [
         "arity",
+        "chgrp",
+        "durationpb",
         "fdbcli",
         "logr",
         "opentelemetry",

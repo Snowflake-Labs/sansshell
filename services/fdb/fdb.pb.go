@@ -3347,6 +3347,8 @@ type FDBCLIKill struct {
 	//	*FDBCLIKill_All
 	//	*FDBCLIKill_Targets
 	Request isFDBCLIKill_Request `protobuf_oneof:"request"`
+	// Duration to sleep after sending the kill command.
+	//
 	// fdbcli may return before message is actually sent.
 	// See https://github.com/apple/foundationdb/pull/9526
 	Sleep *durationpb.Duration `protobuf:"bytes,5,opt,name=sleep,proto3" json:"sleep,omitempty"`
