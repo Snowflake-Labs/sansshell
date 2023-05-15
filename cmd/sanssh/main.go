@@ -78,10 +78,10 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	batchSize        = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
-	targetsFlag util.StringSliceFlag
+	targetsFlag util.StringSliceCommaOrWhitespaceFlag
 
 	// outputs will be found to --outputs for directing output from a single request to N nodes.
-	outputsFlag util.StringSliceFlag
+	outputsFlag util.StringSliceCommaOrWhitespaceFlag
 )
 
 func init() {
@@ -95,8 +95,8 @@ func init() {
 	outputsFlag.Target = &[]string{}
 	targetsFlag.Target = &[]string{}
 
-	flag.Var(&targetsFlag, "targets", fmt.Sprintf("List of targets (host[:port] separated by commas) to apply RPC against. If --proxy is not set must be one entry only. If port is blank the default of %d will be used", defaultTargetPort))
-	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas) to direct output into.
+	flag.Var(&targetsFlag, "targets", fmt.Sprintf("List of targets (host[:port] separated by commas and/or whitespace) to apply RPC against. If --proxy is not set must be one entry only. If port is blank the default of %d will be used", defaultTargetPort))
+	flag.Var(&outputsFlag, "outputs", `List of output destinations (separated by commas and/or whitespace) to direct output into.
     Use - to indicated stdout/stderr (default if nothing else is set). Using - does not have to be repeated per target.
 	Errors will be emitted to <destination>.error separately from command/execution output which will be in the destination file.
 	NOTE: This must map 1:1 with --targets except in the '-' case.`)

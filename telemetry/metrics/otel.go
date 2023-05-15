@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/instrument"
+	ometric "go.opentelemetry.io/otel/metric"
 )
 
 // OtelRecorder is a struct used for recording metrics with otel
@@ -87,11 +87,11 @@ func (m *OtelRecorder) Counter(ctx context.Context, definition MetricDefinition,
 	definition.Name = addPrefix(m.prefix, definition.Name)
 	options := metric.WithAttributes(attributes...)
 	if counter, exists := m.Int64Counters.Load(definition.Name); exists {
-		counter.(instrument.Int64Counter).Add(ctx, value, options)
+		counter.(ometric.Int64Counter).Add(ctx, value, options)
 		return nil
 	}
 
-	counter, err := m.Meter.Int64Counter(definition.Name, instrument.WithDescription(definition.Description))
+	counter, err := m.Meter.Int64Counter(definition.Name, ometric.WithDescription(definition.Description))
 	if err != nil {
 		return errors.Wrap(err, "failed to create Int64counter")
 	}
@@ -111,9 +111,9 @@ func (m *OtelRecorder) CounterOrLog(ctx context.Context, metric MetricDefinition
 }
 
 // Gauge registers the gauge along with the callback function that updates its value
-func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) error {
+func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callback ometric.Int64Callback, attributes ...attribute.KeyValue) error {
 	metric.Name = addPrefix(m.prefix, metric.Name)
-	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, instrument.WithDescription(metric.Description), instrument.WithInt64Callback(callback))
+	gauge, err := m.Meter.Int64ObservableGauge(metric.Name, ometric.WithDescription(metric.Description), ometric.WithInt64Callback(callback))
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (m *OtelRecorder) Gauge(ctx context.Context, metric MetricDefinition, callb
 }
 
 // Counter registers the counter if it's not registered, then increments it
-func (m *OtelRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback instrument.Int64Callback, attributes ...attribute.KeyValue) {
+func (m *OtelRecorder) GaugeOrLog(ctx context.Context, metric MetricDefinition, callback ometric.Int64Callback, attributes ...attribute.KeyValue) {
 	err := m.Gauge(ctx, metric, callback, attributes...)
 	if err != nil {
 		logger := logr.FromContextOrDiscard(ctx)

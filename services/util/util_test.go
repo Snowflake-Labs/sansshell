@@ -19,6 +19,7 @@ package util
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -246,6 +247,58 @@ func TestStringSliceFlag(t *testing.T) {
 	}
 	if len(*flag.Target) != 3 {
 		t.Fatalf("flag should have 3 elements. Instead is %q", *flag.Target)
+	}
+}
+
+func TestStringSliceCommaOrWhitespaceFlag(t *testing.T) {
+	for _, tc := range []struct {
+		desc       string
+		input      string
+		wantTarget []string
+		wantString string
+	}{
+		{
+			desc: "empty input",
+		},
+		{
+			desc:       "simple case",
+			input:      "foo,bar,baz",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "space separated",
+			input:      "foo bar baz",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc: "newline separated",
+			input: `foo
+bar
+baz`,
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "space and comma separated",
+			input:      "foo,bar baz",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			var flag StringSliceCommaOrWhitespaceFlag
+			if err := flag.Set(tc.input); err != nil {
+				t.Errorf("error from flag.Set: %v", err)
+			}
+			if got := flag.String(); got != tc.wantString {
+				t.Errorf("flag didn't set to correct value. got %s and want %s", got, tc.wantString)
+			}
+			if !reflect.DeepEqual(*flag.Target, tc.wantTarget) {
+				t.Errorf("flag parsed as %v, wanted %v", *flag.Target, tc.wantTarget)
+			}
+		})
 	}
 }
 

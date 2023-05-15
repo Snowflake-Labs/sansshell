@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/google/subcommands"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/Snowflake-Labs/sansshell/client"
@@ -1903,7 +1904,7 @@ type fdbCLIKillCmd struct {
 
 func (*fdbCLIKillCmd) Name() string { return "kill" }
 func (*fdbCLIKillCmd) Synopsis() string {
-	return "The kill command attempts to kill one or more processes in the cluster."
+	return "Attempt to kill one or more processes in the cluster"
 }
 func (p *fdbCLIKillCmd) Usage() string {
 	return `kill [list|all|address...]
@@ -1914,6 +1915,8 @@ NOTE: Internally this will be converted to kill; kill <address...> to do the req
 
 func (r *fdbCLIKillCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBCLIKill{}
+	var d = f.Duration("sleep", 0, "Sleep after attempting to kill. Example: -sleep 3s. May be useful to work around lack of https://github.com/apple/foundationdb/pull/9526")
+	r.req.Sleep = durationpb.New(*d)
 }
 
 func (r *fdbCLIKillCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
