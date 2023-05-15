@@ -151,16 +151,6 @@ func StreamServerMetricsInterceptor(recorder MetricsRecorder) grpc.StreamServerI
 			ServerStream:    ss,
 			metricsrecorder: recorder,
 		}
-		peer, ok := peer.FromContext(ss.Context())
-		if ok {
-			tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-			state := tlsInfo.State
-			if state.HandshakeComplete && !state.DidResume {
-				recorder.Counter(ss.Context(), MetricDefinition{Name: "tls_ok", Description: "tls ok"}, 1)
-			} else {
-				recorder.Counter(ss.Context(), MetricDefinition{Name: "tls_failed", Description: "tls failed"}, 1)
-			}
-		}
 		err := handler(srv, stream)
 		return err
 	}
