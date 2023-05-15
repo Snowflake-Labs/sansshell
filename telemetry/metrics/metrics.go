@@ -23,6 +23,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric/instrument"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/peer"
 )
 
 // MetricsRecorder contains methods used for collecting metrics.
@@ -127,6 +129,17 @@ func (o *observedClientStream) Context() context.Context {
 func UnaryServerMetricsInterceptor(recorder MetricsRecorder) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		recorderCtx := NewContextWithRecorder(ctx, recorder)
+
+		peer, ok := peer.FromContext(ctx)
+		if ok {
+			tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+			state := tlsInfo.State
+			if state.HandshakeComplete && !state.DidResume {
+				recorder.Counter(ctx, MetricDefinition{Name: "tls_unary_ok", Description: "tls ok"}, 1)
+			} else {
+				recorder.Counter(ctx, MetricDefinition{Name: "tls_unary_failed", Description: "tls failed"}, 1)
+			}
+		}
 		return handler(recorderCtx, req)
 	}
 }
@@ -137,6 +150,16 @@ func StreamServerMetricsInterceptor(recorder MetricsRecorder) grpc.StreamServerI
 		stream := &observedStream{
 			ServerStream:    ss,
 			metricsrecorder: recorder,
+		}
+		peer, ok := peer.FromContext(ss.Context())
+		if ok {
+			tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
+			state := tlsInfo.State
+			if state.HandshakeComplete && !state.DidResume {
+				recorder.Counter(ss.Context(), MetricDefinition{Name: "tls_ok", Description: "tls ok"}, 1)
+			} else {
+				recorder.Counter(ss.Context(), MetricDefinition{Name: "tls_failed", Description: "tls failed"}, 1)
+			}
 		}
 		err := handler(srv, stream)
 		return err
