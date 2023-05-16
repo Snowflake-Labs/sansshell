@@ -290,7 +290,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: "foo.service",
+					ServiceName: "foo",
 					Status:      pb.Status_STATUS_UNKNOWN,
 				},
 			},
