@@ -323,7 +323,7 @@ func WithMetricsPort(addr string) Option {
 func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		interceptorOpts = append(interceptorOpts,
-			otelgrpc.WithMeterProvider(noop.NewMeterProvider()), // We don't want otel grpc metrics so discard them
+			otelgrpc.WithMeterProvider(noop.MeterProvider{}), // We don't want otel grpc metrics so discard them
 		)
 		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
 			otelgrpc.UnaryClientInterceptor(interceptorOpts...),

@@ -83,20 +83,21 @@ func NewOtelRecorder(meter metric.Meter, opts ...Option) (*OtelRecorder, error) 
 }
 
 // Counter registers the counter if it's not registered, then increments it
-func (m *OtelRecorder) Counter(ctx context.Context, metric MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
-	metric.Name = addPrefix(m.prefix, metric.Name)
-	if counter, exists := m.Int64Counters.Load(metric.Name); exists {
-		counter.(ometric.Int64Counter).Add(ctx, value, ometric.WithAttributes(attributes...))
+func (m *OtelRecorder) Counter(ctx context.Context, definition MetricDefinition, value int64, attributes ...attribute.KeyValue) error {
+	definition.Name = addPrefix(m.prefix, definition.Name)
+	options := metric.WithAttributes(attributes...)
+	if counter, exists := m.Int64Counters.Load(definition.Name); exists {
+		counter.(ometric.Int64Counter).Add(ctx, value, options)
 		return nil
 	}
 
-	counter, err := m.Meter.Int64Counter(metric.Name, ometric.WithDescription(metric.Description))
+	counter, err := m.Meter.Int64Counter(definition.Name, ometric.WithDescription(definition.Description))
 	if err != nil {
 		return errors.Wrap(err, "failed to create Int64counter")
 	}
-	counter.Add(ctx, value, ometric.WithAttributes(attributes...))
+	counter.Add(ctx, value, options)
 
-	m.Int64Counters.Store(metric.Name, counter)
+	m.Int64Counters.Store(definition.Name, counter)
 	return nil
 }
 

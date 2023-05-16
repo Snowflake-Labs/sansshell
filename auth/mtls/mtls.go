@@ -27,8 +27,19 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
+)
+
+// Metrics
+var (
+	clientHandshakeFailureMetrics = metrics.MetricDefinition{
+		Name: "mtls_client_handshake_failure", Description: "failure during mtls client handshake",
+	}
+	serverHandshakeFailureMetrics = metrics.MetricDefinition{
+		Name: "mtls_server_handshake_failure", Description: "failure during mtls server handshake",
+	}
 )
 
 var (
@@ -82,6 +93,7 @@ type WrappedTransportCredentials struct {
 	mtlsLoader CredentialsLoader
 	loader     func(context.Context, string) (credentials.TransportCredentials, error)
 	logger     logr.Logger
+	recorder   metrics.MetricsRecorder
 }
 
 func (w *WrappedTransportCredentials) checkRefresh() error {
@@ -113,7 +125,11 @@ func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s str
 	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.creds.ClientHandshake(ctx, s, n)
+	conn, info, err := w.creds.ClientHandshake(ctx, s, n)
+	if err != nil && w.recorder != nil {
+		w.recorder.CounterOrLog(context.Background(), clientHandshakeFailureMetrics, 1)
+	}
+	return conn, info, err
 }
 
 // ServerHandshake -- see credentials.ServerHandshake
@@ -123,7 +139,11 @@ func (w *WrappedTransportCredentials) ServerHandshake(n net.Conn) (net.Conn, cre
 	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.creds.ServerHandshake(n)
+	conn, info, err := w.creds.ServerHandshake(n)
+	if err != nil && w.recorder != nil {
+		w.recorder.CounterOrLog(context.Background(), serverHandshakeFailureMetrics, 1)
+	}
+	return conn, info, err
 }
 
 // Info -- see credentials.Info

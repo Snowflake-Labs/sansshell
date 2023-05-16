@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc/credentials"
 )
@@ -33,6 +34,7 @@ import (
 // will check at call time if new certificates are available.
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
 	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	mtlsLoader, err := Loader(loaderName)
 	if err != nil {
 		return nil, err
@@ -47,6 +49,7 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 		loader:     internalLoadServerCredentials,
 		mtlsLoader: mtlsLoader,
 		logger:     logger,
+		recorder:   recorder,
 	}
 	return wrapped, nil
 }
