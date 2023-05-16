@@ -248,7 +248,7 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
 		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
-		return nil, status.Errorf(codes.NotFound, "failed to marshal unit properties to json")
+		return nil, status.Errorf(codes.NotFound, "failed to unmarshal unit properties to json")
 	}
 	return &pb.StatusReply{
 		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
