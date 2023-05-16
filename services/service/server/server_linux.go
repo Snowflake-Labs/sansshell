@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -236,7 +237,9 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
 		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
 	}
+	logger := logr.FromContextOrDiscard(ctx)
 	for _, u := range units {
+		logger.V(3).Info("unit name " + u.Name)
 		if u.Name == unitName {
 			return &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
