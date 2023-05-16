@@ -410,7 +410,7 @@ type actionConn struct {
 }
 
 func (a actionConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
-	return nil, nil
+	return nil, notImplementedError
 }
 func (a actionConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return nil, nil
