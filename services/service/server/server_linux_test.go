@@ -98,6 +98,10 @@ var (
 
 type listConn []dbus.UnitStatus
 
+func (l listConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, notImplementedError
+}
+
 func (l listConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return l, nil
 }
@@ -367,6 +371,9 @@ type actionConn struct {
 	reloadErr error
 }
 
+func (a actionConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, nil
+}
 func (a actionConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return nil, nil
 }
