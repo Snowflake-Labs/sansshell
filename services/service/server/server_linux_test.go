@@ -36,6 +36,10 @@ import (
 // errConn is a systemConnection that returns errors for all methods
 type errConn string
 
+func (e errConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, errors.New(string(e))
+}
+
 func (e errConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return nil, errors.New(string(e))
 }
