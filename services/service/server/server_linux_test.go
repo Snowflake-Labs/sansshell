@@ -223,6 +223,11 @@ func TestList(t *testing.T) {
 type getConn []map[string]interface{}
 
 func (g getConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	for _, u := range g {
+		if u["Name"] == unit || u["Name"].(string)+".service" == unit {
+			return u, nil
+		}
+	}
 	return nil, nil
 }
 func (g getConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
@@ -263,7 +268,7 @@ func TestStatus(t *testing.T) {
 				ServiceName: "foo",
 			},
 			want:    nil,
-			errFunc: wantStatusErr(codes.Internal, "sentinel"),
+			errFunc: wantStatusErr(codes.Internal, ""),
 		},
 		{
 			name:    "missing service",

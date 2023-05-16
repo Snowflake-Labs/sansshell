@@ -235,20 +235,20 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	if err != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_unit_properties_err"))
 		logger.V(3).Info("GetUnitPropertiesContext err: " + err.Error())
-		return nil, status.Errorf(codes.NotFound, "failed to get unit properties of %s", req.GetServiceName())
+		return nil, status.Errorf(codes.Internal, "failed to get unit properties of %s", req.GetServiceName())
 	}
 	// cast map[string]interface{} to dbus.UnitStatus{} using json marshal + unmarshal
 	propertiesJson, err := json.Marshal(properties)
 	if err != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_marshal_err"))
 		logger.V(3).Info("failed to marshal properties: " + err.Error())
-		return nil, status.Errorf(codes.NotFound, "failed to marshal unit properties to json")
+		return nil, status.Errorf(codes.Internal, "failed to marshal unit properties to json")
 	}
 	unitState := dbus.UnitStatus{}
 	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
 		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
-		return nil, status.Errorf(codes.NotFound, "failed to unmarshal unit properties to json")
+		return nil, status.Errorf(codes.Internal, "failed to unmarshal unit properties to json")
 	}
 	return &pb.StatusReply{
 		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
