@@ -234,25 +234,27 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	// do not support this method, so the most failsafe method that works on all systemd
 	// versions is to retrieve the full list of units, and filter here.
 	logger := logr.FromContextOrDiscard(ctx)
-	logger.Info("unitsbypattern")
-	units, err := conn.ListUnitsByPatternsContext(ctx, []string{}, []string{})
-	if err != nil {
-		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
-		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
-	}
-	for _, u := range units {
-		logger.Info("unit name " + u.Name)
-		if u.Name == unitName {
-			return &pb.StatusReply{
-				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
-				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: req.GetServiceName(),
-					Status:      unitStateToStatus(u),
-				},
-			}, nil
+	logger.V(3).Info("executing ListUnitsByPatternsContext")
+	units, errPattern := conn.ListUnitsByPatternsContext(ctx, []string{}, []string{})
+	if errPattern != nil {
+		logger.V(3).Info("ListUnitsByPatternsContext fails: " + errPattern.Error())
+	} else {
+		for _, u := range units {
+			logger.Info("unit name " + u.Name)
+			if u.Name == unitName {
+				return &pb.StatusReply{
+					SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+					ServiceStatus: &pb.ServiceStatus{
+						ServiceName: req.GetServiceName(),
+						Status:      unitStateToStatus(u),
+					},
+				}, nil
+			}
 		}
 	}
-	logger.Info("unitsfiltered")
+	// ListUnitsByPatterns may not be supported in older versions of systemd. If it fails, fallback to
+	// the legacy ListUnitsFiltered
+	logger.V(3).Info("executing ListUnitsFilteredContext")
 	units, err = conn.ListUnitsFilteredContext(ctx, []string{})
 	if err != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
