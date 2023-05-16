@@ -34,6 +34,9 @@ import (
 
 // Metrics
 var (
+	clientHandshakeFailureMetrics = metrics.MetricDefinition{
+		Name: "mtls_client_handshake_failure", Description: "failure during mtls client handshake",
+	}
 	serverHandshakeFailureMetrics = metrics.MetricDefinition{
 		Name: "mtls_server_handshake_failure", Description: "failure during mtls server handshake",
 	}
@@ -122,7 +125,11 @@ func (w *WrappedTransportCredentials) ClientHandshake(ctx context.Context, s str
 	}
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	return w.creds.ClientHandshake(ctx, s, n)
+	conn, info, err := w.creds.ClientHandshake(ctx, s, n)
+	if err != nil && w.recorder != nil {
+		w.recorder.CounterOrLog(context.Background(), clientHandshakeFailureMetrics, 1)
+	}
+	return conn, info, err
 }
 
 // ServerHandshake -- see credentials.ServerHandshake
