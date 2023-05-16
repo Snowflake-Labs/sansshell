@@ -118,6 +118,7 @@ func unitStateToStatus(u dbus.UnitStatus) pb.Status {
 // a subset of dbus.Conn used to mock for testing
 type systemdConnection interface {
 	ListUnitsByPatternsContext(ctx context.Context, states []string, patterns []string) ([]dbus.UnitStatus, error)
+	ListUnitsFilteredContext(ctx context.Context, states []string) ([]dbus.UnitStatus, error)
 	ListUnitsContext(ctx context.Context) ([]dbus.UnitStatus, error)
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
@@ -232,14 +233,33 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	// NB: ideally we'd use ListUnitsByNamesContext, but older versions of systemd
 	// do not support this method, so the most failsafe method that works on all systemd
 	// versions is to retrieve the full list of units, and filter here.
+	logger := logr.FromContextOrDiscard(ctx)
+	logger.Info("unitsbypattern")
 	units, err := conn.ListUnitsByPatternsContext(ctx, []string{}, []string{})
 	if err != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
 		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
 	}
-	logger := logr.FromContextOrDiscard(ctx)
 	for _, u := range units {
-		logger.V(3).Info("unit name " + u.Name)
+		logger.Info("unit name " + u.Name)
+		if u.Name == unitName {
+			return &pb.StatusReply{
+				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceStatus: &pb.ServiceStatus{
+					ServiceName: req.GetServiceName(),
+					Status:      unitStateToStatus(u),
+				},
+			}, nil
+		}
+	}
+	logger.Info("unitsfiltered")
+	units, err = conn.ListUnitsFilteredContext(ctx, []string{})
+	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
+		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
+	}
+	for _, u := range units {
+		logger.Info("unit name " + u.Name)
 		if u.Name == unitName {
 			return &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
