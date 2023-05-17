@@ -36,6 +36,10 @@ import (
 // errConn is a systemConnection that returns errors for all methods
 type errConn string
 
+func (e errConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, errors.New(string(e))
+}
+
 func (e errConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return nil, errors.New(string(e))
 }
@@ -94,6 +98,9 @@ var (
 
 type listConn []dbus.UnitStatus
 
+func (l listConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, notImplementedError
+}
 func (l listConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return l, nil
 }
@@ -213,6 +220,39 @@ func TestList(t *testing.T) {
 	}
 }
 
+type getConn []map[string]interface{}
+
+func (g getConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	for _, u := range g {
+		if u["Name"] == unit || u["Name"].(string)+".service" == unit {
+			return u, nil
+		}
+	}
+	return nil, nil
+}
+func (g getConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
+	return nil, nil
+}
+func (g getConn) StartUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, notImplementedError
+}
+func (g getConn) StopUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, notImplementedError
+}
+func (g getConn) RestartUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, notImplementedError
+}
+func (g getConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbus.DisableUnitFileChange, error) {
+	return nil, notImplementedError
+}
+func (g getConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
+	return false, nil, notImplementedError
+}
+func (g getConn) ReloadContext(ctx context.Context) error {
+	return notImplementedError
+}
+func (getConn) Close() {}
+
 func TestStatus(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -228,7 +268,7 @@ func TestStatus(t *testing.T) {
 				ServiceName: "foo",
 			},
 			want:    nil,
-			errFunc: wantStatusErr(codes.Internal, "sentinel"),
+			errFunc: wantStatusErr(codes.Internal, ""),
 		},
 		{
 			name:    "missing service",
@@ -248,27 +288,33 @@ func TestStatus(t *testing.T) {
 		},
 		{
 			name: "not found",
-			conn: listConn([]dbus.UnitStatus{}),
+			conn: getConn([]map[string]interface{}{}),
 			req: &pb.StatusRequest{
 				ServiceName: "foo",
 			},
-			want:    nil,
-			errFunc: wantStatusErr(codes.NotFound, "service"),
+			want: &pb.StatusReply{
+				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceStatus: &pb.ServiceStatus{
+					ServiceName: "foo",
+					Status:      pb.Status_STATUS_UNKNOWN,
+				},
+			},
+			errFunc: testutil.FatalOnErr,
 		},
 		{
 			name: "accept with service suffix",
-			conn: listConn([]dbus.UnitStatus{
+			conn: getConn([]map[string]interface{}{
 				{
-					Name:        "foo.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    substateRunning,
+					"Name":        "foo.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    substateRunning,
 				},
 				{
-					Name:        "bar.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    substateRunning,
+					"Name":        "bar.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    substateRunning,
 				},
 			}),
 			req: &pb.StatusRequest{
@@ -285,18 +331,18 @@ func TestStatus(t *testing.T) {
 		},
 		{
 			name: "accept without service suffix",
-			conn: listConn([]dbus.UnitStatus{
+			conn: getConn([]map[string]interface{}{
 				{
-					Name:        "foo.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    substateRunning,
+					"Name":        "foo.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    substateRunning,
 				},
 				{
-					Name:        "bar.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    substateRunning,
+					"Name":        "bar.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    substateRunning,
 				},
 			}),
 			req: &pb.StatusRequest{
@@ -313,18 +359,18 @@ func TestStatus(t *testing.T) {
 		},
 		{
 			name: "stopped service",
-			conn: listConn([]dbus.UnitStatus{
+			conn: getConn([]map[string]interface{}{
 				{
-					Name:        "foo.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    "dead",
+					"Name":        "foo.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    "dead",
 				},
 				{
-					Name:        "bar.service",
-					LoadState:   loadStateLoaded,
-					ActiveState: activeStateActive,
-					SubState:    substateRunning,
+					"Name":        "bar.service",
+					"LoadState":   loadStateLoaded,
+					"ActiveState": activeStateActive,
+					"SubState":    substateRunning,
 				},
 			}),
 			req: &pb.StatusRequest{
@@ -363,6 +409,9 @@ type actionConn struct {
 	reloadErr error
 }
 
+func (a actionConn) GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error) {
+	return nil, notImplementedError
+}
 func (a actionConn) ListUnitsContext(context.Context) ([]dbus.UnitStatus, error) {
 	return nil, nil
 }

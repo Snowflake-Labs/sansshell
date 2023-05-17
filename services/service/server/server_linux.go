@@ -21,10 +21,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 
 	"github.com/coreos/go-systemd/v22/dbus"
+	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -116,6 +118,7 @@ func unitStateToStatus(u dbus.UnitStatus) pb.Status {
 
 // a subset of dbus.Conn used to mock for testing
 type systemdConnection interface {
+	GetUnitPropertiesContext(ctx context.Context, unit string) (map[string]interface{}, error)
 	ListUnitsContext(ctx context.Context) ([]dbus.UnitStatus, error)
 	StartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	StopUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
@@ -205,6 +208,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	logger := logr.FromContextOrDiscard(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
@@ -227,27 +231,32 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	}
 	defer conn.Close()
 
-	// NB: ideally we'd use ListUnitsByNamesContext, but older versions of systemd
-	// do not support this method, so the most failsafe method that works on all systemd
-	// versions is to retrieve the full list of units, and filter here.
-	units, err := conn.ListUnitsContext(ctx)
+	properties, err := conn.GetUnitPropertiesContext(ctx, unitName)
 	if err != nil {
-		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "list_units_err"))
-		return nil, status.Errorf(codes.Internal, "systemd status error %v", err)
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_unit_properties_err"))
+		logger.V(3).Info("GetUnitPropertiesContext err: " + err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to get unit properties of %s", req.GetServiceName())
 	}
-	for _, u := range units {
-		if u.Name == unitName {
-			return &pb.StatusReply{
-				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
-				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: req.GetServiceName(),
-					Status:      unitStateToStatus(u),
-				},
-			}, nil
-		}
+	// cast map[string]interface{} to dbus.UnitStatus{} using json marshal + unmarshal
+	propertiesJson, err := json.Marshal(properties)
+	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_marshal_err"))
+		logger.V(3).Info("failed to marshal properties: " + err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to marshal unit properties to json")
 	}
-	recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "not_found"))
-	return nil, status.Errorf(codes.NotFound, "service %s was not found", req.GetServiceName())
+	unitState := dbus.UnitStatus{}
+	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
+		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
+		return nil, status.Errorf(codes.Internal, "failed to unmarshal unit properties to json")
+	}
+	return &pb.StatusReply{
+		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+		ServiceStatus: &pb.ServiceStatus{
+			ServiceName: req.GetServiceName(),
+			Status:      unitStateToStatus(unitState),
+		},
+	}, nil
 }
 
 // See: pb.ServiceServer.Action
