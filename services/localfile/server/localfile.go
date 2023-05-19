@@ -77,7 +77,7 @@ var (
 		Description: "number of failures when performing localfile.Write"}
 	localfileCopyFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_copy_failure",
 		Description: "number of failures when performing localfile.Copy"}
-	localfileListFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_copy_failure",
+	localfileListFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_list_failure",
 		Description: "number of failures when performing localfile.List"}
 	localfileRmFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_rm_failure",
 		Description: "number of failures when performing localfile.Rm"}
