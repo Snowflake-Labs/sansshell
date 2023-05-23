@@ -27,8 +27,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
+	"go.opentelemetry.io/otel"
 	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/global"
 	otelmetricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"google.golang.org/grpc"
 	channelz "google.golang.org/grpc/channelz/service"
@@ -104,10 +104,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create prometheus exporter: %v\n", err)
 	}
-	global.SetMeterProvider(otelmetricsdk.NewMeterProvider(
+	otel.SetMeterProvider(otelmetricsdk.NewMeterProvider(
 		otelmetricsdk.WithReader(exporter),
 	))
-	meter := global.Meter("sansshell-proxy")
+	meter := otel.Meter("sansshell-proxy")
 	recorder, err := metrics.NewOtelRecorder(meter, metrics.WithMetricNamePrefix("sansshell-proxy"))
 	if err != nil {
 		log.Fatalf("failed to create OtelRecorder: %v\n", err)

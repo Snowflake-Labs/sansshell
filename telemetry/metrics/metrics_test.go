@@ -23,7 +23,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/pkg/errors"
-	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -65,7 +65,7 @@ func TestRecorderFromContextOrNoop(t *testing.T) {
 		t.Errorf("Expected %v when no recorder is in context, but got %v", noop, got)
 	}
 
-	want, err := NewOtelRecorder(global.Meter("test"))
+	want, err := NewOtelRecorder(otel.Meter("test"))
 	if err != nil {
 		testutil.FatalOnErr("create new otel recorder", err, t)
 	}
@@ -92,7 +92,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 	conn, err := grpc.DialContext(bgCtx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 
-	recorder, err := NewOtelRecorder(global.Meter("test"))
+	recorder, err := NewOtelRecorder(otel.Meter("test"))
 	if err != nil {
 		testutil.FatalOnErr("create new otel recorder", err, t)
 	}
@@ -114,7 +114,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 	conn, err := grpc.DialContext(bgCtx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 
-	recorder, err := NewOtelRecorder(global.Meter("test"))
+	recorder, err := NewOtelRecorder(otel.Meter("test"))
 	if err != nil {
 		testutil.FatalOnErr("create new otel recorder", err, t)
 	}
@@ -145,7 +145,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 
 func TestUnaryServerInterceptor(t *testing.T) {
 	bgCtx := context.Background()
-	recorder, err := NewOtelRecorder(global.Meter("test"))
+	recorder, err := NewOtelRecorder(otel.Meter("test"))
 	if err != nil {
 		testutil.FatalOnErr("create new otel recorder", err, t)
 	}
@@ -167,7 +167,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 
 func TestStreamServerInterceptor(t *testing.T) {
 	ctx := context.Background()
-	recorder, err := NewOtelRecorder(global.Meter("test"))
+	recorder, err := NewOtelRecorder(otel.Meter("test"))
 	if err != nil {
 		testutil.FatalOnErr("create new otel recorder", err, t)
 	}

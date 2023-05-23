@@ -22,8 +22,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/global"
 )
 
 func TestNewOtelRecorderWithInvalidOption(t *testing.T) {
@@ -34,14 +34,14 @@ func TestNewOtelRecorderWithInvalidOption(t *testing.T) {
 		})
 	}
 
-	_, err := NewOtelRecorder(global.Meter("sansshelltesting"), invalidOption())
+	_, err := NewOtelRecorder(otel.Meter("sansshelltesting"), invalidOption())
 	t.Log(err)
 	testutil.FatalOnNoErr("expected NewOtelRecorder to return error", err, t)
 }
 
 func TestNewOtelRecorderWithMetricNamePrefixOption(t *testing.T) {
 	metricPrefix := "test-prefix-"
-	recorder, err := NewOtelRecorder(global.Meter("sansshelltesting"), WithMetricNamePrefix(metricPrefix))
+	recorder, err := NewOtelRecorder(otel.Meter("sansshelltesting"), WithMetricNamePrefix(metricPrefix))
 	testutil.FatalOnErr("unexpected err on NewOtelRecorder", err, t)
 	if recorder.prefix != metricPrefix {
 		t.Fatalf("Option WithMetricNamePrefix was not applied. Expected recorder prefix: %v, got: %v", metricPrefix, recorder.prefix)
@@ -59,7 +59,7 @@ func TestAddPrefix(t *testing.T) {
 }
 
 func TestAddInt64Counter(t *testing.T) {
-	recorder, err := NewOtelRecorder(global.Meter("sansshelltesting"))
+	recorder, err := NewOtelRecorder(otel.Meter("sansshelltesting"))
 	testutil.FatalOnErr("unexpected err on NewOtelRecorder", err, t)
 	counterDef := MetricDefinition{Name: "test_counter", Description: "test"}
 	ctx := context.Background()
@@ -73,7 +73,7 @@ func TestAddInt64Counter(t *testing.T) {
 }
 
 func TestRegisterInt64Gauge(t *testing.T) {
-	recorder, err := NewOtelRecorder(global.Meter("sansshelltesting"))
+	recorder, err := NewOtelRecorder(otel.Meter("sansshelltesting"))
 	testutil.FatalOnErr("unexpected err on NewOtelRecorder", err, t)
 	gaugeDef := MetricDefinition{Name: "disk_usage", Description: "disk"}
 	ctx := context.Background()
