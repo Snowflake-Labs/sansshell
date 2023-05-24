@@ -213,6 +213,37 @@ func TestInstall(t *testing.T) {
 	}
 }
 
+func TestRemove(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewPackagesClient(conn)
+
+	for _, tc := range []struct {
+		name string
+		req  *pb.RemoveRequest
+	}{
+		{
+			name: "no name given",
+			req:  &pb.RemoveRequest{Version: "1.2.3"},
+		},
+		{
+			name: "no version given",
+			req:  &pb.RemoveRequest{Name: "package"},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Remove(ctx, tc.req)
+			testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			t.Logf("%s: %v", tc.name, err)
+		})
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	var err error
 	ctx := context.Background()

@@ -23,6 +23,7 @@ package Packages;
 // The Packages service definition.
 service Packages {
   rpc Install(InstallRequest) returns (InstallReply) {}
+  rpc Remove(RemoveRequest) returns (RemoveReply) {}
   rpc Update(UpdateRequest) returns (UpdateReply) {}
   rpc ListInstalled(ListInstalledRequest) returns (ListInstalledReply) {}
   rpc RepoList(RepoListRequest) returns (RepoListReply) {}
@@ -53,6 +54,17 @@ message InstallRequest {
 }
 
 message InstallReply { string debug_output = 1; }
+
+message RemoveRequest {
+  PackageSystem package_system = 1;
+  string name = 2;
+  // Version must be the full nevra version if this is YUM:
+  //
+  // i.e. epoch:version.arch
+  string version = 3;
+}
+
+message RemoveReply { string debug_output = 1;}
 
 message UpdateRequest {
   PackageSystem package_system = 1;

@@ -41,6 +41,7 @@ func init() {
 func (*packagesCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&installCmd{}, "")
+	c.Register(&removeCmd{}, "")
 	c.Register(&listCmd{}, "")
 	c.Register(&repoListCmd{}, "")
 	c.Register(&updateCmd{}, "")
@@ -147,6 +148,72 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	for r := range resp {
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Success!\n\nOutput from installation:\n%s\n", r.Resp.DebugOutput)
+	}
+	return retCode
+}
+
+type removeCmd struct {
+	packageSystem string
+	name          string
+	version       string
+}
+
+func (*removeCmd) Name() string     { return "remove" }
+func (*removeCmd) Synopsis() string { return "Remove installed package" }
+func (*removeCmd) Usage() string {
+	return `remove [--package_system=P] --name=X --version=Y
+  Remove installed package on the remote machine.
+ `
+}
+
+func (r *removeCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&r.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&r.name, "name", "", "Name of package to remove")
+	f.StringVar(&r.version, "version", "", "Version of package to remove. For YUM this must be a full nevra version")
+}
+
+func (r *removeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	ps, err := flagToType(r.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", r.packageSystem)
+		return subcommands.ExitFailure
+	}
+
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
+	if r.name == "" || r.version == "" {
+		fmt.Fprintln(os.Stderr, "Both --name and --version must be filled in")
+		return subcommands.ExitFailure
+	}
+
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClientProxy(state.Conn)
+
+	req := &pb.RemoveRequest{
+		PackageSystem: ps,
+		Name:          r.name,
+		Version:       r.version,
+	}
+
+	resp, err := c.RemoveOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - Remove returned error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Remove for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
 			retCode = subcommands.ExitFailure
 			continue
 		}
