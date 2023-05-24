@@ -48,8 +48,8 @@ var (
 		Description: "number of failures when performing packages.Install"}
 	packagesUpdateFailureCounter = metrics.MetricDefinition{Name: "actions_packages_update_failure",
 		Description: "number of failures when performing packages.Update"}
-	packagesRemoveFailureCounter = metrics.MetricDefinition{Name: "actions_packages_install_failure",
-		Description: "number of failures when performing packages.Install"}
+	packagesRemoveFailureCounter = metrics.MetricDefinition{Name: "actions_packages_remove_failure",
+		Description: "number of failures when performing packages.Remove"}
 )
 
 // Internal helper to generate the command list. The map must contain the enum.

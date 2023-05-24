@@ -166,7 +166,7 @@ func (*removeCmd) Name() string     { return "remove" }
 func (*removeCmd) Synopsis() string { return "Remove installed package" }
 func (*removeCmd) Usage() string {
 	return `remove [--package_system=P] --name=X --version=Y
-  Remove installed pacakge on the remote machine.
+  Remove installed package on the remote machine.
  `
 }
 
