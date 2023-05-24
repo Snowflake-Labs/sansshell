@@ -19,6 +19,7 @@ import (
 type PackagesClientProxy interface {
 	PackagesClient
 	InstallOneMany(ctx context.Context, in *InstallRequest, opts ...grpc.CallOption) (<-chan *InstallManyResponse, error)
+	RemoveOneMany(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (<-chan *RemoveManyResponse, error)
 	UpdateOneMany(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (<-chan *UpdateManyResponse, error)
 	ListInstalledOneMany(ctx context.Context, in *ListInstalledRequest, opts ...grpc.CallOption) (<-chan *ListInstalledManyResponse, error)
 	RepoListOneMany(ctx context.Context, in *RepoListRequest, opts ...grpc.CallOption) (<-chan *RepoListManyResponse, error)
@@ -80,6 +81,73 @@ func (c *packagesClientProxy) InstallOneMany(ctx context.Context, in *InstallReq
 		for {
 			typedResp := &InstallManyResponse{
 				Resp: &InstallReply{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// RemoveManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type RemoveManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *RemoveReply
+	Error error
+}
+
+// RemoveOneMany provides the same API as Remove but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *packagesClientProxy) RemoveOneMany(ctx context.Context, in *RemoveRequest, opts ...grpc.CallOption) (<-chan *RemoveManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *RemoveManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &RemoveManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &RemoveReply{},
+			}
+			err := conn.Invoke(ctx, "/Packages.Packages/Remove", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Packages.Packages/Remove", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &RemoveManyResponse{
+				Resp: &RemoveReply{},
 			}
 
 			resp, ok := <-manyRet

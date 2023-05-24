@@ -48,6 +48,8 @@ var (
 		Description: "number of failures when performing packages.Install"}
 	packagesUpdateFailureCounter = metrics.MetricDefinition{Name: "actions_packages_update_failure",
 		Description: "number of failures when performing packages.Update"}
+	packagesRemoveFailureCounter = metrics.MetricDefinition{Name: "actions_packages_install_failure",
+		Description: "number of failures when performing packages.Install"}
 )
 
 // Internal helper to generate the command list. The map must contain the enum.
@@ -105,6 +107,16 @@ var (
 			disable: p.DisableRepo,
 		}
 		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.Version, repos), nil
+	}
+
+	generateRemove = func(p *pb.RemoveRequest) ([]string, error) {
+		removeOpts := map[pb.PackageSystem][]string{
+			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
+				"remove-nevra",
+				"-y",
+			},
+		}
+		return genCmd(p.PackageSystem, removeOpts)
 	}
 
 	generateValidate = func(p *pb.UpdateRequest) ([]string, error) {
@@ -223,6 +235,44 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	}
 
 	return &pb.InstallReply{
+		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
+	}, nil
+}
+
+func (s *server) Remove(ctx context.Context, req *pb.RemoveRequest) (*pb.RemoveReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	if err := validateField("name", req.Name); err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_name"))
+		return nil, err
+	}
+	if err := validateField("version", req.Version); err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "invalid_version"))
+		return nil, err
+	}
+
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	command, err := generateRemove(req)
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesRemoveFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
+		return nil, err
+	}
+
+	run, err := util.RunCommand(ctx, command[0], command[1:])
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesRemoveFailureCounter, 1, attribute.String("reason", "run_err"))
+		return nil, err
+	}
+
+	if err := run.Error; run.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesRemoveFailureCounter, 1, attribute.String("reason", "run_err"))
+		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+	}
+
+	return &pb.RemoveReply{
 		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
 	}, nil
 }
