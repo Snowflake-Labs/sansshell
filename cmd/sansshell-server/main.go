@@ -126,7 +126,7 @@ func main() {
 	}
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
-	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-server")
+	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sansshell-server")
 	stdr.SetVerbosity(*verbosity)
 
 	// Setup exporter using the default prometheus registry

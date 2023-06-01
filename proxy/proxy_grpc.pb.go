@@ -22,8 +22,8 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProxyClient interface {
-	// Proxy represents a bidirectional stream of requests from a sanshell
-	// client to one or more target sanshell instances reachable from the
+	// Proxy represents a bidirectional stream of requests from a sansshell
+	// client to one or more target sansshell instances reachable from the
 	// proxy server.
 	Proxy(ctx context.Context, opts ...grpc.CallOption) (Proxy_ProxyClient, error)
 }
@@ -71,8 +71,8 @@ func (x *proxyProxyClient) Recv() (*ProxyReply, error) {
 // All implementations should embed UnimplementedProxyServer
 // for forward compatibility
 type ProxyServer interface {
-	// Proxy represents a bidirectional stream of requests from a sanshell
-	// client to one or more target sanshell instances reachable from the
+	// Proxy represents a bidirectional stream of requests from a sansshell
+	// client to one or more target sansshell instances reachable from the
 	// proxy server.
 	Proxy(Proxy_ProxyServer) error
 }

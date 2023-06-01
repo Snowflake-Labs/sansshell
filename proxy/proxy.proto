@@ -24,8 +24,8 @@ import "google/protobuf/duration.proto";
 package Proxy;
 
 service Proxy {
-  // Proxy represents a bidirectional stream of requests from a sanshell
-  // client to one or more target sanshell instances reachable from the
+  // Proxy represents a bidirectional stream of requests from a sansshell
+  // client to one or more target sansshell instances reachable from the
   // proxy server.
   rpc Proxy(stream ProxyRequest) returns (stream ProxyReply) {}
 }

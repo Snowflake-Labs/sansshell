@@ -17,7 +17,7 @@
    under the License.
 */
 
-package sanshell
+package sansshell
 
 // Various tooling uses by the sansshell build process.
 // These import lines make tools (such as code generators)
