@@ -2,6 +2,7 @@ package server
 
 import (
 	"io/fs"
+	"math"
 	"os"
 	"time"
 
@@ -15,11 +16,12 @@ import (
 var (
 	osAgnosticRm    = os.Remove
 	osAgnosticRmdir = os.Remove
+	osStat          = windowsOsStat
 )
 
-// osStat is the Windows version of geting file status. We only support
+// windowsOsStat is the Windows version of geting file status. We only support
 // the Windows-relevant subset of information.
-func osStat(path string, useLstat bool) (*pb.StatReply, error) {
+func windowsOsStat(path string, useLstat bool) (*pb.StatReply, error) {
 	var stat fs.FileInfo
 	var err error
 	if useLstat {
@@ -38,6 +40,8 @@ func osStat(path string, useLstat bool) (*pb.StatReply, error) {
 		Size:     stat.Size(),
 		Mode:     uint32(stat.Mode()),
 		Modtime:  timestamppb.New(stat.ModTime()),
+		Uid:      math.MaxUint32,
+		Gid:      math.MaxUint32,
 	}
 	return resp, nil
 }
@@ -58,7 +62,7 @@ func dataReady(_ interface{}, stream pb.LocalFile_ReadServer) error {
 	if stream.Context().Err() != nil {
 		return stream.Context().Err()
 	}
-	time.Sleep(ReadTimeout * time.Second)
+	time.Sleep(ReadTimeout)
 	// Time to try again.
 	return nil
 }

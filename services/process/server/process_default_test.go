@@ -22,10 +22,16 @@ package server
 // OS specific locations for finding test data.
 // In this case all blank so tests skip.
 var (
-	testdataPsFile = ""
-	testdataPs     = ""
-	badFilesPS     = nil
+	testdataPsTextProto = ""
+	testdataPs          = ""
+	badFilesPs          = []string{}
 
-	testdataPstackNoThreadsFile = ""
-	testdataPstackThreadsFile   = ""
+	testdataPstackNoThreads              = ""
+	testdataPstackNoThreadsTextProto     = ""
+	testdataPstackThreads                = ""
+	testdataPstackThreadsTextProto       = ""
+	testdataPstackThreadsBadThread       = ""
+	testdataPstackThreadsBadThreadNumber = ""
+	testdataPstackThreadsBadThreadID     = ""
+	testdataPstackThreadsBadLwp          = ""
 )

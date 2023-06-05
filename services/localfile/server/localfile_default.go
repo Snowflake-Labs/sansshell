@@ -32,9 +32,11 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
-// osStat is the platform agnostic version which uses basic os.Stat.
+var osStat = defaultOsStat
+
+// defaultOsStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func osStat(path string, useLstat bool) (*pb.StatReply, error) {
+func defaultOsStat(path string, useLstat bool) (*pb.StatReply, error) {
 	var stat fs.FileInfo
 	var err error
 	if useLstat {

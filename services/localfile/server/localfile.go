@@ -32,6 +32,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -318,6 +319,9 @@ func setupOutput(a *pb.FileAttributes) (*os.File, *immutableState, error) {
 	// to accidentally leave this in another otherwise default state.
 	// Except we don't trigger immutable now or we won't be able to write to it.
 	immutable, err := validateAndSetAttrs(f.Name(), a.Attributes, false)
+	if err != nil {
+		f.Close()
+	}
 	return f, immutable, err
 }
 
@@ -630,7 +634,7 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 		}
 	}
 
-	if uid != -1 || gid != -1 {
+	if runtime.GOOS != "windows" {
 		if err := chown(filename, uid, gid); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chown: %v", err)
 		}

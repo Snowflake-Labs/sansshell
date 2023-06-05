@@ -1,0 +1,3 @@
+# We checksum this data in tests so we need the content to be
+# identical across operating systems.
+services/localfile/server/testdata/sum.data text eol=lf
