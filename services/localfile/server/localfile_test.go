@@ -415,8 +415,8 @@ func TestSum(t *testing.T) {
 			req:         &pb.SumRequest{Filename: temp, SumType: pb.SumType_SUM_TYPE_SHA256},
 			sendErrFunc: testutil.FatalOnErr,
 			recvErrFunc: func(op string, err error, t *testing.T) {
-				if err == nil || (!strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "Incorrect")) {
-					t.Fatalf("%s : err was %v, want err containing 'directory' or 'Incorrect'", op, err)
+				if err == nil || (!strings.Contains(err.Error(), "directory") && !strings.Contains(err.Error(), "copy/read error")) {
+					t.Fatalf("%s : err was %v, want err containing 'directory' or 'copy/read error'", op, err)
 				}
 			},
 		},
