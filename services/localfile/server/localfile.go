@@ -634,7 +634,7 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 		}
 	}
 
-	if runtime.GOOS != "windows" {
+	if (uid != -1 || gid != -1) && runtime.GOOS != "windows" {
 		if err := chown(filename, uid, gid); err != nil {
 			return nil, status.Errorf(codes.Internal, "error from chown: %v", err)
 		}
