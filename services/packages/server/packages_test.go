@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -211,6 +212,53 @@ func TestInstall(t *testing.T) {
 		})
 		generateInstall = saveGenerate
 	}
+
+	// Test 4: Validate RebootRequired
+	for _, tc := range []struct {
+		name          string
+		bin           string
+		reboot        pb.RebootRequired
+		needRebootCmd func(context.Context) (bool, error)
+	}{
+		{
+			name:          "reboot required should be unknown",
+			bin:           "",
+			reboot:        pb.RebootRequired_REBOOT_REQUIRED_UNKNOWN,
+			needRebootCmd: func(_ context.Context) (bool, error) { return false, errors.New("maybe binary not found") },
+		},
+		{
+			name:          "reboot required should be no",
+			bin:           "/bin/needs-restarting",
+			reboot:        pb.RebootRequired_REBOOT_REQUIRED_NO,
+			needRebootCmd: func(_ context.Context) (bool, error) { return false, nil },
+		},
+		{
+			name:          "reboot required should be yes",
+			bin:           "/bin/needs-restarting",
+			reboot:        pb.RebootRequired_REBOOT_REQUIRED_YES,
+			needRebootCmd: func(_ context.Context) (bool, error) { return true, nil },
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			saveNeedRebootRunCmd := needRebootRunCmd
+			saveNeedsRestartingBin := NeedsRestartingBin
+
+			needRebootRunCmd = tc.needRebootCmd
+			NeedsRestartingBin = tc.bin
+
+			resp, err := client.Install(ctx, req)
+			testutil.FatalOnErr("install request failed", err, t)
+
+			if resp.RebootRequired != tc.reboot {
+				t.Fatalf("reboot requirement not met, got: %s", resp.RebootRequired.String())
+			}
+
+			NeedsRestartingBin = saveNeedsRestartingBin
+			needRebootRunCmd = saveNeedRebootRunCmd
+		})
+	}
+
 }
 
 func TestRemove(t *testing.T) {

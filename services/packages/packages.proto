@@ -53,7 +53,18 @@ message InstallRequest {
   string disable_repo = 5;
 }
 
-message InstallReply { string debug_output = 1; }
+enum RebootRequired {
+    // When https://man7.org/linux/man-pages/man1/needs-restarting.1.html is unavailable,
+    // the status must be set to unknown
+    REBOOT_REQUIRED_UNKNOWN = 0;
+    REBOOT_REQUIRED_YES = 1;
+    REBOOT_REQUIRED_NO = 2;
+}
+
+message InstallReply {
+    string debug_output = 1;
+    RebootRequired reboot_required = 2;
+}
 
 message RemoveRequest {
   PackageSystem package_system = 1;

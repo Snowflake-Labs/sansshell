@@ -24,4 +24,6 @@ var (
 	YumBin string
 	// YumCleanup is the location of the yum-complete-transaction binary. On non-linux this is blank as it's likely unsupported.
 	YumCleanup string
+	//NeedsRestartingBin is the location of needs-restarting tool. Supported only on linux.
+	NeedsRestartingBin string
 )

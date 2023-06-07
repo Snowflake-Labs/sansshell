@@ -185,6 +185,15 @@ var (
 		}
 		return out, nil
 	}
+
+	needRebootRunCmd = func(ctx context.Context) (bool, error) {
+		run, err := util.RunCommand(ctx, NeedsRestartingBin, []string{"--reboothint"})
+		if err != nil {
+			return false, err
+		}
+
+		return run.ExitCode == 1, nil
+	}
 )
 
 // server is used to implement the gRPC server
@@ -234,8 +243,18 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
+	// Default to not needeing a reboot unless exit code 1 is explicitly retured
+	isRebootRequired := pb.RebootRequired_REBOOT_REQUIRED_UNKNOWN
+	if needReboot, rErr := needRebootRunCmd(ctx); rErr == nil {
+		isRebootRequired = pb.RebootRequired_REBOOT_REQUIRED_NO
+		if needReboot {
+			isRebootRequired = pb.RebootRequired_REBOOT_REQUIRED_YES
+		}
+	}
+
 	return &pb.InstallReply{
-		DebugOutput: fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
+		DebugOutput:    fmt.Sprintf("%s%s", run.Stdout.String(), run.Stderr.String()),
+		RebootRequired: isRebootRequired,
 	}, nil
 }
 
