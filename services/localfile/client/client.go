@@ -237,7 +237,7 @@ func (p *readlinkCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 type symlinkCmd struct {
 }
 
-func (*symlinkCmd) Name() string { return "readlink" }
+func (*symlinkCmd) Name() string { return "symlink" }
 func (*symlinkCmd) Synopsis() string {
 	return "Create a symbolic link."
 }
