@@ -73,7 +73,7 @@ func (a *rebootCmd) Usage() string {
 }
 
 func (a *rebootCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&a.when, "when", "now", "When to reboot a host. Valid values are 'now', 'hh:mm', '+5m'.")
+	f.StringVar(&a.when, "when", "now", "When to reboot a host. Valid values are 'now', 'hh:mm', '+5'.")
 	f.StringVar(&a.message, "message", "", "Reboot message.")
 }
 
