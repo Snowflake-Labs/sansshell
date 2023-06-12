@@ -61,6 +61,7 @@ import (
 	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
 
 	// Packages needs a real import to bind flags.
 	packages "github.com/Snowflake-Labs/sansshell/services/packages/server"
