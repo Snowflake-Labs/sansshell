@@ -48,7 +48,9 @@ func (*powerCmd) Name() string { return subPackage }
 func (p *powerCmd) Synopsis() string {
 	return client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 2)
 }
-func (*powerCmd) Usage() string { return "" }
+func (p *powerCmd) Usage() string {
+	return client.GenerateUsage(subPackage, p.Synopsis())
+}
 
 func (*powerCmd) SetFlags(f *flag.FlagSet) {}
 
@@ -64,9 +66,7 @@ type rebootCmd struct {
 
 func (*rebootCmd) Name() string { return "reboot" }
 func (*rebootCmd) Synopsis() string {
-	return `reboot:
-  Reboot a host at a predefined time.
- `
+	return `Reboot a host at a predefined time.`
 }
 func (a *rebootCmd) Usage() string {
 	return client.GenerateUsage(subPackage, a.Synopsis())
