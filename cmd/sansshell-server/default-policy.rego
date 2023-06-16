@@ -68,3 +68,7 @@ denial_hints[msg] {
 	input.message.file.filename != "/etc/hosts"
 	msg := "we only allow /etc/hosts"
 }
+
+allow {
+	input.method = "/SysInfo.SysInfo/Uptime"
+}
