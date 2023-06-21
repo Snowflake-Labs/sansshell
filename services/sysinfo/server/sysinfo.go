@@ -19,25 +19,16 @@ package server
 
 import (
 	"context"
-	"io"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"go.opentelemetry.io/otel/attribute"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
-	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 )
 
 // Metrics
@@ -51,54 +42,15 @@ type server struct {
 }
 
 func (s *server) Uptime(ctx context.Context, in *emptypb.Empty) (*pb.UptimeReply, error) {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
-	file, err := getUptimeFilePath()
+	uptime, err := getUptime()
 	if err != nil {
-		recorder.CounterOrLog(ctx, sysinfoUptimeFailureCounter, 1, attribute.String("reason", "get_uptime_file_err"))
+		recorder.CounterOrLog(ctx, sysinfoUptimeFailureCounter, 1, attribute.String("reason", "get_uptime_err"))
 		return nil, err
 	}
 
-	f, err := os.Open(file)
-	if err != nil {
-		recorder.CounterOrLog(ctx, sysinfoUptimeFailureCounter, 1, attribute.String("reason", "open_err"))
-		return nil, status.Errorf(codes.Internal, "can't open file %s: %v", file, err)
-	}
-
-	defer func() {
-		if err := f.Close(); err != nil {
-			recorder.CounterOrLog(ctx, sysinfoUptimeFailureCounter, 1, attribute.String("reason", "close_err"))
-			logger.Error(err, "file.Close()", "file", file)
-		}
-	}()
-
-	// read bytes from file and append to content
-	buf := make([]byte, util.StreamingChunkSize)
-	content := ""
-	for {
-		n, err := f.Read(buf)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			recorder.CounterOrLog(ctx, sysinfoUptimeFailureCounter, 1, attribute.String("reason", "read_err"))
-			return nil, status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
-		}
-		content += string(buf[:n])
-	}
-	// trim the string of content
-	contentTrim := strings.TrimSpace(content)
-	if len(contentTrim) == 0 {
-		return nil, status.Errorf(codes.Internal, "the file %s doesn't contain any uptime info", file)
-	}
-	words := strings.Split(contentTrim, " ")
-
-	uptimeFloat, err := strconv.ParseFloat(words[0], 64)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "cannot convert the time from string to float")
-	}
-	uptimeSecond := durationpb.New(time.Duration(uptimeFloat) * time.Second)
+	uptimeSecond := durationpb.New(uptime)
 	reply := &pb.UptimeReply{
 		UptimeSeconds: uptimeSecond,
 	}

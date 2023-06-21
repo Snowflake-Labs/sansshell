@@ -19,6 +19,21 @@ Copyright (c) 2023 Snowflake Inc. All rights reserved.
 */
 package server
 
-var getUptimeFilePath = func() (string, error) {
-	return "/proc/uptime", nil
+import (
+	"fmt"
+	"time"
+
+	"golang.org/x/sys/unix"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+var getUptime = func() (time.Duration, error) {
+	sysinfo := &unix.Sysinfo_t{}
+	if err := unix.Sysinfo(sysinfo); err != nil {
+		fmt.Println(err)
+		return 0, status.Errorf(codes.Internal, "err in get the system info from unix")
+	}
+	uptime := time.Duration(sysinfo.Uptime) * time.Second
+	return uptime, nil
 }

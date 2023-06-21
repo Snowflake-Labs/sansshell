@@ -20,10 +20,12 @@ Copyright (c) 2023 Snowflake Inc. All rights reserved.
 package server
 
 import (
+	"time"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-var getUptimeFilePath = func() (string, error) {
-	return "", status.Errorf(codes.Unimplemented, "uptime is not supported")
+var getUptime = func() (time.Duration, error) {
+	return 0, status.Errorf(codes.Unimplemented, "uptime is not supported")
 }

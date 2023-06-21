@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -72,110 +73,67 @@ func TestUptime(t *testing.T) {
 
 	client := pb.NewSysInfoClient(conn)
 
-	temp := t.TempDir()
-	f1, err := os.CreateTemp(temp, "testfile.*")
-	testutil.FatalOnErr("os.CreateTemp", err, t)
-
-	savedPath := getUptimeFilePath
-	getUptimeFilePath = func() (string, error) {
-		_, err := savedPath()
-		if err != nil {
-			return "", err
-		}
-		return f1.Name(), nil
-	}
-
+	// test the unix.Sysinfo() returns non-negative uptime
 	for _, tc := range []struct {
-		name        string
-		fileContent string
-		want        int64
-		wantErr     bool
+		name    string
+		wantErr bool
 	}{
 		{
-			name:        "read normal /proc/uptime file",
-			fileContent: "219070.82 1510410.71",
-			want:        219070,
-		},
-		{
-			name:    "Bad file - read empty proc/uptime file",
-			wantErr: true,
-		},
-		{
-			name:        "Bad file - /proc/uptime file contains bad content rather than numbers",
-			fileContent: "abc",
-			wantErr:     true,
+			name: "getUptime() function should return uptime larger than or equal to 0",
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Truncate the file before the second write
-			err = f1.Truncate(0)
-			if err != nil {
-				testutil.FatalOnErr("Failed to truncate the content of the temp file", err, t)
-			}
-
-			// Seek to the beginning of the file before the second write
-			_, err = f1.Seek(0, 0)
-			if err != nil {
-				testutil.FatalOnErr("Failed to set the offset for next read/write", err, t)
-			}
-
-			// Write content to temp file
-			_, err = f1.WriteString(tc.fileContent)
-			if err != nil {
-				testutil.FatalOnErr("Failed to write content to temp file", err, t)
-			}
-
 			resp, err := client.Uptime(ctx, &emptypb.Empty{})
-			testutil.WantErr(tc.name, err, tc.wantErr, t)
-			if tc.wantErr {
-				t.Logf("%s: %v", tc.name, err)
-				return
+			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			uptime := resp.GetUptimeSeconds().Seconds
+			if uptime <= 0 {
+				t.Fatalf("getUptime() returned an invalid uptime: %v", uptime)
 			}
+		})
+	}
 
+	savedUptime := getUptime
+	getUptime = func() (time.Duration, error) {
+		_, err := savedUptime()
+		if err != nil {
+			return 0, err
+		}
+		return 500 * time.Second, nil
+	}
+
+	for _, tc := range []struct {
+		name    string
+		want    int64
+		wantErr bool
+	}{
+		{
+			name: "get system uptime 500 seconds",
+			want: 500,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Uptime(ctx, &emptypb.Empty{})
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			fmt.Println("got: ", resp.GetUptimeSeconds(), "want: ", tc.want)
 			if got, want := resp.GetUptimeSeconds().Seconds, tc.want; got != want {
-				t.Fatalf("uptime differ. Got %q Want %q", got, want)
+				t.Fatalf("uptime differ. Got %d Want %d", got, want)
 			}
 		})
 	}
 
 	// uptime is not supported in other OS, so an error should be raised
-	getUptimeFilePath = func() (string, error) {
-		return "", status.Errorf(codes.Unimplemented, "uptime is not supported")
+	getUptime = func() (time.Duration, error) {
+		return 0, status.Errorf(codes.Unimplemented, "uptime is not supported")
 	}
+	t.Cleanup(func() { getUptime = savedUptime })
 	for _, tc := range []struct {
 		name    string
 		wantErr bool
 	}{
 		{
-			name:    "uptime action not suported in other OS except Linux",
-			wantErr: true,
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := client.Uptime(ctx, &emptypb.Empty{})
-			testutil.WantErr(tc.name, err, tc.wantErr, t)
-			if tc.wantErr {
-				t.Logf("%s: %v", tc.name, err)
-				return
-			}
-		})
-	}
-
-	// if `/proc/uptime` file doesn't exit in linux system, error should be raised
-	getUptimeFilePath = func() (string, error) {
-		return "/no-such-file-for-procuptime", nil
-	}
-	t.Cleanup(func() { getUptimeFilePath = savedPath })
-	for _, tc := range []struct {
-		name    string
-		wantErr bool
-	}{
-		{
-			name:    "/proc/uptime not exit",
+			name:    "uptime action not suported in other OS except Linux right now",
 			wantErr: true,
 		},
 	} {

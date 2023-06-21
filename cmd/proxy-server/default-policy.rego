@@ -42,6 +42,11 @@ allow {
 	input.message.filename = "/etc/hosts"
 }
 
+# Allow anyone to get system uptime on any host
+allow {
+	input.method = "/SysInfo.SysInfo/Uptime"
+}
+
 # More complex example: allow stat of any file in /etc/ for
 # hosts in the 10.0.0.0/8 subnet, for callers in the 'admin'
 # group.
