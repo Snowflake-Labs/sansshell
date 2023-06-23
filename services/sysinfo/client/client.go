@@ -99,7 +99,7 @@ func (p *uptimeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		seconds := int(d.Seconds()) % 60
 		days := hours / 24
 		hours = hours % 24
-		fmt.Fprintf(state.Out[r.Index], "System_%d (%s) up for %d days, %d hours, %d minutes, %d seconds | total %.f seconds \n", r.Index, r.Target, days, hours, minutes, seconds, d.Seconds())
+		fmt.Fprintf(state.Out[r.Index], "Target %s (%d) up for %d days, %d hours, %d minutes, %d seconds | total %.f seconds \n", r.Target, r.Index, days, hours, minutes, seconds, d.Seconds())
 	}
 	return retCode
 }
