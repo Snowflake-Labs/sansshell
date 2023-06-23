@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -128,6 +129,11 @@ test = badcoffee`,
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			// get the old file's permission and ownership
+			originfileInfo, err := os.Stat(tc.req.Location.File)
+			originFileUid := originfileInfo.Sys().(*syscall.Stat_t).Uid
+			originFileGid := originfileInfo.Sys().(*syscall.Stat_t).Gid
+
 			resp, err := client.Write(ctx, tc.req)
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			got, err := os.ReadFile(name)
@@ -135,6 +141,17 @@ test = badcoffee`,
 			sGot := strings.TrimSpace(string(got))
 			if sGot != tc.expected {
 				t.Errorf("expected: %q, got: %q", tc.expected, sGot)
+			}
+			// check the new file's permission and ownership
+			gotFileInfo, err := os.Stat(tc.req.Location.File)
+			if gotFileInfo.Mode() != originfileInfo.Mode() {
+				t.Errorf("expected file mode: %q, got: %q", originfileInfo.Mode(), gotFileInfo.Mode())
+			}
+			if gotFileInfo.Sys().(*syscall.Stat_t).Uid != originFileUid {
+				t.Errorf("expected file owner - user id: %q, got: %q", originFileUid, gotFileInfo.Sys().(*syscall.Stat_t).Uid)
+			}
+			if gotFileInfo.Sys().(*syscall.Stat_t).Gid != originFileGid {
+				t.Errorf("expected file group - group id: %q, got: %q", originFileGid, gotFileInfo.Sys().(*syscall.Stat_t).Gid)
 			}
 		})
 	}

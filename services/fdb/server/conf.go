@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"os"
+	"syscall"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -124,6 +125,22 @@ func atomicSaveTo(f *ini.File, filename string) error {
 	defer os.Remove(tfilename)
 
 	if err = f.SaveTo(tfilename); err != nil {
+		return err
+	}
+
+	originFileInfo, err := os.Stat(filename)
+	if err != nil {
+		return err
+	}
+
+	originUid := originFileInfo.Sys().(*syscall.Stat_t).Uid
+	originGid := originFileInfo.Sys().(*syscall.Stat_t).Gid
+
+	if err = os.Chmod(tfilename, originFileInfo.Mode()); err != nil {
+		return err
+	}
+
+	if err = os.Chown(tfilename, int(originUid), int(originGid)); err != nil {
 		return err
 	}
 
