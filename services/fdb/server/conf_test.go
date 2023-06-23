@@ -131,6 +131,7 @@ test = badcoffee`,
 		t.Run(tc.name, func(t *testing.T) {
 			// get the old file's permission and ownership
 			originfileInfo, err := os.Stat(tc.req.Location.File)
+			testutil.FatalOnErr("can't get file stat info", err, t)
 			originFileUid := originfileInfo.Sys().(*syscall.Stat_t).Uid
 			originFileGid := originfileInfo.Sys().(*syscall.Stat_t).Gid
 
@@ -144,6 +145,7 @@ test = badcoffee`,
 			}
 			// check the new file's permission and ownership
 			gotFileInfo, err := os.Stat(tc.req.Location.File)
+			testutil.FatalOnErr("can't get file stat info", err, t)
 			if gotFileInfo.Mode() != originfileInfo.Mode() {
 				t.Errorf("expected file mode: %q, got: %q", originfileInfo.Mode(), gotFileInfo.Mode())
 			}
