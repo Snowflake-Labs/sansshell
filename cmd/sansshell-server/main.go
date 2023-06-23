@@ -70,6 +70,7 @@ import (
 	// Sansshell server needs a real import to get at Version
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo/server"
 )
 
 var (
