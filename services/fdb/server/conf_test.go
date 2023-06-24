@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,6 +87,16 @@ cluster_file = /etc/foundatindb/fdb.cluster`)
 	err = f1.Close()
 	testutil.FatalOnErr("can't close tmpfile", err, t)
 
+	// assign a special user, group and permission for this file
+	originUid, originGid, originMod := 1000, 1000, int(0775)
+	if err = os.Chmod(name, fs.FileMode(originMod)); err != nil {
+		testutil.FatalOnErr("can't change mod of the tmpfile", err, t)
+	}
+
+	if err = os.Chown(name, originUid, originGid); err != nil {
+		testutil.FatalOnErr("can't change ownership of the tmpfile", err, t)
+	}
+
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
@@ -129,12 +140,6 @@ test = badcoffee`,
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// get the old file's permission and ownership
-			originfileInfo, err := os.Stat(tc.req.Location.File)
-			testutil.FatalOnErr("can't get file stat info", err, t)
-			originFileUid := originfileInfo.Sys().(*syscall.Stat_t).Uid
-			originFileGid := originfileInfo.Sys().(*syscall.Stat_t).Gid
-
 			resp, err := client.Write(ctx, tc.req)
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			got, err := os.ReadFile(name)
@@ -146,14 +151,14 @@ test = badcoffee`,
 			// check the new file's permission and ownership
 			gotFileInfo, err := os.Stat(tc.req.Location.File)
 			testutil.FatalOnErr("can't get file stat info", err, t)
-			if gotFileInfo.Mode() != originfileInfo.Mode() {
-				t.Errorf("expected file mode: %q, got: %q", originfileInfo.Mode(), gotFileInfo.Mode())
+			if gotFileInfo.Mode() != fs.FileMode(originMod) {
+				t.Errorf("expected file mode: %q, got: %q", fs.FileMode(originMod), gotFileInfo.Mode())
 			}
-			if gotFileInfo.Sys().(*syscall.Stat_t).Uid != originFileUid {
-				t.Errorf("expected file owner - user id: %q, got: %q", originFileUid, gotFileInfo.Sys().(*syscall.Stat_t).Uid)
+			if gotFileInfo.Sys().(*syscall.Stat_t).Uid != uint32(originUid) {
+				t.Errorf("expected file owner - user id: %q, got: %q", originUid, gotFileInfo.Sys().(*syscall.Stat_t).Uid)
 			}
-			if gotFileInfo.Sys().(*syscall.Stat_t).Gid != originFileGid {
-				t.Errorf("expected file group - group id: %q, got: %q", originFileGid, gotFileInfo.Sys().(*syscall.Stat_t).Gid)
+			if gotFileInfo.Sys().(*syscall.Stat_t).Gid != uint32(originGid) {
+				t.Errorf("expected file group - group id: %q, got: %q", originGid, gotFileInfo.Sys().(*syscall.Stat_t).Gid)
 			}
 		})
 	}
