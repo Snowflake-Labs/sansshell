@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
 // ReadRemoteFile is a helper function for reading a single file from a remote host
@@ -70,21 +72,16 @@ type FileConfig struct {
 // WriteRemoteFile is a helper function for writing a single file to a remote host
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
 func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, contents []byte) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("WriteRemoteFile only supports single targets")
-	}
-
-	c := pb.NewLocalFileClient(conn)
-	stream, err := c.Write(ctx)
+	c := pb.NewLocalFileClientProxy(conn)
+	stream, err := c.WriteOneMany(ctx)
 	if err != nil {
 		return fmt.Errorf("can't setup Write stream - %v", err)
 	}
 
-	// Send setup packet
-	if err := stream.Send(&pb.WriteRequest{
+	req := &pb.WriteRequest{
 		Request: &pb.WriteRequest_Description{
 			Description: &pb.FileWrite{
-				Overwrite: true,
+				Overwrite: config.Overwrite,
 				Attrs: &pb.FileAttributes{
 					Filename: config.Filename,
 					Attributes: []*pb.FileAttribute{
@@ -107,19 +104,51 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 				},
 			},
 		},
-	}); err != nil {
+	}
+
+	// Send setup packet
+	if err := stream.Send(req); err != nil {
 		return fmt.Errorf("can't send setup for writing file %s - %v", config.Filename, err)
 	}
-	// Send file
-	if err := stream.Send(&pb.WriteRequest{
-		Request: &pb.WriteRequest_Contents{
-			Contents: contents,
-		},
-	}); err != nil {
-		return fmt.Errorf("can't send contents of %s - %v", config.Filename, err)
+	// Send content in chunks
+	buf := make([]byte, util.StreamingChunkSize)
+	reader := bytes.NewBuffer(contents)
+	for {
+		n, err := reader.Read(buf)
+		if err == io.EOF {
+			break
+		}
+
+		req := &pb.WriteRequest{
+			Request: &pb.WriteRequest_Contents{
+				// Only send up to n as the last read is often a short read.
+				Contents: buf[:n],
+			},
+		}
+		if err := stream.Send(req); err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			return fmt.Errorf("failed to send file contents: %v\n", err)
+		}
 	}
-	if err := stream.CloseSend(); err != nil {
-		return fmt.Errorf("CloseSend problem writing %s - %v", config.Filename, err)
+
+	/*
+		// Send file
+		if err := stream.Send(&pb.WriteRequest{
+			Request: &pb.WriteRequest_Contents{
+				Contents: contents,
+			},
+		}); err != nil {
+			return fmt.Errorf("can't send contents of %s - %v", config.Filename, err)
+		}*/
+	resp, err := stream.CloseAndRecv()
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to close stream: %v\n", err)
+	}
+	// There are no responses to process but we do need to check for errors.
+	for _, r := range resp {
+		if r.Error != nil && r.Error != io.EOF {
+			return fmt.Errorf("target returned error: %v\n", r.Error)
+		}
 	}
 	return nil
 }
