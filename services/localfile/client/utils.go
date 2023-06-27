@@ -70,7 +70,7 @@ type FileConfig struct {
 }
 
 // WriteRemoteFile is a helper function for writing a single file to a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+// using a proxy.Conn.
 func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, contents []byte) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	stream, err := c.WriteOneMany(ctx)
@@ -131,15 +131,6 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 		}
 	}
 
-	/*
-		// Send file
-		if err := stream.Send(&pb.WriteRequest{
-			Request: &pb.WriteRequest_Contents{
-				Contents: contents,
-			},
-		}); err != nil {
-			return fmt.Errorf("can't send contents of %s - %v", config.Filename, err)
-		}*/
 	resp, err := stream.CloseAndRecv()
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("failed to close stream: %v\n", err)
