@@ -47,3 +47,4 @@ import (
 //go:generate go generate ./services/process
 //go:generate go generate ./services/sansshell
 //go:generate go generate ./services/service
+//go:generate go generate ./services/sysinfo

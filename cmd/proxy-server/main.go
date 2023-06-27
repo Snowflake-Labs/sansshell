@@ -52,6 +52,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
+	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo"
 
 	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 
