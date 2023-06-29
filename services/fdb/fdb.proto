@@ -615,3 +615,18 @@ message FDBCLIResponse {
     Log log = 2;
   }
 }
+
+service Server {
+  rpc FDBServer(FDBServerRequest) returns (FDBServerResponse) {}
+}
+
+message FDBServerRequest {
+  // Maps to -v|--version
+  google.protobuf.BoolValue version = 1;
+}
+
+message FDBServerResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
+}
