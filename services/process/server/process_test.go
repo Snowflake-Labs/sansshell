@@ -26,6 +26,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -239,6 +240,10 @@ func TestKill(t *testing.T) {
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
+
+	if runtime.GOOS == "windows" {
+		t.Skip("OS not supported")
+	}
 
 	for _, tc := range []struct {
 		name    string
@@ -589,6 +594,10 @@ func TestMemoryDump(t *testing.T) {
 	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
+
+	if runtime.GOOS == "windows" {
+		t.Skip("OS not supported")
+	}
 
 	client := pb.NewProcessClient(conn)
 

@@ -1,5 +1,4 @@
-//go:build !(linux || darwin)
-// +build !linux,!darwin
+//go:build unix
 
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
@@ -17,21 +16,17 @@
    under the License.
 */
 
-package server
+package util
 
-// OS specific locations for finding test data.
-// In this case all blank so tests skip.
-var (
-	testdataPsTextProto = ""
-	testdataPs          = ""
-	badFilesPs          = []string{}
-
-	testdataPstackNoThreads              = ""
-	testdataPstackNoThreadsTextProto     = ""
-	testdataPstackThreads                = ""
-	testdataPstackThreadsTextProto       = ""
-	testdataPstackThreadsBadThread       = ""
-	testdataPstackThreadsBadThreadNumber = ""
-	testdataPstackThreadsBadThreadID     = ""
-	testdataPstackThreadsBadLwp          = ""
+import (
+	"syscall"
 )
+
+func getSysProcAttr(options *cmdOptions) (*syscall.SysProcAttr, error) {
+	return &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: options.uid,
+			Gid: options.gid,
+		},
+	}, nil
+}

@@ -177,8 +177,12 @@ func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty,
 		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be positive and non-zero")
 	}
-	err := syscall.Kill(int(req.Pid), syscall.Signal(req.Signal))
+	process, err := os.FindProcess(int(req.Pid))
 	if err != nil {
+		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "kill_err"))
+		return nil, err
+	}
+	if err := process.Signal(syscall.Signal(req.Signal)); err != nil {
 		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "kill_err"))
 		return nil, status.Errorf(codes.Internal, "kill returned error: %v", err)
 	}

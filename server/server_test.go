@@ -47,12 +47,13 @@ package sansshell.authz
 default allow = false
 
 allow {
-    input.type = "LocalFile.ReadActionRequest"
-		input.message.file.filename = "/etc/hosts"
-}
-allow {
-    input.type = "LocalFile.ReadActionRequest"
-		input.message.file.filename = "/no-such-filename-for-sansshell-unittest"
+	input.type = "LocalFile.ReadActionRequest"
+	input.message.file.filename in [
+		"/etc/hosts",
+		"/no-such-filename-for-sansshell-unittest",
+		"C:\\Windows\\win.ini",
+		"C:\\no-such-filename-for-sansshell-unittest",
+	]
 }
 `
 )
@@ -138,23 +139,7 @@ func TestRead(t *testing.T) {
 	testutil.FatalOnErr("Failed to dial bufnet", err, t)
 	t.Cleanup(func() { conn.Close() })
 
-	for _, tc := range []struct {
-		filename string
-		err      string
-	}{
-		{
-			filename: "/etc/hosts",
-			err:      "",
-		},
-		{
-			filename: "/no-such-filename-for-sansshell-unittest",
-			err:      "no such file or directory",
-		},
-		{
-			filename: "/permission-denied-filename-for-sansshell-unittest",
-			err:      "PermissionDenied",
-		},
-	} {
+	for _, tc := range readFileTestCases {
 		tc := tc
 		t.Run(tc.filename, func(t *testing.T) {
 			client := lfpb.NewLocalFileClient(conn)

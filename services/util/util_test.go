@@ -20,12 +20,17 @@ import (
 	"bytes"
 	"context"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 func TestRunCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Test has unix-specific assumptions")
+	}
+
 	for _, tc := range []struct {
 		name              string
 		bin               string
@@ -203,6 +208,10 @@ func TestLimitedBuffer(t *testing.T) {
 	}
 }
 func TestValidPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Test has unix-specific assumptions")
+	}
+
 	for _, tc := range []struct {
 		name    string
 		path    string

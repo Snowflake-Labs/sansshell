@@ -1,5 +1,5 @@
-//go:build !(linux || darwin)
-// +build !linux,!darwin
+//go:build !(linux || darwin || windows)
+// +build !linux,!darwin,!windows
 
 /* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
@@ -32,9 +32,11 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 )
 
-// osStat is the platform agnostic version which uses basic os.Stat.
+var osStat = defaultOsStat
+
+// defaultOsStat is the platform agnostic version which uses basic os.Stat.
 // As a result immutable bits cannot be returned.
-func osStat(path string, useLstat bool) (*pb.StatReply, error) {
+func defaultOsStat(path string, useLstat bool) (*pb.StatReply, error) {
 	var stat fs.FileInfo
 	var err error
 	if useLstat {
@@ -83,14 +85,14 @@ func dataPrep(f *os.File) (interface{}, func(), error) {
 // stream and then return no matter what (assuming the file was already
 // at EOF).
 func dataReady(_ interface{}, stream pb.LocalFile_ReadServer) error {
-	// We sleep for READ_TIMEOUT_SEC between calls as there's no good
+	// We sleep for ReadTimeout between calls as there's no good
 	// way to poll on a file. Once it reaches EOF it's always readable
 	// (you just get EOF). We have to poll like this so we can check
 	// the context state and return if it's canclled.
 	if stream.Context().Err() != nil {
 		return stream.Context().Err()
 	}
-	time.Sleep(READ_TIMEOUT_SEC * time.Second)
+	time.Sleep(ReadTimeout * time.Second)
 	// Time to try again.
 	return nil
 }

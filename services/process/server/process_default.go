@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/process"
 )
 
 var (
@@ -35,11 +37,11 @@ var (
 	// GcoreBin is the location of the gcore binary. On non linux/OS/X this isn't supported.
 	GcoreBin = ""
 
-	psOptions = func() ([]string, error) {
-		return nil, fmt.Errorf("No support for OS %s", runtime.GOOS)
+	psOptions = func() []string {
+		return nil
 	}
 )
 
-func parser(r io.Reader) (map[int64]*ProcessEntry, error) {
+func parser(r io.Reader) (map[int64]*pb.ProcessEntry, error) {
 	return nil, fmt.Errorf("No support for OS %s", runtime.GOOS)
 }
