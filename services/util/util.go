@@ -92,6 +92,22 @@ func OptionsEqual(a, b Option) bool {
 	return cmp.Equal(aCmdOptions, bCmdOptions, cmp.AllowUnexported(cmdOptions{}))
 }
 
+// OptionsEqual returns true if the results of applying all elements of both Option slices on
+// an empty cmdOptions are equal
+func OptionSlicesEqual(a, b []Option) bool {
+	aCmdOptions := &cmdOptions{}
+	bCmdOptions := &cmdOptions{}
+
+	for _, opt := range a {
+		opt.apply(aCmdOptions)
+	}
+	for _, opt := range b {
+		opt.apply(bCmdOptions)
+	}
+
+	return cmp.Equal(aCmdOptions, bCmdOptions, cmp.AllowUnexported(cmdOptions{}))
+}
+
 // FailOnStderr is an option where the command will return an error if any output appears on stderr
 // regardless of exit code. As we're often parsing the text output of specific commands as root
 // this is a sanity check we're getting expected output. i.e. ps never returns anything on stderr
