@@ -63,7 +63,7 @@ type CmdOptions struct {
 	failOnStderr bool
 	stdoutMax    uint
 	stderrMax    uint
-	env          []string
+	Env          []string
 	uid          uint32
 	gid          uint32
 }
@@ -126,7 +126,7 @@ func CommandGroup(gid uint32) Option {
 // evar should be of the form foo=bar
 func EnvVar(evar string) Option {
 	return optionfunc(func(o *CmdOptions) {
-		o.env = append(o.env, evar)
+		o.Env = append(o.Env, evar)
 	})
 }
 
@@ -238,7 +238,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	// Set to an empty slice to get an empty environment. Nil means inherit.
 	cmd.Env = []string{}
 	// Now append any we received.
-	cmd.Env = append(cmd.Env, options.env...)
+	cmd.Env = append(cmd.Env, options.Env...)
 
 	// Set uid/gid if needed for the sub-process to run under.
 	// Only do this if it's different than our current ones since
