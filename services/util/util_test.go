@@ -337,3 +337,88 @@ func TestIntSliceFlag(t *testing.T) {
 		t.Fatal("didn't get error from bad flag set as we should")
 	}
 }
+
+func TestOptionsSliceEqual(t *testing.T) {
+	for _, tc := range []struct {
+		optionA        []Option
+		optionB        []Option
+		expectedResult bool
+		name           string
+	}{
+		{
+			name:           "multiple EnvVars",
+			optionA:        []Option{EnvVar("A=A"), EnvVar("B=B")},
+			optionB:        []Option{EnvVar("A=A"), EnvVar("B=B")},
+			expectedResult: true,
+		},
+		{
+			name:           "should be true because FailOnStdErr is idempotent",
+			optionA:        []Option{FailOnStderr(), FailOnStderr()},
+			optionB:        []Option{FailOnStderr()},
+			expectedResult: true,
+		},
+		{
+			name:           "Ordering of idempotent funcs shouldn't matter",
+			optionA:        []Option{StdoutMax(3), EnvVar("A=A")},
+			optionB:        []Option{EnvVar("A=A"), StdoutMax(3)},
+			expectedResult: true,
+		},
+		{
+			name:           "EnvVar ordering does matter",
+			optionA:        []Option{EnvVar("A=A"), EnvVar("B=B")},
+			optionB:        []Option{EnvVar("B=B"), EnvVar("A=A")},
+			expectedResult: false,
+		},
+		{
+			optionA:        []Option{CommandGroup(1)},
+			optionB:        []Option{CommandUser(2), EnvVar("FOO=BAR")},
+			expectedResult: false,
+		},
+	} {
+		tc := tc
+		result := OptionSlicesEqual(tc.optionA, tc.optionB)
+		if result != tc.expectedResult {
+			t.Fatalf("test %s failed: expected %v, got %v", tc.name, tc.expectedResult, result)
+		}
+	}
+}
+
+func TestOptionsEqual(t *testing.T) {
+	for _, tc := range []struct {
+		optionA        Option
+		optionB        Option
+		expectedResult bool
+	}{
+		{
+			optionA:        EnvVar(""),
+			optionB:        EnvVar(""),
+			expectedResult: true,
+		},
+		{
+			optionA:        FailOnStderr(),
+			optionB:        FailOnStderr(),
+			expectedResult: true,
+		},
+		{
+			optionA:        EnvVar("SANSSHELL_PROXY=sansshell.com"),
+			optionB:        EnvVar("SANSSHELL_PROXY=sansshell.com"),
+			expectedResult: true,
+		},
+		{
+			optionA:        EnvVar(""),
+			optionB:        EnvVar("FOO=false"),
+			expectedResult: false,
+		},
+		{
+			optionA:        CommandGroup(1),
+			optionB:        CommandUser(2),
+			expectedResult: false,
+		},
+	} {
+		tc := tc
+		result := OptionsEqual(tc.optionA, tc.optionB)
+		if result != tc.expectedResult {
+			t.Fatalf("expected %v, got %v", tc.expectedResult, result)
+		}
+	}
+}
