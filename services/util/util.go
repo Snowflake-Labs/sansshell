@@ -59,7 +59,7 @@ type CommandRun struct {
 }
 
 // A builder pattern for Options so it's easy to add various ones (such as dropping permissions, etc).
-type cmdOptions struct {
+type CmdOptions struct {
 	failOnStderr bool
 	stdoutMax    uint
 	stderrMax    uint
@@ -71,12 +71,12 @@ type cmdOptions struct {
 // Option will run the apply operation to change required checking/state
 // before executing RunCommand.
 type Option interface {
-	apply(*cmdOptions)
+	apply(*CmdOptions)
 }
 
-type optionfunc func(*cmdOptions)
+type optionfunc func(*CmdOptions)
 
-func (f optionfunc) apply(opts *cmdOptions) {
+func (f optionfunc) apply(opts *CmdOptions) {
 	f(opts)
 }
 
@@ -86,7 +86,7 @@ func (f optionfunc) apply(opts *cmdOptions) {
 // so if some run does that's suspect. Up to callers to decide as some tools (yum...) like to emit
 // stderr as debugging as they run.
 func FailOnStderr() Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.failOnStderr = true
 	})
 }
@@ -94,7 +94,7 @@ func FailOnStderr() Option {
 // StdoutMax is an option where the command run will limit output buffered from stdout to this
 // many bytes before truncating.
 func StdoutMax(max uint) Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.stdoutMax = max
 	})
 
@@ -103,21 +103,21 @@ func StdoutMax(max uint) Option {
 // StderrMax is an option where the command run will limit output buffered from stdout to this
 // many bytes before truncating.
 func StderrMax(max uint) Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.stderrMax = max
 	})
 }
 
 // CommandUser is an option which sets the uid for the Command to run as.
 func CommandUser(uid uint32) Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.uid = uid
 	})
 }
 
 // CommandGroup is an option which sets the gid for the Command to run as.
 func CommandGroup(gid uint32) Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.gid = gid
 	})
 }
@@ -125,7 +125,7 @@ func CommandGroup(gid uint32) Option {
 // EnvVar is an option which sets an environment variable for the sub-processes.
 // evar should be of the form foo=bar
 func EnvVar(evar string) Option {
-	return optionfunc(func(o *cmdOptions) {
+	return optionfunc(func(o *CmdOptions) {
 		o.env = append(o.env, evar)
 	})
 }
@@ -215,7 +215,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 
 	euid := uint32(os.Geteuid())
 	gid := uint32(os.Getgid())
-	options := &cmdOptions{
+	options := &CmdOptions{
 		stdoutMax: DefRunBufLimit,
 		stderrMax: DefRunBufLimit,
 		uid:       euid,
