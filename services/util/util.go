@@ -30,6 +30,7 @@ import (
 	"syscall"
 
 	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -78,6 +79,17 @@ type optionfunc func(*cmdOptions)
 
 func (f optionfunc) apply(opts *cmdOptions) {
 	f(opts)
+}
+
+// OptionsEqual returns true if the results of applying both Options on
+// an empty cmdOptions are equal
+func OptionsEqual(a, b Option) bool {
+	aCmdOptions := &cmdOptions{}
+	bCmdOptions := &cmdOptions{}
+	a.apply(aCmdOptions)
+	b.apply(bCmdOptions)
+
+	return cmp.Equal(aCmdOptions, bCmdOptions)
 }
 
 // FailOnStderr is an option where the command will return an error if any output appears on stderr
