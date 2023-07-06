@@ -58,6 +58,7 @@ import (
 	ansible "github.com/Snowflake-Labs/sansshell/services/ansible/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc/server"
 
 	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"

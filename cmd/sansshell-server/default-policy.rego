@@ -16,6 +16,10 @@ allow {
 }
 
 allow {
+	input.method = "/HTTPOverRPC.HTTPOverRPC/Localhost"
+}
+
+allow {
 	input.type = "LocalFile.ReadActionRequest"
 	input.message.file.filename = "/etc/hosts"
 }
