@@ -89,7 +89,7 @@ func OptionsEqual(a, b Option) bool {
 	a.apply(aCmdOptions)
 	b.apply(bCmdOptions)
 
-	return cmp.Equal(aCmdOptions, bCmdOptions)
+	return cmp.Equal(aCmdOptions, bCmdOptions, cmp.AllowUnexported(cmdOptions{}))
 }
 
 // FailOnStderr is an option where the command will return an error if any output appears on stderr
