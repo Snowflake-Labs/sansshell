@@ -81,8 +81,7 @@ func (f optionfunc) apply(opts *cmdOptions) {
 	f(opts)
 }
 
-// OptionsEqual returns true if the results of applying both Options on
-// an empty cmdOptions are equal
+// OptionsEqual returns true if the results of applying both Options are equal
 func OptionsEqual(a, b Option) bool {
 	aCmdOptions := &cmdOptions{}
 	bCmdOptions := &cmdOptions{}
@@ -92,8 +91,7 @@ func OptionsEqual(a, b Option) bool {
 	return cmp.Equal(aCmdOptions, bCmdOptions, cmp.AllowUnexported(cmdOptions{}))
 }
 
-// OptionsEqual returns true if the results of applying all elements of both Option slices on
-// an empty cmdOptions are equal
+// OptionsEqual returns true if the results of applying all elements of both Option slices are equal
 func OptionSlicesEqual(a, b []Option) bool {
 	aCmdOptions := &cmdOptions{}
 	bCmdOptions := &cmdOptions{}
