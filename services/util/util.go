@@ -71,12 +71,12 @@ type CmdOptions struct {
 // Option will run the apply operation to change required checking/state
 // before executing RunCommand.
 type Option interface {
-	apply(*CmdOptions)
+	Apply(*CmdOptions)
 }
 
 type optionfunc func(*CmdOptions)
 
-func (f optionfunc) apply(opts *CmdOptions) {
+func (f optionfunc) Apply(opts *CmdOptions) {
 	f(opts)
 }
 
@@ -222,7 +222,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		gid:       gid,
 	}
 	for _, opt := range opts {
-		opt.apply(options)
+		opt.Apply(options)
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
