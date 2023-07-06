@@ -203,7 +203,7 @@ func (*getCmd) Usage() string {
 }
 
 func (g *getCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&g.method, "method", "GET", "Address to listen on, defaults to a random localhost port")
+	f.StringVar(&g.method, "method", "GET", "Method to use in the HTTP request")
 	f.Var(&g.headers, "header", "Header to send in the request, may be specified multiple times.")
 	f.StringVar(&g.body, "body", "", "Body to send in request")
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")

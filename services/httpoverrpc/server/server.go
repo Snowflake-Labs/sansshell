@@ -61,6 +61,7 @@ func (s *server) Localhost(ctx context.Context, req *pb.LocalhostHTTPRequest) (*
 	if err != nil {
 		return nil, err
 	}
+	defer httpResp.Body.Close()
 	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, err
