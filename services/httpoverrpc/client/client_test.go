@@ -74,7 +74,9 @@ func TestProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Parse([]string{port})
+	if err := f.Parse([]string{port}); err != nil {
+		t.Fatal(err)
+	}
 	reader, writer := io.Pipe()
 	go p.Execute(ctx, f, &util.ExecuteState{
 		Conn: conn,
@@ -135,7 +137,9 @@ func TestGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.Parse([]string{port, "/"})
+	if err := f.Parse([]string{port, "/"}); err != nil {
+		t.Fatal(err)
+	}
 	reader, writer := io.Pipe()
 	go g.Execute(ctx, f, &util.ExecuteState{
 		Conn: conn,

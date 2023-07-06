@@ -101,7 +101,7 @@ func WithoutCancel(ctx context.Context) context.Context {
 func sendError(resp http.ResponseWriter, code int, err error) {
 	resp.WriteHeader(code)
 	if _, err := resp.Write([]byte(err.Error())); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
 	}
 }
 
@@ -156,7 +156,9 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			}
 		}
 		httpResp.WriteHeader(int(resp.StatusCode))
-		httpResp.Write(resp.Body)
+		if _, err := httpResp.Write(resp.Body); err != nil {
+			fmt.Fprintln(os.Stdout, err)
+		}
 	})
 	l, err := net.Listen("tcp4", p.listenAddr)
 	if err != nil {
