@@ -18,8 +18,11 @@ package server
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"syscall"
 
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -34,6 +37,13 @@ import (
 
 type cserver struct {
 }
+
+var (
+	chown     = unix.Chown
+	getUidGid = func(file fs.FileInfo) (uint32, uint32) {
+		return file.Sys().(*syscall.Stat_t).Uid, file.Sys().(*syscall.Stat_t).Gid
+	}
+)
 
 func (s *cserver) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfResponse, error) {
 	cfg, err := ini.Load(req.Location.File)
@@ -124,6 +134,21 @@ func atomicSaveTo(f *ini.File, filename string) error {
 	defer os.Remove(tfilename)
 
 	if err = f.SaveTo(tfilename); err != nil {
+		return err
+	}
+
+	originFileInfo, err := os.Stat(filename)
+	if err != nil {
+		return err
+	}
+
+	originUid, originGid := getUidGid(originFileInfo)
+
+	if err = unix.Chmod(tfilename, uint32(originFileInfo.Mode().Perm())); err != nil {
+		return err
+	}
+
+	if err = chown(tfilename, int(originUid), int(originGid)); err != nil {
 		return err
 	}
 

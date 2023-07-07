@@ -19,11 +19,14 @@ package server
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
+	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -85,10 +88,39 @@ cluster_file = /etc/foundatindb/fdb.cluster`)
 	err = f1.Close()
 	testutil.FatalOnErr("can't close tmpfile", err, t)
 
+	// assign a special user, group and permission for this file
+	// we just assume chown has been used and the current info for the file is listed
+	originUid, originGid, originMod := 1000, 1000, int(0775)
+	// the real uid and gid for the file
+	setUID, setGID := 0, 0
+
+	// mock the chown function to assign uid and gid to the file
+	savedChown := chown
+	chown = func(path string, uid int, gid int) error {
+		setUID = uid
+		setGID = gid
+		return nil
+	}
+
+	// mock the getUidGid function to make it return the current uid and gid of the file
+	savedGetUidGid := getUidGid
+	getUidGid = func(file fs.FileInfo) (uint32, uint32) {
+		return uint32(originUid), uint32(originGid)
+	}
+
+	// change the mod of the file (since it does not require root priviledges)
+	if err = unix.Chmod(name, uint32(fs.FileMode(originMod).Perm())); err != nil {
+		testutil.FatalOnErr("can't change mod of the tmpfile", err, t)
+	}
+
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
-	t.Cleanup(func() { conn.Close() })
+	t.Cleanup(func() {
+		conn.Close()
+		chown = savedChown
+		getUidGid = savedGetUidGid
+	})
 
 	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
@@ -135,6 +167,18 @@ test = badcoffee`,
 			sGot := strings.TrimSpace(string(got))
 			if sGot != tc.expected {
 				t.Errorf("expected: %q, got: %q", tc.expected, sGot)
+			}
+			// check the new file's permission and ownership
+			gotFileInfo, err := os.Stat(tc.req.Location.File)
+			testutil.FatalOnErr("can't get file stat info", err, t)
+			if gotFileInfo.Mode() != fs.FileMode(originMod) {
+				t.Errorf("expected file mode: %q, got: %q", fs.FileMode(originMod), gotFileInfo.Mode())
+			}
+			if uint32(setUID) != uint32(originUid) {
+				t.Errorf("expected file owner - user id: %d, got: %d", originUid, gotFileInfo.Sys().(*syscall.Stat_t).Uid)
+			}
+			if uint32(setGID) != uint32(originGid) {
+				t.Errorf("expected file group - group id: %d, got: %d", originGid, gotFileInfo.Sys().(*syscall.Stat_t).Gid)
 			}
 		})
 	}
