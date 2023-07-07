@@ -673,6 +673,14 @@ func TestSearch(t *testing.T) {
 
 	client := pb.NewPackagesClient(conn)
 	testPackageName := "firefox"
+	firefoxInstalled := "firefox-0:102.10.0-1.el7.centos.aarch64"
+	firefoxLatest := "firefox-0:102.12.0-1.el7.centos.aarch64"
+
+	savedRepoqueryBin := RepoqueryBin
+	t.Cleanup(func() {
+		RepoqueryBin = savedRepoqueryBin
+	})
+	RepoqueryBin = "repoquery"
 
 	for _, tc := range []struct {
 		name                 string
@@ -680,6 +688,8 @@ func TestSearch(t *testing.T) {
 		wantInstalledPackage string
 		wantLatestPackage    string
 		wantError            bool
+		wantCmdLineInstall   string
+		wantCmdLineLatest    string
 	}{
 		{
 			name:      "--name should always be provided",
@@ -702,8 +712,10 @@ func TestSearch(t *testing.T) {
 				Installed: true,
 				Latest:    true,
 			},
-			wantInstalledPackage: "firefox-0:102.10.0-1.el7.centos.aarch64",
-			wantLatestPackage:    "firefox-0:102.12.0-1.el7.centos.aarch64",
+			wantInstalledPackage: firefoxInstalled,
+			wantLatestPackage:    firefoxLatest,
+			wantCmdLineInstall:   fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+			wantCmdLineLatest:    fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --installed flag",
@@ -711,7 +723,8 @@ func TestSearch(t *testing.T) {
 				Name:      testPackageName,
 				Installed: true,
 			},
-			wantInstalledPackage: "firefox-0:102.10.0-1.el7.centos.aarch64",
+			wantInstalledPackage: firefoxInstalled,
+			wantCmdLineInstall:   fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --latest flag",
@@ -719,23 +732,49 @@ func TestSearch(t *testing.T) {
 				Name:   testPackageName,
 				Latest: true,
 			},
-			wantLatestPackage: "firefox-0:102.12.0-1.el7.centos.aarch64",
+			wantLatestPackage: firefoxLatest,
+			wantCmdLineLatest: fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName),
+		},
+		{
+			name: "specify --latest flag and the package not found in yum repos expect empty",
+			req: &pb.SearchRequest{
+				Name:   testPackageName + "9999",
+				Latest: true,
+			},
+			wantLatestPackage: "",
+			wantCmdLineLatest: fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName+"9999"),
+		},
+		{
+			name: "specify --current flag and the package not found in current system expect empty",
+			req: &pb.SearchRequest{
+				Name:      testPackageName + "9999",
+				Installed: true,
+			},
+			wantLatestPackage:  "",
+			wantCmdLineInstall: fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName+"9999"),
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			// mock the repoquery command
 			savedGenerateSearch := generateSearch
-			// var cmdLine string
+			// cmdLineInstall and cmdLineLatest for verify
+			var cmdLineInstall, cmdLineLatest string
+
 			generateSearch = func(p *pb.SearchRequest, searchInstall bool) ([]string, error) {
 				// Capture what was generated so we can validate it.
-				_, err := savedGenerateSearch(p, searchInstall)
+				out, err := savedGenerateSearch(p, searchInstall)
 				if err != nil {
 					return nil, err
 				}
-				// cmdLine = strings.Join(out, " ")
-				var testdataInput = tc.wantLatestPackage
+				cmdLine := strings.Join(out, " ")
+				var testdataInput string
 				if searchInstall {
 					testdataInput = tc.wantInstalledPackage
+					cmdLineInstall = cmdLine
+				} else {
+					testdataInput = tc.wantLatestPackage
+					cmdLineLatest = cmdLine
 				}
 				return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 			}
@@ -758,9 +797,19 @@ func TestSearch(t *testing.T) {
 				t.Fatalf("search package latest differ. Got %q Want %q", got, want)
 			}
 
+			if tc.req.Installed {
+				if got, want := cmdLineInstall, tc.wantCmdLineInstall; got != want {
+					t.Fatalf("command lines differ. Got %q Want %q", got, want)
+				}
+			}
+
+			if tc.req.Latest {
+				if got, want := cmdLineLatest, tc.wantCmdLineLatest; got != want {
+					t.Fatalf("command lines differ. Got %q Want %q", got, want)
+				}
+			}
 		})
 	}
-
 }
 
 func TestRepoList(t *testing.T) {
