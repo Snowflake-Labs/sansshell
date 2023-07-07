@@ -85,6 +85,11 @@ type prefixWriter struct {
 }
 
 func (p *prefixWriter) Write(b []byte) (n int, err error) {
+	// Exit early if we're not writing any bytes
+	if len(b) == 0 {
+		return 0, nil
+	}
+
 	// Keep track of the size of the incoming buf as we'll print more
 	// but clients want to know we wrote what they asked for.
 	tot := len(b)
