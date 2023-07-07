@@ -25,6 +25,7 @@ service Packages {
   rpc Install(InstallRequest) returns (InstallReply) {}
   rpc Remove(RemoveRequest) returns (RemoveReply) {}
   rpc Update(UpdateRequest) returns (UpdateReply) {}
+  rpc Search(SearchRequest) returns (SearchReply) {}
   rpc ListInstalled(ListInstalledRequest) returns (ListInstalledReply) {}
   rpc RepoList(RepoListRequest) returns (RepoListReply) {}
   // Cleanup executes any package system specific cleanup such as
@@ -91,6 +92,19 @@ message UpdateRequest {
 }
 
 message UpdateReply { string debug_output = 1; }
+
+
+message SearchRequest { 
+  PackageSystem package_system = 1; 
+  string name = 2;
+  bool installed = 3;
+  bool latest = 4;
+}
+
+message SearchReply {
+  string installed_package = 1;
+  string latest_package = 2;
+}
 
 message ListInstalledRequest { PackageSystem package_system = 1; }
 

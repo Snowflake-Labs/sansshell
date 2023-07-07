@@ -26,4 +26,6 @@ var (
 	YumCleanup string
 	//NeedsRestartingBin is the location of needs-restarting tool. Supported only on linux.
 	NeedsRestartingBin string
+	// RepoqueryBin is the location of the repoquery binary. On non-linux this is blank as it's likely unsupported.
+	RepoqueryBin string
 )

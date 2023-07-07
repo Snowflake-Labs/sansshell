@@ -664,6 +664,105 @@ func TestListInstalled(t *testing.T) {
 	}
 }
 
+func TestSearch(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewPackagesClient(conn)
+	testPackageName := "firefox"
+
+	for _, tc := range []struct {
+		name                 string
+		req                  *pb.SearchRequest
+		wantInstalledPackage string
+		wantLatestPackage    string
+		wantError            bool
+	}{
+		{
+			name:      "--name should always be provided",
+			req:       &pb.SearchRequest{},
+			wantError: true,
+		},
+		{
+			name: "specify a bad package system and get an error.",
+			req: &pb.SearchRequest{
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
+				Name:          testPackageName,
+				Installed:     true,
+			},
+			wantError: true,
+		},
+		{
+			name: "specify --installed and --latest flags",
+			req: &pb.SearchRequest{
+				Name:      testPackageName,
+				Installed: true,
+				Latest:    true,
+			},
+			wantInstalledPackage: "firefox-0:102.10.0-1.el7.centos.aarch64",
+			wantLatestPackage:    "firefox-0:102.12.0-1.el7.centos.aarch64",
+		},
+		{
+			name: "specify --installed flag",
+			req: &pb.SearchRequest{
+				Name:      testPackageName,
+				Installed: true,
+			},
+			wantInstalledPackage: "firefox-0:102.10.0-1.el7.centos.aarch64",
+		},
+		{
+			name: "specify --latest flag",
+			req: &pb.SearchRequest{
+				Name:   testPackageName,
+				Latest: true,
+			},
+			wantLatestPackage: "firefox-0:102.12.0-1.el7.centos.aarch64",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			savedGenerateSearch := generateSearch
+			// var cmdLine string
+			generateSearch = func(p *pb.SearchRequest, searchInstall bool) ([]string, error) {
+				// Capture what was generated so we can validate it.
+				_, err := savedGenerateSearch(p, searchInstall)
+				if err != nil {
+					return nil, err
+				}
+				// cmdLine = strings.Join(out, " ")
+				var testdataInput = tc.wantLatestPackage
+				if searchInstall {
+					testdataInput = tc.wantInstalledPackage
+				}
+				return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
+			}
+			t.Cleanup(func() {
+				generateSearch = savedGenerateSearch
+			})
+
+			resp, err := client.Search(ctx, tc.req)
+
+			if tc.wantError {
+				testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+				return
+			}
+
+			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			if got, want := resp.InstalledPackage, tc.wantInstalledPackage; got != want {
+				t.Fatalf("search package installed differ. Got %q Want %q", got, want)
+			}
+			if got, want := resp.LatestPackage, tc.wantLatestPackage; got != want {
+				t.Fatalf("search package latest differ. Got %q Want %q", got, want)
+			}
+
+		})
+	}
+
+}
+
 func TestRepoList(t *testing.T) {
 	var err error
 	ctx := context.Background()

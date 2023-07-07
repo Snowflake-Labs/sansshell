@@ -26,4 +26,6 @@ var (
 	YumCleanup = "/sbin/yum-complete-transaction"
 	// NeedsRestartingBin is location of the needs-restarting binary.
 	NeedsRestartingBin = "/bin/needs-restarting"
+	// RepoqueryBin is the location of the repoquery binary. Binding this to a flag is often useful.
+	RepoqueryBin = "/usr/bin/repoquery"
 )
