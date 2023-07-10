@@ -30,8 +30,8 @@ import (
 )
 
 var (
-	FDBServer string = "/usr/sbin/fdbserver" // uncomment that if fdbserver binary is in that location
-	// FDBServer string
+	// fdbserver binary location
+	FDBServer string
 	// generateFDBServerArgs exists as a var for testing purposes
 	generateFDBServerArgs = generateFDBServerArgsImpl
 )

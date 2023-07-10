@@ -58,7 +58,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 
-	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
@@ -99,6 +99,7 @@ func init() {
 	//fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
 	//*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "SOME_ENV_VAR") // To set a default
 	//flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
+	flag.StringVar(&fdbserver.FDBServer, "fdbserver", "/usr/sbin/fdbserver", "Path to fdbserver binary.")
 
 	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
 	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
