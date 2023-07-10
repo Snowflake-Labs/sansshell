@@ -3346,6 +3346,7 @@ const fdbServerPackage = "fdbserver"
 
 func (*fdbServerCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbServerPackage, f)
+	c.Register(&fdbServerVersionCmd{}, "")
 	return c
 }
 
@@ -3358,35 +3359,48 @@ func (p *fdbServerCmd) Synopsis() string {
 	return "Run a fdbserver command on the given host.\n" + client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
 func (p *fdbServerCmd) Usage() string {
-	return `fdbserver [--version|-v]
-	Run fdbserver for the given flags
+	return `fdbserver <command>
+	Run fdbserver for the given command
 ` + client.GenerateUsage(fdbServerPackage, p.Synopsis())
 }
 
 func (r *fdbServerCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBServerRequest{}
-	versionDesc := "Print FoundationDB werver version information and exit."
-	versionFunc := func(s string) error {
-		r.req.Version = &wrapperspb.BoolValue{
-			Value: true,
-		}
-		return nil
-	}
-	f.Var(funcValue(versionFunc), "v", versionDesc)
-	f.Var(funcValue(versionFunc), "version", versionDesc)
 }
 
 func (p *fdbServerCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	c := p.GetSubpackage(f)
-	// If it's just asking for flags or commands run those and exit. Help is special since we have that
-	// as its own subcommand which executes remotely.
-	if f.Arg(0) == "flags" || f.Arg(0) == "commands" || f.Arg(0) == "help" {
-		return c.Execute(ctx, args...)
-	}
+	args = append(args, p.req)
+	return c.Execute(ctx, args...)
+}
 
+type fdbServerVersionCmd struct {
+	req *pb.FDBServerCommand
+}
+
+func (*fdbServerVersionCmd) Name() string { return "version" }
+
+func (p *fdbServerVersionCmd) Synopsis() string {
+	return "Lookup the fdbserver version"
+}
+
+func (p *fdbServerVersionCmd) Usage() string {
+	return "version\n"
+}
+
+func (r *fdbServerVersionCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBServerCommand{}
+}
+func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
+	req := args[1].(*pb.FDBServerRequest)
 	client := pb.NewServerClientProxy(state.Conn)
-	resp, err := client.FDBServerOneMany(ctx, p.req)
+
+	req.Commands = append(req.Commands,
+		&pb.FDBServerCommand{
+			Command: &pb.FDBServerCommand_Version{},
+		})
+	resp, err := client.FDBServerOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
@@ -3397,20 +3411,19 @@ func (p *fdbServerCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 	retCode := subcommands.ExitSuccess
 
 	// process version output
-	if p.req.GetVersion() != nil && p.req.GetVersion().GetValue() {
-		for r := range resp {
-			if r.Error != nil {
-				fmt.Fprintf(state.Err[r.Index], "fdb server check version error: %v\n", r.Error)
-				retCode = subcommands.ExitFailure
-			}
-			// split results to multiple lines and ident, finally combine them
-			multiLines := strings.Split(string(r.Resp.Stdout), "\n")
-			for i, line := range multiLines {
-				multiLines[i] = fmt.Sprintf("    %s", line)
-			}
-			combinedLines := strings.Join(multiLines, "\n")
-			fmt.Fprintf(state.Out[r.Index], "Target %s(%d) FDB server version:\n%s\n", r.Target, r.Index, combinedLines)
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdb server check version error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
 		}
+		// split results to multiple lines and ident, finally combine them
+		multiLines := strings.Split(string(r.Resp.Stdout), "\n")
+		for i, line := range multiLines {
+			multiLines[i] = fmt.Sprintf("    %s", line)
+		}
+		combinedLines := strings.Join(multiLines, "\n")
+		fmt.Fprintf(state.Out[r.Index], "Target %s(%d) FDB server version:\n%s\n", r.Target, r.Index, combinedLines)
 	}
 
 	return retCode

@@ -621,9 +621,22 @@ service Server {
 }
 
 message FDBServerRequest {
-  // Maps to -v|--version
-  google.protobuf.BoolValue version = 1;
+
+repeated FDBServerCommand commands = 1;
 }
+
+// FDBServerCommand defines all of the fdbserver commands supported.
+message FDBServerCommand {
+  oneof command {
+    FDBServerVersion version = 1;
+    // just for test purpose
+    FDBServerUnknownAction unknown = 2;
+  }
+}
+
+message FDBServerVersion {}
+
+message FDBServerUnknownAction {}
 
 message FDBServerResponse {
   bytes stdout = 1;

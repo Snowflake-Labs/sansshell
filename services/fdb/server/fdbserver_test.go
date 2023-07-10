@@ -26,7 +26,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestFDBServer(t *testing.T) {
@@ -51,11 +50,11 @@ func TestFDBServer(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name       string
-		req        *pb.FDBServerRequest
-		output     *pb.FDBServerResponse
-		wantAnyErr bool
-		command    []string
+		name         string
+		req          *pb.FDBServerRequest
+		output       *pb.FDBServerResponse
+		wantAnyErr   bool
+		wantCommands []string
 	}{
 		{
 			name:       "missing request",
@@ -65,31 +64,36 @@ func TestFDBServer(t *testing.T) {
 		{
 			name: "nil command",
 			req: &pb.FDBServerRequest{
-				Version: nil,
+				Commands: []*pb.FDBServerCommand{
+					nil,
+				},
 			},
 			wantAnyErr: true,
 		},
 		{
-			name: "didn't set version flag, the --version flag should not appear",
+			name: "unknown command",
 			req: &pb.FDBServerRequest{
-				Version: &wrapperspb.BoolValue{Value: false},
+				Commands: []*pb.FDBServerCommand{
+					{
+						Command: &pb.FDBServerCommand_Unknown{},
+					},
+				},
 			},
-			output: &pb.FDBServerResponse{
-				Stdout: []byte(fmt.Sprintf("%s\n", FDBServer)),
-			},
-			command: []string{
-				FDBServer,
-			},
+			wantAnyErr: true,
 		},
 		{
-			name: "set version flag",
+			name: "test version action",
 			req: &pb.FDBServerRequest{
-				Version: &wrapperspb.BoolValue{Value: true},
+				Commands: []*pb.FDBServerCommand{
+					{
+						Command: &pb.FDBServerCommand_Version{},
+					},
+				},
 			},
 			output: &pb.FDBServerResponse{
 				Stdout: []byte(fmt.Sprintf("%s --version\n", FDBServer)),
 			},
-			command: []string{
+			wantCommands: []string{
 				FDBServer,
 				"--version",
 			},
@@ -104,8 +108,8 @@ func TestFDBServer(t *testing.T) {
 				return
 			}
 			testutil.FatalOnErr("fdbserver failed", err, t)
-			if tc.command != nil {
-				testutil.DiffErr("diff commands", commands, tc.command, t)
+			if tc.wantCommands != nil {
+				testutil.DiffErr("diff commands", commands, tc.wantCommands, t)
 			}
 			if tc.output != nil {
 				testutil.DiffErr("output", resp, tc.output, t)

@@ -30,8 +30,8 @@ import (
 )
 
 var (
-	// FDBServer string = "/usr/sbin/fdbserver" // uncomment that if fdbserver binary is in that location
-	FDBServer string
+	FDBServer string = "/usr/sbin/fdbserver" // uncomment that if fdbserver binary is in that location
+	// FDBServer string
 	// generateFDBServerArgs exists as a var for testing purposes
 	generateFDBServerArgs = generateFDBServerArgsImpl
 )
@@ -45,19 +45,44 @@ var (
 type fdbserver struct {
 }
 
+func parseFDBServerCommand(req *pb.FDBServerCommand) (args []string, l []captureLogs, err error) {
+	if req.Command == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "command must be filled in")
+	}
+	switch req.Command.(type) {
+	case *pb.FDBServerCommand_Version:
+		args, l, err = []string{"--version"}, nil, nil
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown type %T for command", req.Command)
+	}
+	return
+}
+
 func generateFDBServerArgsImpl(req *pb.FDBServerRequest) ([]string, error) {
 	command := []string{FDBServer}
-	if req.GetVersion() == nil {
-		return nil, status.Errorf(codes.Internal, "version cannot be nil")
+
+	var args []string
+	for _, c := range req.Commands {
+		newArgs, _, err := parseFDBServerCommand(c)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, newArgs...)
+		if len(req.Commands) > 1 {
+			args = append(args, ";")
+		}
 	}
-	if req.GetVersion().GetValue() {
-		command = append(command, "--version")
-	}
+	command = append(command, args...)
 	return command, nil
 }
 
 func (s *fdbserver) FDBServer(ctx context.Context, req *pb.FDBServerRequest) (*pb.FDBServerResponse, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	if len(req.Commands) == 0 {
+		recorder.CounterOrLog(ctx, fdbcliFailureCounter, 1, attribute.String("reason", "missing_command"))
+		return nil, status.Error(codes.InvalidArgument, "must fill in at least one command")
+	}
+
 	command, err := generateFDBServerArgs(req)
 	if err != nil {
 		recorder.CounterOrLog(ctx, fdbserverFailureCounter, 1, attribute.String("reason", "generate_args_err"))
