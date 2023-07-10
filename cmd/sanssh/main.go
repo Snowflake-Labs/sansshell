@@ -43,6 +43,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/fdb/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
@@ -51,7 +52,6 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo/client"
-	//_ "github.com/Snowflake-Labs/sansshell/services/fdb/client" // To get FDB modules uncomment this line.
 )
 
 const (

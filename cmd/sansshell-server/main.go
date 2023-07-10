@@ -58,7 +58,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 
-	//fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
@@ -92,8 +92,8 @@ var (
 )
 
 func init() {
+	flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/usr/bin/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
 	// Uncomment below to bind FDB flags.
-	//flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/some/path/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
 	//flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "fdbuser", "User to change to when running fdbcli")
 	//flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "fdbgroup", "Group to change to when running fdbcli")
 	//fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
