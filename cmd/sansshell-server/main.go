@@ -100,7 +100,6 @@ func init() {
 	fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
 	*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "") // To set a default
 	flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
-	flag.StringVar(&fdbserver.FDBServer, "fdbserver", "/usr/sbin/fdbserver", "Path to fdbserver binary.")
 
 	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
 	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
