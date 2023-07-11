@@ -49,6 +49,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	ssutil "github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
 	// Import the server modules you want to expose, they automatically register
@@ -58,7 +59,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 
-	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server" // To get FDB modules uncomment this line.
+	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
@@ -88,17 +89,16 @@ var (
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 	version       bool
 
-	//fdbCLIEnvList ssutil.StringSliceFlag
+	fdbCLIEnvList ssutil.StringSliceFlag
 )
 
 func init() {
 	flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/usr/bin/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
-	// Uncomment below to bind FDB flags.
-	//flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "fdbuser", "User to change to when running fdbcli")
-	//flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "fdbgroup", "Group to change to when running fdbcli")
-	//fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
-	//*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "SOME_ENV_VAR") // To set a default
-	//flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
+	flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "", "User to change to when running fdbcli")
+	flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "", "Group to change to when running fdbcli")
+	fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
+	*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "") // To set a default
+	flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
 
 	flag.StringVar(&mtlsFlags.ClientCertFile, "client-cert", mtlsFlags.ClientCertFile, "Path to this client's x509 cert, PEM format")
 	flag.StringVar(&mtlsFlags.ClientKeyFile, "client-key", mtlsFlags.ClientKeyFile, "Path to this client's key")
