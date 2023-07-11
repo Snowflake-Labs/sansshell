@@ -615,3 +615,31 @@ message FDBCLIResponse {
     Log log = 2;
   }
 }
+
+service Server {
+  rpc FDBServer(FDBServerRequest) returns (FDBServerResponse) {}
+}
+
+message FDBServerRequest {
+
+repeated FDBServerCommand commands = 1;
+}
+
+// FDBServerCommand defines all of the fdbserver commands supported.
+message FDBServerCommand {
+  oneof command {
+    FDBServerVersion version = 1;
+    // just for test purpose
+    FDBServerUnknownAction unknown = 2;
+  }
+}
+
+message FDBServerVersion {}
+
+message FDBServerUnknownAction {}
+
+message FDBServerResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
+}

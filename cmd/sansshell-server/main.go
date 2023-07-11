@@ -93,6 +93,7 @@ var (
 )
 
 func init() {
+	flag.StringVar(&fdbserver.FDBServer, "fdbserver", "/usr/sbin/fdbserver", "Path to fdbserver binary.")
 	flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/usr/bin/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
 	flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "", "User to change to when running fdbcli")
 	flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "", "Group to change to when running fdbcli")
