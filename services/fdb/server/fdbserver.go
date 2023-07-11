@@ -68,9 +68,6 @@ func generateFDBServerArgsImpl(req *pb.FDBServerRequest) ([]string, error) {
 			return nil, err
 		}
 		args = append(args, newArgs...)
-		if len(req.Commands) > 1 {
-			args = append(args, ";")
-		}
 	}
 	command = append(command, args...)
 	return command, nil

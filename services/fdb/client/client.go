@@ -3391,6 +3391,7 @@ func (p *fdbServerVersionCmd) Usage() string {
 func (r *fdbServerVersionCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBServerCommand{}
 }
+
 func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	req := args[1].(*pb.FDBServerRequest)
@@ -3419,6 +3420,10 @@ func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 		}
 		// split results to multiple lines and ident, finally combine them
 		multiLines := strings.Split(string(r.Resp.Stdout), "\n")
+		// if the last line is empty, just remove it
+		if len(multiLines) > 0 && multiLines[len(multiLines)-1] == "" {
+			multiLines = multiLines[:len(multiLines)-1]
+		}
 		for i, line := range multiLines {
 			multiLines[i] = fmt.Sprintf("    %s", line)
 		}
