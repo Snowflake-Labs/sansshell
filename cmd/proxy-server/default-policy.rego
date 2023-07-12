@@ -20,6 +20,11 @@ allow {
 
 ## Access control for targets
 
+# Allow proxying HTTP requests
+allow {
+	input.method = "/HTTPOverRPC.HTTPOverRPC/Localhost"
+}
+
 # Allow anyone to call healthcheck on any host
 allow {
 	input.method = "/HealthCheck.HealthCheck/Ok"
