@@ -36,8 +36,8 @@ allow {
 
 allow {
 	input.type = "Exec.ExecRequest"
-	input.message.command = "echo"
-	input.message.args = ["hello", "world"]
+	# input.message.command = "/bin/echo"
+	# input.message.args = ["hello", "world"]
 }
 
 allow {
