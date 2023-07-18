@@ -349,8 +349,13 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 		fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
 		for _, pkg := range r.Resp.Packages {
-			// Print the package name, version and repo with some reasonable spacing.
-			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", pkg.Name, pkg.Version, pkg.Repo)
+			// Print the package name.arch, [epoch]:version-release and repo with some reasonable spacing.
+			na := fmt.Sprintf("%s.%s", pkg.Name, pkg.Architecture)
+			evr := fmt.Sprintf("%s-%s", pkg.Version, pkg.Release)
+			if pkg.Epoch != 0 {
+				evr = fmt.Sprintf("%d:%s", pkg.Epoch, evr)
+			}
+			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", na, evr, pkg.Repo)
 		}
 	}
 	return retCode
@@ -376,6 +381,17 @@ func (l *searchCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&l.name, "name", "", "Name of package to search")
 	f.BoolVar(&l.installed, "installed", false, "If true print out installed NEVRA of the package")
 	f.BoolVar(&l.latest, "latest", false, "If true print out latest NEVRA of the package")
+}
+
+func getSearchType(i int) (string, error) {
+	switch i {
+	case int(pb.SearchType_SEARCH_TYPE_INSTALLED):
+		return "Installed Package:", nil
+	case int(pb.SearchType_SEARCH_TYPE_LATEST):
+		return "Latest Package:", nil
+	default:
+		return "", fmt.Errorf("unknown search type")
+	}
 }
 
 func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -430,21 +446,23 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			retCode = subcommands.ExitFailure
 			continue
 		}
-		if installed {
-			var installedPackage = r.Resp.InstalledPackage
-			if len(installedPackage) == 0 {
-				installedPackage = "No package foud!"
+		var packageInfoMap = r.Resp.PackageInfoMap
+		for key, value := range packageInfoMap {
+			searchType, err := getSearchType(int(key))
+			if err != nil {
+				fmt.Fprintf(state.Err[r.Index], "Search for target %s (%d) got: %v\n", r.Target, r.Index, err)
 			}
-			fmt.Fprintf(state.Out[r.Index], "%20s %s\n", "Installed Package:", installedPackage)
-		}
-		if latest {
-			var latestPackage = r.Resp.LatestPackage
-			if len(latestPackage) == 0 {
-				latestPackage = "No package foud!"
+			fmt.Fprintf(state.Out[r.Index], "%20s", searchType)
+			if len(value.Packages) == 0 {
+				fmt.Fprintf(state.Out[r.Index], " %s\n", "No package found!")
+				continue
 			}
-			fmt.Fprintf(state.Out[r.Index], "%20s %s\n", "Latest Package:", latestPackage)
+			packageInfo := value.Packages[0]
+			fmt.Fprintf(state.Out[r.Index], " %s-%d:%s-%s.%s\n", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+			for _, packageInfo := range value.Packages[1:] {
+				fmt.Fprintf(state.Out[r.Index], "%20s %s-%d:%s-%s.%s\n", "", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+			}
 		}
-
 	}
 	return retCode
 }

@@ -1,15 +1,24 @@
 packages : <
-  name : "adoptopenjdk-11-hotspot.x86_64"
-  version : "11.0.11+9-3"
+  name : "adoptopenjdk-11-hotspot"
+  epoch: 0
+  release: "3"
+  architecture: "x86_64"
+  version : "11.0.11+9"
   repo : "@adoptopenjdk"
 >
 packages : <
-  name : "copy-jdk-configs.noarch"
-  version : "3.3-10.el7_5"
+  name : "copy-jdk-configs"
+  epoch: 0
+  release: "10.el7_5"
+  architecture: "noarch"
+  version : "3.3"
   repo : "@anaconda"
 >
 packages : <
-  name : "java-1.8.0-openjdk.x86_64"
-  version : "1:1.8.0.292.b10-1.el7_9"
+  name : "java-1.8.0-openjdk"
+  epoch: 1
+  release: "1.el7_9"
+  architecture: "x86_64"
+  version : "1.8.0.292.b10"
   repo : "@updates"
 >

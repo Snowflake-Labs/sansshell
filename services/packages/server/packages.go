@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -318,6 +319,9 @@ func (s *server) Remove(ctx context.Context, req *pb.RemoveRequest) (*pb.RemoveR
 // Nevra is of the form n-e:v-r.a (where n is optional since e can be 0 for no epoch).
 var nevraRe = regexp.MustCompile(`^([^-]+-)?[^:]+:[^-]+-[^\.]+\..+$`)
 
+// split each part of nevra
+var nevraReSplit = regexp.MustCompile(`^(.+)-([\d]*):(.+)-(.+)\.(.+)$`)
+
 func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
@@ -394,6 +398,24 @@ func parseListInstallOutput(p pb.PackageSystem, r io.Reader) (*pb.ListInstalledR
 	return parser(r)
 }
 
+// extract values from [epoch:]version-release
+func extractEVR(evr string) (epoch, version, release string) {
+	re := regexp.MustCompile(`^([\d]*):(.+)-(.+)$`)
+	matches := re.FindStringSubmatch(evr)
+	if len(matches) == 4 {
+		epoch = matches[1]
+		version = matches[2]
+		release = matches[3]
+	} else {
+		re = regexp.MustCompile(`^(.+)-(.+)$`)
+		matches = re.FindStringSubmatch(evr)
+		epoch = "0"
+		version = matches[1]
+		release = matches[2]
+	}
+	return
+}
+
 func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -439,10 +461,22 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 			return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q which is invalid", text)
 		}
 
+		// process the PACKAGE_NAME(name.arch) and PACKAGE_VERSION([epoch:]version-release)
+		// the package name itself may contain dot, so we split them based on the last dot
+		dotIdx := strings.LastIndex(fields[0], ".")
+		name, arch := fields[0][:dotIdx], fields[0][dotIdx+1:]
+		epoch, version, release := extractEVR(fields[1])
+		epochUint, err := strconv.ParseUint(epoch, 10, 32)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "convert epoch from string to uint error: %s", err)
+		}
 		reply.Packages = append(reply.Packages, &pb.PackageInfo{
-			Name:    fields[0],
-			Version: fields[1],
-			Repo:    fields[2],
+			Name:         name,
+			Epoch:        uint32(epochUint),
+			Version:      version,
+			Release:      release,
+			Architecture: arch,
+			Repo:         fields[2],
 		})
 	}
 
@@ -480,8 +514,8 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	return parseListInstallOutput(req.PackageSystem, run.Stdout)
 }
 
-func parseRepoQueryOutput(p *pb.SearchRequest, r io.Reader) ([]string, error) {
-	parsers := map[pb.PackageSystem]func(p *pb.SearchRequest, r io.Reader) ([]string, error){
+func parseRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error) {
+	parsers := map[pb.PackageSystem]func(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error){
 		pb.PackageSystem_PACKAGE_SYSTEM_YUM: parseYumRepoQueryOutput,
 	}
 	parser, ok := parsers[p.PackageSystem]
@@ -491,7 +525,7 @@ func parseRepoQueryOutput(p *pb.SearchRequest, r io.Reader) ([]string, error) {
 	return parser(p, r)
 }
 
-func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) ([]string, error) {
+func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error) {
 	// The output of repoquery should just be package info
 	// Split the output into lines
 	data, err := io.ReadAll(r)
@@ -499,12 +533,36 @@ func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) ([]string, error)
 		return nil, status.Errorf(codes.Internal, "error reading from io.Reader:")
 	}
 	outputLines := strings.Split(string(data), "\n")
-	// Remove the leading and trailing white space
-	for i, line := range outputLines {
-		outputLines[i] = strings.TrimSpace(line)
-	}
 
-	return outputLines, nil
+	packageInfoList := &pb.PackageInfoList{}
+	for i, line := range outputLines {
+		// Remove the leading and trailing white space
+		outputLines[i] = strings.TrimSpace(line)
+		// skip if output line is empty
+		if len(outputLines[i]) == 0 {
+			continue
+		}
+
+		matches := nevraReSplit.FindStringSubmatch(outputLines[i])
+		if len(matches) != 6 {
+			return nil, fmt.Errorf("invalid NEVRA format")
+		}
+		epoch, err := strconv.ParseUint(matches[2], 10, 32)
+		if err != nil {
+			// handle error
+			return nil, fmt.Errorf("unable to transfer from string to int: %s", err)
+		}
+
+		packageInfo := &pb.PackageInfo{
+			Name:         matches[1],
+			Epoch:        uint32(epoch),
+			Version:      matches[3],
+			Release:      matches[4],
+			Architecture: matches[5],
+		}
+		packageInfoList.Packages = append(packageInfoList.Packages, packageInfo)
+	}
+	return packageInfoList, nil
 }
 
 func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchReply, error) {
@@ -519,7 +577,7 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
 	}
 
-	runRepoqueryCommand := func(command []string) ([]string, error) {
+	runRepoqueryCommand := func(command []string) (*pb.PackageInfoList, error) {
 		// This may return output to stderr if the lock is held and we wait. That's ok.
 		run, err := util.RunCommand(ctx, command[0], command[1:])
 		if err != nil {
@@ -530,15 +588,16 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "run_err"))
 			return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 		}
-		packages, err := parseRepoQueryOutput(req, run.Stdout)
+		packageInfoList, err := parseRepoQueryOutput(req, run.Stdout)
 		if err != nil {
 			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "parse_err"))
 			return nil, err
 		}
-		return packages, nil
+		return packageInfoList, nil
 	}
 
 	reply := &pb.SearchReply{}
+	reply.PackageInfoMap = make(map[int32]*pb.PackageInfoList)
 	if req.Installed {
 		command, err := generateSearch(req, true)
 		if err != nil {
@@ -546,11 +605,11 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 			return nil, err
 		}
 
-		packages, err := runRepoqueryCommand(command)
+		packageInfoList, err := runRepoqueryCommand(command)
 		if err != nil {
 			return nil, err
 		}
-		reply.InstalledPackage = packages[0]
+		reply.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_INSTALLED)] = packageInfoList
 	}
 	if req.Latest {
 		command, err := generateSearch(req, false)
@@ -559,11 +618,11 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 			return nil, err
 		}
 
-		packages, err := runRepoqueryCommand(command)
+		packageInfoList, err := runRepoqueryCommand(command)
 		if err != nil {
 			return nil, err
 		}
-		reply.LatestPackage = packages[0]
+		reply.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_LATEST)] = packageInfoList
 	}
 	return reply, nil
 }

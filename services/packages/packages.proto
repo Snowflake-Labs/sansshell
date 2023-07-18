@@ -102,17 +102,30 @@ message SearchRequest {
 }
 
 message SearchReply {
-  string installed_package = 1;
-  string latest_package = 2;
+  // key: SearchType value: List of PackageInfo for specific SearchType
+  map<int32, PackageInfoList> package_info_map = 1;
 }
 
-message ListInstalledRequest { PackageSystem package_system = 1; }
+enum SearchType {
+  SEARCH_TYPE_INSTALLED = 0;
+  SEARCH_TYPE_LATEST = 1;
+  // expand the search capability by adding more types
+}
 
 message PackageInfo {
   string name = 1;
-  string version = 2;
-  string repo = 3;
+  uint32 epoch = 2;
+  string version = 3;
+  string release = 4;
+  string architecture = 5;
+  string repo = 6;
 }
+
+message PackageInfoList  {repeated PackageInfo packages = 1; }
+
+
+message ListInstalledRequest { PackageSystem package_system = 1; }
+
 
 message ListInstalledReply { repeated PackageInfo packages = 1; }
 
