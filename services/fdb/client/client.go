@@ -1352,7 +1352,11 @@ func (*fdbCLIExcludeCmd) Synopsis() string {
 	return "The exclude command excludes servers from the database or marks them as failed."
 }
 func (p *fdbCLIExcludeCmd) Usage() string {
-	return "exclude [failed] [<ADDRESS...>] [locality_dcid:<excludedcid>] [locality_zoneid:<excludezoneid>] [locality_machineid:<excludemachineid>] [locality_processid:<excludeprocessid>] or any locality"
+	return `exclude [wait] [failed] [<ADDRESS...>] [locality_dcid:<excludedcid>] [locality_zoneid:<excludezoneid>] [locality_machineid:<excludemachineid>] [locality_processid:<excludeprocessid>] or any locality
+
+Note: By default no_wait will be applied for process exclusion which will return response asynchronously. 
+If want to wait for entire data to be moved off machine before returning result, please add wait argument.
+`
 }
 
 func (r *fdbCLIExcludeCmd) SetFlags(f *flag.FlagSet) {
@@ -1361,24 +1365,46 @@ func (r *fdbCLIExcludeCmd) SetFlags(f *flag.FlagSet) {
 
 func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
+	// by default the no_wait will be set, unless we explicit set the wait option in command
+	r.req.NoWait = &wrapperspb.BoolValue{
+		Value: true,
+	}
 
-	failed, address := false, false
+	wait, failed, address := false, false, false
+	setOpt := func(opt string, optName string, optValue *bool) (bool, subcommands.ExitStatus) {
+		if *optValue {
+			fmt.Fprintf(os.Stderr, "cannot specify %s more than once\n", optName)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return false, subcommands.ExitFailure
+		}
+		if address {
+			fmt.Fprintf(os.Stderr, "cannot specify %s after listing addresses\n", optName)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return false, subcommands.ExitFailure
+		}
+		*optValue = true
+		return true, subcommands.ExitSuccess
+	}
 	for _, opt := range f.Args() {
 		if opt == "failed" {
-			if failed {
-				fmt.Fprintln(os.Stderr, "cannot specify failed more than once")
-				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
-				return subcommands.ExitFailure
-			}
-			if address {
-				fmt.Fprintln(os.Stderr, "cannot specify failed after listing addresses")
-				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
-				return subcommands.ExitFailure
+			ok, status := setOpt(opt, "failed", &failed)
+			if !ok {
+				return status
 			}
 			r.req.Failed = &wrapperspb.BoolValue{
 				Value: true,
 			}
 			failed = true
+			continue
+		} else if opt == "wait" {
+			ok, status := setOpt(opt, "wait", &wait)
+			if !ok {
+				return status
+			}
+			r.req.NoWait = &wrapperspb.BoolValue{
+				Value: false,
+			}
+			wait = true
 			continue
 		}
 		address = true
