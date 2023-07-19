@@ -46,8 +46,11 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
 }
 
-func generateNEVRA(p *pb.PackageInfo) string {
-	return fmt.Sprintf("%s-%d:%s-%s.%s", p.Name, p.Epoch, p.Version, p.Release, p.Architecture)
+func generateNEVRA(p *pb.PackageInfo) (string, error) {
+	if p == nil {
+		return "", fmt.Errorf("package not found!")
+	}
+	return fmt.Sprintf("%s-%d:%s-%s.%s", p.Name, p.Epoch, p.Version, p.Release, p.Architecture), nil
 }
 
 func TestMain(m *testing.M) {
@@ -796,19 +799,13 @@ func TestSearch(t *testing.T) {
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 
 			if tc.req.Installed {
-				if resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_INSTALLED)] == nil {
-					t.Fatalf("Specify the --installed flag and suppose to have installed search type in response")
-				} else if len(resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_INSTALLED)].Packages) == 0 {
-					// if packages not found, the empty package list is expected
-					if tc.wantInstalledPackage != "" {
-						t.Fatalf("search package installed differ. Got %q Want %q", "nothing", tc.wantInstalledPackage)
-					}
-				} else {
-					// verify the first (should be only one) element of the package list with wantPackage
-					installedPackageInfo := resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_INSTALLED)].Packages[0]
-					if got, want := generateNEVRA(installedPackageInfo), tc.wantInstalledPackage; got != want {
-						t.Fatalf("search package installed differ. Got %q Want %q", got, want)
-					}
+				packageVersion, err := generateNEVRA(resp.InstalledPackage)
+				// if resp.InstalledPackage is nil but wantInstalledPackage is not nil, something wrong happens
+				if err != nil && tc.wantInstalledPackage != "" {
+					t.Fatalf("search package installed differ. Got %q Want %q", err, tc.wantInstalledPackage)
+				}
+				if got, want := packageVersion, tc.wantInstalledPackage; got != want {
+					t.Fatalf("search package installed differ. Got %q Want %q", got, want)
 				}
 				if got, want := cmdLineInstall, tc.wantCmdLineInstall; got != want {
 					t.Fatalf("command lines differ. Got %q Want %q", got, want)
@@ -816,19 +813,13 @@ func TestSearch(t *testing.T) {
 			}
 
 			if tc.req.Latest {
-				if resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_LATEST)] == nil {
-					t.Fatalf("Specify the --latest flag and suppose to have latest search type in response")
-				} else if len(resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_LATEST)].Packages) == 0 {
-					// if packages not found, the empty package list is expected
-					if tc.wantLatestPackage != "" {
-						t.Fatalf("search package latest differ. Got %q Want %q", "nothing", tc.wantLatestPackage)
-					}
-				} else {
-					// verify the first (should be only one) element of the package list with wantPackage
-					latestPackageInfo := resp.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_LATEST)].Packages[0]
-					if got, want := generateNEVRA(latestPackageInfo), tc.wantLatestPackage; got != want {
-						t.Fatalf("search package latest differ. Got %q Want %q", got, want)
-					}
+				packageVersion, err := generateNEVRA(resp.LatestPackage)
+				// if resp.LatestPackage is nil but wantLatestPackage is not nil, something wrong happens
+				if err != nil && tc.wantLatestPackage != "" {
+					t.Fatalf("search package latest differ. Got %q Want %q", err, tc.wantLatestPackage)
+				}
+				if got, want := packageVersion, tc.wantLatestPackage; got != want {
+					t.Fatalf("search package latest differ. Got %q Want %q", got, want)
 				}
 				if got, want := cmdLineLatest, tc.wantCmdLineLatest; got != want {
 					t.Fatalf("command lines differ. Got %q Want %q", got, want)

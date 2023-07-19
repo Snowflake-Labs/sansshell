@@ -102,14 +102,8 @@ message SearchRequest {
 }
 
 message SearchReply {
-  // key: SearchType value: List of PackageInfo for specific SearchType
-  map<int32, PackageInfoList> package_info_map = 1;
-}
-
-enum SearchType {
-  SEARCH_TYPE_INSTALLED = 0;
-  SEARCH_TYPE_LATEST = 1;
-  // expand the search capability by adding more types
+  PackageInfo installed_package = 1;
+  PackageInfo latest_package = 2;
 }
 
 message PackageInfo {

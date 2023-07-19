@@ -373,6 +373,7 @@ func (*searchCmd) Synopsis() string { return "Search NEVRA of a package" }
 func (*searchCmd) Usage() string {
 	return `search --name=X [--installed] [--latest] [--package_system=P]:
   Search the current installed packages or the latest packages to be updated on the remote machine. The packages will be displayed in NEVRA version.
+  By default, --installed and --latest will be enabled.
 `
 }
 
@@ -381,17 +382,6 @@ func (l *searchCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&l.name, "name", "", "Name of package to search")
 	f.BoolVar(&l.installed, "installed", false, "If true print out installed NEVRA of the package")
 	f.BoolVar(&l.latest, "latest", false, "If true print out latest NEVRA of the package")
-}
-
-func getSearchType(i int) (string, error) {
-	switch i {
-	case int(pb.SearchType_SEARCH_TYPE_INSTALLED):
-		return "Installed Package:", nil
-	case int(pb.SearchType_SEARCH_TYPE_LATEST):
-		return "Latest Package:", nil
-	default:
-		return "", fmt.Errorf("unknown search type")
-	}
 }
 
 func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -403,17 +393,10 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		fmt.Fprintln(os.Stderr, "--name must be supplied")
 		return subcommands.ExitFailure
 	}
-	var installed, latest = false, false
 
 	// if we don't set flags for current and latest, both should be set by default
 	if !l.installed && !l.latest {
-		installed, latest = true, true
-	}
-	if l.installed {
-		installed = true
-	}
-	if l.latest {
-		latest = true
+		l.installed, l.latest = true, true
 	}
 
 	ps, err := flagToType(l.packageSystem)
@@ -428,8 +411,8 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	resp, err := c.SearchOneMany(ctx, &pb.SearchRequest{
 		PackageSystem: ps,
 		Name:          l.name,
-		Installed:     installed,
-		Latest:        latest,
+		Installed:     l.installed,
+		Latest:        l.latest,
 	})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -446,22 +429,19 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			retCode = subcommands.ExitFailure
 			continue
 		}
-		var packageInfoMap = r.Resp.PackageInfoMap
-		for key, value := range packageInfoMap {
-			searchType, err := getSearchType(int(key))
-			if err != nil {
-				fmt.Fprintf(state.Err[r.Index], "Search for target %s (%d) got: %v\n", r.Target, r.Index, err)
+		if l.installed {
+			packageVersion := "No package found!"
+			if packageInfo := r.Resp.InstalledPackage; packageInfo != nil {
+				packageVersion = fmt.Sprintf("%s-%d:%s-%s.%s", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
 			}
-			fmt.Fprintf(state.Out[r.Index], "%20s", searchType)
-			if len(value.Packages) == 0 {
-				fmt.Fprintf(state.Out[r.Index], " %s\n", "No package found!")
-				continue
+			fmt.Fprintf(state.Out[r.Index], "%20s: %s\n", "Installed Package", packageVersion)
+		}
+		if l.latest {
+			packageVersion := "No package found!"
+			if packageInfo := r.Resp.LatestPackage; packageInfo != nil {
+				packageVersion = fmt.Sprintf("%s-%d:%s-%s.%s", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
 			}
-			packageInfo := value.Packages[0]
-			fmt.Fprintf(state.Out[r.Index], " %s-%d:%s-%s.%s\n", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
-			for _, packageInfo := range value.Packages[1:] {
-				fmt.Fprintf(state.Out[r.Index], "%20s %s-%d:%s-%s.%s\n", "", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
-			}
+			fmt.Fprintf(state.Out[r.Index], "%20s: %s\n", "Latest Package", packageVersion)
 		}
 	}
 	return retCode
@@ -557,7 +537,7 @@ type cleanupCmd struct {
 func (*cleanupCmd) Name() string     { return "cleanup" }
 func (*cleanupCmd) Synopsis() string { return "Run cleanup on machine" }
 func (*cleanupCmd) Usage() string {
-	return `cleanup [--package_system=P]:
+	return `cleanup [--package_system=P]:	
   Run cleanup on remote machine
 `
 }

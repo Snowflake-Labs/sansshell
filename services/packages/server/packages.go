@@ -171,6 +171,7 @@ var (
 			out = append(out, RepoqueryBin)
 			out = append(out, "--nevra")
 			out = append(out, p.Name)
+			// if we don't set --installed, repoquery will fetch the latest one by default
 			if searchInstalled {
 				out = append(out, "--installed")
 			}
@@ -597,7 +598,6 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 	}
 
 	reply := &pb.SearchReply{}
-	reply.PackageInfoMap = make(map[int32]*pb.PackageInfoList)
 	if req.Installed {
 		command, err := generateSearch(req, true)
 		if err != nil {
@@ -609,7 +609,12 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 		if err != nil {
 			return nil, err
 		}
-		reply.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_INSTALLED)] = packageInfoList
+		if length := len(packageInfoList.Packages); length > 1 {
+			return nil, status.Errorf(codes.Internal, "shouldn't have over one installed package")
+		} else if length == 1 {
+			reply.InstalledPackage = packageInfoList.Packages[0]
+		}
+
 	}
 	if req.Latest {
 		command, err := generateSearch(req, false)
@@ -622,7 +627,11 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 		if err != nil {
 			return nil, err
 		}
-		reply.PackageInfoMap[int32(pb.SearchType_SEARCH_TYPE_LATEST)] = packageInfoList
+		if length := len(packageInfoList.Packages); length > 1 {
+			return nil, status.Errorf(codes.Internal, "shouldn't have over one latest package")
+		} else if length == 1 {
+			reply.LatestPackage = packageInfoList.Packages[0]
+		}
 	}
 	return reply, nil
 }
