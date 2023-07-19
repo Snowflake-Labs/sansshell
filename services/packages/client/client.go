@@ -365,15 +365,15 @@ type searchCmd struct {
 	packageSystem string
 	name          string
 	installed     bool
-	latest        bool
+	available     bool
 }
 
 func (*searchCmd) Name() string     { return "search" }
 func (*searchCmd) Synopsis() string { return "Search NEVRA of a package" }
 func (*searchCmd) Usage() string {
-	return `search --name=X [--installed] [--latest] [--package_system=P]:
-  Search the current installed packages or the latest packages to be updated on the remote machine. The packages will be displayed in NEVRA version.
-  By default, --installed and --latest will be enabled.
+	return `search --name=X [--installed] [--available] [--package_system=P]:
+  Search the current installed packages or all available packages in package repo. The packages will be displayed in NEVRA version.
+  By default, --installed and --available will be enabled.
 `
 }
 
@@ -381,7 +381,7 @@ func (l *searchCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&l.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
 	f.StringVar(&l.name, "name", "", "Name of package to search")
 	f.BoolVar(&l.installed, "installed", false, "If true print out installed NEVRA of the package")
-	f.BoolVar(&l.latest, "latest", false, "If true print out latest NEVRA of the package")
+	f.BoolVar(&l.available, "available", false, "If true print out all available NEVRA of the package")
 }
 
 func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -395,8 +395,8 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	}
 
 	// if we don't set flags for current and latest, both should be set by default
-	if !l.installed && !l.latest {
-		l.installed, l.latest = true, true
+	if !l.installed && !l.available {
+		l.installed, l.available = true, true
 	}
 
 	ps, err := flagToType(l.packageSystem)
@@ -412,7 +412,7 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		PackageSystem: ps,
 		Name:          l.name,
 		Installed:     l.installed,
-		Latest:        l.latest,
+		Available:     l.available,
 	})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -430,18 +430,25 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 			continue
 		}
 		if l.installed {
-			packageVersion := "No package found!"
-			if packageInfo := r.Resp.InstalledPackage; packageInfo != nil {
-				packageVersion = fmt.Sprintf("%s-%d:%s-%s.%s", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+			fmt.Fprintf(state.Out[r.Index], "%s:\n", "Installed Packages")
+			if packages := r.Resp.InstalledPackages.Packages; len(packages) == 0 {
+				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
+			} else {
+				for _, packageInfo := range packages {
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+				}
 			}
-			fmt.Fprintf(state.Out[r.Index], "%20s: %s\n", "Installed Package", packageVersion)
+
 		}
-		if l.latest {
-			packageVersion := "No package found!"
-			if packageInfo := r.Resp.LatestPackage; packageInfo != nil {
-				packageVersion = fmt.Sprintf("%s-%d:%s-%s.%s", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+		if l.available {
+			fmt.Fprintf(state.Out[r.Index], "%s:\n", "Available Packages")
+			if packages := r.Resp.AvailablePackages.Packages; len(packages) == 0 {
+				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
+			} else {
+				for _, packageInfo := range packages {
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+				}
 			}
-			fmt.Fprintf(state.Out[r.Index], "%20s: %s\n", "Latest Package", packageVersion)
 		}
 	}
 	return retCode

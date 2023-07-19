@@ -681,7 +681,9 @@ func TestSearch(t *testing.T) {
 	client := pb.NewPackagesClient(conn)
 	testPackageName := "firefox"
 	firefoxInstalled := "firefox-0:102.10.0-1.el7.centos.aarch64"
-	firefoxLatest := "firefox-0:102.12.0-1.el7.centos.aarch64"
+	firefoxV1 := "firefox-0:68.10.0-1.el7.centos.aarch64"
+	firefoxV2 := firefoxInstalled
+	firefoxV3 := "firefox-0:102.12.0-1.el7.centos.aarch64"
 
 	savedRepoqueryBin := RepoqueryBin
 	t.Cleanup(func() {
@@ -690,13 +692,13 @@ func TestSearch(t *testing.T) {
 	RepoqueryBin = "repoquery"
 
 	for _, tc := range []struct {
-		name                 string
-		req                  *pb.SearchRequest
-		wantInstalledPackage string
-		wantLatestPackage    string
-		wantError            bool
-		wantCmdLineInstall   string
-		wantCmdLineLatest    string
+		name                  string
+		req                   *pb.SearchRequest
+		wantInstalledPackages []string
+		wantAvailablePackages []string
+		wantError             bool
+		wantCmdLineInstall    string
+		wantCmdLineAvailable  string
 	}{
 		{
 			name:      "--name should always be provided",
@@ -717,12 +719,12 @@ func TestSearch(t *testing.T) {
 			req: &pb.SearchRequest{
 				Name:      testPackageName,
 				Installed: true,
-				Latest:    true,
+				Available: true,
 			},
-			wantInstalledPackage: firefoxInstalled,
-			wantLatestPackage:    firefoxLatest,
-			wantCmdLineInstall:   fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
-			wantCmdLineLatest:    fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName),
+			wantInstalledPackages: []string{firefoxInstalled},
+			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --installed flag",
@@ -730,26 +732,26 @@ func TestSearch(t *testing.T) {
 				Name:      testPackageName,
 				Installed: true,
 			},
-			wantInstalledPackage: firefoxInstalled,
-			wantCmdLineInstall:   fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+			wantInstalledPackages: []string{firefoxInstalled},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --latest flag",
 			req: &pb.SearchRequest{
-				Name:   testPackageName,
-				Latest: true,
+				Name:      testPackageName,
+				Available: true,
 			},
-			wantLatestPackage: firefoxLatest,
-			wantCmdLineLatest: fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName),
+			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --latest flag and the package not found in yum repos expect empty",
 			req: &pb.SearchRequest{
-				Name:   testPackageName + "9999",
-				Latest: true,
+				Name:      testPackageName + "9999",
+				Available: true,
 			},
-			wantLatestPackage: "",
-			wantCmdLineLatest: fmt.Sprintf("%s --nevra %s", RepoqueryBin, testPackageName+"9999"),
+			wantAvailablePackages: []string{},
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName+"9999"),
 		},
 		{
 			name: "specify --current flag and the package not found in current system expect empty",
@@ -757,33 +759,35 @@ func TestSearch(t *testing.T) {
 				Name:      testPackageName + "9999",
 				Installed: true,
 			},
-			wantLatestPackage:  "",
-			wantCmdLineInstall: fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName+"9999"),
+			wantAvailablePackages: []string{},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName+"9999"),
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			// mock the repoquery command
 			savedGenerateSearch := generateSearch
-			// cmdLineInstall and cmdLineLatest for verify
-			var cmdLineInstall, cmdLineLatest string
+			// cmdLineInstall and cmdLineAvailable for verify
+			var cmdLineInstall, cmdLineAvailable string
 
-			generateSearch = func(p *pb.SearchRequest, searchInstall bool) ([]string, error) {
+			generateSearch = func(p *pb.SearchRequest, searchtype string) ([]string, error) {
 				// Capture what was generated so we can validate it.
-				out, err := savedGenerateSearch(p, searchInstall)
+				out, err := savedGenerateSearch(p, searchtype)
 				if err != nil {
 					return nil, err
 				}
 				cmdLine := strings.Join(out, " ")
-				var testdataInput string
-				if searchInstall {
-					testdataInput = tc.wantInstalledPackage
+				var testdataInput []string
+				switch searchtype {
+				case "installed":
+					testdataInput = tc.wantInstalledPackages
 					cmdLineInstall = cmdLine
-				} else {
-					testdataInput = tc.wantLatestPackage
-					cmdLineLatest = cmdLine
+				case "available":
+					testdataInput = tc.wantAvailablePackages
+					cmdLineAvailable = cmdLine
 				}
-				return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
+
+				return []string{testutil.ResolvePath(t, "echo"), "-n", strings.Join(testdataInput, "\n")}, nil
 			}
 			t.Cleanup(func() {
 				generateSearch = savedGenerateSearch
@@ -798,32 +802,31 @@ func TestSearch(t *testing.T) {
 
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 
-			if tc.req.Installed {
-				packageVersion, err := generateNEVRA(resp.InstalledPackage)
-				// if resp.InstalledPackage is nil but wantInstalledPackage is not nil, something wrong happens
-				if err != nil && tc.wantInstalledPackage != "" {
-					t.Fatalf("search package installed differ. Got %q Want %q", err, tc.wantInstalledPackage)
+			comparePackageList := func(wantPackages []string, wantCmdLine string, gotPackagesList *pb.PackageInfoList, gotCmdLine string, searchType string) {
+				if gotLen, wantLen := len(gotPackagesList.Packages), len(wantPackages); gotLen != wantLen {
+					t.Fatalf("search package %s result length differ.Got %d Want %d", searchType, gotLen, wantLen)
 				}
-				if got, want := packageVersion, tc.wantInstalledPackage; got != want {
-					t.Fatalf("search package installed differ. Got %q Want %q", got, want)
-				}
-				if got, want := cmdLineInstall, tc.wantCmdLineInstall; got != want {
-					t.Fatalf("command lines differ. Got %q Want %q", got, want)
+				for i := range gotPackagesList.Packages {
+					wantPackage := wantPackages[i]
+					packageVersion, err := generateNEVRA(gotPackagesList.Packages[i])
+					// if resp.InstalledPackage is nil but wantInstalledPackage is not nil, something wrong happens
+					if err != nil && wantPackage != "" {
+						t.Fatalf("search package %s differ. Got %q Want %q", searchType, err, wantPackage)
+					}
+					if got, want := packageVersion, wantPackage; got != want {
+						t.Fatalf("search package %s differ. Got %q Want %q", searchType, err, want)
+					}
+					if got, want := gotCmdLine, wantCmdLine; got != want {
+						t.Fatalf("command lines differ for %s. Got %q Want %q", searchType, got, want)
+					}
 				}
 			}
 
-			if tc.req.Latest {
-				packageVersion, err := generateNEVRA(resp.LatestPackage)
-				// if resp.LatestPackage is nil but wantLatestPackage is not nil, something wrong happens
-				if err != nil && tc.wantLatestPackage != "" {
-					t.Fatalf("search package latest differ. Got %q Want %q", err, tc.wantLatestPackage)
-				}
-				if got, want := packageVersion, tc.wantLatestPackage; got != want {
-					t.Fatalf("search package latest differ. Got %q Want %q", got, want)
-				}
-				if got, want := cmdLineLatest, tc.wantCmdLineLatest; got != want {
-					t.Fatalf("command lines differ. Got %q Want %q", got, want)
-				}
+			if tc.req.Installed {
+				comparePackageList(tc.wantInstalledPackages, tc.wantCmdLineInstall, resp.InstalledPackages, cmdLineInstall, "installed")
+			}
+			if tc.req.Available {
+				comparePackageList(tc.wantAvailablePackages, tc.wantCmdLineAvailable, resp.AvailablePackages, cmdLineAvailable, "available")
 			}
 		})
 	}

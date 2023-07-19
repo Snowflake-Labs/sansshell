@@ -98,12 +98,12 @@ message SearchRequest {
   PackageSystem package_system = 1; 
   string name = 2;
   bool installed = 3;
-  bool latest = 4;
+  bool available = 4;
 }
 
 message SearchReply {
-  PackageInfo installed_package = 1;
-  PackageInfo latest_package = 2;
+  PackageInfoList installed_packages = 1;
+  PackageInfoList available_packages = 2;
 }
 
 message PackageInfo {

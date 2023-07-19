@@ -164,17 +164,23 @@ var (
 		return genCmd(p, listOpts)
 	}
 
-	generateSearch = func(p *pb.SearchRequest, searchInstalled bool) ([]string, error) {
+	generateSearch = func(p *pb.SearchRequest, searchType string) ([]string, error) {
 		var out []string
 		switch p.PackageSystem {
 		case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
 			out = append(out, RepoqueryBin)
 			out = append(out, "--nevra")
 			out = append(out, p.Name)
-			// if we don't set --installed, repoquery will fetch the latest one by default
-			if searchInstalled {
+			// add options based on search type
+			switch searchType {
+			case "installed":
 				out = append(out, "--installed")
+			case "available":
+				out = append(out, "--show-duplicates")
+			default:
+				return nil, status.Errorf(codes.InvalidArgument, "no support for package search type %s", searchType)
 			}
+
 		default:
 			return nil, status.Errorf(codes.Unimplemented, "no support for package system enum %d", p.PackageSystem)
 		}
@@ -543,7 +549,7 @@ func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoL
 		if len(outputLines[i]) == 0 {
 			continue
 		}
-
+		// extract NEVRA of each package
 		matches := nevraReSplit.FindStringSubmatch(outputLines[i])
 		if len(matches) != 6 {
 			return nil, fmt.Errorf("invalid NEVRA format")
@@ -599,7 +605,7 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 
 	reply := &pb.SearchReply{}
 	if req.Installed {
-		command, err := generateSearch(req, true)
+		command, err := generateSearch(req, "installed")
 		if err != nil {
 			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 			return nil, err
@@ -609,15 +615,11 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 		if err != nil {
 			return nil, err
 		}
-		if length := len(packageInfoList.Packages); length > 1 {
-			return nil, status.Errorf(codes.Internal, "shouldn't have over one installed package")
-		} else if length == 1 {
-			reply.InstalledPackage = packageInfoList.Packages[0]
-		}
+		reply.InstalledPackages = packageInfoList
 
 	}
-	if req.Latest {
-		command, err := generateSearch(req, false)
+	if req.Available {
+		command, err := generateSearch(req, "available")
 		if err != nil {
 			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
 			return nil, err
@@ -627,11 +629,7 @@ func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 		if err != nil {
 			return nil, err
 		}
-		if length := len(packageInfoList.Packages); length > 1 {
-			return nil, status.Errorf(codes.Internal, "shouldn't have over one latest package")
-		} else if length == 1 {
-			reply.LatestPackage = packageInfoList.Packages[0]
-		}
+		reply.AvailablePackages = packageInfoList
 	}
 	return reply, nil
 }
