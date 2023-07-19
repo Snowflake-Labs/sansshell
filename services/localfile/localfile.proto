@@ -65,6 +65,9 @@ service LocalFile {
 
   // Symlink creates a symbolic link
   rpc Symlink(SymlinkRequest) returns (google.protobuf.Empty) {}
+
+  // Mkdir create a new directory.
+  rpc Mkdir(MkdirRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -266,4 +269,9 @@ message ReadlinkReply {
 message SymlinkRequest {
   string target = 1;
   string linkname = 2;
+}
+
+// MkdirRequest describes the directory
+message MkdirRequest {
+  FileWrite dir_description = 1;
 }
