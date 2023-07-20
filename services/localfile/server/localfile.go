@@ -325,25 +325,29 @@ func setupOutput(a *pb.FileAttributes) (*os.File, *immutableState, error) {
 	return f, immutable, err
 }
 
-// create a temp directory, set ownership and mode
-func setupTmpDir(a *pb.FileAttributes) (string, *immutableState, error) {
+// create a directory, set ownership and mode
+func setupDir(a *pb.FileAttributes) (string, *immutableState, error) {
 	// Validate path. We'll go ahead and write the data to a tmpfile and
 	// do the overwrite check when we rename below.
-	filename := a.Filename
-	if err := util.ValidPath(filename); err != nil {
+	dirName := a.Filename
+	if err := util.ValidPath(dirName); err != nil {
 		return "", nil, err
 	}
-
-	dir, err := os.MkdirTemp(filepath.Dir(filename), filepath.Base(filename))
+	// 0777 is just a placeholder, real mode will be set in validateAndSetAttrs() function
+	err := os.Mkdir(dirName, 0777)
 	if err != nil {
-		return "", nil, status.Errorf(codes.Internal, "can't create tmp directory: %v", err)
+		return "", nil, status.Errorf(codes.Internal, "can't create directory: %v", err)
 	}
 
 	// Set owner/gid/perms now since we have an open FD to the file and we don't want
 	// to accidentally leave this in another otherwise default state.
 	// Except we don't trigger immutable now or we won't be able to write to it.
-	immutable, err := validateAndSetAttrs(dir, a.Attributes, false)
-	return dir, immutable, err
+	immutable, err := validateAndSetAttrs(dirName, a.Attributes, false)
+	// if something wrong with owner/gid/perms settting, remove the created directory
+	if err != nil {
+		os.Remove(dirName)
+	}
+	return dirName, immutable, err
 }
 
 func finalizeFile(d *pb.FileWrite, f *os.File, filename string, immutable *immutableState) error {
@@ -811,28 +815,16 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "missing_attrs"))
 		return nil, status.Errorf(codes.InvalidArgument, "must send attrs")
 	}
-	filename := dirAttrs.Filename
-	logger.Info("create directory", filename)
-	dir, immutable, err := setupTmpDir(dirAttrs)
+	dirName := dirAttrs.Filename
+	logger.Info("create directory", dirName)
+	_, immutable, err := setupDir(dirAttrs)
 	if err != nil {
-		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "setup_output_err"))
+		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "setup_dir_err"))
 		return nil, err
 	}
 
 	if immutable.immutable && immutable.setImmutable {
 		return nil, status.Errorf(codes.Internal, "error on setting immutable when creating a directory")
-	}
-
-	cleanup := func() {
-		if retErr != nil {
-			os.Remove(dir)
-		}
-	}
-	defer cleanup()
-
-	// Rename tmp directory to real destination.
-	if err := os.Rename(dir, filename); err != nil {
-		return nil, status.Errorf(codes.Internal, "error renaming %s -> %s - %v", dir, filename, err)
 	}
 
 	return &emptypb.Empty{}, nil
