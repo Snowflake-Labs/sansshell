@@ -1339,7 +1339,10 @@ func (*mkdirCmd) Synopsis() string { return "Create a directory" }
 func (*mkdirCmd) Usage() string {
 	return `mkdir --uid=X|username=Y --gid=X|group=Y --mode=X <path>:
   Create a directory at the specified path.
-  Note: please set flags before path
+  Note: 
+  1. Please set flags before path. 
+  2. The action doesn't support creating intermedaite directories, e.g for this path /AAA/BBB/test, 
+     the parent directories BBB or /AAA/BBB doesn't exist, the action won't work.
 `
 }
 
@@ -1371,50 +1374,49 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	}
 
 	c := pb.NewLocalFileClientProxy(state.Conn)
-	dest := f.Args()[0]
+	directoryName := f.Args()[0]
 
-	descr := &pb.FileWrite{
-		Attrs: &pb.FileAttributes{
-			Filename: dest,
-			Attributes: []*pb.FileAttribute{
-				{
-					Value: &pb.FileAttribute_Mode{
-						Mode: uint32(p.mode),
-					},
+	dirAttrs := &pb.FileAttributes{
+		Filename: directoryName,
+		Attributes: []*pb.FileAttribute{
+			{
+				Value: &pb.FileAttribute_Mode{
+					Mode: uint32(p.mode),
 				},
 			},
 		},
 	}
+
 	if p.uid >= 0 {
-		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
 			Value: &pb.FileAttribute_Uid{
 				Uid: uint32(p.uid),
 			},
 		})
 	}
 	if p.username != "" {
-		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
 			Value: &pb.FileAttribute_Username{
 				Username: p.username,
 			},
 		})
 	}
 	if p.gid >= 0 {
-		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
 			Value: &pb.FileAttribute_Gid{
 				Gid: uint32(p.gid),
 			},
 		})
 	}
 	if p.group != "" {
-		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
 			Value: &pb.FileAttribute_Group{
 				Group: p.group,
 			},
 		})
 	}
 	req := &pb.MkdirRequest{
-		DirDescription: descr,
+		DirAttrs: dirAttrs,
 	}
 
 	respChan, err := c.MkdirOneMany(ctx, req)

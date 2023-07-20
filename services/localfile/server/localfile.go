@@ -325,7 +325,8 @@ func setupOutput(a *pb.FileAttributes) (*os.File, *immutableState, error) {
 	return f, immutable, err
 }
 
-func setupOutputDir(a *pb.FileAttributes) (string, *immutableState, error) {
+// create a temp directory, set ownership and mode
+func setupTmpDir(a *pb.FileAttributes) (string, *immutableState, error) {
 	// Validate path. We'll go ahead and write the data to a tmpfile and
 	// do the overwrite check when we rename below.
 	filename := a.Filename
@@ -800,23 +801,26 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
-	if req.GetDirDescription() == nil {
+	if req.GetDirAttrs() == nil {
 		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "missing_dst"))
 		return nil, status.Error(codes.InvalidArgument, "destination must be filled in")
 	}
-	d := req.GetDirDescription()
+	dirAttrs := req.GetDirAttrs()
 
-	a := d.GetAttrs()
-	if a == nil {
+	if dirAttrs == nil {
 		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "missing_attrs"))
 		return nil, status.Errorf(codes.InvalidArgument, "must send attrs")
 	}
-	filename := a.Filename
+	filename := dirAttrs.Filename
 	logger.Info("create directory", filename)
-	dir, _, err := setupOutputDir(a)
+	dir, immutable, err := setupTmpDir(dirAttrs)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "setup_output_err"))
 		return nil, err
+	}
+
+	if immutable.immutable && immutable.setImmutable {
+		return nil, status.Errorf(codes.Internal, "error on setting immutable when creating a directory")
 	}
 
 	cleanup := func() {
@@ -825,12 +829,6 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 		}
 	}
 	defer cleanup()
-
-	// Do one final check (though racy) to see if the file exists.
-	_, err = os.Stat(filename)
-	if err == nil {
-		return nil, status.Errorf(codes.Internal, "directory %s already exists ", filename)
-	}
 
 	// Rename tmp directory to real destination.
 	if err := os.Rename(dir, filename); err != nil {

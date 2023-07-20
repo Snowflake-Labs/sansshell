@@ -273,5 +273,5 @@ message SymlinkRequest {
 
 // MkdirRequest describes the directory
 message MkdirRequest {
-  FileWrite dir_description = 1;
+  FileAttributes dir_attrs = 1;
 }

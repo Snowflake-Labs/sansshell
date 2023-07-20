@@ -2032,7 +2032,7 @@ func TestMkdir(t *testing.T) {
 		{
 			name: "Blank dir description -- no attrs",
 			req: &pb.MkdirRequest{
-				DirDescription: &pb.FileWrite{},
+				DirAttrs: &pb.FileAttributes{},
 			},
 			wantErr: true,
 		},
@@ -2040,10 +2040,19 @@ func TestMkdir(t *testing.T) {
 			// Don't need to test all attributes combinations as TestWrite did this.
 			name: "Bad path",
 			req: &pb.MkdirRequest{
-				DirDescription: &pb.FileWrite{
-					Attrs: &pb.FileAttributes{
-						Filename: "/tmp/bbb/../../aaa/test",
-					},
+
+				DirAttrs: &pb.FileAttributes{
+					Filename: "/tmp/bbb/../../aaa/test",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "cannot craete intermediate directories",
+			req: &pb.MkdirRequest{
+
+				DirAttrs: &pb.FileAttributes{
+					Filename: filepath.Join(temp, "/AAA/test"),
 				},
 			},
 			wantErr: true,
@@ -2051,24 +2060,22 @@ func TestMkdir(t *testing.T) {
 		{
 			name: "create a directory",
 			req: &pb.MkdirRequest{
-				DirDescription: &pb.FileWrite{
-					Attrs: &pb.FileAttributes{
-						Filename: filepath.Join(temp, "/test"),
-						Attributes: []*pb.FileAttribute{
-							{
-								Value: &pb.FileAttribute_Uid{
-									Uid: uint32(uid),
-								},
+				DirAttrs: &pb.FileAttributes{
+					Filename: filepath.Join(temp, "/test"),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid),
 							},
-							{
-								Value: &pb.FileAttribute_Gid{
-									Gid: uint32(gid),
-								},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid),
 							},
-							{
-								Value: &pb.FileAttribute_Mode{
-									Mode: mode,
-								},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: mode,
 							},
 						},
 					},
