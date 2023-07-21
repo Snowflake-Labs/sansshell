@@ -46,6 +46,7 @@ func (*packagesCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&repoListCmd{}, "")
 	c.Register(&updateCmd{}, "")
 	c.Register(&cleanupCmd{}, "")
+	c.Register(&searchCmd{}, "")
 	return c
 }
 
@@ -348,8 +349,106 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 		fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
 		for _, pkg := range r.Resp.Packages {
-			// Print the package name, version and repo with some reasonable spacing.
-			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", pkg.Name, pkg.Version, pkg.Repo)
+			// Print the package name.arch, [epoch]:version-release and repo with some reasonable spacing.
+			na := fmt.Sprintf("%s.%s", pkg.Name, pkg.Architecture)
+			evr := fmt.Sprintf("%s-%s", pkg.Version, pkg.Release)
+			if pkg.Epoch != 0 {
+				evr = fmt.Sprintf("%d:%s", pkg.Epoch, evr)
+			}
+			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", na, evr, pkg.Repo)
+		}
+	}
+	return retCode
+}
+
+type searchCmd struct {
+	packageSystem string
+	name          string
+	installed     bool
+	available     bool
+}
+
+func (*searchCmd) Name() string     { return "search" }
+func (*searchCmd) Synopsis() string { return "Search NEVRA of a package" }
+func (*searchCmd) Usage() string {
+	return `search --name=X [--installed] [--available] [--package_system=P]:
+  Search the current installed packages or all available packages in package repo. The packages will be displayed in NEVRA version.
+  By default, --installed and --available will be enabled.
+`
+}
+
+func (l *searchCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&l.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.StringVar(&l.name, "name", "", "Name of package to search")
+	f.BoolVar(&l.installed, "installed", false, "If true print out installed NEVRA of the package")
+	f.BoolVar(&l.available, "available", false, "If true print out all available NEVRA of the package")
+}
+
+func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if f.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "All options are set via flags")
+		return subcommands.ExitFailure
+	}
+	if l.name == "" {
+		fmt.Fprintln(os.Stderr, "--name must be supplied")
+		return subcommands.ExitFailure
+	}
+
+	// if we don't set flags for current and latest, both should be set by default
+	if !l.installed && !l.available {
+		l.installed, l.available = true, true
+	}
+
+	ps, err := flagToType(l.packageSystem)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse package system for --package-system: %s invalid\n", l.packageSystem)
+		return subcommands.ExitFailure
+	}
+
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewPackagesClientProxy(state.Conn)
+
+	resp, err := c.SearchOneMany(ctx, &pb.SearchRequest{
+		PackageSystem: ps,
+		Name:          l.name,
+		Installed:     l.installed,
+		Available:     l.available,
+	})
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - Search returned error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Search for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		if l.installed {
+			fmt.Fprintf(state.Out[r.Index], "%s:\n", "Installed Packages")
+			if packages := r.Resp.InstalledPackages.Packages; len(packages) == 0 {
+				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
+			} else {
+				for _, packageInfo := range packages {
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+				}
+			}
+
+		}
+		if l.available {
+			fmt.Fprintf(state.Out[r.Index], "%s:\n", "Available Packages")
+			if packages := r.Resp.AvailablePackages.Packages; len(packages) == 0 {
+				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
+			} else {
+				for _, packageInfo := range packages {
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+				}
+			}
 		}
 	}
 	return retCode

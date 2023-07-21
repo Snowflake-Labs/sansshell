@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -38,6 +39,8 @@ import (
 
 // Metrics
 var (
+	packagesSearchFailureCounter = metrics.MetricDefinition{Name: "actions_packages_search_failure",
+		Description: "number of failures when performing packages.Search"}
 	packagesListInstalledFailureCounter = metrics.MetricDefinition{Name: "actions_packages_listinstalled_failure",
 		Description: "number of failures when performing packages.ListInstalled"}
 	packagesRepoListFailureCounter = metrics.MetricDefinition{Name: "actions_packages_repolist_failure",
@@ -159,6 +162,30 @@ var (
 			},
 		}
 		return genCmd(p, listOpts)
+	}
+
+	generateSearch = func(p *pb.SearchRequest, searchType string) ([]string, error) {
+		var out []string
+		switch p.PackageSystem {
+		case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
+			out = append(out, RepoqueryBin)
+			out = append(out, "--nevra")
+			out = append(out, p.Name)
+			// add options based on search type
+			switch searchType {
+			case "installed":
+				out = append(out, "--installed")
+			case "available":
+				out = append(out, "--show-duplicates")
+			default:
+				return nil, status.Errorf(codes.InvalidArgument, "no support for package search type %s", searchType)
+			}
+
+		default:
+			return nil, status.Errorf(codes.Unimplemented, "no support for package system enum %d", p.PackageSystem)
+		}
+
+		return out, nil
 	}
 
 	generateRepoList = func(p pb.PackageSystem) ([]string, error) {
@@ -299,6 +326,9 @@ func (s *server) Remove(ctx context.Context, req *pb.RemoveRequest) (*pb.RemoveR
 // Nevra is of the form n-e:v-r.a (where n is optional since e can be 0 for no epoch).
 var nevraRe = regexp.MustCompile(`^([^-]+-)?[^:]+:[^-]+-[^\.]+\..+$`)
 
+// split each part of nevra
+var nevraReSplit = regexp.MustCompile(`^(.+)-([\d]*):(.+)-(.+)\.(.+)$`)
+
 func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
@@ -375,6 +405,31 @@ func parseListInstallOutput(p pb.PackageSystem, r io.Reader) (*pb.ListInstalledR
 	return parser(r)
 }
 
+// extract epoch, version and release from string with pattern: [epoch:]version-release
+func extractEVR(evr string) (uint64, string, string, error) {
+	epoch, version, release := "0", "", ""
+	// in yum repo, none of epoch, version or release will contain : or -
+	// we can safely split based on these separators
+	parts := strings.Split(evr, ":")
+	if len(parts) == 2 {
+		epoch = parts[0]
+		evr = parts[1]
+	}
+	parts = strings.Split(evr, "-")
+	version = parts[0]
+	if len(parts) == 2 {
+		release = parts[1]
+	} else {
+		return 0, "", "", status.Errorf(codes.Internal, "can't extract EVR from yum list output `-` should exist between version and release")
+	}
+
+	epochUint, err := strconv.ParseUint(epoch, 10, 32)
+	if err != nil {
+		return 0, "", "", status.Errorf(codes.Internal, "convert epoch from string to uint error: %s", err)
+	}
+	return epochUint, version, release, nil
+}
+
 func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 	scanner := bufio.NewScanner(r)
 
@@ -420,10 +475,22 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 			return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q which is invalid", text)
 		}
 
+		// process the PACKAGE_NAME(name.arch) and PACKAGE_VERSION([epoch:]version-release)
+		// the package name itself may contain periods, but architecture cannot, so we split them based on the last period
+		dotIdx := strings.LastIndex(fields[0], ".")
+		name, arch := fields[0][:dotIdx], fields[0][dotIdx+1:]
+		epoch, version, release, err := extractEVR(fields[1])
+		if err != nil {
+			return nil, err
+		}
+
 		reply.Packages = append(reply.Packages, &pb.PackageInfo{
-			Name:    fields[0],
-			Version: fields[1],
-			Repo:    fields[2],
+			Name:         name,
+			Epoch:        uint32(epoch),
+			Version:      version,
+			Release:      release,
+			Architecture: arch,
+			Repo:         fields[2],
 		})
 	}
 
@@ -459,6 +526,123 @@ func (s *server) ListInstalled(ctx context.Context, req *pb.ListInstalledRequest
 	}
 
 	return parseListInstallOutput(req.PackageSystem, run.Stdout)
+}
+
+func parseRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error) {
+	parsers := map[pb.PackageSystem]func(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error){
+		pb.PackageSystem_PACKAGE_SYSTEM_YUM: parseYumRepoQueryOutput,
+	}
+	parser, ok := parsers[p.PackageSystem]
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "can't find parser for repoquery output for package system %d", p.PackageSystem)
+	}
+	return parser(p, r)
+}
+
+func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoList, error) {
+	// The output of repoquery should just be package info
+	// Split the output into lines
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "error reading from io.Reader:")
+	}
+	outputLines := strings.Split(string(data), "\n")
+
+	packageInfoList := &pb.PackageInfoList{}
+	for i, line := range outputLines {
+		// Remove the leading and trailing white space
+		outputLines[i] = strings.TrimSpace(line)
+		// skip if output line is empty
+		if len(outputLines[i]) == 0 {
+			continue
+		}
+		// extract NEVRA of each package
+		matches := nevraReSplit.FindStringSubmatch(outputLines[i])
+		if len(matches) != 6 {
+			return nil, fmt.Errorf("invalid NEVRA format")
+		}
+		epoch, err := strconv.ParseUint(matches[2], 10, 32)
+		if err != nil {
+			// handle error
+			return nil, fmt.Errorf("unable to transfer from string to int: %s", err)
+		}
+
+		packageInfo := &pb.PackageInfo{
+			Name:         matches[1],
+			Epoch:        uint32(epoch),
+			Version:      matches[3],
+			Release:      matches[4],
+			Architecture: matches[5],
+		}
+		packageInfoList.Packages = append(packageInfoList.Packages, packageInfo)
+	}
+	return packageInfoList, nil
+}
+
+func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	// check package name is set
+	if len(req.Name) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "package name must be filled in")
+	}
+	// current search rpc requires at lease one search type: installed or available
+	if !req.Installed && !req.Available {
+		return nil, status.Errorf(codes.InvalidArgument, "At lease one search type (available, installed) must be set")
+	}
+
+	// Unset means YUM.
+	if req.PackageSystem == pb.PackageSystem_PACKAGE_SYSTEM_UNKNOWN {
+		req.PackageSystem = pb.PackageSystem_PACKAGE_SYSTEM_YUM
+	}
+
+	runRepoqueryCommand := func(command []string) (*pb.PackageInfoList, error) {
+		// This may return output to stderr if the lock is held and we wait. That's ok.
+		run, err := util.RunCommand(ctx, command[0], command[1:])
+		if err != nil {
+			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "run_err"))
+			return nil, err
+		}
+		if err := run.Error; run.ExitCode != 0 || err != nil {
+			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "run_err"))
+			return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+		}
+		packageInfoList, err := parseRepoQueryOutput(req, run.Stdout)
+		if err != nil {
+			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "parse_err"))
+			return nil, err
+		}
+		return packageInfoList, nil
+	}
+
+	reply := &pb.SearchReply{}
+	if req.Installed {
+		command, err := generateSearch(req, "installed")
+		if err != nil {
+			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
+			return nil, err
+		}
+
+		packageInfoList, err := runRepoqueryCommand(command)
+		if err != nil {
+			return nil, err
+		}
+		reply.InstalledPackages = packageInfoList
+
+	}
+	if req.Available {
+		command, err := generateSearch(req, "available")
+		if err != nil {
+			recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
+			return nil, err
+		}
+
+		packageInfoList, err := runRepoqueryCommand(command)
+		if err != nil {
+			return nil, err
+		}
+		reply.AvailablePackages = packageInfoList
+	}
+	return reply, nil
 }
 
 func parseRepoListOutput(p pb.PackageSystem, r io.Reader) (*pb.RepoListReply, error) {

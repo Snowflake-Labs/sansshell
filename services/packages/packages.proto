@@ -25,6 +25,7 @@ service Packages {
   rpc Install(InstallRequest) returns (InstallReply) {}
   rpc Remove(RemoveRequest) returns (RemoveReply) {}
   rpc Update(UpdateRequest) returns (UpdateReply) {}
+  rpc Search(SearchRequest) returns (SearchReply) {}
   rpc ListInstalled(ListInstalledRequest) returns (ListInstalledReply) {}
   rpc RepoList(RepoListRequest) returns (RepoListReply) {}
   // Cleanup executes any package system specific cleanup such as
@@ -92,13 +93,37 @@ message UpdateRequest {
 
 message UpdateReply { string debug_output = 1; }
 
-message ListInstalledRequest { PackageSystem package_system = 1; }
+// Search package NEVRA based on the package name and search type
+// If none of the search type is specified, server will return error
+message SearchRequest { 
+  PackageSystem package_system = 1; 
+  // Specify the package name to search
+  string name = 2;
+  // If true: search installed package NEVRA for specified package name
+  bool installed = 3;
+  // If true: search all available package NEVRAs for specified package name
+  bool available = 4;
+}
+
+message SearchReply {
+  PackageInfoList installed_packages = 1;
+  PackageInfoList available_packages = 2;
+}
 
 message PackageInfo {
   string name = 1;
-  string version = 2;
-  string repo = 3;
+  uint32 epoch = 2;
+  string version = 3;
+  string release = 4;
+  string architecture = 5;
+  string repo = 6;
 }
+
+message PackageInfoList  {repeated PackageInfo packages = 1; }
+
+
+message ListInstalledRequest { PackageSystem package_system = 1; }
+
 
 message ListInstalledReply { repeated PackageInfo packages = 1; }
 

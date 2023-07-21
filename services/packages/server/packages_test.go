@@ -46,6 +46,13 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
 }
 
+func generateNEVRA(p *pb.PackageInfo) (string, error) {
+	if p == nil {
+		return "", fmt.Errorf("package not found!")
+	}
+	return fmt.Sprintf("%s-%d:%s-%s.%s", p.Name, p.Epoch, p.Version, p.Release, p.Architecture), nil
+}
+
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
 	s := grpc.NewServer()
@@ -59,6 +66,93 @@ func TestMain(m *testing.M) {
 	defer s.GracefulStop()
 
 	os.Exit(m.Run())
+}
+
+func TestExtractEVR(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		parsedStr   string
+		wantEpoch   uint64
+		wantVersion string
+		wantRelease string
+		wantError   bool
+	}{
+		{
+			name:        "epoch is 0 and missing from parsedStr",
+			parsedStr:   "2.1.1-1.el7",
+			wantEpoch:   0,
+			wantVersion: "2.1.1",
+			wantRelease: "1.el7",
+		},
+		{
+			name:        "epoch exists in parsedStr",
+			parsedStr:   "1:0.5.1-2.el7",
+			wantEpoch:   1,
+			wantVersion: "0.5.1",
+			wantRelease: "2.el7",
+		},
+		{
+			name:        "version doesn't necessary need to major.minor.patch",
+			parsedStr:   "0-0.17.20140318svn632.el7",
+			wantEpoch:   0,
+			wantVersion: "0",
+			wantRelease: "0.17.20140318svn632.el7",
+		},
+		{
+			name:        "release can contian underscores and periods",
+			parsedStr:   "1.3.0-6.el7_3",
+			wantEpoch:   0,
+			wantVersion: "1.3.0",
+			wantRelease: "6.el7_3",
+		},
+		{
+			name:        "version can be a large number",
+			parsedStr:   "20080615-13.1.el7",
+			wantEpoch:   0,
+			wantVersion: "20080615",
+			wantRelease: "13.1.el7",
+		},
+		{
+			name:        "version can contains letters",
+			parsedStr:   "2:svn23897.0.981-45.el7",
+			wantEpoch:   2,
+			wantVersion: "svn23897.0.981",
+			wantRelease: "45.el7",
+		},
+		{
+			name:      "bad parsed string without -",
+			parsedStr: "45.el7",
+			wantError: true,
+		},
+		{
+			name:      "bad epoch which should be a positive number case 1",
+			parsedStr: "-2:svn23897.0.981-45.el7",
+			wantError: true,
+		},
+		{
+			name:      "bad epoch which should be a positive number case 2",
+			parsedStr: "ppp:svn23897.0.981-45.el7",
+			wantError: true,
+		},
+	} {
+		epoch, version, release, err := extractEVR(tc.parsedStr)
+		if tc.wantError {
+			testutil.FatalOnNoErr("extractEVR", err, t)
+			continue
+		}
+		testutil.FatalOnErr("extractEVR", err, t)
+		if tc.wantEpoch != epoch {
+			t.Fatalf("Output from extractEVR differs. Got:\n%d\nWant:\n%d", epoch, tc.wantEpoch)
+		}
+		if tc.wantVersion != version {
+			t.Fatalf("Output from extractEVR differs. Got:\n%s\nWant:\n%s", version, tc.wantVersion)
+		}
+		if tc.wantRelease != release {
+			t.Fatalf("Output from extractEVR differs. Got:\n%s\nWant:\n%s", release, tc.wantRelease)
+		}
+
+	}
+
 }
 
 func TestInstall(t *testing.T) {
@@ -661,6 +755,167 @@ func TestListInstalled(t *testing.T) {
 			t.Log(err)
 		})
 		generateListInstalled = saveGenerate
+	}
+}
+
+func TestSearch(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewPackagesClient(conn)
+	testPackageName := "firefox"
+	firefoxInstalled := "firefox-0:102.10.0-1.el7.centos.aarch64"
+	firefoxV1 := "firefox-0:68.10.0-1.el7.centos.aarch64"
+	firefoxV2 := firefoxInstalled
+	firefoxV3 := "firefox-0:102.12.0-1.el7.centos.aarch64"
+
+	savedRepoqueryBin := RepoqueryBin
+	t.Cleanup(func() {
+		RepoqueryBin = savedRepoqueryBin
+	})
+	RepoqueryBin = "repoquery"
+
+	for _, tc := range []struct {
+		name                  string
+		req                   *pb.SearchRequest
+		wantInstalledPackages []string
+		wantAvailablePackages []string
+		wantError             bool
+		wantCmdLineInstall    string
+		wantCmdLineAvailable  string
+	}{
+		{
+			name:      "--name should always be provided",
+			req:       &pb.SearchRequest{},
+			wantError: true,
+		},
+		{
+			name: "specify a bad package system and get an error.",
+			req: &pb.SearchRequest{
+				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
+				Name:          testPackageName,
+				Installed:     true,
+			},
+			wantError: true,
+		},
+		{
+			name: "specify --installed and --latest flags",
+			req: &pb.SearchRequest{
+				Name:      testPackageName,
+				Installed: true,
+				Available: true,
+			},
+			wantInstalledPackages: []string{firefoxInstalled},
+			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
+		},
+		{
+			name: "specify --installed flag",
+			req: &pb.SearchRequest{
+				Name:      testPackageName,
+				Installed: true,
+			},
+			wantInstalledPackages: []string{firefoxInstalled},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+		},
+		{
+			name: "specify --latest flag",
+			req: &pb.SearchRequest{
+				Name:      testPackageName,
+				Available: true,
+			},
+			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
+		},
+		{
+			name: "specify --latest flag and the package not found in yum repos expect empty",
+			req: &pb.SearchRequest{
+				Name:      testPackageName + "9999",
+				Available: true,
+			},
+			wantAvailablePackages: []string{},
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName+"9999"),
+		},
+		{
+			name: "specify --current flag and the package not found in current system expect empty",
+			req: &pb.SearchRequest{
+				Name:      testPackageName + "9999",
+				Installed: true,
+			},
+			wantAvailablePackages: []string{},
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName+"9999"),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// mock the repoquery command
+			savedGenerateSearch := generateSearch
+			// cmdLineInstall and cmdLineAvailable for verify
+			var cmdLineInstall, cmdLineAvailable string
+
+			generateSearch = func(p *pb.SearchRequest, searchtype string) ([]string, error) {
+				// Capture what was generated so we can validate it.
+				out, err := savedGenerateSearch(p, searchtype)
+				if err != nil {
+					return nil, err
+				}
+				cmdLine := strings.Join(out, " ")
+				var testdataInput []string
+				switch searchtype {
+				case "installed":
+					testdataInput = tc.wantInstalledPackages
+					cmdLineInstall = cmdLine
+				case "available":
+					testdataInput = tc.wantAvailablePackages
+					cmdLineAvailable = cmdLine
+				}
+
+				return []string{testutil.ResolvePath(t, "echo"), "-n", strings.Join(testdataInput, "\n")}, nil
+			}
+			t.Cleanup(func() {
+				generateSearch = savedGenerateSearch
+			})
+
+			resp, err := client.Search(ctx, tc.req)
+
+			if tc.wantError {
+				testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+				return
+			}
+
+			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+
+			comparePackageList := func(wantPackages []string, wantCmdLine string, gotPackagesList *pb.PackageInfoList, gotCmdLine string, searchType string) {
+				if gotLen, wantLen := len(gotPackagesList.Packages), len(wantPackages); gotLen != wantLen {
+					t.Fatalf("search package %s result length differ.Got %d Want %d", searchType, gotLen, wantLen)
+				}
+				for i := range gotPackagesList.Packages {
+					wantPackage := wantPackages[i]
+					packageVersion, err := generateNEVRA(gotPackagesList.Packages[i])
+					// if resp.InstalledPackage is nil but wantInstalledPackage is not nil, something wrong happens
+					if err != nil && wantPackage != "" {
+						t.Fatalf("search package %s differ. Got %q Want %q", searchType, err, wantPackage)
+					}
+					if got, want := packageVersion, wantPackage; got != want {
+						t.Fatalf("search package %s differ. Got %q Want %q", searchType, err, want)
+					}
+					if got, want := gotCmdLine, wantCmdLine; got != want {
+						t.Fatalf("command lines differ for %s. Got %q Want %q", searchType, got, want)
+					}
+				}
+			}
+
+			if tc.req.Installed {
+				comparePackageList(tc.wantInstalledPackages, tc.wantCmdLineInstall, resp.InstalledPackages, cmdLineInstall, "installed")
+			}
+			if tc.req.Available {
+				comparePackageList(tc.wantAvailablePackages, tc.wantCmdLineAvailable, resp.AvailablePackages, cmdLineAvailable, "available")
+			}
+		})
 	}
 }
 

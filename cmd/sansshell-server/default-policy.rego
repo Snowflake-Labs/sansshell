@@ -53,6 +53,10 @@ allow {
 }
 
 allow {
+	input.type = "Packages.SearchRequest"
+}
+
+allow {
 	input.type = "Packages.RepoListRequest"
 }
 
