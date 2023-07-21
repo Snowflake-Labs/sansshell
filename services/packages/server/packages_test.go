@@ -68,6 +68,93 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestExtractEVR(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		parsedStr   string
+		wantEpoch   uint64
+		wantVersion string
+		wantRelease string
+		wantError   bool
+	}{
+		{
+			name:        "epoch is 0 and missing from parsedStr",
+			parsedStr:   "2.1.1-1.el7",
+			wantEpoch:   0,
+			wantVersion: "2.1.1",
+			wantRelease: "1.el7",
+		},
+		{
+			name:        "epoch exists in parsedStr",
+			parsedStr:   "1:0.5.1-2.el7",
+			wantEpoch:   1,
+			wantVersion: "0.5.1",
+			wantRelease: "2.el7",
+		},
+		{
+			name:        "version doesn't necessary need to major.minor.patch",
+			parsedStr:   "0-0.17.20140318svn632.el7",
+			wantEpoch:   0,
+			wantVersion: "0",
+			wantRelease: "0.17.20140318svn632.el7",
+		},
+		{
+			name:        "release can contian underscores and periods",
+			parsedStr:   "1.3.0-6.el7_3",
+			wantEpoch:   0,
+			wantVersion: "1.3.0",
+			wantRelease: "6.el7_3",
+		},
+		{
+			name:        "version can be a large number",
+			parsedStr:   "20080615-13.1.el7",
+			wantEpoch:   0,
+			wantVersion: "20080615",
+			wantRelease: "13.1.el7",
+		},
+		{
+			name:        "version can contains letters",
+			parsedStr:   "2:svn23897.0.981-45.el7",
+			wantEpoch:   2,
+			wantVersion: "svn23897.0.981",
+			wantRelease: "45.el7",
+		},
+		{
+			name:      "bad parsed string without -",
+			parsedStr: "45.el7",
+			wantError: true,
+		},
+		{
+			name:      "bad epoch which should be a positive number case 1",
+			parsedStr: "-2:svn23897.0.981-45.el7",
+			wantError: true,
+		},
+		{
+			name:      "bad epoch which should be a positive number case 2",
+			parsedStr: "ppp:svn23897.0.981-45.el7",
+			wantError: true,
+		},
+	} {
+		epoch, version, release, err := extractEVR(tc.parsedStr)
+		if tc.wantError {
+			testutil.FatalOnNoErr("extractEVR", err, t)
+			continue
+		}
+		testutil.FatalOnErr("extractEVR", err, t)
+		if tc.wantEpoch != epoch {
+			t.Fatalf("Output from extractEVR differs. Got:\n%d\nWant:\n%d", epoch, tc.wantEpoch)
+		}
+		if tc.wantVersion != version {
+			t.Fatalf("Output from extractEVR differs. Got:\n%s\nWant:\n%s", version, tc.wantVersion)
+		}
+		if tc.wantRelease != release {
+			t.Fatalf("Output from extractEVR differs. Got:\n%s\nWant:\n%s", release, tc.wantRelease)
+		}
+
+	}
+
+}
+
 func TestInstall(t *testing.T) {
 	var err error
 	ctx := context.Background()

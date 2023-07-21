@@ -93,11 +93,15 @@ message UpdateRequest {
 
 message UpdateReply { string debug_output = 1; }
 
-
+// Search package NEVRA based on the package name and search type
+// If none of the search type is specified, server will return error
 message SearchRequest { 
   PackageSystem package_system = 1; 
+  // Specify the package name to search
   string name = 2;
+  // If true: search installed package NEVRA for specified package name
   bool installed = 3;
+  // If true: search all available package NEVRAs for specified package name
   bool available = 4;
 }
 

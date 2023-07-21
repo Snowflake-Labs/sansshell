@@ -406,8 +406,8 @@ func parseListInstallOutput(p pb.PackageSystem, r io.Reader) (*pb.ListInstalledR
 }
 
 // extract epoch, version and release from string with pattern: [epoch:]version-release
-func extractEVR(evr string) (epoch, version, release string) {
-	epoch = "0"
+func extractEVR(evr string) (uint64, string, string, error) {
+	epoch, version, release := "0", "", ""
 	// in yum repo, none of epoch, version or release will contain : or -
 	// we can safely split based on these separators
 	parts := strings.Split(evr, ":")
@@ -419,8 +419,15 @@ func extractEVR(evr string) (epoch, version, release string) {
 	version = parts[0]
 	if len(parts) == 2 {
 		release = parts[1]
+	} else {
+		return 0, "", "", status.Errorf(codes.Internal, "can't extract EVR from yum list output `-` should exist between version and release")
 	}
-	return
+
+	epochUint, err := strconv.ParseUint(epoch, 10, 32)
+	if err != nil {
+		return 0, "", "", status.Errorf(codes.Internal, "convert epoch from string to uint error: %s", err)
+	}
+	return epochUint, version, release, nil
 }
 
 func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
@@ -472,14 +479,14 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 		// the package name itself may contain periods, but architecture cannot, so we split them based on the last period
 		dotIdx := strings.LastIndex(fields[0], ".")
 		name, arch := fields[0][:dotIdx], fields[0][dotIdx+1:]
-		epoch, version, release := extractEVR(fields[1])
-		epochUint, err := strconv.ParseUint(epoch, 10, 32)
+		epoch, version, release, err := extractEVR(fields[1])
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "convert epoch from string to uint error: %s", err)
+			return nil, err
 		}
+
 		reply.Packages = append(reply.Packages, &pb.PackageInfo{
 			Name:         name,
-			Epoch:        uint32(epochUint),
+			Epoch:        uint32(epoch),
 			Version:      version,
 			Release:      release,
 			Architecture: arch,
@@ -574,9 +581,13 @@ func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoL
 
 func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	// check name is set
+	// check package name is set
 	if len(req.Name) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "package name must be filled in")
+	}
+	// current search rpc requires at lease one search type: installed or available
+	if !req.Installed && !req.Available {
+		return nil, status.Errorf(codes.InvalidArgument, "At lease one search type (available, installed) must be set")
 	}
 
 	// Unset means YUM.

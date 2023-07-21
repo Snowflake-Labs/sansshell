@@ -544,7 +544,7 @@ type cleanupCmd struct {
 func (*cleanupCmd) Name() string     { return "cleanup" }
 func (*cleanupCmd) Synopsis() string { return "Run cleanup on machine" }
 func (*cleanupCmd) Usage() string {
-	return `cleanup [--package_system=P]:	
+	return `cleanup [--package_system=P]:
   Run cleanup on remote machine
 `
 }
