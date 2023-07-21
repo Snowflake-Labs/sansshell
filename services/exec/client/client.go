@@ -21,6 +21,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/google/subcommands"
@@ -29,6 +30,12 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
+
+// Default value for using streaming exec.
+// This is exposed so that clients can set a default that works for
+// their environment. StreamingExec was added after Exec, so policies
+// or sansshell nodes may not have been updated to support streaming.
+var DefaultStreaming = false
 
 const subPackage = "exec"
 
@@ -58,21 +65,53 @@ func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	return c.Execute(ctx, args...)
 }
 
-type runCmd struct{}
+type runCmd struct {
+	streaming bool
+
+	// returnCode internally keeps track of the final status to return
+	returnCode subcommands.ExitStatus
+}
 
 func (*runCmd) Name() string     { return "run" }
 func (*runCmd) Synopsis() string { return "Run provided command and return a response." }
 func (*runCmd) Usage() string {
-	return `run <command> [<args>...]:
+	return `run <command> [--stream] [<args>...]:
   Run a command remotely and return the response
 
 	Note: This is not optimized for large output or long running commands.  If
-	the output doesn't fit in memory in a single proto message or if it doesnt
+	the output doesn't fit in memory in a single proto message or if it doesn't
 	complete within the timeout, you'll have a bad time.
+
+	The --stream flag can be used to stream back command output as the command
+	runs. It doesn't affect the timeout.
 `
 }
 
-func (p *runCmd) SetFlags(f *flag.FlagSet) {}
+func (p *runCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&p.streaming, "stream", DefaultStreaming, "If true, stream back stdout and stdin during the command instead of sending it all at the end.")
+}
+
+func (p *runCmd) printCommandOutput(state *util.ExecuteState, idx int, resp *pb.ExecResponse, err error) {
+	if err == io.EOF {
+		// Streaming commands may return EOF
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(state.Err[idx], "Command execution failure - %v\n", err)
+		// If any target had errors it needs to be reported for that target but we still
+		// need to process responses off the channel. Final return code though should
+		// indicate something failed.
+		p.returnCode = subcommands.ExitFailure
+		return
+	}
+	if len(resp.Stderr) > 0 {
+		fmt.Fprintf(state.Err[idx], "%s", resp.Stderr)
+	}
+	fmt.Fprintf(state.Out[idx], "%s", resp.Stdout)
+	if resp.RetCode != 0 {
+		p.returnCode = subcommands.ExitFailure
+	}
+}
 
 func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
@@ -82,33 +121,44 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	c := pb.NewExecClientProxy(state.Conn)
+	req := &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]}
 
-	resp, err := c.RunOneMany(ctx, &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]})
-	if err != nil {
-		// Emit this to every error file as it's not specific to a given target.
-		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
+	if p.streaming {
+		resp, err := c.StreamingRunOneMany(ctx, req)
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
+			}
+			return subcommands.ExitFailure
 		}
-		return subcommands.ExitFailure
-	}
 
-	returnCode := subcommands.ExitSuccess
-	for r := range resp {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "Command execution failure for target %s (%d) - error - %v\n", r.Target, r.Index, r.Error)
-			// If any target had errors it needs to be reported for that target but we still
-			// need to process responses off the channel. Final return code though should
-			// indicate something failed.
-			returnCode = subcommands.ExitFailure
-			continue
+		for {
+			rs, err := resp.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return p.returnCode
+				}
+				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
+				return subcommands.ExitFailure
+			}
+			for _, r := range rs {
+				p.printCommandOutput(state, r.Index, r.Resp, r.Error)
+			}
 		}
-		if len(r.Resp.Stderr) > 0 {
-			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+	} else {
+		resp, err := c.RunOneMany(ctx, req)
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
+			}
+			return subcommands.ExitFailure
 		}
-		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
-		if r.Resp.RetCode != 0 {
-			returnCode = subcommands.ExitFailure
+
+		for r := range resp {
+			p.printCommandOutput(state, r.Index, r.Resp, r.Error)
 		}
 	}
-	return returnCode
+	return p.returnCode
 }

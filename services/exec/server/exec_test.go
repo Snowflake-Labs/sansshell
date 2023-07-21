@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -54,6 +55,22 @@ func TestMain(m *testing.M) {
 	defer s.GracefulStop()
 
 	os.Exit(m.Run())
+}
+
+func collect(c pb.Exec_StreamingRunClient) (*pb.ExecResponse, error) {
+	collected := &pb.ExecResponse{}
+	for {
+		resp, err := c.Recv()
+		if err == io.EOF {
+			return collected, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		collected.Stdout = append(collected.Stdout, resp.Stdout...)
+		collected.Stderr = append(collected.Stderr, resp.Stderr...)
+		collected.RetCode = resp.RetCode
+	}
 }
 
 func TestExec(t *testing.T) {
@@ -97,6 +114,7 @@ func TestExec(t *testing.T) {
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			// Test a normal exec.
 			resp, err := client.Run(ctx, &pb.ExecRequest{
 				Command: tc.bin,
 				Args:    tc.args,
@@ -113,6 +131,30 @@ func TestExec(t *testing.T) {
 			if got, want := resp.RetCode != 0, tc.returnCodeNonZero; got != want {
 				t.Fatalf("%s: Invalid return codes. Non-zero state doesn't match. Want %t Got %t ReturnCode %d", tc.name, want, got, resp.RetCode)
 			}
+
+			// Test a streaming exec, which should behave identically to normal exec if
+			// all responses are concatenated together.
+			stream, err := client.StreamingRun(ctx, &pb.ExecRequest{
+				Command: tc.bin,
+				Args:    tc.args,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			streamResp, err := collect(stream)
+			t.Logf("%s: resp: %+v", tc.name, streamResp)
+			t.Logf("%s: err: %v", tc.name, err)
+			if tc.wantErr {
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
+				return
+			}
+			if got, want := streamResp.Stdout, tc.stdout; string(got) != want {
+				t.Fatalf("%s: stdout doesn't match. Want %q Got %q", tc.name, want, got)
+			}
+			if got, want := streamResp.RetCode != 0, tc.returnCodeNonZero; got != want {
+				t.Fatalf("%s: Invalid return codes. Non-zero state doesn't match. Want %t Got %t ReturnCode %d", tc.name, want, got, streamResp.RetCode)
+			}
+
 		})
 	}
 }

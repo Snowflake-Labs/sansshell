@@ -24,6 +24,11 @@ package Exec;
 service Exec {
   // Run takes input, executes it and returns result of input execution
   rpc Run (ExecRequest) returns (ExecResponse) {}
+  // StreamingRun takes input, executes it and streams back execution information
+  //
+  // A nonzero return code, if any, will be in the final response. Intermediate
+  // responses may contain stdout and/or stderr.
+  rpc StreamingRun (ExecRequest) returns (stream ExecResponse) {}
 }
 
 // ExecRequest describes what to execute
