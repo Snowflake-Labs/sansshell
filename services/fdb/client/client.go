@@ -1352,7 +1352,11 @@ func (*fdbCLIExcludeCmd) Synopsis() string {
 	return "The exclude command excludes servers from the database or marks them as failed."
 }
 func (p *fdbCLIExcludeCmd) Usage() string {
-	return "exclude [failed] [<ADDRESS...>] [locality_dcid:<excludedcid>] [locality_zoneid:<excludezoneid>] [locality_machineid:<excludemachineid>] [locality_processid:<excludeprocessid>] or any locality"
+	return `exclude [wait] [failed] [<ADDRESS...>] [locality_dcid:<excludedcid>] [locality_zoneid:<excludezoneid>] [locality_machineid:<excludemachineid>] [locality_processid:<excludeprocessid>] or any locality
+
+Note: By default no_wait will be applied for process exclusion which is asynchronous. 
+If want to wait for entire data to be moved off machine before returning result, please add wait option.
+`
 }
 
 func (r *fdbCLIExcludeCmd) SetFlags(f *flag.FlagSet) {
@@ -1362,23 +1366,40 @@ func (r *fdbCLIExcludeCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	failed, address := false, false
+	wait, failed, address := false, false, false
+	// set option value
+	setOpt := func(opt string, optName string, optValue *bool) bool {
+		if *optValue {
+			fmt.Fprintf(os.Stderr, "cannot specify %s more than once\n", optName)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return false
+		}
+		if address {
+			fmt.Fprintf(os.Stderr, "cannot specify %s after listing addresses\n", optName)
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return false
+		}
+		*optValue = true
+		return true
+	}
 	for _, opt := range f.Args() {
 		if opt == "failed" {
-			if failed {
-				fmt.Fprintln(os.Stderr, "cannot specify failed more than once")
-				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
-				return subcommands.ExitFailure
-			}
-			if address {
-				fmt.Fprintln(os.Stderr, "cannot specify failed after listing addresses")
-				fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			if ok := setOpt(opt, "failed", &failed); !ok {
 				return subcommands.ExitFailure
 			}
 			r.req.Failed = &wrapperspb.BoolValue{
 				Value: true,
 			}
 			failed = true
+			continue
+		} else if opt == "wait" {
+			if ok := setOpt(opt, "wait", &wait); !ok {
+				return subcommands.ExitFailure
+			}
+			r.req.NoWait = &wrapperspb.BoolValue{
+				Value: false,
+			}
+			wait = true
 			continue
 		}
 		address = true
@@ -1388,6 +1409,13 @@ func (r *fdbCLIExcludeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 			return subcommands.ExitFailure
 		}
 		r.req.Addresses = append(r.req.Addresses, opt)
+	}
+
+	// by default the no_wait will be set if we specify the address, unless we explicit set the wait option in command
+	if r.req.Addresses != nil && r.req.NoWait == nil {
+		r.req.NoWait = &wrapperspb.BoolValue{
+			Value: true,
+		}
 	}
 
 	req.Commands = append(req.Commands,

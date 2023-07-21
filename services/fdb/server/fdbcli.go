@@ -754,6 +754,7 @@ func parseFDBCLIDeleteTenant(req *pb.FDBCLIDeletetenant) ([]string, []captureLog
 func parseFDBCLIExclude(req *pb.FDBCLIExclude) ([]string, []captureLogs, error) {
 	args := []string{"exclude"}
 
+	args = boolFlag(args, req.NoWait, "no_wait")
 	args = boolFlag(args, req.Failed, "failed")
 	args = append(args, req.Addresses...)
 	return args, nil, nil

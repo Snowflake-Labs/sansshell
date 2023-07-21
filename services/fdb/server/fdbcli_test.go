@@ -1485,6 +1485,39 @@ func TestFDBCLI(t *testing.T) {
 								Failed: &wrapperspb.BoolValue{
 									Value: true,
 								},
+								NoWait: &wrapperspb.BoolValue{
+									Value: true,
+								},
+								Addresses: []string{
+									"address1",
+									"address2",
+								},
+							},
+						},
+					},
+				},
+			},
+			bin:      testutil.ResolvePath(t, "true"),
+			respLogs: make(map[string][]byte),
+			command: []string{
+				FDBCLI,
+				"--exec",
+				"exclude no_wait failed address1 address2",
+			},
+		},
+		{
+			name: "exclude add wait",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Exclude{
+							Exclude: &pb.FDBCLIExclude{
+								Failed: &wrapperspb.BoolValue{
+									Value: true,
+								},
+								NoWait: &wrapperspb.BoolValue{
+									Value: false,
+								},
 								Addresses: []string{
 									"address1",
 									"address2",

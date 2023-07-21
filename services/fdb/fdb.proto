@@ -206,6 +206,7 @@ message FDBCLIDeletetenant { string name = 1; }
 message FDBCLIExclude {
   google.protobuf.BoolValue failed = 1;
   repeated string addresses = 2;
+  google.protobuf.BoolValue no_wait = 3;
 }
 
 message FDBCLIExpensiveDataCheckInit {}
