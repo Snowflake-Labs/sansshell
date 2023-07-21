@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -2004,6 +2005,114 @@ func TestSymlink(t *testing.T) {
 
 			_, err := client.Symlink(ctx, tc.req)
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
+		})
+	}
+}
+
+func TestMkdir(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	temp := t.TempDir()
+	uid, gid, mode := os.Getuid(), os.Getgid(), uint32(0777)
+
+	for _, tc := range []struct {
+		name     string
+		req      *pb.MkdirRequest
+		wantErr  bool
+		filename string
+	}{
+		{
+			name:    "Blank request",
+			req:     &pb.MkdirRequest{},
+			wantErr: true,
+		},
+		{
+			name: "Blank dir description -- no attrs",
+			req: &pb.MkdirRequest{
+				DirAttrs: &pb.FileAttributes{},
+			},
+			wantErr: true,
+		},
+		{
+			// Don't need to test all attributes combinations as TestWrite did this.
+			name: "Bad path",
+			req: &pb.MkdirRequest{
+
+				DirAttrs: &pb.FileAttributes{
+					Filename: "/tmp/bbb/../../aaa/test",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "cannot craete intermediate directories",
+			req: &pb.MkdirRequest{
+
+				DirAttrs: &pb.FileAttributes{
+					Filename: filepath.Join(temp, "/AAA/test"),
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "create a directory",
+			req: &pb.MkdirRequest{
+				DirAttrs: &pb.FileAttributes{
+					Filename: filepath.Join(temp, "/test"),
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: mode,
+							},
+						},
+					},
+				},
+			},
+			filename: filepath.Join(temp, "test"),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if tc.filename != "" {
+					os.Remove(tc.filename)
+				}
+			}()
+
+			client := pb.NewLocalFileClient(conn)
+			_, err := client.Mkdir(context.Background(), tc.req)
+			t.Log(err)
+			testutil.WantErr(tc.name, err, tc.wantErr, t)
+			if tc.wantErr {
+				return
+			}
+
+			// check the new dir exist and its permission and ownership
+			originFileInfo, err := os.Stat(tc.filename)
+			testutil.FatalOnErr("Stat()", err, t)
+			if wantUid, gotUid := uid, originFileInfo.Sys().(*syscall.Stat_t).Uid; wantUid != int(gotUid) {
+				t.Fatalf("user id differ for new directory. Got %q Want %q", gotUid, wantUid)
+			}
+			if wantGid, gotGid := gid, originFileInfo.Sys().(*syscall.Stat_t).Gid; wantGid != int(gotGid) {
+				t.Fatalf("group id differ for new directory. Got %q Want %q", gotGid, wantGid)
+			}
+			if wantMode, gotMode := mode, originFileInfo.Mode().Perm(); wantMode != uint32(gotMode) {
+				t.Fatalf("permission mode differ for new directory. Got %q Want %q", gotMode, wantMode)
+			}
+
 		})
 	}
 }

@@ -91,6 +91,8 @@ var (
 		Description: "number of failures when performing localfile.Symlink"}
 	localfileSetFileAttributesFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_setfileattribute_failure",
 		Description: "number of failures when performing localfile.SetFileAttribute"}
+	localfileMkdirFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_mkdir_failure",
+		Description: "number of failures when performing localfile.Mkdir"}
 )
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
@@ -321,6 +323,31 @@ func setupOutput(a *pb.FileAttributes) (*os.File, *immutableState, error) {
 	// Except we don't trigger immutable now or we won't be able to write to it.
 	immutable, err := validateAndSetAttrs(f.Name(), a.Attributes, false)
 	return f, immutable, err
+}
+
+// create a directory, set ownership and mode
+func createDir(a *pb.FileAttributes) (string, *immutableState, error) {
+	// Validate path. We'll go ahead and write the data to a tmpfile and
+	// do the overwrite check when we rename below.
+	dirName := a.Filename
+	if err := util.ValidPath(dirName); err != nil {
+		return "", nil, err
+	}
+	// 0777 is just a placeholder, real mode will be set in validateAndSetAttrs() function
+	err := os.Mkdir(dirName, 0777)
+	if err != nil {
+		return "", nil, status.Errorf(codes.Internal, "can't create directory: %v", err)
+	}
+
+	// Set owner/gid/perms now since we have an open FD to the file and we don't want
+	// to accidentally leave this in another otherwise default state.
+	// Except we don't trigger immutable now or we won't be able to write to it.
+	immutable, err := validateAndSetAttrs(dirName, a.Attributes, false)
+	// if something wrong with owner/gid/perms settting, remove the created directory
+	if err != nil {
+		os.Remove(dirName)
+	}
+	return dirName, immutable, err
 }
 
 func finalizeFile(d *pb.FileWrite, f *os.File, filename string, immutable *immutableState) error {
@@ -771,6 +798,35 @@ func (s *server) Symlink(ctx context.Context, req *pb.SymlinkRequest) (*emptypb.
 		recorder.CounterOrLog(ctx, localfileSymlinkFailureCounter, 1, attribute.String("reason", "symlink_err"))
 		return nil, status.Errorf(codes.Internal, "symlink error: %v", err)
 	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Empty, retErr error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	if req.GetDirAttrs() == nil {
+		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "missing_dst"))
+		return nil, status.Error(codes.InvalidArgument, "destination must be filled in")
+	}
+	dirAttrs := req.GetDirAttrs()
+
+	if dirAttrs == nil {
+		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "missing_attrs"))
+		return nil, status.Errorf(codes.InvalidArgument, "must send attrs")
+	}
+	dirName := dirAttrs.Filename
+	logger.Info("create directory", dirName)
+	_, immutable, err := createDir(dirAttrs)
+	if err != nil {
+		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "create_dir_err"))
+		return nil, err
+	}
+
+	if immutable.immutable && immutable.setImmutable {
+		return nil, status.Errorf(codes.Internal, "error on setting immutable when creating a directory")
+	}
+
 	return &emptypb.Empty{}, nil
 }
 

@@ -58,6 +58,7 @@ func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&symlinkCmd{}, "")
 	c.Register(&sumCmd{}, "")
 	c.Register(&tailCmd{}, "")
+	c.Register(&mkdirCmd{}, "")
 	return c
 }
 
@@ -1323,4 +1324,117 @@ func (i *renameCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		}
 	}
 	return retCode
+}
+
+type mkdirCmd struct {
+	uid      int
+	username string
+	gid      int
+	group    string
+	mode     int
+}
+
+func (*mkdirCmd) Name() string     { return "mkdir" }
+func (*mkdirCmd) Synopsis() string { return "Create a directory" }
+func (*mkdirCmd) Usage() string {
+	return `mkdir --uid=X|username=Y --gid=X|group=Y --mode=X <path>:
+  Create a directory at the specified path.
+  Note: 
+  1. Please set flags before path. 
+  2. The action doesn't support creating intermedaite directories, e.g for this path /AAA/BBB/test, 
+     the parent directories BBB or /AAA/BBB doesn't exist, the action won't work.
+`
+}
+
+func (p *mkdirCmd) SetFlags(f *flag.FlagSet) {
+	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
+	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
+	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
+	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
+}
+
+func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if f.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "Please specify a directory path to create.")
+		return subcommands.ExitUsageError
+	}
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
+		return subcommands.ExitUsageError
+	}
+	if p.uid >= 0 && p.username != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --uid and --username")
+		return subcommands.ExitFailure
+	}
+	if p.gid >= 0 && p.group != "" {
+		fmt.Fprintln(os.Stderr, "cannot set both --gid and --group")
+		return subcommands.ExitFailure
+	}
+
+	c := pb.NewLocalFileClientProxy(state.Conn)
+	directoryName := f.Args()[0]
+
+	dirAttrs := &pb.FileAttributes{
+		Filename: directoryName,
+		Attributes: []*pb.FileAttribute{
+			{
+				Value: &pb.FileAttribute_Mode{
+					Mode: uint32(p.mode),
+				},
+			},
+		},
+	}
+
+	if p.uid >= 0 {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(p.uid),
+			},
+		})
+	}
+	if p.username != "" {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: p.username,
+			},
+		})
+	}
+	if p.gid >= 0 {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(p.gid),
+			},
+		})
+	}
+	if p.group != "" {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: p.group,
+			},
+		})
+	}
+	req := &pb.MkdirRequest{
+		DirAttrs: dirAttrs,
+	}
+
+	respChan, err := c.MkdirOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - mkdir client error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range respChan {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "mkdir client error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
+
 }
