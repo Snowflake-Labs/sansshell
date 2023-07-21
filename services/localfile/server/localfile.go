@@ -326,7 +326,7 @@ func setupOutput(a *pb.FileAttributes) (*os.File, *immutableState, error) {
 }
 
 // create a directory, set ownership and mode
-func setupDir(a *pb.FileAttributes) (string, *immutableState, error) {
+func createDir(a *pb.FileAttributes) (string, *immutableState, error) {
 	// Validate path. We'll go ahead and write the data to a tmpfile and
 	// do the overwrite check when we rename below.
 	dirName := a.Filename
@@ -817,9 +817,9 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 	}
 	dirName := dirAttrs.Filename
 	logger.Info("create directory", dirName)
-	_, immutable, err := setupDir(dirAttrs)
+	_, immutable, err := createDir(dirAttrs)
 	if err != nil {
-		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "setup_dir_err"))
+		recorder.CounterOrLog(ctx, localfileMkdirFailureCounter, 1, attribute.String("reason", "create_dir_err"))
 		return nil, err
 	}
 
