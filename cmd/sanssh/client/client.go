@@ -31,6 +31,7 @@ import (
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
@@ -71,7 +72,8 @@ type RunState struct {
 	PrefixOutput bool
 	// BatchSize if non-zero will do the requested operation to the targets but in
 	// N calls to the proxy where N is the target list size divided by BatchSize.
-	BatchSize int
+	BatchSize       int
+	KeepAliveParams *keepalive.ClientParameters
 }
 
 const (
@@ -227,6 +229,9 @@ func Run(ctx context.Context, rs RunState) {
 	// We may need an option for doing client OPA checks.
 	ops := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
+	}
+	if rs.KeepAliveParams != nil {
+		ops = append(ops, grpc.WithKeepaliveParams(*rs.KeepAliveParams))
 	}
 	if clientAuthz != nil {
 		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
