@@ -44,6 +44,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 // runState encapsulates all of the variable state needed
@@ -69,6 +70,8 @@ type runState struct {
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
 	metricsRecorder          metrics.MetricsRecorder
+	keepAliveServerParams    *keepalive.ServerParameters
+	keepAliveClientParams    *keepalive.ClientParameters
 }
 
 type Option interface {
@@ -341,6 +344,20 @@ func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	})
 }
 
+func WithKeepAliveServerParams(params *keepalive.ServerParameters) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.keepAliveServerParams = params
+		return nil
+	})
+}
+
+func WithKeepAliveClientParams(params *keepalive.ClientParameters) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.keepAliveClientParams = params
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -421,6 +438,9 @@ func Run(ctx context.Context, opts ...Option) {
 		grpc.WithChainUnaryInterceptor(unaryClient...),
 		grpc.WithChainStreamInterceptor(streamClient...),
 	}
+	if rs.keepAliveClientParams != nil {
+		dialOpts = append(dialOpts, grpc.WithKeepaliveParams(*rs.keepAliveClientParams))
+	}
 	targetDialer := server.NewDialer(dialOpts...)
 
 	svcMap := server.LoadGlobalServiceMap()
@@ -450,6 +470,11 @@ func Run(ctx context.Context, opts ...Option) {
 		grpc.ChainUnaryInterceptor(unaryServer...),
 		grpc.ChainStreamInterceptor(streamServer...),
 	}
+
+	if rs.keepAliveServerParams != nil {
+		serverOpts = append(serverOpts, grpc.KeepaliveParams(*rs.keepAliveServerParams))
+	}
+
 	g := grpc.NewServer(serverOpts...)
 
 	// We always register the proxy.
