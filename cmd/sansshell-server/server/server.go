@@ -41,6 +41,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 )
 
 // runState encapsulates all of the variable state needed
@@ -63,6 +64,7 @@ type runState struct {
 	streamInterceptors []grpc.StreamServerInterceptor
 	authzHooks         []rpcauth.RPCAuthzHook
 	services           []func(*grpc.Server)
+	keepAliveParams    *keepalive.ServerParameters
 }
 
 type Option interface {
@@ -327,6 +329,9 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	for _, s := range rs.services {
 		serverOpts = append(serverOpts, server.WithRawServerOption(s))
+	}
+	if rs.keepAliveParams != nil {
+		serverOpts = append(serverOpts, server.WithKeepAliveParams(rs.keepAliveParams))
 	}
 	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
