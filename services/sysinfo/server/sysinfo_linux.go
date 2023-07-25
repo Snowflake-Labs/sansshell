@@ -31,6 +31,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// for testing
+var getKmsgParser = func() (kmsgparser.Parser, error) {
+	return kmsgparser.NewParser()
+}
+
 var getUptime = func() (time.Duration, error) {
 	sysinfo := &unix.Sysinfo_t{}
 	if err := unix.Sysinfo(sysinfo); err != nil {
@@ -42,7 +47,7 @@ var getUptime = func() (time.Duration, error) {
 }
 
 var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
-	parser, err := kmsgparser.NewParser()
+	parser, err := getKmsgParser()
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +67,6 @@ var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 				Time:    timestamppb.New(msg.Timestamp),
 			})
 		case <-time.After(2 * time.Second):
-			// set timeout to close the Parse()
 			parser.Close()
 			done = true
 		}

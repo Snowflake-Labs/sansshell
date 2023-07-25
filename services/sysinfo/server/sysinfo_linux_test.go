@@ -39,6 +39,7 @@ import (
 
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"github.com/euank/go-kmsg-parser/v2/kmsgparser"
 )
 
 var (
@@ -46,6 +47,27 @@ var (
 	lis     *bufconn.Listener
 	conn    *grpc.ClientConn
 )
+
+// mock KmsgParser for testing: some testing environment doesn't allow
+// KmsgParser read file from /dev/kmsg
+type mockKmsgParser struct{}
+
+func (m *mockKmsgParser) Parse() <-chan kmsgparser.Message {
+	output := make(chan kmsgparser.Message, 1)
+	message := kmsgparser.Message{}
+	output <- message
+	return output
+}
+
+func (m *mockKmsgParser) Close() error {
+	return nil
+}
+
+func (m *mockKmsgParser) SeekEnd() error {
+	return nil
+}
+
+func (m *mockKmsgParser) SetLogger(kmsgparser.Logger) {}
 
 func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
@@ -160,6 +182,12 @@ func TestDmesg(t *testing.T) {
 
 	client := pb.NewSysInfoClient(conn)
 
+	// Mock the getKmsgParser function to return a mockKmsgParser object
+	getKmsgParser = func() (kmsgparser.Parser, error) {
+		return &mockKmsgParser{}, nil
+	}
+
+	// Message mocks the kmsgparser.Message it process from /dev/kmsg
 	type Message struct {
 		message   string
 		timestamp time.Time
@@ -387,7 +415,6 @@ func TestDmesg(t *testing.T) {
 				wantRecord := tc.wantReply[idx].Record
 				testutil.DiffErr(tc.name, record, wantRecord, t)
 			}
-
 		})
 	}
 }
