@@ -23,9 +23,12 @@ import (
 	"fmt"
 	"time"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
+	"github.com/euank/go-kmsg-parser/v2/kmsgparser"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var getUptime = func() (time.Duration, error) {
@@ -36,4 +39,33 @@ var getUptime = func() (time.Duration, error) {
 	}
 	uptime := time.Duration(sysinfo.Uptime) * time.Second
 	return uptime, nil
+}
+
+var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+	parser, err := kmsgparser.NewParser()
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*pb.DmsgRecord
+	messages := parser.Parse()
+	done := false
+	for !done {
+		select {
+		case msg, ok := <-messages:
+			if !ok {
+				done = true
+			}
+			// process the message
+			records = append(records, &pb.DmsgRecord{
+				Message: msg.Message,
+				Time:    timestamppb.New(msg.Timestamp),
+			})
+		case <-time.After(2 * time.Second):
+			// set timeout to close the Parse()
+			parser.Close()
+			done = true
+		}
+	}
+	return records, nil
 }

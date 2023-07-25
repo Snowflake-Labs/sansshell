@@ -22,6 +22,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -147,5 +149,245 @@ func TestUptime(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestDmesg(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewSysInfoClient(conn)
+
+	type Message struct {
+		message   string
+		timestamp time.Time
+	}
+	timestamp := time.Now()
+	wantTime := timestamppb.New(timestamp)
+	rawRecords := [3]Message{
+		{
+			message:   "xfs filesystem being remounted at /tmp supports timestamps until 2038 (0x7fffffff)",
+			timestamp: timestamp,
+		},
+		{
+			message: `usb 1-1: SerialNumber: TAG11d87aca0
+			SUBSYSTEM=usb
+			DEVICE=c189:3`,
+			timestamp: timestamp,
+		},
+		{
+			message:   "CPU features: detected: Address authentication (IMP DEF algorithm)",
+			timestamp: timestamp,
+		},
+	}
+
+	savedGetKernelMessages := getKernelMessages
+
+	// dmesg is not supported in other OS, so an error should be raised
+	getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+		return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
+	}
+	t.Cleanup(func() { getKernelMessages = savedGetKernelMessages })
+	for _, tc := range []struct {
+		name    string
+		req     *pb.DmesgRequest
+		wantErr bool
+	}{
+		{
+			name: "dmesg action not supported in other OS except Linux right now",
+			req: &pb.DmesgRequest{
+				TailLines: -1,
+			},
+			wantErr: true,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stream, _ := client.Dmesg(ctx, tc.req)
+			for {
+				_, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
+				if tc.wantErr {
+					// If this was an expected error we're done.
+					return
+				}
+
+			}
+		})
+	}
+
+	getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+		_, err := savedGetKernelMessages()
+		if err != nil {
+			return nil, err
+		}
+		var records []*pb.DmsgRecord
+		for _, raw := range rawRecords {
+			records = append(records, &pb.DmsgRecord{
+				Message: raw.message,
+				Time:    timestamppb.New(raw.timestamp),
+			})
+		}
+		return records, nil
+	}
+
+	for _, tc := range []struct {
+		name      string
+		req       *pb.DmesgRequest
+		wantReply []*pb.DmesgReply
+		wantErr   bool
+	}{
+		{
+			name: "specify ignore case without provide grep expect an error: dmesg",
+			req: &pb.DmesgRequest{
+				IgnoreCase: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "specify invert match without provide grep expect an error: dmesg",
+			req: &pb.DmesgRequest{
+				InvertMatch: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "fetch all kernel messages",
+			req: &pb.DmesgRequest{
+				TailLines: -1,
+			},
+			wantReply: []*pb.DmesgReply{
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[0].message,
+					},
+				},
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[1].message,
+					},
+				},
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[2].message,
+					},
+				},
+			},
+		},
+		{
+			name: "tailLines larger than initial records will still fetch all kernel messagesL dmesg -tail 100",
+			req: &pb.DmesgRequest{
+				TailLines: 100,
+			},
+			wantReply: []*pb.DmesgReply{
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[0].message,
+					},
+				},
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[1].message,
+					},
+				},
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[2].message,
+					},
+				},
+			},
+		},
+		{
+			name: "fetch last one kernel message: dmesg -tail 1",
+			req: &pb.DmesgRequest{
+				TailLines: 1,
+			},
+			wantReply: []*pb.DmesgReply{
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[2].message,
+					},
+				},
+			},
+		},
+		{
+			name: "match string usb with ignore case flag: dmesg -grep Usb -i",
+			req: &pb.DmesgRequest{
+				TailLines:  -1,
+				Grep:       "Usb",
+				IgnoreCase: true,
+			},
+			wantReply: []*pb.DmesgReply{
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[1].message,
+					},
+				},
+			},
+		},
+		{
+			name: "match string usb with ignore case and invert match flag: dmesg -grep Usb -i -v",
+			req: &pb.DmesgRequest{
+				TailLines:   -1,
+				Grep:        "Usb",
+				IgnoreCase:  true,
+				InvertMatch: true,
+			},
+			wantReply: []*pb.DmesgReply{
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[0].message,
+					},
+				},
+				{
+					Record: &pb.DmsgRecord{
+						Time:    wantTime,
+						Message: rawRecords[2].message,
+					},
+				},
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stream, err := client.Dmesg(ctx, tc.req)
+			testutil.FatalOnErr("Dmesg failed", err, t)
+			var gotRecords []*pb.DmsgRecord
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
+				if tc.wantErr {
+					// If this was an expected error we're done.
+					return
+				}
+				gotRecords = append(gotRecords, resp.Record)
+
+			}
+			if wantLen, gotLen := len(tc.wantReply), len(gotRecords); wantLen != gotLen {
+				t.Fatalf("dmesg length differ. Got %d Want %d", gotLen, wantLen)
+			}
+			for idx, record := range gotRecords {
+				wantRecord := tc.wantReply[idx].Record
+				testutil.DiffErr(tc.name, record, wantRecord, t)
+			}
+
+		})
+	}
 }

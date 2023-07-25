@@ -22,10 +22,15 @@ package server
 import (
 	"time"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 var getUptime = func() (time.Duration, error) {
 	return 0, status.Errorf(codes.Unimplemented, "uptime is not supported")
+}
+
+var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+	return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
 }
