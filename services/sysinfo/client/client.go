@@ -37,6 +37,15 @@ func init() {
 	subcommands.Register(&sysinfoCmd{}, subPackage)
 }
 
+var (
+	// printed timestamp will be the following format: date time timezone
+	// date: YYYY-MM-DD
+	// time: HH-MM-SS
+	// timezone: MST/PDT etc.
+	// this format can be used for couple actions: dmesg, journalctl etc.
+	timestampFormat = "2006-01-02 15:04:05 MST"
+)
+
 func (*sysinfoCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&uptimeCmd{}, "")
@@ -147,11 +156,6 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		return subcommands.ExitFailure
 	}
 
-	// printed timestamp will be the following format: date time timezone
-	// date: YYYY-MM-DD
-	// time: HH-MM-SS
-	// timezone: MST/PDT etc.
-	timestampFormat := "2006-01-02 15:04:05 MST"
 	targetsDone := make(map[int]bool)
 	exit := subcommands.ExitSuccess
 	for {

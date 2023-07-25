@@ -62,11 +62,10 @@ func (s *server) Uptime(ctx context.Context, in *emptypb.Empty) (*pb.UptimeReply
 	return reply, nil
 }
 
-func (s *server) Dmesg(request *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) error {
+func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) error {
 	ctx := stream.Context()
-	// logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	if request.Grep == "" && (request.IgnoreCase || request.InvertMatch) {
+	if req.Grep == "" && (req.IgnoreCase || req.InvertMatch) {
 		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
 	}
 
@@ -76,14 +75,14 @@ func (s *server) Dmesg(request *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) 
 		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)
 	}
 	// grep the messages we want
-	if request.Grep != "" {
+	if req.Grep != "" {
 		var newRecords []*pb.DmsgRecord
-		regex := request.Grep
-		if request.IgnoreCase {
+		regex := req.Grep
+		if req.IgnoreCase {
 			regex = `(?i)` + regex
 		}
 
-		isInvert := request.InvertMatch
+		isInvert := req.InvertMatch
 		pattern := regexp.MustCompile(regex)
 		for _, record := range records {
 			// Two cases are what we want
@@ -98,12 +97,12 @@ func (s *server) Dmesg(request *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) 
 
 	// tail the last n lines
 	// there is no way to tail number of messages more than initial records
-	if request.TailLines > int32(len(records)) {
-		request.TailLines = int32(len(records))
+	if req.TailLines > int32(len(records)) {
+		req.TailLines = int32(len(records))
 	}
 	// negative number means disables the tail feature
-	if request.TailLines >= 0 {
-		records = records[len(records)-int(request.TailLines):]
+	if req.TailLines >= 0 {
+		records = records[len(records)-int(req.TailLines):]
 	}
 	for _, r := range records {
 		if err := stream.Send(&pb.DmesgReply{Record: r}); err != nil {
