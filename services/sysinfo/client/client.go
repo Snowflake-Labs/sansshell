@@ -37,15 +37,6 @@ func init() {
 	subcommands.Register(&sysinfoCmd{}, subPackage)
 }
 
-var (
-	// printed timestamp will be the following format: date time timezone
-	// date: YYYY-MM-DD
-	// time: HH-MM-SS
-	// timezone: MST/PDT etc.
-	// this format can be used for couple actions: dmesg, journalctl etc.
-	timestampFormat = "2006-01-02 15:04:05 MST"
-)
-
 func (*sysinfoCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&uptimeCmd{}, "")
@@ -125,13 +116,13 @@ type dmesgCmd struct {
 func (*dmesgCmd) Name() string     { return "dmesg" }
 func (*dmesgCmd) Synopsis() string { return "View the messages in kernel ring buffer" }
 func (*dmesgCmd) Usage() string {
-	return `demsg [--tail=N] [--grep=PATTERN] [-i] [-v]:
+	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v]:
 	 Print the messages from kernel ring buffer.
 `
 }
 
 func (p *dmesgCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&p.grep, "grep", "", "regual expression filter")
+	f.StringVar(&p.grep, "grep", "", "regular expression filter")
 	f.Int64Var(&p.tail, "tail", -1, "tail the latest n lines")
 	f.BoolVar(&p.ignoreCase, "i", false, "ignore case")
 	f.BoolVar(&p.invertMatch, "v", false, "invert match")
@@ -191,7 +182,7 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 				continue
 			}
 			record := r.Resp.Record
-			fmt.Fprintf(state.Out[i], "[%s]: %s", record.Time.AsTime().Local().Format(timestampFormat), record.Message)
+			fmt.Fprintf(state.Out[i], "[%s]: %s", record.Time.AsTime().Local(), record.Message)
 		}
 	}
 	return exit

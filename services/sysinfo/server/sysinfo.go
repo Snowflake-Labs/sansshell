@@ -101,7 +101,7 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 		req.TailLines = int32(len(records))
 	}
 	// negative number means disables the tail feature
-	if req.TailLines >= 0 {
+	if req.TailLines > 0 {
 		records = records[len(records)-int(req.TailLines):]
 	}
 	for _, r := range records {
