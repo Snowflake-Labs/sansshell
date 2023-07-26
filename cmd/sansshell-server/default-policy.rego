@@ -80,3 +80,7 @@ denial_hints[msg] {
 allow {
 	input.method = "/SysInfo.SysInfo/Uptime"
 }
+
+allow {
+	input.method = "/SysInfo.SysInfo/Dmesg"
+}

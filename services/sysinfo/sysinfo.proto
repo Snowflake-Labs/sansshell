@@ -22,14 +22,37 @@ package SysInfo;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 // The SysInfo service definition.
 service SysInfo {
   // Uptime return 
   rpc Uptime(google.protobuf.Empty) returns (UptimeReply) {}
+  // display kernel-related messages 
+  rpc Dmesg(DmesgRequest) returns (stream DmesgReply) {}
 }
 
 message UptimeReply {
  // show the uptime in protobuf.Duration
   google.protobuf.Duration uptime_seconds = 1;  
+}
+
+// DmesgRequest describes the filename to be tailed.
+message DmesgRequest {
+ // tail the number of line from the dmesg output, negative means display all messages
+ int32 tail_lines = 1;
+ string grep = 2;
+ bool ignore_case = 3;
+ bool invert_match = 4;
+}
+
+// DmesgReply contains the messages from kernel 
+message DmesgReply {
+  DmsgRecord record = 1;
+}
+
+// DmesgRecord contains the specific fields about the a dmesg record
+message DmsgRecord{
+  google.protobuf.Timestamp time = 1;
+  string message = 2;
 }

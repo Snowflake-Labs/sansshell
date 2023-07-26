@@ -23,10 +23,18 @@ import (
 	"fmt"
 	"time"
 
+	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
+	"github.com/euank/go-kmsg-parser/v2/kmsgparser"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// for testing
+var getKmsgParser = func() (kmsgparser.Parser, error) {
+	return kmsgparser.NewParser()
+}
 
 var getUptime = func() (time.Duration, error) {
 	sysinfo := &unix.Sysinfo_t{}
@@ -36,4 +44,37 @@ var getUptime = func() (time.Duration, error) {
 	}
 	uptime := time.Duration(sysinfo.Uptime) * time.Second
 	return uptime, nil
+}
+
+// Based on: https://pkg.go.dev/github.com/euank/go-kmsg-parser
+// kmsg-parser only allows us to read message from /dev/kmsg in blocking way
+// we set 2 seconds timeout to explicitly close the channel
+// If the package release new feature to support non-blocking read, we can
+// make corresding changes below to get rid of hard code timeout setting
+var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+	parser, err := getKmsgParser()
+	if err != nil {
+		return nil, err
+	}
+
+	var records []*pb.DmsgRecord
+	messages := parser.Parse()
+	done := false
+	for !done {
+		select {
+		case msg, ok := <-messages:
+			if !ok {
+				done = true
+			}
+			// process the message
+			records = append(records, &pb.DmsgRecord{
+				Message: msg.Message,
+				Time:    timestamppb.New(msg.Timestamp),
+			})
+		case <-time.After(2 * time.Second):
+			parser.Close()
+			done = true
+		}
+	}
+	return records, nil
 }

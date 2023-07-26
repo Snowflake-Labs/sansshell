@@ -19,8 +19,11 @@ package server
 
 import (
 	"context"
+	"regexp"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -35,6 +38,8 @@ import (
 var (
 	sysinfoUptimeFailureCounter = metrics.MetricDefinition{Name: "actions_sysinfo_uptime_failure",
 		Description: "number of failures when performing sysinfo.Uptime"}
+	sysinfoDmesgFailureCounter = metrics.MetricDefinition{Name: "actions_sysinfo_dmesg_failure",
+		Description: "number of failures when performing sysinfo.Dmesg"}
 )
 
 // server is used to implement the gRPC server
@@ -55,6 +60,57 @@ func (s *server) Uptime(ctx context.Context, in *emptypb.Empty) (*pb.UptimeReply
 		UptimeSeconds: uptimeSecond,
 	}
 	return reply, nil
+}
+
+func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) error {
+	ctx := stream.Context()
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	if req.Grep == "" && (req.IgnoreCase || req.InvertMatch) {
+		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
+	}
+
+	records, err := getKernelMessages()
+	if err != nil {
+		recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "get kernel message error"))
+		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)
+	}
+	// grep the messages we want
+	if req.Grep != "" {
+		var newRecords []*pb.DmsgRecord
+		regex := req.Grep
+		if req.IgnoreCase {
+			regex = `(?i)` + regex
+		}
+
+		isInvert := req.InvertMatch
+		pattern := regexp.MustCompile(regex)
+		for _, record := range records {
+			// Two cases are what we want
+			// case 1: isInvert = false and match = true (pattern matched)
+			// case 2: isInvert = true and match = false (pattern doesn't match)
+			if match := pattern.MatchString(record.Message); match != isInvert {
+				newRecords = append(newRecords, record)
+			}
+		}
+		records = newRecords
+	}
+
+	// tail the last n lines
+	// there is no way to tail number of messages more than initial records
+	if req.TailLines > int32(len(records)) {
+		req.TailLines = int32(len(records))
+	}
+	// negative number means disables the tail feature
+	if req.TailLines > 0 {
+		records = records[len(records)-int(req.TailLines):]
+	}
+	for _, r := range records {
+		if err := stream.Send(&pb.DmesgReply{Record: r}); err != nil {
+			recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+			return status.Errorf(codes.Internal, "dmesg: send error %v", err)
+		}
+	}
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server
