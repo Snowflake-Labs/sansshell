@@ -46,6 +46,11 @@ var getUptime = func() (time.Duration, error) {
 	return uptime, nil
 }
 
+// Based on: https://pkg.go.dev/github.com/euank/go-kmsg-parser
+// kmsg-parser only allows us to read message from /dev/kmsg in blocking way
+// we set 2 seconds timeout to explicitly close the channel
+// If the package release new feature to support non-blocking read, we can
+// make corresding changes below to get rid of hard code timeout setting
 var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 	parser, err := getKmsgParser()
 	if err != nil {
