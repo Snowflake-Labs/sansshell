@@ -34,3 +34,7 @@ var getUptime = func() (time.Duration, error) {
 var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 	return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
 }
+
+var getJournalRecords = func(req *pb.JournalRequest) ([]*pb.JournalReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "journal is not supported")
+}

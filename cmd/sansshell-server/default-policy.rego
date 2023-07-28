@@ -84,3 +84,7 @@ allow {
 allow {
 	input.method = "/SysInfo.SysInfo/Dmesg"
 }
+
+allow {
+	input.method = "/SysInfo.SysInfo/Journal"
+}

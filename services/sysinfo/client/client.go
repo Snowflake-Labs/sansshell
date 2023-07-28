@@ -19,12 +19,17 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
@@ -41,6 +46,7 @@ func (*sysinfoCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&uptimeCmd{}, "")
 	c.Register(&dmesgCmd{}, "")
+	c.Register(&journalCmd{}, "")
 	return c
 }
 
@@ -183,6 +189,171 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			}
 			record := r.Resp.Record
 			fmt.Fprintf(state.Out[i], "[%s]: %s", record.Time.AsTime().Local(), record.Message)
+		}
+	}
+	return exit
+}
+
+type journalCmd struct {
+	since   string
+	until   string
+	tail    int64
+	unit    string
+	explain bool
+	output  string
+}
+
+func (*journalCmd) Name() string     { return "journalctl" }
+func (*journalCmd) Synopsis() string { return "Get the log entries stored in journald" }
+func (*journalCmd) Usage() string {
+	return `journalCtl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X] [-o|--output=X] [-x] :
+	Get the log entries stored in journald by systemd-journald.service 
+`
+}
+
+func (p *journalCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&p.since, "since", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter from")
+	f.StringVar(&p.since, "S", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter from (the date time is included)")
+	f.StringVar(&p.until, "until", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until (the date time is not included)")
+	f.StringVar(&p.until, "U", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until")
+	f.StringVar(&p.unit, "unit", "", "Sets systemd unit to filter messages")
+	f.StringVar(&p.output, "output", "", "Sets the format of the journal entries that will be shown. Right now only json and json-pretty are supported.")
+	f.BoolVar(&p.explain, "x", false, "If true, augment log lines with explanatory texts from the message catalog.")
+	f.Int64Var(&p.tail, "tail", 100, "If positive, the latest n records to fetch. By default, fetch latest 100 records. If negative, fetch all records")
+}
+
+func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewSysInfoClientProxy(state.Conn)
+
+	// the output is case insensitive
+	p.output = strings.ToLower(p.output)
+	// currently output can only be json or json-pretty
+	if p.output != "" && p.output != "json" && p.output != "json-pretty" {
+		fmt.Fprintln(os.Stderr, "cannot set output to other formats unless json or json-pretty")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.JournalRequest{
+		TailLine: int32(p.tail),
+		Explain:  p.explain,
+		Unit:     p.unit,
+		Output:   p.output,
+	}
+	// Note: if timestamp is passed, don't forget to conver to UTC
+	expectedTimeFormat := "2006-01-02 15:04:05"
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot get local location")
+		return subcommands.ExitUsageError
+	}
+	if p.since != "" {
+		sinceTime, err := time.ParseInLocation(expectedTimeFormat, p.since, loc)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
+			return subcommands.ExitUsageError
+		}
+		req.TimeSince = timestamppb.New(sinceTime.UTC())
+	}
+
+	if p.until != "" {
+		untilTime, err := time.ParseInLocation(expectedTimeFormat, p.until, loc)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
+			return subcommands.ExitUsageError
+		}
+		req.TimeUntil = timestamppb.New(untilTime.UTC())
+	}
+
+	stream, err := c.JournalOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - could not info servers: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	targetsDone := make(map[int]bool)
+	exit := subcommands.ExitSuccess
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "Stream error: %v\n", err)
+				}
+			}
+			exit = subcommands.ExitFailure
+			break
+		}
+		for i, r := range resp {
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
+				targetsDone[r.Index] = true
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
+				exit = subcommands.ExitFailure
+				continue
+			}
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			switch t := r.Resp.Response.(type) {
+			case *pb.JournalReply_Journal:
+				journal := t.Journal
+				displayPid := ""
+				if journal.Pid != 0 {
+
+					displayPid = fmt.Sprintf("[%d]", journal.Pid)
+				}
+				fmt.Fprintf(state.Out[i], "[%s]  %s %s%s: %s\n", journal.RealtimeTimestamp.AsTime().Local(), journal.Hostname, journal.SyslogIdentifier, displayPid, journal.Message)
+				// process explanatory texts if exists
+				if journal.Catalog != "" {
+					lines := strings.Split(journal.Catalog, "\n")
+					// if last line is empty, just remove it
+					if len(lines) > 0 && lines[len(lines)-1] == "" {
+						lines = lines[:len(lines)-1]
+					}
+					for idx := range lines {
+						lines[idx] = "-- " + lines[idx]
+					}
+					explainTexts := strings.Join(lines, "\n")
+					fmt.Fprintf(state.Out[i], "%s\n", explainTexts)
+				}
+			case *pb.JournalReply_JournalRaw:
+				journalRaw := t.JournalRaw
+				// Encode the map to JSON
+				var jsonData []byte
+				if p.output == "json" {
+					jsonData, err = json.Marshal(journalRaw.Entry)
+					if err != nil {
+						fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned cannot encode journal entry to JSON\n", r.Target, r.Index)
+						exit = subcommands.ExitFailure
+						continue
+					}
+				} else if p.output == "json-pretty" {
+					jsonData, err = json.MarshalIndent(journalRaw.Entry, "", "        ")
+					if err != nil {
+						fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned cannot encode journal entry to pretty JSON\n", r.Target, r.Index)
+						exit = subcommands.ExitFailure
+						continue
+					}
+				}
+				// Convert the JSON data to a string
+				jsonString := string(jsonData)
+				fmt.Fprintf(state.Out[i], "%s\n", jsonString)
+			}
 		}
 	}
 	return exit
