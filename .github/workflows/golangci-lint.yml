@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version-file: 'go.mod'
+      - name: Install libsystemd-dev
+        run: sudo apt-get install -y libsystemd-dev
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:

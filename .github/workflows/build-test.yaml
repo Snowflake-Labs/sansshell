@@ -19,7 +19,10 @@ jobs:
       with:
         go-version-file: 'go.mod'
     - uses: actions/setup-python@v3
+    - name: Install libsystemd-dev
+      run: sudo apt-get install -y libsystemd-dev
     - uses: pre-commit/action@v3.0.0
+
   test:
     name: Unit tests
     runs-on: ubuntu-20.04
