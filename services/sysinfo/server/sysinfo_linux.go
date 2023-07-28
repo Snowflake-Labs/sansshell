@@ -101,7 +101,10 @@ var getJournalRecords = func(req *pb.JournalRequest) ([]*pb.JournalReply, error)
 	defer journal.Close()
 
 	// Seek to the end of the journal entries
-	journal.SeekTail()
+	err = journal.SeekTail()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "sdjournal seek to the end of the journal error: %v", err)
+	}
 
 	var records []*pb.JournalReply
 	for {
