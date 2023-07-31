@@ -350,8 +350,14 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
 		for _, pkg := range r.Resp.Packages {
 			// Print the package name.arch, [epoch]:version-release and repo with some reasonable spacing.
-			na := fmt.Sprintf("%s.%s", pkg.Name, pkg.Architecture)
-			evr := fmt.Sprintf("%s-%s", pkg.Version, pkg.Release)
+			na := pkg.Name
+			if pkg.Architecture != "" {
+				na = na + "." + pkg.Architecture
+			}
+			evr := pkg.Version
+			if pkg.Release != "" {
+				evr = evr + "-" + pkg.Release
+			}
 			if pkg.Epoch != 0 {
 				evr = fmt.Sprintf("%d:%s", pkg.Epoch, evr)
 			}
