@@ -112,11 +112,11 @@ message SearchReply {
 
 message PackageInfo {
   string name = 1;
-  uint32 epoch = 2;
-  string version = 3;
+  string version = 2;
+  string repo = 3;
   string release = 4;
   string architecture = 5;
-  string repo = 6;
+  uint32 epoch = 6;
 }
 
 message PackageInfoList  {repeated PackageInfo packages = 1; }
