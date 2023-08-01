@@ -406,7 +406,7 @@ func parseListInstallOutput(p pb.PackageSystem, r io.Reader) (*pb.ListInstalledR
 }
 
 // extract epoch, version and release from string with pattern: [epoch:]version-release
-func extractEVR(evr string) (uint64, string, string, error) {
+var extractEVR = func(evr string) (uint64, string, string, error) {
 	epoch, version, release := "0", "", ""
 	// in yum repo, none of epoch, version or release will contain : or -
 	// we can safely split based on these separators
@@ -428,6 +428,14 @@ func extractEVR(evr string) (uint64, string, string, error) {
 		return 0, "", "", status.Errorf(codes.Internal, "convert epoch from string to uint error: %s", err)
 	}
 	return epochUint, version, release, nil
+}
+
+// extract name, arch from pattern name.arch
+var extractNA = func(na string) (string, string, error) {
+	// the package name itself may contain periods, but architecture cannot, so we split them based on the last period
+	dotIdx := strings.LastIndex(na, ".")
+	name, arch := na[:dotIdx], na[dotIdx+1:]
+	return name, arch, nil
 }
 
 func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
@@ -476,9 +484,11 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 		}
 
 		// process the PACKAGE_NAME(name.arch) and PACKAGE_VERSION([epoch:]version-release)
-		// the package name itself may contain periods, but architecture cannot, so we split them based on the last period
-		dotIdx := strings.LastIndex(fields[0], ".")
-		name, arch := fields[0][:dotIdx], fields[0][dotIdx+1:]
+
+		name, arch, err := extractNA(fields[0])
+		if err != nil {
+			return nil, err
+		}
 		epoch, version, release, err := extractEVR(fields[1])
 		if err != nil {
 			return nil, err

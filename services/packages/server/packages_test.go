@@ -646,6 +646,7 @@ func TestListInstalled(t *testing.T) {
 	testdataInputBad2 := "./testdata/yum-installed-bad2.out"
 	testdataInputBad3 := "./testdata/yum-installed-bad3.out"
 	testdataGolden := "./testdata/yum-installed.textproto"
+	testdataOldVersion := "./testdata/yum-installed-old-server-version.textproto"
 
 	savedGenerateListInstalled := generateListInstalled
 	var cmdLine string
@@ -756,6 +757,42 @@ func TestListInstalled(t *testing.T) {
 		})
 		generateListInstalled = saveGenerate
 	}
+
+	// test 5: sansshell runs in order version with three fields (name,version,repo) in PackageInfo
+	//         and the newer version of client with filds (name,version,repo, release, architecture, epoch) in PackageInfo
+	//         should still correctly fetch their values.
+	testdataOldVersionInput, err := os.ReadFile(testdataOldVersion)
+	testutil.FatalOnErr(fmt.Sprintf("can't read testdata golden from %s", testdataGolden), err, t)
+
+	expectedReply := &pb.ListInstalledReply{}
+	err = prototext.Unmarshal(testdataOldVersionInput, expectedReply)
+	testutil.FatalOnErr("Can't unmarshall test data", err, t)
+
+	// mock extractNA and extractEVR functions to make them act like older version package list
+	saveExtractNA := extractNA
+	extractNA = func(na string) (string, string, error) {
+		return na, "", nil
+	}
+	saveExtractEVR := extractEVR
+	extractEVR = func(evr string) (uint64, string, string, error) {
+		return 0, evr, "", nil
+	}
+	generateListInstalled = func(p pb.PackageSystem) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		_, err := savedGenerateListInstalled(p)
+		if err != nil {
+			return nil, err
+		}
+		return []string{testutil.ResolvePath(t, "cat"), testdataInput}, nil
+	}
+	t.Cleanup(func() {
+		extractNA = saveExtractNA
+		extractEVR = saveExtractEVR
+	})
+	resp, err = client.ListInstalled(ctx, &pb.ListInstalledRequest{})
+	testutil.FatalOnErr("package list with older version", err, t)
+
+	testutil.DiffErr("package list with older version", resp, expectedReply, t, sortEntries)
 }
 
 func TestSearch(t *testing.T) {
