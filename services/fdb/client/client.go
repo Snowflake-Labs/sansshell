@@ -2624,6 +2624,7 @@ func (p *fdbCLITenantEmergencyMoveCmd) Usage() string {
 tenant_emergency_move switch <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
 tenant_emergency_move stop <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
 tenant_emergency_move abort <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
+tenant_emergency_move status <capacityGroupIdentifier>
 `
 }
 
@@ -2634,12 +2635,16 @@ func (r *fdbCLITenantEmergencyMoveCmd) SetFlags(f *flag.FlagSet) {
 func (r *fdbCLITenantEmergencyMoveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	req := args[1].(*pb.FDBCLIRequest)
 
-	if f.NArg() != 4 || anyEmpty(f.Args()) {
+	if f.NArg() < 2 || f.NArg() > 4 || anyEmpty(f.Args()) {
 		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 	switch f.Arg(0) {
 	case "start":
+		if f.NArg() != 4 {
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
 		r.req.Request = &pb.FDBCLITenantEmergencyMove_Start{
 			Start: &pb.FDBCLITenantEmergencyMoveStart{
 				TenantGroup:        f.Arg(1),
@@ -2648,6 +2653,10 @@ func (r *fdbCLITenantEmergencyMoveCmd) Execute(ctx context.Context, f *flag.Flag
 			},
 		}
 	case "switch":
+		if f.NArg() != 4 {
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
 		r.req.Request = &pb.FDBCLITenantEmergencyMove_Switch{
 			Switch: &pb.FDBCLITenantEmergencyMoveSwitch{
 				TenantGroup:        f.Arg(1),
@@ -2656,6 +2665,10 @@ func (r *fdbCLITenantEmergencyMoveCmd) Execute(ctx context.Context, f *flag.Flag
 			},
 		}
 	case "finish":
+		if f.NArg() != 4 {
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
 		r.req.Request = &pb.FDBCLITenantEmergencyMove_Finish{
 			Finish: &pb.FDBCLITenantEmergencyMoveFinish{
 				TenantGroup:        f.Arg(1),
@@ -2664,11 +2677,25 @@ func (r *fdbCLITenantEmergencyMoveCmd) Execute(ctx context.Context, f *flag.Flag
 			},
 		}
 	case "abort":
+		if f.NArg() != 4 {
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
 		r.req.Request = &pb.FDBCLITenantEmergencyMove_Abort{
 			Abort: &pb.FDBCLITenantEmergencyMoveAbort{
 				TenantGroup:        f.Arg(1),
 				SourceCluster:      f.Arg(2),
 				DestinationCluster: f.Arg(3),
+			},
+		}
+	case "status":
+		if f.NArg() != 2 {
+			fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+			return subcommands.ExitFailure
+		}
+		r.req.Request = &pb.FDBCLITenantEmergencyMove_Status{
+			Status: &pb.FDBCLITenantEmergencyMoveStatus{
+				TenantGroup: f.Arg(1),
 			},
 		}
 	default:

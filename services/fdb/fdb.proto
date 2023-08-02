@@ -434,12 +434,18 @@ message FDBCLITenantEmergencyMoveAbort {
   string destination_cluster = 3;
 }
 
+
+message FDBCLITenantEmergencyMoveStatus {
+  string tenant_group = 1;
+}
+
 message FDBCLITenantEmergencyMove {
   oneof request {
     FDBCLITenantEmergencyMoveStart start = 1;
     FDBCLITenantEmergencyMoveSwitch switch = 2;
     FDBCLITenantEmergencyMoveFinish finish = 3;
     FDBCLITenantEmergencyMoveAbort abort = 4;
+    FDBCLITenantEmergencyMoveStatus status = 5;
   }
 }
 

@@ -1177,6 +1177,9 @@ func parseFDBCLITenantEmergencyMove(req *pb.FDBCLITenantEmergencyMove) ([]string
 	case *pb.FDBCLITenantEmergencyMove_Abort:
 		abortCmd := req.GetStart()
 		args = append(args, "abort", abortCmd.TenantGroup, abortCmd.SourceCluster, abortCmd.DestinationCluster)
+	case *pb.FDBCLITenantEmergencyMove_Status:
+		statusCmd := req.GetStatus()
+		args = append(args, "status", statusCmd.TenantGroup)
 	default:
 		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}
