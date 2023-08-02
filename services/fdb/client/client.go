@@ -163,6 +163,7 @@ func (*fdbCLICmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&fdbCLISnapshotCmd{}, "")
 	c.Register(&fdbCLIStatusCmd{}, "")
 	c.Register(&fdbCLISuspendCmd{}, "")
+	c.Register(&fdbCLITenantEmergencyMoveCmd{}, "")
 	c.Register(&fdbCLIThrottleCmd{}, "")
 	c.Register(&fdbCLITriggerddteaminfologCmd{}, "")
 	c.Register(&fdbCLITssqCmd{}, "")
@@ -2604,6 +2605,81 @@ func (r *fdbCLISuspendCmd) Execute(ctx context.Context, f *flag.FlagSet, args ..
 		&pb.FDBCLICommand{
 			Command: &pb.FDBCLICommand_Suspend{
 				Suspend: r.req,
+			},
+		})
+
+	return subcommands.ExitSuccess
+}
+
+type fdbCLITenantEmergencyMoveCmd struct {
+	req *pb.FDBCLITenantEmergencyMove
+}
+
+func (*fdbCLITenantEmergencyMoveCmd) Name() string { return "tenant_emergency_move" }
+func (*fdbCLITenantEmergencyMoveCmd) Synopsis() string {
+	return "Utility commands for handling offline emergency tenant movement."
+}
+func (p *fdbCLITenantEmergencyMoveCmd) Usage() string {
+	return `tenant_emergency_move start <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
+tenant_emergency_move switch <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
+tenant_emergency_move stop <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
+tenant_emergency_move abort <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>
+`
+}
+
+func (r *fdbCLITenantEmergencyMoveCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBCLITenantEmergencyMove{}
+}
+
+func (r *fdbCLITenantEmergencyMoveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	req := args[1].(*pb.FDBCLIRequest)
+
+	if f.NArg() != 4 || anyEmpty(f.Args()) {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+	switch f.Arg(0) {
+	case "start":
+		r.req.Request = &pb.FDBCLITenantEmergencyMove_Start{
+			Start: &pb.FDBCLITenantEmergencyMoveStart{
+				TenantGroup:        f.Arg(1),
+				SourceCluster:      f.Arg(2),
+				DestinationCluster: f.Arg(3),
+			},
+		}
+	case "switch":
+		r.req.Request = &pb.FDBCLITenantEmergencyMove_Switch{
+			Switch: &pb.FDBCLITenantEmergencyMoveSwitch{
+				TenantGroup:        f.Arg(1),
+				SourceCluster:      f.Arg(2),
+				DestinationCluster: f.Arg(3),
+			},
+		}
+	case "finish":
+		r.req.Request = &pb.FDBCLITenantEmergencyMove_Finish{
+			Finish: &pb.FDBCLITenantEmergencyMoveFinish{
+				TenantGroup:        f.Arg(1),
+				SourceCluster:      f.Arg(2),
+				DestinationCluster: f.Arg(3),
+			},
+		}
+	case "abort":
+		r.req.Request = &pb.FDBCLITenantEmergencyMove_Abort{
+			Abort: &pb.FDBCLITenantEmergencyMoveAbort{
+				TenantGroup:        f.Arg(1),
+				SourceCluster:      f.Arg(2),
+				DestinationCluster: f.Arg(3),
+			},
+		}
+	default:
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	req.Commands = append(req.Commands,
+		&pb.FDBCLICommand{
+			Command: &pb.FDBCLICommand_TenantEmergencyMove{
+				TenantEmergencyMove: r.req,
 			},
 		})
 

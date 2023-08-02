@@ -454,6 +454,8 @@ func parseFDBCommand(req *pb.FDBCLICommand) (args []string, l []captureLogs, err
 		args, l, err = parseFDBCLISleep(req.GetSleep())
 	case *pb.FDBCLICommand_Status:
 		args, l, err = parseFDBCLIStatus(req.GetStatus())
+	case *pb.FDBCLICommand_TenantEmergencyMove:
+		args, l, err = parseFDBCLITenantEmergencyMove(req.GetTenantEmergencyMove())
 	case *pb.FDBCLICommand_Throttle:
 		args, l, err = parseFDBCLIThrottle(req.GetThrottle())
 	case *pb.FDBCLICommand_Triggerddteaminfolog:
@@ -1149,6 +1151,32 @@ func parseFDBCLISuspend(req *pb.FDBCLISuspend) ([]string, []captureLogs, error) 
 		}
 		args = append(args, fmt.Sprintf("%g", s.Seconds))
 		args = append(args, s.Addresses...)
+	default:
+		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
+	}
+	return args, nil, nil
+}
+
+func parseFDBCLITenantEmergencyMove(req *pb.FDBCLITenantEmergencyMove) ([]string, []captureLogs, error) {
+	args := []string{"tenant_emergency_move"}
+
+	if req.Request == nil {
+		return nil, nil, status.Error(codes.InvalidArgument, "tenant_emergency_move requires request to be filled in")
+	}
+
+	switch req.Request.(type) {
+	case *pb.FDBCLITenantEmergencyMove_Start:
+		startCmd := req.GetStart()
+		args = append(args, "start", startCmd.TenantGroup, startCmd.SourceCluster, startCmd.DestinationCluster)
+	case *pb.FDBCLITenantEmergencyMove_Switch:
+		switchCmd := req.GetSwitch()
+		args = append(args, "switch", switchCmd.TenantGroup, switchCmd.SourceCluster, switchCmd.DestinationCluster)
+	case *pb.FDBCLITenantEmergencyMove_Finish:
+		finishCmd := req.GetStart()
+		args = append(args, "finish", finishCmd.TenantGroup, finishCmd.SourceCluster, finishCmd.DestinationCluster)
+	case *pb.FDBCLITenantEmergencyMove_Abort:
+		abortCmd := req.GetStart()
+		args = append(args, "abort", abortCmd.TenantGroup, abortCmd.SourceCluster, abortCmd.DestinationCluster)
 	default:
 		return nil, nil, status.Errorf(codes.InvalidArgument, "unknown request: %T", req.Request)
 	}

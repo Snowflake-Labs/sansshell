@@ -410,6 +410,39 @@ message FDBCLISuspend {
   }
 }
 
+message FDBCLITenantEmergencyMoveStart {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveSwitch {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveFinish {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveAbort {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMove {
+  oneof request {
+    FDBCLITenantEmergencyMoveStart start = 1;
+    FDBCLITenantEmergencyMoveSwitch switch = 2;
+    FDBCLITenantEmergencyMoveFinish finish = 3;
+    FDBCLITenantEmergencyMoveAbort abort = 4;
+  }
+}
+
 message FDBCLIThrottleActionOn {
   string tag = 1;
   google.protobuf.UInt32Value rate = 2;
@@ -496,7 +529,7 @@ message FDBCLIWaitopen {}
 // session such as reset or rollback.
 // This message is broken out separately for ease of use since it has
 // gotten so large.
-// NEXT: 49
+// NEXT: 50
 message FDBCLICommand {
   oneof command {
     // Does not include begin, commit, exit, help, reset, or rollback.
@@ -538,6 +571,7 @@ message FDBCLICommand {
     FDBCLISleep sleep = 22;
     FDBCLIStatus status = 23;
     FDBCLISuspend suspend = 43;
+    FDBCLITenantEmergencyMove tenant_emergency_move = 49;
     FDBCLIThrottle throttle = 24;
     FDBCLITriggerddteaminfolog triggerddteaminfolog = 25;
     FDBCLITssq tssq = 35;
