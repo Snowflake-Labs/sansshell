@@ -19,6 +19,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -66,7 +67,8 @@ func (p *httpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 }
 
 type proxyCmd struct {
-	listenAddr string
+	listenAddr   string
+	allowAnyHost bool
 }
 
 func (*proxyCmd) Name() string { return "proxy" }
@@ -81,6 +83,7 @@ func (*proxyCmd) Usage() string {
 
 func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.listenAddr, "addr", "localhost:0", "Address to listen on, defaults to a random localhost port")
+	f.BoolVar(&p.allowAnyHost, "allow-any-host", false, "Serve data regardless of the Host in HTTP requests instead of only allowing localhost and IPs. False by default to prevent DNS rebinding attacks.")
 }
 
 // This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
@@ -127,6 +130,16 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		host, _, err := net.SplitHostPort(httpReq.Host)
+		if err != nil {
+			sendError(httpResp, http.StatusBadRequest, err)
+			return
+		}
+		if !p.allowAnyHost && host != "localhost" && net.ParseIP(host) == nil {
+			sendError(httpResp, http.StatusBadRequest, errors.New("refusing to serve non-ip non-localhost, set --allow-any-host to allow this call"))
+			return
+		}
+
 		var reqHeaders []*pb.Header
 		for k, v := range httpReq.Header {
 			reqHeaders = append(reqHeaders, &pb.Header{Key: k, Values: v})
