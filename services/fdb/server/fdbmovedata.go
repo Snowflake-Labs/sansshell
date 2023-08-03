@@ -57,6 +57,7 @@ func (s *fdbmovedata) FDBMoveData(ctx context.Context, req *pb.FDBMoveDataReques
 	if err != nil {
 		return nil, err
 	}
+	// TODO: add env variables and opts
 	run, err := util.RunCommand(ctx, command[0], command[1:])
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "error running fdbmovedata cmd (%+v): %v", command, err)

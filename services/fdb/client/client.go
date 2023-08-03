@@ -3600,7 +3600,7 @@ func (*fdbMoveDataCopyCmd) Synopsis() string {
 	return "Copy data across two tenant groups in a metacluster."
 }
 func (p *fdbMoveDataCopyCmd) Usage() string {
-	return "fdbMoveDataCopy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> <numProcs>"
+	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> <numProcs>"
 }
 
 func (r *fdbMoveDataCopyCmd) SetFlags(f *flag.FlagSet) {
