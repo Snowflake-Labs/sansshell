@@ -100,6 +100,7 @@ func (*fdbCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&fdbCLICmd{}, "")
 	c.Register(&fdbConfCmd{}, "")
 	c.Register(&fdbServerCmd{}, "")
+	c.Register(&fdbMoveDataCmd{}, "")
 
 	return c
 }
@@ -3565,7 +3566,7 @@ func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 	return retCode
 }
 
-const fdbMoveDataCLIPackage = "movedata"
+const fdbMoveDataCLIPackage = "fdbmovedata"
 
 func GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbMoveDataCLIPackage, f)
@@ -3594,7 +3595,7 @@ type fdbMoveDataCopyCmd struct {
 	req *pb.FDBMoveDataRequest
 }
 
-func (*fdbMoveDataCopyCmd) Name() string { return "fdbMoveDataCopy" }
+func (*fdbMoveDataCopyCmd) Name() string { return "copy" }
 func (*fdbMoveDataCopyCmd) Synopsis() string {
 	return "Copy data across two tenant groups in a metacluster."
 }
