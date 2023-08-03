@@ -63,7 +63,9 @@ message FDBMoveDataRequest {
 }
 
 message FDBMoveDataResponse {
-  string message = 1;
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
 }
 
 service CLI {
