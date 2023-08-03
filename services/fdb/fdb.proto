@@ -60,6 +60,7 @@ message FDBMoveDataRequest {
   string tenant_group = 2;
   string source_cluster = 3;
   string destination_cluster = 4;
+  int64 num_procs = 5;
 }
 
 message FDBMoveDataResponse {

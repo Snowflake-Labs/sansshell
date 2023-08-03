@@ -3599,7 +3599,7 @@ func (*fdbMoveDataCopyCmd) Synopsis() string {
 	return "Copy data across two tenant groups in a metacluster."
 }
 func (p *fdbMoveDataCopyCmd) Usage() string {
-	return "fdbMoveDataCopy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>"
+	return "fdbMoveDataCopy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> <numProcs>"
 }
 
 func (r *fdbMoveDataCopyCmd) SetFlags(f *flag.FlagSet) {
@@ -3610,18 +3610,30 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewFDBMoveClientProxy(state.Conn)
 
-	if f.NArg() != 4 {
+	if f.NArg() < 4 || f.NArg() > 5 {
 		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
 		return subcommands.ExitFailure
 	}
 
 	clusterFile, tenantGroup, sourceCluster, destinationCluster := f.Arg(0), f.Arg(1), f.Arg(2), f.Arg(3)
+	numProcs := int64(10)
+	var s int64
+	var err error
+	if f.NArg() == 5 {
+		s, err = strconv.ParseInt(f.Arg(4), 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "can't parse number of processes: %v\n", err)
+			return subcommands.ExitFailure
+		}
+		numProcs = s
+	}
 
 	resp, err := c.FDBMoveDataOneMany(ctx, &pb.FDBMoveDataRequest{
 		ClusterFile:        clusterFile,
 		TenantGroup:        tenantGroup,
 		SourceCluster:      sourceCluster,
 		DestinationCluster: destinationCluster,
+		NumProcs:           numProcs,
 	})
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.

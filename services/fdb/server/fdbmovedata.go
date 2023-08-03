@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
@@ -44,6 +45,7 @@ func generateFDBMoveDataArgsImpl(req *pb.FDBMoveDataRequest) ([]string, error) {
 	args = append(args, "--tenant-group", req.TenantGroup)
 	args = append(args, "--src-name", req.SourceCluster)
 	args = append(args, "--dst-name", req.DestinationCluster)
+	args = append(args, "--num-procs", fmt.Sprintf("%d", req.NumProcs))
 
 	command = append(command, args...)
 	return command, nil
