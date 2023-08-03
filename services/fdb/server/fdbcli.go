@@ -1172,10 +1172,10 @@ func parseFDBCLITenantEmergencyMove(req *pb.FDBCLITenantEmergencyMove) ([]string
 		switchCmd := req.GetSwitch()
 		args = append(args, "switch", switchCmd.TenantGroup, switchCmd.SourceCluster, switchCmd.DestinationCluster)
 	case *pb.FDBCLITenantEmergencyMove_Finish:
-		finishCmd := req.GetStart()
+		finishCmd := req.GetFinish()
 		args = append(args, "finish", finishCmd.TenantGroup, finishCmd.SourceCluster, finishCmd.DestinationCluster)
 	case *pb.FDBCLITenantEmergencyMove_Abort:
-		abortCmd := req.GetStart()
+		abortCmd := req.GetAbort()
 		args = append(args, "abort", abortCmd.TenantGroup, abortCmd.SourceCluster, abortCmd.DestinationCluster)
 	case *pb.FDBCLITenantEmergencyMove_Status:
 		statusCmd := req.GetStatus()
