@@ -3564,3 +3564,81 @@ func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 
 	return retCode
 }
+
+const fdbMoveDataCLIPackage = "movedata"
+
+func GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(fdbMoveDataCLIPackage, f)
+	c.Register(&fdbMoveDataCopyCmd{}, "")
+
+	return c
+}
+
+type fdbMoveDataCmd struct{}
+
+func (*fdbMoveDataCmd) Name() string             { return fdbMoveDataCLIPackage }
+func (*fdbMoveDataCmd) SetFlags(_ *flag.FlagSet) {}
+func (*fdbMoveDataCmd) Synopsis() string {
+	return "Copy data across two tenant groups in a metacluster.\n" + client.GenerateSynopsis(GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
+}
+func (p *fdbMoveDataCmd) Usage() string {
+	return client.GenerateUsage(fdbMoveDataCLIPackage, p.Synopsis())
+}
+
+func (p *fdbMoveDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := GetSubpackage(f)
+	return c.Execute(ctx, args...)
+}
+
+type fdbMoveDataCopyCmd struct {
+	req *pb.FDBMoveDataRequest
+}
+
+func (*fdbMoveDataCopyCmd) Name() string { return "fdbMoveDataCopy" }
+func (*fdbMoveDataCopyCmd) Synopsis() string {
+	return "Copy data across two tenant groups in a metacluster."
+}
+func (p *fdbMoveDataCopyCmd) Usage() string {
+	return "fdbMoveDataCopy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName>"
+}
+
+func (r *fdbMoveDataCopyCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBMoveDataRequest{}
+}
+
+func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBMoveClientProxy(state.Conn)
+
+	if f.NArg() != 4 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+
+	clusterFile, tenantGroup, sourceCluster, destinationCluster := f.Arg(0), f.Arg(1), f.Arg(2), f.Arg(3)
+
+	resp, err := c.FDBMoveDataOneMany(ctx, &pb.FDBMoveDataRequest{
+		ClusterFile:        clusterFile,
+		TenantGroup:        tenantGroup,
+		SourceCluster:      sourceCluster,
+		DestinationCluster: destinationCluster,
+	})
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdb move data error: %v\n", err)
+		}
+
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdb move data error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}

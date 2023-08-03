@@ -203,6 +203,94 @@ var Conf_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	FDBMove_FDBMoveData_FullMethodName = "/Fdb.FDBMove/FDBMoveData"
+)
+
+// FDBMoveClient is the client API for FDBMove service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type FDBMoveClient interface {
+	FDBMoveData(ctx context.Context, in *FDBMoveDataRequest, opts ...grpc.CallOption) (*FDBMoveDataResponse, error)
+}
+
+type fDBMoveClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewFDBMoveClient(cc grpc.ClientConnInterface) FDBMoveClient {
+	return &fDBMoveClient{cc}
+}
+
+func (c *fDBMoveClient) FDBMoveData(ctx context.Context, in *FDBMoveDataRequest, opts ...grpc.CallOption) (*FDBMoveDataResponse, error) {
+	out := new(FDBMoveDataResponse)
+	err := c.cc.Invoke(ctx, FDBMove_FDBMoveData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FDBMoveServer is the server API for FDBMove service.
+// All implementations should embed UnimplementedFDBMoveServer
+// for forward compatibility
+type FDBMoveServer interface {
+	FDBMoveData(context.Context, *FDBMoveDataRequest) (*FDBMoveDataResponse, error)
+}
+
+// UnimplementedFDBMoveServer should be embedded to have forward compatible implementations.
+type UnimplementedFDBMoveServer struct {
+}
+
+func (UnimplementedFDBMoveServer) FDBMoveData(context.Context, *FDBMoveDataRequest) (*FDBMoveDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBMoveData not implemented")
+}
+
+// UnsafeFDBMoveServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to FDBMoveServer will
+// result in compilation errors.
+type UnsafeFDBMoveServer interface {
+	mustEmbedUnimplementedFDBMoveServer()
+}
+
+func RegisterFDBMoveServer(s grpc.ServiceRegistrar, srv FDBMoveServer) {
+	s.RegisterService(&FDBMove_ServiceDesc, srv)
+}
+
+func _FDBMove_FDBMoveData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBMoveDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBMoveServer).FDBMoveData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBMove_FDBMoveData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBMoveServer).FDBMoveData(ctx, req.(*FDBMoveDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// FDBMove_ServiceDesc is the grpc.ServiceDesc for FDBMove service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var FDBMove_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Fdb.FDBMove",
+	HandlerType: (*FDBMoveServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "FDBMoveData",
+			Handler:    _FDBMove_FDBMoveData_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "fdb.proto",
+}
+
+const (
 	CLI_FDBCLI_FullMethodName = "/Fdb.CLI/FDBCLI"
 )
 

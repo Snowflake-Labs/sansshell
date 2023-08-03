@@ -51,6 +51,21 @@ message DeleteRequest { Location location = 1; }
 
 message FdbConfResponse { string value = 1; }
 
+service FDBMove {
+  rpc FDBMoveData(FDBMoveDataRequest) returns (FDBMoveDataResponse);
+}
+
+message FDBMoveDataRequest {
+  string cluster_file = 1;
+  string tenant_group = 2;
+  string source_cluster = 3;
+  string destination_cluster = 4;
+}
+
+message FDBMoveDataResponse {
+  string message = 1;
+}
+
 service CLI {
   rpc FDBCLI(FDBCLIRequest) returns (stream FDBCLIResponse) {}
 }
