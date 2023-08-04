@@ -271,9 +271,6 @@ func Run(ctx context.Context, rs RunState) {
 		state.Err = append(state.Err, makeWriter(rs.PrefixOutput, i, errF))
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
-	defer cancel()
-
 	exitCode := subcommands.ExitSuccess
 
 	// If there's no batch size set then it'll be the whole thing so we can use one loop below.
@@ -290,6 +287,8 @@ func Run(ctx context.Context, rs RunState) {
 	}
 	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
+		ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
+		defer cancel()
 		// Set up a connection to the sansshell-server (possibly via proxy).
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
 		if err != nil {
@@ -309,6 +308,8 @@ func Run(ctx context.Context, rs RunState) {
 
 	// Remainder or the fall through case of no targets (i.e. a proxy command).
 	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
+		ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
+		defer cancel()
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
