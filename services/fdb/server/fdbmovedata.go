@@ -113,7 +113,11 @@ func (s *fdbmovedata) FDBMoveDataWait(ctx context.Context, req *pb.FDBMoveDataWa
 	s.cmd.Stdout = run.Stdout
 	s.cmd.Stderr = run.Stderr
 	s.cmd.Stdin = nil
-	s.cmd.Wait()
+
+	err := s.cmd.Wait()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "error waiting for fdbmovedata cmd: %v", err)
+	}
 
 	resp := &pb.FDBMoveDataWaitResponse{
 		Stdout:  run.Stdout.Bytes(),
