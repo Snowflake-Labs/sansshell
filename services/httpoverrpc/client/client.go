@@ -149,16 +149,18 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			sendError(httpResp, http.StatusBadRequest, err)
 			return
 		}
-		req := &pb.LocalhostHTTPRequest{
+		req := &pb.HostHTTPRequest{
 			Request: &pb.HTTPRequest{
 				RequestUri: httpReq.RequestURI,
 				Method:     httpReq.Method,
 				Headers:    reqHeaders,
 				Body:       body,
 			},
-			Port: int32(port),
+			Port:     int32(port),
+			Protocol: "http",
+			Hostname: "localhost",
 		}
-		resp, err := proxy.Localhost(ctx, req)
+		resp, err := proxy.Host(ctx, req)
 		if err != nil {
 			sendError(httpResp, http.StatusInternalServerError, err)
 			return
@@ -205,18 +207,22 @@ type getCmd struct {
 	headers             repeatedString
 	body                string
 	showResponseHeaders bool
+	protocol            string
+	hostname            string
 }
 
 func (*getCmd) Name() string     { return "get" }
 func (*getCmd) Synopsis() string { return "Makes a HTTP call to a port on a remote host" }
 func (*getCmd) Usage() string {
-	return `get [-method METHOD] [-header Header...] [-body body] remoteport request_uri:
-    Make a HTTP request to a specified port on the remote host, defaulting to GET.
+	return `get [-method METHOD] [-header Header...] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
+    Make a HTTP request to a specified port on the remote host.
 `
 }
 
 func (g *getCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&g.method, "method", "GET", "Method to use in the HTTP request")
+	f.StringVar(&g.protocol, "protocol", "http", "protocol to communicate with specified hostname")
+	f.StringVar(&g.hostname, "hostname", "localhost", "ip address or domain name to specify host")
 	f.Var(&g.headers, "header", "Header to send in the request, may be specified multiple times.")
 	f.StringVar(&g.body, "body", "", "Body to send in request")
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")
@@ -246,17 +252,19 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 
 	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
 
-	req := &pb.LocalhostHTTPRequest{
+	req := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
 			RequestUri: f.Arg(1),
 			Method:     g.method,
 			Headers:    reqHeaders,
 			Body:       []byte(g.body),
 		},
-		Port: int32(port),
+		Port:     int32(port),
+		Protocol: g.protocol,
+		Hostname: g.hostname,
 	}
 
-	resp, err := proxy.LocalhostOneMany(ctx, req)
+	resp, err := proxy.HostOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {

@@ -29,6 +29,8 @@ import (
 	sansshellserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Metrics
@@ -37,13 +39,25 @@ var (
 		Description: "number of failures when performing HTTPOverRPC/Localhost"}
 )
 
+var (
+	httpClient = &http.Client{}
+)
+
 // Server is used to implement the gRPC Server
 type server struct{}
 
-func (s *server) Localhost(ctx context.Context, req *pb.LocalhostHTTPRequest) (*pb.HTTPReply, error) {
+func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
-	url := fmt.Sprintf("http://localhost:%v%v", req.Port, req.Request.RequestUri)
+	hostname := "localhost"
+	if req.Hostname != "" {
+		hostname = req.Hostname
+	}
+	if req.Protocol != "http" && req.Protocol != "https" {
+		return nil, status.Errorf(codes.InvalidArgument, "currently request protocol can only be http or https")
+	}
+
+	url := fmt.Sprintf("%s://%s:%v%v", req.Protocol, hostname, req.Port, req.Request.RequestUri)
 	httpReq, err := http.NewRequestWithContext(ctx, req.Request.Method, url, bytes.NewReader(req.Request.Body))
 	if err != nil {
 		recorder.CounterOrLog(ctx, localhostFailureCounter, 1)
@@ -54,10 +68,9 @@ func (s *server) Localhost(ctx context.Context, req *pb.LocalhostHTTPRequest) (*
 	for _, header := range req.Request.Headers {
 		httpReq.Header[header.Key] = header.Values
 	}
-	client := &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	httpResp, err := client.Do(httpReq)
+	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
