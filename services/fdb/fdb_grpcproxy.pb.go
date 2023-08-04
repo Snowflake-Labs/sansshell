@@ -240,7 +240,8 @@ func (c *confClientProxy) DeleteOneMany(ctx context.Context, in *DeleteRequest, 
 // FDBMoveClientProxy is the superset of FDBMoveClient which additionally includes the OneMany proxy methods
 type FDBMoveClientProxy interface {
 	FDBMoveClient
-	FDBMoveDataOneMany(ctx context.Context, in *FDBMoveDataRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataManyResponse, error)
+	FDBMoveDataCopyOneMany(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataCopyManyResponse, error)
+	FDBMoveDataWaitOneMany(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataWaitManyResponse, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -254,32 +255,32 @@ func NewFDBMoveClientProxy(cc *proxy.Conn) FDBMoveClientProxy {
 	return &fDBMoveClientProxy{NewFDBMoveClient(cc).(*fDBMoveClient)}
 }
 
-// FDBMoveDataManyResponse encapsulates a proxy data packet.
+// FDBMoveDataCopyManyResponse encapsulates a proxy data packet.
 // It includes the target, index, response and possible error returned.
-type FDBMoveDataManyResponse struct {
+type FDBMoveDataCopyManyResponse struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
-	Resp  *FDBMoveDataResponse
+	Resp  *FDBMoveDataCopyResponse
 	Error error
 }
 
-// FDBMoveDataOneMany provides the same API as FDBMoveData but sends the same request to N destinations at once.
+// FDBMoveDataCopyOneMany provides the same API as FDBMoveDataCopy but sends the same request to N destinations at once.
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *fDBMoveClientProxy) FDBMoveDataOneMany(ctx context.Context, in *FDBMoveDataRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataManyResponse, error) {
+func (c *fDBMoveClientProxy) FDBMoveDataCopyOneMany(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataCopyManyResponse, error) {
 	conn := c.cc.(*proxy.Conn)
-	ret := make(chan *FDBMoveDataManyResponse)
+	ret := make(chan *FDBMoveDataCopyManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
-			out := &FDBMoveDataManyResponse{
+			out := &FDBMoveDataCopyManyResponse{
 				Target: conn.Targets[0],
 				Index:  0,
-				Resp:   &FDBMoveDataResponse{},
+				Resp:   &FDBMoveDataCopyResponse{},
 			}
-			err := conn.Invoke(ctx, "/Fdb.FDBMove/FDBMoveData", in, out.Resp, opts...)
+			err := conn.Invoke(ctx, "/Fdb.FDBMove/FDBMoveDataCopy", in, out.Resp, opts...)
 			if err != nil {
 				out.Error = err
 			}
@@ -289,15 +290,82 @@ func (c *fDBMoveClientProxy) FDBMoveDataOneMany(ctx context.Context, in *FDBMove
 		}()
 		return ret, nil
 	}
-	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBMove/FDBMoveData", in, opts...)
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBMove/FDBMoveDataCopy", in, opts...)
 	if err != nil {
 		return nil, err
 	}
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		for {
-			typedResp := &FDBMoveDataManyResponse{
-				Resp: &FDBMoveDataResponse{},
+			typedResp := &FDBMoveDataCopyManyResponse{
+				Resp: &FDBMoveDataCopyResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBMoveDataWaitManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBMoveDataWaitManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBMoveDataWaitResponse
+	Error error
+}
+
+// FDBMoveDataWaitOneMany provides the same API as FDBMoveDataWait but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBMoveClientProxy) FDBMoveDataWaitOneMany(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (<-chan *FDBMoveDataWaitManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBMoveDataWaitManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBMoveDataWaitManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBMoveDataWaitResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBMove/FDBMoveDataWait", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBMove/FDBMoveDataWait", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBMoveDataWaitManyResponse{
+				Resp: &FDBMoveDataWaitResponse{},
 			}
 
 			resp, ok := <-manyRet

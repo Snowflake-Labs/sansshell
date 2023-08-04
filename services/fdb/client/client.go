@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3571,8 +3572,23 @@ const fdbMoveDataCLIPackage = "fdbmovedata"
 func GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbMoveDataCLIPackage, f)
 	c.Register(&fdbMoveDataCopyCmd{}, "")
-
+	c.Register(&fdbMoveDataWaitCmd{}, "")
 	return c
+}
+
+// This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
+type noCancel struct {
+	ctx context.Context
+}
+
+func (c noCancel) Deadline() (time.Time, bool)       { return time.Time{}, false }
+func (c noCancel) Done() <-chan struct{}             { return nil }
+func (c noCancel) Err() error                        { return nil }
+func (c noCancel) Value(key interface{}) interface{} { return c.ctx.Value(key) }
+
+// WithoutCancel returns a context that is never canceled.
+func WithoutCancel(ctx context.Context) context.Context {
+	return noCancel{ctx: ctx}
 }
 
 type fdbMoveDataCmd struct{}
@@ -3592,19 +3608,19 @@ func (p *fdbMoveDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...i
 }
 
 type fdbMoveDataCopyCmd struct {
-	req *pb.FDBMoveDataRequest
+	req *pb.FDBMoveDataCopyRequest
 }
 
 func (*fdbMoveDataCopyCmd) Name() string { return "copy" }
 func (*fdbMoveDataCopyCmd) Synopsis() string {
-	return "Copy data across two tenant groups in a metacluster."
+	return "Initiate data copy across two tenant groups in a metacluster. Starts a long-running command on the server."
 }
 func (p *fdbMoveDataCopyCmd) Usage() string {
-	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> <numProcs>"
+	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> [numProcs]"
 }
 
 func (r *fdbMoveDataCopyCmd) SetFlags(f *flag.FlagSet) {
-	r.req = &pb.FDBMoveDataRequest{}
+	r.req = &pb.FDBMoveDataCopyRequest{}
 }
 
 func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -3617,6 +3633,7 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	}
 
 	clusterFile, tenantGroup, sourceCluster, destinationCluster := f.Arg(0), f.Arg(1), f.Arg(2), f.Arg(3)
+	// default number of processes is 10
 	numProcs := int64(10)
 	var s int64
 	var err error
@@ -3629,7 +3646,7 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 		numProcs = s
 	}
 
-	resp, err := c.FDBMoveDataOneMany(ctx, &pb.FDBMoveDataRequest{
+	resp, err := c.FDBMoveDataCopyOneMany(ctx, &pb.FDBMoveDataCopyRequest{
 		ClusterFile:        clusterFile,
 		TenantGroup:        tenantGroup,
 		SourceCluster:      sourceCluster,
@@ -3639,7 +3656,7 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "fdb move data error: %v\n", err)
+			fmt.Fprintf(e, "fdb move data copy error: %v\n", err)
 		}
 
 		return subcommands.ExitFailure
@@ -3648,10 +3665,67 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 	retCode := subcommands.ExitSuccess
 	for r := range resp {
 		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "fdb move data error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "fdb move data copy error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
+		fmt.Fprintf(state.Out[r.Index], "Command ID to wait on: %d\n", r.Resp.Id)
 	}
 
+	return retCode
+}
+
+type fdbMoveDataWaitCmd struct {
+	req *pb.FDBMoveDataWaitRequest
+}
+
+func (*fdbMoveDataWaitCmd) Name() string { return "wait" }
+func (*fdbMoveDataWaitCmd) Synopsis() string {
+	return "Wait for data copy across two tenant groups in a metacluster to complete"
+}
+func (p *fdbMoveDataWaitCmd) Usage() string {
+	return "fdbmovedata wait <ID>"
+}
+
+func (r *fdbMoveDataWaitCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBMoveDataWaitRequest{}
+}
+
+func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	// Ignore the parent context timeout because we don't want to time out here.
+	ctx = WithoutCancel(ctx)
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBMoveClientProxy(state.Conn)
+
+	if f.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: ", r.Usage())
+		return subcommands.ExitFailure
+	}
+	id, err := strconv.ParseInt(f.Arg(0), 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "can't parse ID: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	resp, err := c.FDBMoveDataWaitOneMany(ctx, &pb.FDBMoveDataWaitRequest{
+		Id: id,
+	})
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdb move data wait error: %v\n", err)
+		}
+
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdb move data copy error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+	}
 	return retCode
 }

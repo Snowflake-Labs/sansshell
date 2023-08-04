@@ -52,10 +52,11 @@ message DeleteRequest { Location location = 1; }
 message FdbConfResponse { string value = 1; }
 
 service FDBMove {
-  rpc FDBMoveData(FDBMoveDataRequest) returns (FDBMoveDataResponse);
+  rpc FDBMoveDataCopy(FDBMoveDataCopyRequest) returns (FDBMoveDataCopyResponse);
+  rpc FDBMoveDataWait(FDBMoveDataWaitRequest) returns (FDBMoveDataWaitResponse);
 }
 
-message FDBMoveDataRequest {
+message FDBMoveDataCopyRequest {
   string cluster_file = 1;
   string tenant_group = 2;
   string source_cluster = 3;
@@ -63,7 +64,15 @@ message FDBMoveDataRequest {
   int64 num_procs = 5;
 }
 
-message FDBMoveDataResponse {
+message FDBMoveDataCopyResponse {
+  int64 id = 1;
+}
+
+message FDBMoveDataWaitRequest {
+  int64 id = 1;
+}
+
+message FDBMoveDataWaitResponse {
   bytes stdout = 1;
   bytes stderr = 2;
   int32 retCode = 3;
