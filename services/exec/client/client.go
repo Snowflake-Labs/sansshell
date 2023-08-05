@@ -115,8 +115,7 @@ func (p *runCmd) printCommandOutput(state *util.ExecuteState, idx int, resp *pb.
 }
 
 func RecvWithTimeout(ctx context.Context, resp pb.Exec_StreamingRunClientProxy) ([]*pb.StreamingRunManyResponse, error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	respCh := make(chan []*pb.StreamingRunManyResponse, 1)
 	errCh := make(chan error, 1)
