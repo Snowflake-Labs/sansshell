@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"github.com/google/subcommands"
 
@@ -113,6 +114,33 @@ func (p *runCmd) printCommandOutput(state *util.ExecuteState, idx int, resp *pb.
 	}
 }
 
+func RecvWithTimeout(ctx context.Context, resp pb.Exec_StreamingRunClientProxy) ([]*pb.StreamingRunManyResponse, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	respCh := make(chan []*pb.StreamingRunManyResponse, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		resp, err := resp.Recv()
+		if err != nil {
+			errCh <- err
+		}
+		respCh <- resp
+	}()
+	var rs []*pb.StreamingRunManyResponse
+	var errRecv error
+	select {
+	case <-ctx.Done():
+		errRecv = fmt.Errorf("deadline exceeded: %v", ctx.Err())
+	case err := <-errCh:
+		errRecv = fmt.Errorf("can't get response data on stream - %v", err)
+	case r := <-respCh:
+		rs = r
+	}
+
+	return rs, errRecv
+}
+
 func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() == 0 {
@@ -122,7 +150,6 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 
 	c := pb.NewExecClientProxy(state.Conn)
 	req := &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]}
-
 	if p.streaming {
 		resp, err := c.StreamingRunOneMany(ctx, req)
 		if err != nil {
@@ -132,14 +159,13 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			}
 			return subcommands.ExitFailure
 		}
-
 		for {
-			rs, err := resp.Recv()
-			if err != nil {
-				if err == io.EOF {
+			rs, errRecv := RecvWithTimeout(ctx, resp)
+			if errRecv != nil {
+				if errRecv == io.EOF {
 					return p.returnCode
 				}
-				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", errRecv)
 				return subcommands.ExitFailure
 			}
 			for _, r := range rs {
