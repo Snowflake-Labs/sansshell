@@ -683,6 +683,7 @@ func (p *Conn) Close() error {
 	return p.cc.Close()
 }
 
+// targets are in the form of host[:port][;<duration>]
 func parseTargets(targets []string) ([]string, []*time.Duration, error) {
 	var hostport []string
 	var timeouts []*time.Duration

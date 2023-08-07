@@ -60,10 +60,10 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
-// ValidateAndAddPort will take a given target address and optionally add a default port
+// ValidateAndAddPortAndTimeout will take a given target address and optionally add a default port and timeout
 // onto it if a port is missing. This will also take in account optional dial timeout
 // suffix and make sure the returned value has that if it exists.
-func ValidateAndAddPort(s string, port int) string {
+func ValidateAndAddPortAndTimeout(s string, port int, timeout string) string {
 	// See if there's a duration appended and pull it off
 	p := strings.Split(s, ";")
 	if len(p) == 0 || len(p) > 2 || p[0] == "" {

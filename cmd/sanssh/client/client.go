@@ -63,8 +63,6 @@ type RunState struct {
 	OutputsDir string
 	// CredSource is a registered credential source with the mtls package.
 	CredSource string
-	// DialTimeout is the time duration to wait for a connect to complete.
-	DialTimeout time.Duration
 	// IdleTimeout is the time duration to wait before closing an idle connection.
 	// If no messages are received within this timeframe, connection will be terminated.
 	// For streaming RPCs, if this is not set, connection will stay open until canceled.
@@ -291,8 +289,6 @@ func Run(ctx context.Context, rs RunState) {
 	}
 	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
-		ctx, cancel := context.WithTimeout(ctx, rs.DialTimeout)
-		defer cancel()
 		// Set up a connection to the sansshell-server (possibly via proxy).
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
 		if err != nil {
@@ -313,8 +309,6 @@ func Run(ctx context.Context, rs RunState) {
 
 	// Remainder or the fall through case of no targets (i.e. a proxy command).
 	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
-		ctx, cancel := context.WithTimeout(ctx, rs.DialTimeout)
-		defer cancel()
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
