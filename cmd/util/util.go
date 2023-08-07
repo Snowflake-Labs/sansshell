@@ -23,6 +23,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -60,14 +61,16 @@ func hasPort(s string) bool {
 	return strings.LastIndex(s, "]") < strings.LastIndex(s, ":")
 }
 
+// swappable for testing
+var logFatalf = log.Fatalf
+
 // ValidateAndAddPortAndTimeout will take a given target address and optionally add a default port and timeout
-// onto it if a port is missing. This will also take in account optional dial timeout
-// suffix and make sure the returned value has that if it exists.
-func ValidateAndAddPortAndTimeout(s string, port int, timeout string) string {
+// onto it if a port or a timeout is missing.
+func ValidateAndAddPortAndTimeout(s string, port int, dialTimeout time.Duration) string {
 	// See if there's a duration appended and pull it off
 	p := strings.Split(s, ";")
 	if len(p) == 0 || len(p) > 2 || p[0] == "" {
-		log.Fatalf("Invalid address %q - should be of the form host[:port][;<duration>]", s)
+		logFatalf("Invalid address %q - should be of the form host[:port][;<duration>]", s)
 	}
 	new := s
 	if !hasPort(p[0]) {
@@ -76,6 +79,14 @@ func ValidateAndAddPortAndTimeout(s string, port int, timeout string) string {
 			// Add duration back if we pulled it off.
 			new = fmt.Sprintf("%s;%s", new, p[1])
 		}
+	}
+	if len(p) == 2 { // timeout exists, validate it
+		timeout := p[1]
+		if _, err := time.ParseDuration(timeout); err != nil {
+			logFatalf("Invalid timeout %s - should be of the form time.Duration", timeout)
+		}
+	} else { // no timeout, let's validate dialTimeout and add it
+		new = fmt.Sprintf("%s;%s", new, dialTimeout.String())
 	}
 	return new
 }
