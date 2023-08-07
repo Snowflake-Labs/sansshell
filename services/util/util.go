@@ -252,6 +252,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
+	fmt.Println("cmd: ", cmd)
 	run := &CommandRun{
 		Stdout: NewLimitedBuffer(options.stdoutMax),
 		Stderr: NewLimitedBuffer(options.stderrMax),

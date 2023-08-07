@@ -40,6 +40,8 @@ var (
 		Description: "number of failures when performing sysinfo.Uptime"}
 	sysinfoDmesgFailureCounter = metrics.MetricDefinition{Name: "actions_sysinfo_dmesg_failure",
 		Description: "number of failures when performing sysinfo.Dmesg"}
+	sysinfoJournalFailureCounter = metrics.MetricDefinition{Name: "actions_sysinfo_journal_failure",
+		Description: "number of failures when performing sysinfo.Journal"}
 )
 
 // server is used to implement the gRPC server
@@ -110,6 +112,31 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 			return status.Errorf(codes.Internal, "dmesg: send error %v", err)
 		}
 	}
+	return nil
+}
+
+func (s *server) Journal(req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {
+	ctx := stream.Context()
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	// currently output can only be json or json-pretty
+	if req.Output != "" && req.Output != "json" && req.Output != "json-pretty" {
+		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "invalid_args"))
+		return status.Errorf(codes.InvalidArgument, "cannot set output to other formats unless json or json-pretty")
+	}
+
+	err := getJournalRecordsAndSend(ctx, req, stream)
+	if err != nil {
+		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "get_journal_and_send_err"))
+		return err
+	}
+
+	// for _, record := range records {
+	// 	if err := stream.Send(record); err != nil {
+	// 		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+	// 		return status.Errorf(codes.Internal, "journal: send error %v", err)
+	// 	}
+	// }
 	return nil
 }
 
