@@ -23,6 +23,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -76,6 +77,12 @@ func TestFDBCLI(t *testing.T) {
 
 	contents := []byte("contents")
 
+	tmpdir := t.TempDir()
+	fdbEnvFile := filepath.Join(tmpdir, "fdbenvfile")
+	if err := os.WriteFile(fdbEnvFile, []byte("ONE=2\nTHREE=4"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, tc := range []struct {
 		name       string
 		req        *pb.FDBCLIRequest
@@ -91,6 +98,7 @@ func TestFDBCLI(t *testing.T) {
 		command    []string
 		perms      fs.FileMode
 		envList    []string
+		envFile    string
 		ignoreOpts bool
 	}{
 		{
@@ -329,10 +337,11 @@ func TestFDBCLI(t *testing.T) {
 				},
 			},
 			envList:    []string{"FOO=BAR"},
+			envFile:    fdbEnvFile,
 			ignoreOpts: true,
 			respLogs:   make(map[string][]byte),
 			output: &pb.FDBCLIResponseOutput{
-				Stdout: []byte("FOO=BAR\n"),
+				Stdout: []byte("FOO=BAR\nONE=2\nTHREE=4\n"),
 			},
 			bin: testutil.ResolvePath(t, "env"),
 			command: []string{
@@ -3627,11 +3636,13 @@ func TestFDBCLI(t *testing.T) {
 			origUser := FDBCLIUser
 			origGroup := FDBCLIGroup
 			origEnvList := FDBCLIEnvList
+			origEnvFile := FDBCLIEnvFile
 			t.Cleanup(func() {
 				generateFDBCLIArgs = origGen
 				FDBCLIUser = origUser
 				FDBCLIGroup = origGroup
 				FDBCLIEnvList = origEnvList
+				FDBCLIEnvFile = origEnvFile
 				// Reset these so each test starts fresh.
 				lfs.fdbCLIUid = -1
 				lfs.fdbCLIGid = -1
@@ -3639,6 +3650,7 @@ func TestFDBCLI(t *testing.T) {
 			FDBCLIUser = tc.user
 			FDBCLIGroup = tc.group
 			FDBCLIEnvList = tc.envList
+			FDBCLIEnvFile = tc.envFile
 			var generatedOpts []string
 			var logs []captureLogs
 
