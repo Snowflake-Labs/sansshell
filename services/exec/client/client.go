@@ -122,6 +122,7 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 
 	c := pb.NewExecClientProxy(state.Conn)
 	req := &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]}
+
 	if p.streaming {
 		resp, err := c.StreamingRunOneMany(ctx, req)
 		if err != nil {
@@ -131,6 +132,7 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			}
 			return subcommands.ExitFailure
 		}
+
 		for {
 			rs, err := resp.Recv()
 			if err != nil {
