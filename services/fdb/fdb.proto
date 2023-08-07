@@ -53,7 +53,7 @@ message FdbConfResponse { string value = 1; }
 
 service FDBMove {
   rpc FDBMoveDataCopy(FDBMoveDataCopyRequest) returns (FDBMoveDataCopyResponse);
-  rpc FDBMoveDataWait(FDBMoveDataWaitRequest) returns (FDBMoveDataWaitResponse);
+  rpc FDBMoveDataWait(FDBMoveDataWaitRequest) returns (stream FDBMoveDataWaitResponse);
 }
 
 message FDBMoveDataCopyRequest {

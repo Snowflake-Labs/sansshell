@@ -19,13 +19,13 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"os/exec"
 	"sync"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
-	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -39,9 +39,11 @@ var (
 )
 
 type fdbmovedata struct {
-	mu  sync.Mutex
-	id  int64
-	cmd *exec.Cmd
+	mu     sync.Mutex
+	id     int64
+	cmd    *exec.Cmd
+	stdout io.ReadCloser
+	stderr io.ReadCloser
 }
 
 func generateFDBMoveDataArgsImpl(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
@@ -82,6 +84,16 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	cmd.Env = append(cmd.Environ(), "PYTHONPATH=/home/teleport-jfu/python")
 	cmd.Env = append(cmd.Environ(), "PATH=/opt/rh/rh-python36/root/bin")
 
+	s.stdout, err = cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	s.stderr, err = cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
 	logger.Info("executing local command", "cmd", cmd.String())
 	s.cmd = cmd
 	err = s.cmd.Start()
@@ -95,69 +107,66 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	}
 	return resp, nil
 }
-
-func (s *fdbmovedata) FDBMoveDataWait(ctx context.Context, req *pb.FDBMoveDataWaitRequest) (*pb.FDBMoveDataWaitResponse, error) {
+func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !(req.Id == s.id) {
-		return nil, status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
+		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
 	if s.cmd == nil {
-		return nil, status.Errorf(codes.Internal, "No command running on the server")
+		return status.Errorf(codes.Internal, "No command running on the server")
 	}
 
-	run := &util.CommandRun{
-		Stdout: util.NewLimitedBuffer(util.DefRunBufLimit),
-		Stderr: util.NewLimitedBuffer(util.DefRunBufLimit),
-	}
-	s.cmd.Stdout = run.Stdout
-	s.cmd.Stderr = run.Stderr
-	s.cmd.Stdin = nil
+	// Send stderr asynchronously
+	go func() {
+		for {
+			buf := make([]byte, 1024)
+			n, err := s.stderr.Read(buf)
+			if err != nil {
+				return
+			}
+			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stderr: buf[:n]}); err != nil {
+				return
+			}
+		}
+	}()
 
+	// // Send stdout asynchronously
+	// go func() {
+	// 	for {
+	// 		buf := make([]byte, 1024)
+	// 		n, err := s.stdout.Read(buf)
+	// 		if err != nil {
+	// 			return
+	// 		}
+	// 		if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
+	// 			return
+	// 		}
+	// 	}
+	// 	}()
+	// Send stdout synchronously
+	for {
+		buf := make([]byte, 1024)
+		n, err := s.stdout.Read(buf)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return err
+		}
+		if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
+			return err
+		}
+	}
 	err := s.cmd.Wait()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "error waiting for fdbmovedata cmd: %v", err)
-	}
-
-	resp := &pb.FDBMoveDataWaitResponse{
-		Stdout:  run.Stdout.Bytes(),
-		Stderr:  run.Stderr.Bytes(),
-		RetCode: int32(s.cmd.ProcessState.ExitCode()),
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
 	}
 	// clear the cmd to allow another call
 	s.cmd = nil
+	s.stdout = nil
+	s.stderr = nil
 	s.id = 0
-	// 	// Send stderr asynchronously
-	// 	go func() {
-	// 		for {
-	// 			buf := make([]byte, 1024)
-	// 			n, err := stderr.Read(buf)
-	// 			if err != nil {
-	// 				return
-	// 			}
-	// 			if err := stream.Send(&pb.ExecResponse{Stderr: buf[:n]}); err != nil {
-	// 				recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
-	// 				return
-	// 			}
-	// 		}
-	// 	}()
-
-	// 	// Send stdout synchronously
-	// 	for {
-	// 		buf := make([]byte, 1024)
-	// 		n, err := stdout.Read(buf)
-	// 		if err == io.EOF {
-	// 			break
-	// 		} else if err != nil {
-	// 			recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
-	// 			return err
-	// 		}
-	// 		if err := stream.Send(&pb.ExecResponse{Stdout: buf[:n]}); err != nil {
-	// 			return err
-	// 		}
-	// 	}
-
-	return resp, nil
+	return err
 }
 
 // Register is called to expose this handler to the gRPC server

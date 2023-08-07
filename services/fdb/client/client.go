@@ -3598,11 +3598,11 @@ func (*fdbMoveDataCmd) SetFlags(_ *flag.FlagSet) {}
 func (*fdbMoveDataCmd) Synopsis() string {
 	return "Copy data across two tenant groups in a metacluster.\n" + client.GenerateSynopsis(GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
-func (p *fdbMoveDataCmd) Usage() string {
-	return client.GenerateUsage(fdbMoveDataCLIPackage, p.Synopsis())
+func (r *fdbMoveDataCmd) Usage() string {
+	return client.GenerateUsage(fdbMoveDataCLIPackage, r.Synopsis())
 }
 
-func (p *fdbMoveDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (r *fdbMoveDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	c := GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
@@ -3615,7 +3615,7 @@ func (*fdbMoveDataCopyCmd) Name() string { return "copy" }
 func (*fdbMoveDataCopyCmd) Synopsis() string {
 	return "Initiate data copy across two tenant groups in a metacluster. Starts a long-running command on the server."
 }
-func (p *fdbMoveDataCopyCmd) Usage() string {
+func (r *fdbMoveDataCopyCmd) Usage() string {
 	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> [numProcs]"
 }
 
@@ -3676,18 +3676,43 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 
 type fdbMoveDataWaitCmd struct {
 	req *pb.FDBMoveDataWaitRequest
+
+	// returnCode internally keeps track of the final status to return
+	returnCode subcommands.ExitStatus
 }
 
 func (*fdbMoveDataWaitCmd) Name() string { return "wait" }
 func (*fdbMoveDataWaitCmd) Synopsis() string {
 	return "Wait for data copy across two tenant groups in a metacluster to complete"
 }
-func (p *fdbMoveDataWaitCmd) Usage() string {
+func (r *fdbMoveDataWaitCmd) Usage() string {
 	return "fdbmovedata wait <ID>"
 }
 
 func (r *fdbMoveDataWaitCmd) SetFlags(f *flag.FlagSet) {
 	r.req = &pb.FDBMoveDataWaitRequest{}
+}
+
+func (r *fdbMoveDataWaitCmd) printCommandOutput(state *util.ExecuteState, idx int, resp *pb.FDBMoveDataWaitResponse, err error) {
+	if err == io.EOF {
+		// Streaming commands may return EOF
+		return
+	}
+	if err != nil {
+		fmt.Fprintf(state.Err[idx], "Command execution failure - %v\n", err)
+		// If any target had errors it needs to be reported for that target but we still
+		// need to process responses off the channel. Final return code though should
+		// indicate something failed.
+		r.returnCode = subcommands.ExitFailure
+		return
+	}
+	if len(resp.Stderr) > 0 {
+		fmt.Fprintf(state.Err[idx], "%s", resp.Stderr)
+	}
+	fmt.Fprintf(state.Out[idx], "%s", resp.Stdout)
+	if resp.RetCode != 0 {
+		r.returnCode = subcommands.ExitFailure
+	}
 }
 
 func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -3714,18 +3739,20 @@ func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 		for _, e := range state.Err {
 			fmt.Fprintf(e, "fdb move data wait error: %v\n", err)
 		}
-
 		return subcommands.ExitFailure
 	}
 
-	retCode := subcommands.ExitSuccess
-	for r := range resp {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "fdb move data copy error: %v\n", r.Error)
-			retCode = subcommands.ExitFailure
+	for {
+		rs, err := resp.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return r.returnCode
+			}
+			fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
+			return subcommands.ExitFailure
 		}
-		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
-		fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		for _, res := range rs {
+			r.printCommandOutput(state, res.Index, res.Resp, res.Error)
+		}
 	}
-	return retCode
 }
