@@ -20,6 +20,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -124,7 +125,7 @@ func init() {
 }
 
 func atomicSaveTo(f *ini.File, filename string) error {
-	tf, err := os.CreateTemp("", "fdb_conf")
+	tf, err := os.CreateTemp(filepath.Dir(filename), "fdb_conf")
 	if err != nil {
 		return err
 	}
