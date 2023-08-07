@@ -295,7 +295,7 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
-		conn.IdleTimeout = &rs.IdleTimeout // is there a better way to do this? maybe via option?
+		conn.IdleTimeout = &rs.IdleTimeout // TODO(elinardi): make idleTimeout an option to proxy.DialContext() and set conn.IdleTimeout there
 		state.Conn = conn
 		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
 		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
@@ -314,7 +314,7 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
 			os.Exit(1)
 		}
-		conn.IdleTimeout = &rs.IdleTimeout // is there a better way to do this? maybe via option?
+		conn.IdleTimeout = &rs.IdleTimeout // TODO(elinardi): make idleTimeout an option to proxy.DialContext() and set conn.IdleTimeout there
 		state.Conn = conn
 		state.Out = output[batchCnt*rs.BatchSize:]
 		state.Err = errors[batchCnt*rs.BatchSize:]
