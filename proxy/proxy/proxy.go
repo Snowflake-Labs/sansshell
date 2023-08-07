@@ -47,8 +47,12 @@ type Conn struct {
 	// The targets we're proxying for currently.
 	Targets []string
 
-	// Possible dial timeouts for each target
-	timeouts []*time.Duration
+	// Possible dial dialTimeouts for each target
+	dialTimeouts []*time.Duration
+
+	// IdleTimeout is the time limit for an idle connection.
+	// If no messages are received within this timeframe, connection will be closed.
+	IdleTimeout *time.Duration
 
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
@@ -88,6 +92,8 @@ type proxyStream struct {
 	errors     []*Ret
 	sentErrors bool
 	sendClosed bool
+	// idleTimeout is the duration to wait for action to complete
+	idleTimeout *time.Duration
 }
 
 // Invoke - see grpc.ClientConnInterface
@@ -156,10 +162,11 @@ func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 	}
 
 	s := &proxyStream{
-		method: method,
-		stream: stream,
-		ids:    streamIds,
-		errors: errors,
+		method:      method,
+		stream:      stream,
+		ids:         streamIds,
+		errors:      errors,
+		idleTimeout: p.IdleTimeout,
 	}
 
 	return s, nil
@@ -261,8 +268,8 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 	return p.send(m)
 }
 
-func RecvWithTimeout(resp proxypb.Proxy_ProxyClient) (*proxypb.ProxyReply, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func RecvWithTimeout(resp proxypb.Proxy_ProxyClient, timeout time.Duration) (*proxypb.ProxyReply, error) {
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
 	defer cancel()
 	respCh := make(chan *proxypb.ProxyReply, 1)
 	errCh := make(chan error, 1)
@@ -277,9 +284,9 @@ func RecvWithTimeout(resp proxypb.Proxy_ProxyClient) (*proxypb.ProxyReply, error
 	var errRecv error
 	select {
 	case <-ctx.Done():
-		errRecv = fmt.Errorf("deadline exceeded: %v", ctx.Err())
+		errRecv = fmt.Errorf("connection closed due to no activity after %s: %v", timeout, ctx.Err())
 	case err := <-errCh:
-		errRecv = fmt.Errorf("can't get response data on stream - %v", err)
+		errRecv = fmt.Errorf("recv error: %v", err)
 	case r := <-respCh:
 		rs = r
 	}
@@ -333,8 +340,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		p.sentErrors = true
 	}
 
-	resp, err := RecvWithTimeout(p.stream)
-	//resp, err := p.stream.Recv()
+	resp, err := RecvWithTimeout(p.stream, *p.idleTimeout)
 	// If it's io.EOF the upper level code will handle that.
 	if err != nil {
 		return err
@@ -434,8 +440,8 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 					},
 				},
 			}
-			if p.timeouts[i] != nil {
-				req.GetStartStream().DialTimeout = durationpb.New(*p.timeouts[i])
+			if p.dialTimeouts[i] != nil {
+				req.GetStartStream().DialTimeout = durationpb.New(*p.dialTimeouts[i])
 			}
 			err = stream.Send(req)
 
@@ -595,7 +601,7 @@ func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{
 		// Now do receives until we get all the responses or closes for each stream ID.
 	processing:
 		for {
-			resp, err := s.stream.Recv()
+			resp, err := RecvWithTimeout(s.stream, *p.IdleTimeout)
 			if err == io.EOF {
 				break
 			}
@@ -763,6 +769,6 @@ func DialContext(ctx context.Context, proxy string, targets []string, opts ...gr
 	ret.cc = conn
 	// Make our own copy of these.
 	ret.Targets = append(ret.Targets, hostport...)
-	ret.timeouts = append(ret.timeouts, timeouts...)
+	ret.dialTimeouts = append(ret.dialTimeouts, timeouts...)
 	return ret, nil
 }

@@ -62,14 +62,16 @@ const (
 )
 
 var (
-	defaultTimeout = 30 * time.Second
+	defaultDialTimeout = 30 * time.Second
+	defaultIdleTimeout = 15 * time.Minute
 
 	proxyAddr = flag.String("proxy", "", fmt.Sprintf(
 		`Address (host[:port]) to contact for proxy to sansshell-server.
 %s in the environment can also be set instead of setting this flag. The flag will take precedence.
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
-	timeout          = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
+	dialTimeout      = flag.Duration("timeout", defaultDialTimeout, "How long to wait for the connection to be accepted")
+	idleTimeout      = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	outputsDir       = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
 	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
@@ -169,7 +171,8 @@ func main() {
 		Outputs:      *outputsFlag.Target,
 		OutputsDir:   *outputsDir,
 		CredSource:   *credSource,
-		Timeout:      *timeout,
+		DialTimeout:  *dialTimeout,
+		IdleTimeout:  *idleTimeout,
 		ClientPolicy: clientPolicy,
 		PrefixOutput: *prefixHeader,
 		BatchSize:    *batchSize,
