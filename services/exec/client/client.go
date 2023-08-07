@@ -159,7 +159,7 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			return subcommands.ExitFailure
 		}
 		for {
-			rs, errRecv := RecvWithTimeout(ctx, resp)
+			rs, errRecv := resp.Recv()
 			if errRecv != nil {
 				if errRecv == io.EOF {
 					return p.returnCode

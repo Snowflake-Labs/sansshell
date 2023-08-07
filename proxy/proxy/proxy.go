@@ -261,6 +261,32 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 	return p.send(m)
 }
 
+func RecvWithTimeout(resp proxypb.Proxy_ProxyClient) (*proxypb.ProxyReply, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	respCh := make(chan *proxypb.ProxyReply, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		resp, err := resp.Recv()
+		if err != nil {
+			errCh <- err
+		}
+		respCh <- resp
+	}()
+	var rs *proxypb.ProxyReply
+	var errRecv error
+	select {
+	case <-ctx.Done():
+		errRecv = fmt.Errorf("deadline exceeded: %v", ctx.Err())
+	case err := <-errCh:
+		errRecv = fmt.Errorf("can't get response data on stream - %v", err)
+	case r := <-respCh:
+		rs = r
+	}
+
+	return rs, errRecv
+}
+
 // see grpc.ClientStream
 func (p *proxyStream) RecvMsg(m interface{}) error {
 	// Up front check for nothing left since we closed all streams.
@@ -307,7 +333,8 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		p.sentErrors = true
 	}
 
-	resp, err := p.stream.Recv()
+	resp, err := RecvWithTimeout(p.stream)
+	//resp, err := p.stream.Recv()
 	// If it's io.EOF the upper level code will handle that.
 	if err != nil {
 		return err
