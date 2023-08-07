@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	defaultDialTimeout = 30 * time.Second
+	defaultDialTimeout = 10 * time.Second
 	defaultIdleTimeout = 15 * time.Minute
 
 	proxyAddr = flag.String("proxy", "", fmt.Sprintf(
