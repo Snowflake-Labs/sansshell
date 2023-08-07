@@ -34,6 +34,8 @@ import (
 
 var (
 	// fdb_move_orchestrator binary location
+	// Will be checked into:
+	// https://github.com/apple/foundationdb/tree/snowflake/release-71.3/bindings/python/fdb/fdb_move_orchestrator.py
 	FDBMoveOrchestrator     string
 	generateFDBMoveDataArgs = generateFDBMoveDataArgsImpl
 )
@@ -109,7 +111,6 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 }
 func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !(req.Id == s.id) {
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
@@ -157,6 +158,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 			return err
 		}
 	}
+	s.mu.Unlock()
 	err := s.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
