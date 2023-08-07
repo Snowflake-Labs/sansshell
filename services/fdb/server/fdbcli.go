@@ -1158,7 +1158,7 @@ func parseFDBCLISuspend(req *pb.FDBCLISuspend) ([]string, []captureLogs, error) 
 }
 
 func parseFDBCLITenantEmergencyMove(req *pb.FDBCLITenantEmergencyMove) ([]string, []captureLogs, error) {
-	args := []string{"tenant emergency_move"}
+	args := []string{"tenant", "emergency_move"}
 
 	if req.Request == nil {
 		return nil, nil, status.Error(codes.InvalidArgument, "tenant_emergency_move requires request to be filled in")

@@ -109,12 +109,15 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	}
 	return resp, nil
 }
+
 func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
 	s.mu.Lock()
 	if !(req.Id == s.id) {
+		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
 	if s.cmd == nil {
+		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
 
@@ -132,32 +135,32 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 		}
 	}()
 
-	// // Send stdout asynchronously
-	// go func() {
-	// 	for {
-	// 		buf := make([]byte, 1024)
-	// 		n, err := s.stdout.Read(buf)
-	// 		if err != nil {
-	// 			return
-	// 		}
-	// 		if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
-	// 			return
-	// 		}
+	// Send stdout asynchronously
+	go func() {
+		for {
+			buf := make([]byte, 1024)
+			n, err := s.stdout.Read(buf)
+			if err != nil {
+				return
+			}
+			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
+				return
+			}
+		}
+	}()
+	// // Send stdout synchronously
+	// for {
+	// 	buf := make([]byte, 1024)
+	// 	n, err := s.stdout.Read(buf)
+	// 	if err == io.EOF {
+	// 		break
+	// 	} else if err != nil {
+	// 		return err
 	// 	}
-	// 	}()
-	// Send stdout synchronously
-	for {
-		buf := make([]byte, 1024)
-		n, err := s.stdout.Read(buf)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return err
-		}
-		if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
-			return err
-		}
-	}
+	// 	if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
+	// 		return err
+	// 	}
+	// }
 	s.mu.Unlock()
 	err := s.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
