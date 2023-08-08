@@ -70,6 +70,8 @@ var (
 %s in the environment can also be set instead of setting this flag. The flag will take precedence.
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
+	// Deprecated: --timeout flag is deprecated. Use --idle-timeout or --dial-timeout instead
+	timeout          = flag.Duration("timeout", defaultDialTimeout, "DEPRECATED. Please use --idle-timeout or --dial-timeout instead")
 	dialTimeout      = flag.Duration("dial-timeout", defaultDialTimeout, "How long to wait for the connection to be accepted. Timeout specified in --targets or --proxy will take precedence")
 	idleTimeout      = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
