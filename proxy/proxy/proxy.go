@@ -50,10 +50,6 @@ type Conn struct {
 	// Possible dial dialTimeouts for each target
 	dialTimeouts []*time.Duration
 
-	// IdleTimeout is the time limit for an idle connection.
-	// If no messages are received within this timeframe, connection will be closed.
-	IdleTimeout *time.Duration
-
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
 
@@ -92,8 +88,6 @@ type proxyStream struct {
 	errors     []*Ret
 	sentErrors bool
 	sendClosed bool
-	// idleTimeout is the duration to wait for action to complete
-	idleTimeout *time.Duration
 }
 
 // Invoke - see grpc.ClientConnInterface
@@ -162,11 +156,10 @@ func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 	}
 
 	s := &proxyStream{
-		method:      method,
-		stream:      stream,
-		ids:         streamIds,
-		errors:      errors,
-		idleTimeout: p.IdleTimeout,
+		method: method,
+		stream: stream,
+		ids:    streamIds,
+		errors: errors,
 	}
 
 	return s, nil
