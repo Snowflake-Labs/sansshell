@@ -156,13 +156,13 @@ func (t *clientStreamWithTimeout) SendMsg(m interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 	errCh := make(chan error, 1)
-	doneCh := make(chan bool, 1)
+	doneCh := make(chan struct{}, 1)
 	go func() {
 		err := t.ClientStream.SendMsg(m)
 		if err != nil {
 			errCh <- err
 		}
-		doneCh <- true
+		close(doneCh)
 	}()
 	var errSend error
 	select {
@@ -182,13 +182,13 @@ func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 	errCh := make(chan error, 1)
-	doneCh := make(chan bool, 1)
+	doneCh := make(chan struct{}, 1)
 	go func() {
 		err := t.ClientStream.RecvMsg(m)
 		if err != nil {
 			errCh <- err
 		}
-		doneCh <- true
+		close(doneCh)
 	}()
 	var errRecv error
 	select {
