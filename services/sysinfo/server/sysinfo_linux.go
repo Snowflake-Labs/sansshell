@@ -40,8 +40,7 @@ import (
 
 // for testing
 var (
-	journalctlBin                   = "/usr/bin/journalctl"
-	expectedTimeFormatForJournalctl = "2006-01-02 15:04:05"
+	journalctlBin = "/usr/bin/journalctl"
 
 	getKmsgParser = func() (kmsgparser.Parser, error) {
 		return kmsgparser.NewParser()
@@ -59,11 +58,11 @@ var (
 			cmd = append(cmd, fmt.Sprintf("--lines=%d", p.TailLine))
 		}
 		if p.TimeSince != nil {
-			timeStr := p.TimeSince.AsTime().Format(expectedTimeFormatForJournalctl)
+			timeStr := p.TimeSince.AsTime().Format(util.TimeFormat_YYYYMMDDHHMMSS)
 			cmd = append(cmd, fmt.Sprintf("--since=%v", timeStr))
 		}
 		if p.TimeUntil != nil {
-			timeStr := p.TimeUntil.AsTime().Format(expectedTimeFormatForJournalctl)
+			timeStr := p.TimeUntil.AsTime().Format(util.TimeFormat_YYYYMMDDHHMMSS)
 			cmd = append(cmd, fmt.Sprintf("--until=%v", timeStr))
 		}
 		// since json output contains all necessary information we need for now
@@ -76,7 +75,6 @@ var (
 var getUptime = func() (time.Duration, error) {
 	sysinfo := &unix.Sysinfo_t{}
 	if err := unix.Sysinfo(sysinfo); err != nil {
-		fmt.Println(err)
 		return 0, status.Errorf(codes.Internal, "err in get the system info from unix")
 	}
 	uptime := time.Duration(sysinfo.Uptime) * time.Second
@@ -150,8 +148,8 @@ var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest,
 		if err != nil {
 			return status.Errorf(codes.Internal, "parse the journal entry from json string to map err: %v", err)
 		}
-		switch req.Output {
-		case "json", "json-pretty":
+		// EnableJson: true means return
+		if req.EnableJson {
 			journalRecordRaw := &pb.JournalRecordRaw{}
 			journalRecordRaw.Entry = journalMap
 			if err := stream.Send(&pb.JournalReply{
@@ -162,7 +160,7 @@ var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest,
 				recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 				return status.Errorf(codes.Internal, "journal: send error %v", err)
 			}
-		case "":
+		} else {
 			// default format
 			journalRecord := &pb.JournalRecord{}
 

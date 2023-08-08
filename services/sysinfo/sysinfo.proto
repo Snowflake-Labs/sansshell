@@ -69,7 +69,7 @@ message JournalRequest {
   // Filter messages for specified systemd units  
   string unit = 4;
   // Controls the format of the journal entries
-  string output = 5;
+  bool enable_json = 5;
 }
 
 message JournalReply {

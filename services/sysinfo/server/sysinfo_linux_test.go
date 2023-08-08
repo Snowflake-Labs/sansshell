@@ -572,10 +572,10 @@ func TestJournal(t *testing.T) {
 			},
 		},
 		{
-			name: "fetch latest entry with json format: journalctl -tail 1 -output json",
+			name: "fetch latest entry with json format: journalctl -tail 1 -json",
 			req: &pb.JournalRequest{
-				TailLine: 1,
-				Output:   "json",
+				TailLine:   1,
+				EnableJson: true,
 			},
 			testdataInput: []string{rawDataList[3]},
 			wantCmdLine:   fmt.Sprintf("%s --lines=1 --output=json", journalctlBin),
@@ -584,10 +584,9 @@ func TestJournal(t *testing.T) {
 			},
 		},
 		{
-			name: "bad output format input: journalctl -tail 1 -output XXX",
+			name: "bad command large tail number : journalctl -tail 10003 ",
 			req: &pb.JournalRequest{
-				TailLine: 1,
-				Output:   "XXX",
+				TailLine: 10003,
 			},
 			wantErr: true,
 		},

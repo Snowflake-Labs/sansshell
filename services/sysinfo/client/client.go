@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/google/subcommands"
@@ -195,24 +194,18 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 }
 
 type journalCmd struct {
-	since  string
-	until  string
-	tail   uint64
-	unit   string
-	output string
+	since      string
+	until      string
+	tail       uint64
+	unit       string
+	enableJSON bool
 }
 
 func (*journalCmd) Name() string     { return "journalctl" }
 func (*journalCmd) Synopsis() string { return "Get the log entries stored in journald" }
 func (*journalCmd) Usage() string {
-	return `journalCtl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X] [-o|--output=X]9 :
+	return `journalctl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X] [-o|--output=X]:
 	Get the log entries stored in journald by systemd-journald.service 
-
-	Note: we have turned off the way to display all journal entries since boot since that will exceed the default buffer limit set in sansshell.
-		  Be careful when specifying the tail to a large number due to the limit of DefRunBufLimit set for stdout
-		  https://github.com/Snowflake-Labs/sansshell/blob/989cb789586532eaa22b75303ea94c97ca246306/services/util/util.go#L161.
-		  So It's best to reduce the the number of journal entries return based on these filtering flags.
-
 `
 }
 
@@ -222,36 +215,35 @@ func (p *journalCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.until, "until", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until (the date time is not included)")
 	f.StringVar(&p.until, "U", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until")
 	f.StringVar(&p.unit, "unit", "", "Sets systemd unit to filter messages")
-	f.StringVar(&p.output, "output", "", "Sets the format of the journal entries that will be shown. Right now only json and json-pretty are supported.")
-	f.Uint64Var(&p.tail, "tail", 100, "If positive, the latest n records to fetch. By default, fetch latest 100 records.")
+	f.BoolVar(&p.enableJSON, "json", false, "Print the journal entries in JSON format(can work with jq for better visualization)")
+	f.Uint64Var(&p.tail, "tail", 100, "If positive, the latest n records to fetch. By default, fetch latest 100 records. The upper limit is 10000 for now")
 }
 
 func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewSysInfoClientProxy(state.Conn)
 
-	// the output is case insensitive
-	p.output = strings.ToLower(p.output)
-	// currently output can only be json or json-pretty
-	if p.output != "" && p.output != "json" && p.output != "json-pretty" {
-		fmt.Fprintln(os.Stderr, "cannot set output to other formats unless json or json-pretty")
+	// validate the tail number is set correctly
+	// reason we set this limit is due to the limit of DefRunBufLimit set for stdout
+	// https://github.com/Snowflake-Labs/sansshell/blob/989cb789586532eaa22b75303ea94c97ca246306/services/util/util.go#L161.
+	if p.tail > 10000 {
+		fmt.Fprintln(os.Stderr, "cannot set tail number larger than 10000")
 		return subcommands.ExitUsageError
 	}
 
 	req := &pb.JournalRequest{
-		TailLine: uint32(p.tail),
-		Unit:     p.unit,
-		Output:   p.output,
+		TailLine:   uint32(p.tail),
+		Unit:       p.unit,
+		EnableJson: p.enableJSON,
 	}
 	// Note: if timestamp is passed, don't forget to conver to UTC before sending the rpc request
-	expectedTimeFormat := "2006-01-02 15:04:05"
 	loc, err := time.LoadLocation("Local")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot get local location")
 		return subcommands.ExitUsageError
 	}
 	if p.since != "" {
-		sinceTime, err := time.ParseInLocation(expectedTimeFormat, p.since, loc)
+		sinceTime, err := time.ParseInLocation(util.TimeFormat_YYYYMMDDHHMMSS, p.since, loc)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
 			return subcommands.ExitUsageError
@@ -260,7 +252,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	if p.until != "" {
-		untilTime, err := time.ParseInLocation(expectedTimeFormat, p.until, loc)
+		untilTime, err := time.ParseInLocation(util.TimeFormat_YYYYMMDDHHMMSS, p.until, loc)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
 			return subcommands.ExitUsageError
@@ -326,17 +318,10 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 				journalRaw := t.JournalRaw
 				// Encode the map to JSON
 				var jsonData []byte
-				if p.output == "json" {
+				if p.enableJSON {
 					jsonData, err = json.Marshal(journalRaw.Entry)
 					if err != nil {
 						fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned cannot encode journal entry to JSON\n", r.Target, r.Index)
-						exit = subcommands.ExitFailure
-						continue
-					}
-				} else if p.output == "json-pretty" {
-					jsonData, err = json.MarshalIndent(journalRaw.Entry, "", "        ")
-					if err != nil {
-						fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned cannot encode journal entry to pretty JSON\n", r.Target, r.Index)
 						exit = subcommands.ExitFailure
 						continue
 					}

@@ -252,7 +252,6 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	}
 
 	cmd := exec.CommandContext(ctx, bin, args...)
-	fmt.Println("cmd: ", cmd)
 	run := &CommandRun{
 		Stdout: NewLimitedBuffer(options.stdoutMax),
 		Stderr: NewLimitedBuffer(options.stderrMax),
@@ -440,3 +439,6 @@ func (i *IntSliceFlags) Set(val string) error {
 	}
 	return nil
 }
+
+// YYYY-MM-DD HH:MM:SS time format
+const TimeFormat_YYYYMMDDHHMMSS = "2006-01-02 15:04:05"

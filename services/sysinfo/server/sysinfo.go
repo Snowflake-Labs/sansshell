@@ -118,11 +118,9 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 func (s *server) Journal(req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {
 	ctx := stream.Context()
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-
-	// currently output can only be json or json-pretty
-	if req.Output != "" && req.Output != "json" && req.Output != "json-pretty" {
-		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "invalid_args"))
-		return status.Errorf(codes.InvalidArgument, "cannot set output to other formats unless json or json-pretty")
+	if req.TailLine > 10000 {
+		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "bad_args"))
+		return status.Errorf(codes.InvalidArgument, "can't set tail number larger than 10000")
 	}
 
 	err := getJournalRecordsAndSend(ctx, req, stream)
