@@ -156,51 +156,52 @@ func (t *clientStreamWithTimeout) SendMsg(m interface{}) error {
 	ctx, cancel := context.WithTimeout(ctx, t.timeout)
 	defer cancel()
 	errCh := make(chan error, 1)
-	doneCh := make(chan struct{}, 1)
 	go func() {
-		err := t.ClientStream.SendMsg(m)
-		if err != nil {
-			errCh <- err
-		}
-		close(doneCh)
+		errCh <- t.ClientStream.SendMsg(m)
 	}()
-	var errSend error
 	select {
-	case <-ctx.Done():
-		errSend = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, ctx.Err())
 	case err := <-errCh:
-		errSend = fmt.Errorf("send error: %v", err)
-	case <-doneCh:
-		return nil
+		return err
+	case <-ctx.Done():
+		err := ctx.Err()
+		if err == context.DeadlineExceeded {
+			err = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
+		}
+		select {
+		// if there's any err in errCh, append it to err
+		case errSend := <-errCh:
+			return fmt.Errorf("%s - %s", err, errSend)
+		// otherwise just return err
+		default:
+			return err
+		}
 	}
-
-	return errSend
 }
 
 func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
-	ctx := t.Context()
-	ctx, cancel := context.WithTimeout(ctx, t.timeout)
+	ctx, cancel := context.WithTimeout(t.Context(), t.timeout)
 	defer cancel()
 	errCh := make(chan error, 1)
-	doneCh := make(chan struct{}, 1)
 	go func() {
-		err := t.ClientStream.RecvMsg(m)
-		if err != nil {
-			errCh <- err
-		}
-		close(doneCh)
+		errCh <- t.ClientStream.RecvMsg(m)
 	}()
-	var errRecv error
 	select {
-	case <-ctx.Done():
-		errRecv = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, ctx.Err())
 	case err := <-errCh:
-		errRecv = fmt.Errorf("recv error: %v", err)
-	case <-doneCh:
-		return nil
+		return err
+	case <-ctx.Done():
+		err := ctx.Err()
+		if err == context.DeadlineExceeded {
+			err = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
+		}
+		select {
+		// if there's any err in errCh, append it to err
+		case errRecv := <-errCh:
+			return fmt.Errorf("%s - %s", err, errRecv)
+		// otherwise just return err
+		default:
+			return err
+		}
 	}
-
-	return errRecv
 }
 
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
