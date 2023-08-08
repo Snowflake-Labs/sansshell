@@ -85,7 +85,7 @@ func ValidateAndAddPortAndTimeout(s string, port int, dialTimeout time.Duration)
 		if _, err := time.ParseDuration(timeout); err != nil {
 			logFatalf("Invalid timeout %s - should be of the form time.Duration", timeout)
 		}
-	} else { // no timeout, let's validate dialTimeout and add it
+	} else { // no timeout, let's add dialTimeout
 		new = fmt.Sprintf("%s;%s", new, dialTimeout.String())
 	}
 	return new
