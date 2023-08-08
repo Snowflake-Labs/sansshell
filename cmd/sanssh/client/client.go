@@ -64,8 +64,7 @@ type RunState struct {
 	// CredSource is a registered credential source with the mtls package.
 	CredSource string
 	// IdleTimeout is the time duration to wait before closing an idle connection.
-	// If no messages are received within this timeframe, connection will be terminated.
-	// For streaming RPCs, if this is not set, connection will stay open until canceled.
+	// If no messages are sent/received within this timeframe, connection will be terminated.
 	IdleTimeout time.Duration
 	// ClientPolicy is an optional OPA policy for determining outbound decisions.
 	ClientPolicy string
