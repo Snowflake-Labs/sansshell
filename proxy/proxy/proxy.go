@@ -268,32 +268,6 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 	return p.send(m)
 }
 
-func RecvWithTimeout(resp proxypb.Proxy_ProxyClient, timeout time.Duration) (*proxypb.ProxyReply, error) {
-	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
-	defer cancel()
-	respCh := make(chan *proxypb.ProxyReply, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		resp, err := resp.Recv()
-		if err != nil {
-			errCh <- err
-		}
-		respCh <- resp
-	}()
-	var rs *proxypb.ProxyReply
-	var errRecv error
-	select {
-	case <-ctx.Done():
-		errRecv = fmt.Errorf("connection closed due to no activity after %s: %v", timeout, ctx.Err())
-	case err := <-errCh:
-		errRecv = fmt.Errorf("recv error: %v", err)
-	case r := <-respCh:
-		rs = r
-	}
-
-	return rs, errRecv
-}
-
 // see grpc.ClientStream
 func (p *proxyStream) RecvMsg(m interface{}) error {
 	// Up front check for nothing left since we closed all streams.
@@ -340,13 +314,7 @@ func (p *proxyStream) RecvMsg(m interface{}) error {
 		p.sentErrors = true
 	}
 
-	var err error
-	var resp *proxypb.ProxyReply
-	if p.idleTimeout != nil {
-		resp, err = RecvWithTimeout(p.stream, *p.idleTimeout)
-	} else {
-		resp, err = p.stream.Recv()
-	}
+	resp, err := p.stream.Recv()
 	// If it's io.EOF the upper level code will handle that.
 	if err != nil {
 		return err
@@ -607,13 +575,7 @@ func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{
 		// Now do receives until we get all the responses or closes for each stream ID.
 	processing:
 		for {
-			var err error
-			var resp *proxypb.ProxyReply
-			if p.IdleTimeout != nil {
-				resp, err = RecvWithTimeout(s.stream, *p.IdleTimeout)
-			} else {
-				resp, err = s.stream.Recv()
-			}
+			resp, err := s.stream.Recv()
 			if err == io.EOF {
 				break
 			}

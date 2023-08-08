@@ -126,6 +126,84 @@ func (p *prefixWriter) Write(b []byte) (n int, err error) {
 	return tot, nil
 }
 
+// UnaryClientTimeoutInterceptor returns a grpc.UnaryClientInterceptor that adds a deadline to every request
+func UnaryClientTimeoutInterceptor(timeout time.Duration) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+// StreamClientTimeoutInterceptor returns a grpc.UnaryClientInterceptor that adds a deadline to every client SendMsg and RecvMsg
+func StreamClientTimeoutInterceptor(timeout time.Duration) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		clientStream, err := streamer(ctx, desc, cc, method, opts...)
+		if err != nil {
+			return nil, err
+		}
+		t := &clientStreamWithTimeout{ClientStream: clientStream, timeout: timeout}
+		return t, nil
+	}
+}
+
+type clientStreamWithTimeout struct {
+	grpc.ClientStream
+	timeout time.Duration
+}
+
+func (t *clientStreamWithTimeout) SendMsg(m interface{}) error {
+	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(ctx, t.timeout)
+	defer cancel()
+	errCh := make(chan error, 1)
+	doneCh := make(chan bool, 1)
+	go func() {
+		err := t.ClientStream.SendMsg(m)
+		if err != nil {
+			errCh <- err
+		}
+		doneCh <- true
+	}()
+	var errSend error
+	select {
+	case <-ctx.Done():
+		errSend = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, ctx.Err())
+	case err := <-errCh:
+		errSend = fmt.Errorf("send error: %v", err)
+	case <-doneCh:
+		return nil
+	}
+
+	return errSend
+}
+
+func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
+	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(ctx, t.timeout)
+	defer cancel()
+	errCh := make(chan error, 1)
+	doneCh := make(chan bool, 1)
+	go func() {
+		err := t.ClientStream.RecvMsg(m)
+		if err != nil {
+			errCh <- err
+		}
+		doneCh <- true
+	}()
+	var errRecv error
+	select {
+	case <-ctx.Done():
+		errRecv = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, ctx.Err())
+	case err := <-errCh:
+		errRecv = fmt.Errorf("recv error: %v", err)
+	case <-doneCh:
+		return nil
+	}
+
+	return errRecv
+}
+
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
@@ -233,6 +311,11 @@ func Run(ctx context.Context, rs RunState) {
 	if clientAuthz != nil {
 		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
 	}
+	// add timeout
+	ops = append(ops,
+		grpc.WithStreamInterceptor(StreamClientTimeoutInterceptor(rs.IdleTimeout)),
+		grpc.WithUnaryInterceptor(UnaryClientTimeoutInterceptor(rs.IdleTimeout)),
+	)
 
 	state := &util.ExecuteState{
 		Dir: dir,
@@ -295,7 +378,6 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
-		conn.IdleTimeout = &rs.IdleTimeout // TODO(elinardi): make idleTimeout an option to proxy.DialContext() and set conn.IdleTimeout there
 		state.Conn = conn
 		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
 		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
@@ -314,7 +396,6 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
 			os.Exit(1)
 		}
-		conn.IdleTimeout = &rs.IdleTimeout // TODO(elinardi): make idleTimeout an option to proxy.DialContext() and set conn.IdleTimeout there
 		state.Conn = conn
 		state.Out = output[batchCnt*rs.BatchSize:]
 		state.Err = errors[batchCnt*rs.BatchSize:]
