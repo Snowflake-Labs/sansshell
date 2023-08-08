@@ -108,6 +108,10 @@ func sendError(resp http.ResponseWriter, code int, err error) {
 	}
 }
 
+func validatePort(port int) bool {
+	return port >= 0 && port <= 65535
+}
+
 func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	// Ignore the parent context timeout because we don't want to time out here.
 	ctx = WithoutCancel(ctx)
@@ -123,6 +127,10 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	port, err := strconv.Atoi(f.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Port could not be interpreted as a number.")
+		return subcommands.ExitUsageError
+	}
+	if !validatePort(port) {
+		fmt.Fprintln(os.Stderr, "Port could not be outside the range of [0~65535].")
 		return subcommands.ExitUsageError
 	}
 
@@ -216,6 +224,9 @@ func (*getCmd) Synopsis() string { return "Makes a HTTP call to a port on a remo
 func (*getCmd) Usage() string {
 	return `get [-method METHOD] [-header Header...] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
     Make a HTTP request to a specified port on the remote host.
+
+	Note: if we set the domain name other than localhost for flag --hostname, and want to use snsshell proxy action to proxy requests
+	don't forget to add --allow-any-host for proxy action
 `
 }
 
@@ -237,6 +248,10 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	port, err := strconv.Atoi(f.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Port could not be interpreted as a number.")
+		return subcommands.ExitUsageError
+	}
+	if !validatePort(port) {
+		fmt.Fprintln(os.Stderr, "Port could not be outside the range of [0~65535].")
 		return subcommands.ExitUsageError
 	}
 
