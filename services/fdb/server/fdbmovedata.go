@@ -85,19 +85,22 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	// TODO: change to finalized locations when ready
 	cmd.Env = append(cmd.Environ(), "PYTHONPATH=/home/teleport-jfu/python")
 	cmd.Env = append(cmd.Environ(), "PATH=/opt/rh/rh-python36/root/bin")
+	cmd.Env = append(cmd.Environ(), "PYTHONUNBUFFERED=true")
 
-	s.stdout, err = cmd.StdoutPipe()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
 
-	s.stderr, err = cmd.StderrPipe()
+	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return nil, err
 	}
 
 	logger.Info("executing local command", "cmd", cmd.String())
 	s.cmd = cmd
+	s.stdout = stdout
+	s.stderr = stderr
 	err = s.cmd.Start()
 	if err != nil {
 		s.cmd = nil
@@ -116,7 +119,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
-	if s.cmd == nil {
+	if s.cmd == nil || s.stdout == nil || s.stderr == nil {
 		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
@@ -148,19 +151,6 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 			}
 		}
 	}()
-	// // Send stdout synchronously
-	// for {
-	// 	buf := make([]byte, 1024)
-	// 	n, err := s.stdout.Read(buf)
-	// 	if err == io.EOF {
-	// 		break
-	// 	} else if err != nil {
-	// 		return err
-	// 	}
-	// 	if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
-	// 		return err
-	// 	}
-	// }
 	s.mu.Unlock()
 	err := s.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
