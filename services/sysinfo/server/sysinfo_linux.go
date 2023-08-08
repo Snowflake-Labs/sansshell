@@ -50,9 +50,6 @@ var (
 	generateJournalCmd = func(p *pb.JournalRequest) ([]string, error) {
 		cmd := []string{journalctlBin}
 
-		// if p.Explain {
-		// 	cmd = append(cmd, "-x")
-		// }
 		if p.Unit != "" {
 			cmd = append(cmd, fmt.Sprintf("--unit=%s", p.Unit))
 		}
@@ -70,6 +67,7 @@ var (
 			cmd = append(cmd, fmt.Sprintf("--until=%v", timeStr))
 		}
 		// since json output contains all necessary information we need for now
+		// set the format and extract fields we need
 		cmd = append(cmd, "--output=json")
 		return cmd, nil
 	}
@@ -156,11 +154,11 @@ var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest,
 		case "json", "json-pretty":
 			journalRecordRaw := &pb.JournalRecordRaw{}
 			journalRecordRaw.Entry = journalMap
-			if err := stream.Send(
-				&pb.JournalReply{
-					Response: &pb.JournalReply_JournalRaw{
-						JournalRaw: journalRecordRaw,
-					}}); err != nil {
+			if err := stream.Send(&pb.JournalReply{
+				Response: &pb.JournalReply_JournalRaw{
+					JournalRaw: journalRecordRaw,
+				},
+			}); err != nil {
 				recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 				return status.Errorf(codes.Internal, "journal: send error %v", err)
 			}

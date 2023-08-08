@@ -131,12 +131,6 @@ func (s *server) Journal(req *pb.JournalRequest, stream pb.SysInfo_JournalServer
 		return err
 	}
 
-	// for _, record := range records {
-	// 	if err := stream.Send(record); err != nil {
-	// 		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-	// 		return status.Errorf(codes.Internal, "journal: send error %v", err)
-	// 	}
-	// }
 	return nil
 }
 
