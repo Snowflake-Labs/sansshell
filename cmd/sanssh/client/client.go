@@ -36,6 +36,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 
+	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
@@ -258,7 +259,8 @@ func Run(ctx context.Context, rs RunState) {
 		// as often one wants to correlate specific output back to a given target and there's no guarentee the
 		// output will have this information in it. So instead supply it as metadata via the filename.
 		for i, t := range rs.Targets {
-			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d-%s", i, t)))
+			targetName := cmdUtil.StripTimeout(t)
+			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d-%s", i, targetName)))
 		}
 		dir = rs.OutputsDir
 	} else {
@@ -330,10 +332,11 @@ func Run(ctx context.Context, rs RunState) {
 
 	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {
 		if prefix {
+			targetName := cmdUtil.StripTimeout(rs.Targets[i])
 			dest = &prefixWriter{
 				start:  true,
 				dest:   dest,
-				prefix: []byte(fmt.Sprintf("%d-%s: ", i, rs.Targets[i])),
+				prefix: []byte(fmt.Sprintf("%d-%s: ", i, targetName)),
 			}
 		}
 		return dest

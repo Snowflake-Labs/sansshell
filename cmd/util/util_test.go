@@ -93,10 +93,55 @@ func TestValidateAndAddPortAndTimeout(t *testing.T) {
 			fatalCalled = true
 		}
 		result := ValidateAndAddPortAndTimeout(tc.s, tc.port, tc.dialTimeout)
-		if tc.expectFatal {
-			// if expect fatal, no need to validate result
-			testutil.DiffErr(tc.name, fatalCalled, tc.expectFatal, t)
-		} else {
+		testutil.DiffErr(tc.name, fatalCalled, tc.expectFatal, t)
+
+		if !tc.expectFatal {
+			testutil.DiffErr(tc.name, result, tc.expectedResult, t)
+		}
+	}
+}
+
+func TestStripTime(t *testing.T) {
+	defer func() { logFatalf = log.Fatalf }() // replace the original func after this test
+	tests := []struct {
+		name           string
+		s              string
+		expectFatal    bool
+		expectedResult string
+	}{
+		{
+			name:           "timeout should be stripped",
+			s:              "localhost:9999;20s",
+			expectFatal:    false,
+			expectedResult: "localhost:9999",
+		},
+		{
+			name:           "no timeout, should return the original string",
+			s:              "localhost:9999",
+			expectFatal:    false,
+			expectedResult: "localhost:9999",
+		},
+		{
+			name:           "no timeout and no port, should return the original string",
+			s:              "localhost",
+			expectFatal:    false,
+			expectedResult: "localhost",
+		},
+		{
+			name:           "multiple timeout should fatal",
+			s:              "localhost:9999;20s;30s",
+			expectFatal:    true,
+			expectedResult: "",
+		},
+	}
+	for _, tc := range tests {
+		fatalCalled := false
+		logFatalf = func(format string, v ...any) {
+			fatalCalled = true
+		}
+		result := StripTimeout(tc.s)
+		testutil.DiffErr(tc.name, fatalCalled, tc.expectFatal, t)
+		if !tc.expectFatal {
 			testutil.DiffErr(tc.name, result, tc.expectedResult, t)
 		}
 	}

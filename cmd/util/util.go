@@ -99,3 +99,12 @@ func ValidateAndAddPortAndTimeout(s string, port int, dialTimeout time.Duration)
 	}
 	return new
 }
+
+func StripTimeout(s string) string {
+	p := strings.Split(s, ";")
+	if len(p) == 0 || len(p) > 2 {
+		logFatalf("Invalid address %q - should be of the form host[:port][;<duration>]", s)
+	}
+
+	return p[0]
+}
