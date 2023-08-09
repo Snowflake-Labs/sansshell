@@ -159,11 +159,13 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
 	}
+	s.mu.Lock()
 	// clear the cmd to allow another call
 	s.cmd = nil
 	s.stdout = nil
 	s.stderr = nil
 	s.id = 0
+	s.mu.Unlock()
 	return err
 }
 
