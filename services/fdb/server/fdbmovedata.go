@@ -122,7 +122,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	if !(req.Id == s.id) {
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
-	if s.cmd == nil || s.stdout == nil || s.stderr == nil {
+	if s.cmd == nil {
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
 
@@ -159,8 +159,6 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	}
 	// clear the cmd to allow another call
 	s.cmd = nil
-	s.stdout = nil
-	s.stderr = nil
 	s.id = 0
 	return err
 }
