@@ -85,7 +85,7 @@ func TestFDBMoveData(t *testing.T) {
 			for _, want := range tc.outputWait {
 				rs, err := waitResp.Recv()
 				if err != nil {
-					testutil.FatalOnErr("fdbmovedata wait failed", err, t)
+					testutil.FatalOnErr("fdbmovedata wait recv failed", err, t)
 				}
 				if !(proto.Equal(want, rs)) {
 					t.Errorf("want: %v, got: %v", want, rs)
