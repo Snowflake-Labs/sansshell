@@ -605,7 +605,7 @@ check_status $? /dev/null cant find proxy version in logs
 
 echo "Checking prefix option functions"
 ${SANSSH_PROXY} -h ${SINGLE_TARGET} file read /etc/hosts >&${LOGS}/prefix-test
-prefix_lines=$(cat ${LOGS}/prefix-test | grep -E -c -e '^0-localhost:50042;10s')
+prefix_lines=$(cat ${LOGS}/prefix-test | grep -E -c -e '^0-localhost:50042')
 total_lines=$(wc -l </etc/hosts)
 if [ "${prefix_lines}" != "${total_lines}" ]; then
   check_status 1 "line count different for prefix check - prefix log ${LOGS}/prefix-test ${prefix_lines} vs /etc/hosts ${total_lines}"
@@ -627,16 +627,16 @@ fi
 mkdir -p ${LOGS}/exec-testdir
 ${SANSSH_PROXY} ${MULTI_TARGETS} --output-dir=${LOGS}/exec-testdir exec run /bin/sh -c "echo foo >&2"
 check_status $? /dev/null exec failed emitting to stderr
-if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042;10s" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042;10s" ]; then
+if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042" ]; then
   check_status 1 /dev/null "exec output files do not exist"
 fi
-if [ -s "${LOGS}/exec-testdir/0-localhost:50042;10s" ] || [ -s "${LOGS}/exec-testdir/1-localhost:50042;10s" ]; then
+if [ -s "${LOGS}/exec-testdir/0-localhost:50042" ] || [ -s "${LOGS}/exec-testdir/1-localhost:50042" ]; then
   check_status 1 /dev/null "exec output appeared in normal output files in ${LOGS}/exec-testdir"
 fi
-if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042;10s.error" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042;10s.error" ]; then
+if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042.error" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042.error" ]; then
   check_status 1 /dev/null "exec error output files do not exist"
 fi
-if [ ! -s "${LOGS}/exec-testdir/0-localhost:50042;10s.error" ] || [ ! -s "${LOGS}/exec-testdir/1-localhost:50042;10s.error" ]; then
+if [ ! -s "${LOGS}/exec-testdir/0-localhost:50042.error" ] || [ ! -s "${LOGS}/exec-testdir/1-localhost:50042.error" ]; then
   check_status 1 /dev/null "exec error output did not appear in ${LOGS}/exec-testdir error files"
 fi
 
