@@ -127,10 +127,11 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	}
 
 	// Send stderr asynchronously
+	stderr := s.stderr
 	go func() {
 		for {
 			buf := make([]byte, 1024)
-			n, err := s.stderr.Read(buf)
+			n, err := stderr.Read(buf)
 			if err != nil {
 				return
 			}
@@ -141,10 +142,11 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	}()
 
 	// Send stdout asynchronously
+	stdout := s.stdout
 	go func() {
 		for {
 			buf := make([]byte, 1024)
-			n, err := s.stdout.Read(buf)
+			n, err := stdout.Read(buf)
 			if err != nil {
 				return
 			}
