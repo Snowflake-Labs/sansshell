@@ -17,6 +17,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -49,8 +50,11 @@ var (
 	// FDBCLIGroup is the group to become before running fdbcli (if non blank). Binding this to a flag is often useful.
 	FDBCLIGroup string
 
-	// FDBCLIEnvList ia a list of environment variables to retain before running fdbcli (such as TLS). Binding this to a flag is often useful.
+	// FDBCLIEnvList is a list of environment variables to retain before running fdbcli (such as TLS). Binding this to a flag is often useful.
 	FDBCLIEnvList []string
+
+	// FDBCLIEnvFile is a file with newline-separated environment variables to set before running fdbcli (such as TLS). Binding this to a flag is often useful.
+	FDBCLIEnvFile string
 
 	// generateFDBCLIArgs exists as a var for testing purposes
 	generateFDBCLIArgs = generateFDBCLIArgsImpl
@@ -242,6 +246,16 @@ func (s *server) FDBCLI(req *pb.FDBCLIRequest, stream pb.CLI_FDBCLIServer) error
 	// Add env vars from flag
 	for _, e := range FDBCLIEnvList {
 		opts = append(opts, util.EnvVar(e))
+	}
+	// Add env vars from file
+	if _, err := os.Stat(FDBCLIEnvFile); !errors.Is(err, os.ErrNotExist) {
+		content, err := os.ReadFile(FDBCLIEnvFile)
+		if err != nil {
+			return err
+		}
+		for _, l := range strings.Split(string(content), "\n") {
+			opts = append(opts, util.EnvVar(l))
+		}
 	}
 
 	run, err := util.RunCommand(stream.Context(), command[0], command[1:], opts...)
