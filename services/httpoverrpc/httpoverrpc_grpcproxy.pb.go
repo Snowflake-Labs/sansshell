@@ -18,7 +18,7 @@ import (
 // HTTPOverRPCClientProxy is the superset of HTTPOverRPCClient which additionally includes the OneMany proxy methods
 type HTTPOverRPCClientProxy interface {
 	HTTPOverRPCClient
-	LocalhostOneMany(ctx context.Context, in *LocalhostHTTPRequest, opts ...grpc.CallOption) (<-chan *LocalhostManyResponse, error)
+	HostOneMany(ctx context.Context, in *HostHTTPRequest, opts ...grpc.CallOption) (<-chan *HostManyResponse, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -32,9 +32,9 @@ func NewHTTPOverRPCClientProxy(cc *proxy.Conn) HTTPOverRPCClientProxy {
 	return &hTTPOverRPCClientProxy{NewHTTPOverRPCClient(cc).(*hTTPOverRPCClient)}
 }
 
-// LocalhostManyResponse encapsulates a proxy data packet.
+// HostManyResponse encapsulates a proxy data packet.
 // It includes the target, index, response and possible error returned.
-type LocalhostManyResponse struct {
+type HostManyResponse struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
@@ -42,22 +42,22 @@ type LocalhostManyResponse struct {
 	Error error
 }
 
-// LocalhostOneMany provides the same API as Localhost but sends the same request to N destinations at once.
+// HostOneMany provides the same API as Host but sends the same request to N destinations at once.
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *hTTPOverRPCClientProxy) LocalhostOneMany(ctx context.Context, in *LocalhostHTTPRequest, opts ...grpc.CallOption) (<-chan *LocalhostManyResponse, error) {
+func (c *hTTPOverRPCClientProxy) HostOneMany(ctx context.Context, in *HostHTTPRequest, opts ...grpc.CallOption) (<-chan *HostManyResponse, error) {
 	conn := c.cc.(*proxy.Conn)
-	ret := make(chan *LocalhostManyResponse)
+	ret := make(chan *HostManyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
-			out := &LocalhostManyResponse{
+			out := &HostManyResponse{
 				Target: conn.Targets[0],
 				Index:  0,
 				Resp:   &HTTPReply{},
 			}
-			err := conn.Invoke(ctx, "/HTTPOverRPC.HTTPOverRPC/Localhost", in, out.Resp, opts...)
+			err := conn.Invoke(ctx, "/HTTPOverRPC.HTTPOverRPC/Host", in, out.Resp, opts...)
 			if err != nil {
 				out.Error = err
 			}
@@ -67,14 +67,14 @@ func (c *hTTPOverRPCClientProxy) LocalhostOneMany(ctx context.Context, in *Local
 		}()
 		return ret, nil
 	}
-	manyRet, err := conn.InvokeOneMany(ctx, "/HTTPOverRPC.HTTPOverRPC/Localhost", in, opts...)
+	manyRet, err := conn.InvokeOneMany(ctx, "/HTTPOverRPC.HTTPOverRPC/Host", in, opts...)
 	if err != nil {
 		return nil, err
 	}
 	// A goroutine to retrive untyped responses and convert them to typed ones.
 	go func() {
 		for {
-			typedResp := &LocalhostManyResponse{
+			typedResp := &HostManyResponse{
 				Resp: &HTTPReply{},
 			}
 

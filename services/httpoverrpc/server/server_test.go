@@ -2,9 +2,12 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"sort"
 	"strconv"
@@ -72,12 +75,13 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := client.Localhost(ctx, &httpoverrpc.LocalhostHTTPRequest{
+	got, err := client.Host(ctx, &httpoverrpc.HostHTTPRequest{
 		Request: &httpoverrpc.HTTPRequest{
 			Method:     "GET",
 			RequestUri: "/",
 		},
-		Port: int32(httpPort),
+		Port:     int32(httpPort),
+		Protocol: "http",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +105,93 @@ func TestServer(t *testing.T) {
 			{Key: "Date"},
 		},
 		Body: []byte("hello world"),
+	}
+	if !cmp.Equal(got, want, protocmp.Transform()) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+
+	// test https post request and expect json response
+	type Data struct {
+		InstanceID int    `json:"instanceId"`
+		IPAddress  string `json:"ipAddress"`
+	}
+
+	type Response struct {
+		Data    Data    `json:"data"`
+		Code    *string `json:"code"`
+		Message *string `json:"message"`
+		Success bool    `json:"success"`
+	}
+	m = http.NewServeMux()
+	m.HandleFunc("/register", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		if httpReq.Method == http.MethodPost {
+			httpResp.Header().Set("Content-Type", "application/json")
+			response := Response{
+				Data: Data{
+					InstanceID: 11,
+					IPAddress:  "127.0.0.1",
+				},
+				Code:    nil,
+				Message: nil,
+				Success: true,
+			}
+			err = json.NewEncoder(httpResp).Encode(response)
+			testutil.FatalOnErr("Failed to ", err, t)
+		} else {
+			http.Error(httpResp, "Invalid request method", http.StatusMethodNotAllowed)
+		}
+	})
+
+	server := httptest.NewTLSServer(m)
+	l = server.Listener
+
+	httpClient = server.Client()
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	httpClient.Transport = tr
+
+	_, p, err = net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpPort, err = strconv.Atoi(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = client.Host(ctx, &httpoverrpc.HostHTTPRequest{
+		Request: &httpoverrpc.HTTPRequest{
+			Method:     "POST",
+			RequestUri: "/register",
+		},
+		Port:     int32(httpPort),
+		Protocol: "https",
+		Hostname: "localhost",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sort.Slice(got.Headers, func(i, j int) bool {
+		return got.Headers[i].Key < got.Headers[j].Key
+	})
+	for _, h := range got.Headers {
+		if h.Key == "Date" {
+			// Clear out the date header because it varies based on time.
+			h.Values = nil
+		}
+	}
+	wantBody := `{"data":{"instanceId":11,"ipAddress":"127.0.0.1"},"code":null,"message":null,"success":true}` + "\n"
+	contentLengthStr := strconv.Itoa(len(wantBody))
+	want = &httpoverrpc.HTTPReply{
+		StatusCode: 200,
+		Headers: []*httpoverrpc.Header{
+			{Key: "Content-Length", Values: []string{contentLengthStr}},
+			{Key: "Content-Type", Values: []string{"application/json"}},
+			{Key: "Date"},
+		},
+		Body: []byte(wantBody),
 	}
 	if !cmp.Equal(got, want, protocmp.Transform()) {
 		t.Fatalf("want %v, got %v", want, got)
