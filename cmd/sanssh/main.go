@@ -120,7 +120,18 @@ func init() {
 	subcommands.ImportantFlag("v")
 }
 
+func isFlagPassed(name string) bool {
+	result := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			result = true
+		}
+	})
+	return result
+}
+
 func main() {
+
 	// If this is blank it'll remain blank which is fine
 	// as that means just talk to --targets[0] instead.
 	// If the flag itself was set that will override.
@@ -130,6 +141,9 @@ func main() {
 		"targets": func(string) []string { return []string{"localhost"} },
 	})
 	flag.Parse()
+	if isFlagPassed("timeout") {
+		log.Fatalf("DEPRECATED: --timeout flag is deprecated. Please use --dial-timeout or --idle-timeout instead. Run `sanssh help` for details")
+	}
 
 	// If we're given a --targets-file read it in and stuff into targetsFlag
 	// so it can be processed below as if it was set that way.
