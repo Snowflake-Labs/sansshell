@@ -63,7 +63,10 @@ func generateFDBMoveDataArgsImpl(req *pb.FDBMoveDataCopyRequest) ([]string, erro
 }
 
 func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCopyRequest) (*pb.FDBMoveDataCopyResponse, error) {
-	s.mu.Lock()
+	lockSuccess := s.mu.TryLock()
+	if !(lockSuccess) {
+		return nil, status.Errorf(codes.Internal, "Copy or Wait command already running")
+	}
 	defer s.mu.Unlock()
 	logger := logr.FromContextOrDiscard(ctx)
 	// The sansshell server should only run one copy command at a time

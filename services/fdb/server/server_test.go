@@ -52,6 +52,9 @@ func TestMain(m *testing.M) {
 	fds := &fdbserver{}
 	fds.Register(s)
 
+	fdbm := &fdbmovedata{}
+	fdbm.Register(s)
+
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Server exited with error: %v", err)
