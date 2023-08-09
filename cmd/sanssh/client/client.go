@@ -189,16 +189,17 @@ func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		err := ctx.Err()
-		if err == context.DeadlineExceeded {
-			err = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
-		}
+
 		select {
-		// if there's any err in errCh, append it to err
+		// if there's any err in errCh, just return it
 		case errRecv := <-errCh:
-			return fmt.Errorf("%s - %s", err, errRecv)
+			return errRecv
 		// otherwise just return err
 		default:
+			err := ctx.Err()
+			if err == context.DeadlineExceeded {
+				return fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
+			}
 			return err
 		}
 	}
