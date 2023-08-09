@@ -36,6 +36,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 
+	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
@@ -63,8 +64,9 @@ type RunState struct {
 	OutputsDir string
 	// CredSource is a registered credential source with the mtls package.
 	CredSource string
-	// Timeout is the duration to place on the context when making RPC calls.
-	Timeout time.Duration
+	// IdleTimeout is the time duration to wait before closing an idle connection.
+	// If no messages are sent/received within this timeframe, connection will be terminated.
+	IdleTimeout time.Duration
 	// ClientPolicy is an optional OPA policy for determining outbound decisions.
 	ClientPolicy string
 	// PrefixOutput if true will prefix every line of output with '<index>-<target>: '
@@ -124,6 +126,86 @@ func (p *prefixWriter) Write(b []byte) (n int, err error) {
 	return tot, nil
 }
 
+// UnaryClientTimeoutInterceptor returns a grpc.UnaryClientInterceptor that adds a deadline to every request
+func UnaryClientTimeoutInterceptor(timeout time.Duration) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+// StreamClientTimeoutInterceptor returns a grpc.UnaryClientInterceptor that adds a deadline to every client SendMsg and RecvMsg
+func StreamClientTimeoutInterceptor(timeout time.Duration) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		clientStream, err := streamer(ctx, desc, cc, method, opts...)
+		if err != nil {
+			return nil, err
+		}
+		t := &clientStreamWithTimeout{ClientStream: clientStream, timeout: timeout}
+		return t, nil
+	}
+}
+
+type clientStreamWithTimeout struct {
+	grpc.ClientStream
+	timeout time.Duration
+}
+
+func (t *clientStreamWithTimeout) SendMsg(m interface{}) error {
+	ctx := t.Context()
+	ctx, cancel := context.WithTimeout(ctx, t.timeout)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- t.ClientStream.SendMsg(m)
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		err := ctx.Err()
+		if err == context.DeadlineExceeded {
+			err = fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
+		}
+		select {
+		// if there's any err in errCh, append it to err
+		case errSend := <-errCh:
+			return fmt.Errorf("%s - %s", err, errSend)
+		// otherwise just return err
+		default:
+			return err
+		}
+	}
+}
+
+func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
+	ctx, cancel := context.WithTimeout(t.Context(), t.timeout)
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- t.ClientStream.RecvMsg(m)
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+
+		select {
+		// if there's any err in errCh, just return it
+		case errRecv := <-errCh:
+			return errRecv
+		// otherwise just return err
+		default:
+			err := ctx.Err()
+			if err == context.DeadlineExceeded {
+				return fmt.Errorf("connection closed due to no activity after %s: %v", t.timeout, err)
+			}
+			return err
+		}
+	}
+}
+
 // Run takes the given context and RunState and executes the command passed in after parsing with flags.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, rs RunState) {
@@ -177,7 +259,8 @@ func Run(ctx context.Context, rs RunState) {
 		// as often one wants to correlate specific output back to a given target and there's no guarentee the
 		// output will have this information in it. So instead supply it as metadata via the filename.
 		for i, t := range rs.Targets {
-			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d-%s", i, t)))
+			targetName := cmdUtil.StripTimeout(t)
+			rs.Outputs = append(rs.Outputs, filepath.Join(rs.OutputsDir, fmt.Sprintf("%d-%s", i, targetName)))
 		}
 		dir = rs.OutputsDir
 	} else {
@@ -228,9 +311,20 @@ func Run(ctx context.Context, rs RunState) {
 	ops := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 	}
+	streamInterceptors := []grpc.StreamClientInterceptor{}
+	unaryInterceptors := []grpc.UnaryClientInterceptor{}
 	if clientAuthz != nil {
-		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
+		streamInterceptors = append(streamInterceptors, clientAuthz.AuthorizeClientStream)
+		unaryInterceptors = append(unaryInterceptors, clientAuthz.AuthorizeClient)
 	}
+	// timeout interceptor should be the last item in ops so that it's executed first.
+	streamInterceptors = append(streamInterceptors, StreamClientTimeoutInterceptor(rs.IdleTimeout))
+	unaryInterceptors = append(unaryInterceptors, UnaryClientTimeoutInterceptor(rs.IdleTimeout))
+
+	ops = append(ops,
+		grpc.WithChainStreamInterceptor(streamInterceptors...),
+		grpc.WithChainUnaryInterceptor(unaryInterceptors...),
+	)
 
 	state := &util.ExecuteState{
 		Dir: dir,
@@ -238,10 +332,11 @@ func Run(ctx context.Context, rs RunState) {
 
 	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {
 		if prefix {
+			targetName := cmdUtil.StripTimeout(rs.Targets[i])
 			dest = &prefixWriter{
 				start:  true,
 				dest:   dest,
-				prefix: []byte(fmt.Sprintf("%d-%s: ", i, rs.Targets[i])),
+				prefix: []byte(fmt.Sprintf("%d-%s: ", i, targetName)),
 			}
 		}
 		return dest
@@ -287,8 +382,6 @@ func Run(ctx context.Context, rs RunState) {
 	}
 	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
-		ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
-		defer cancel()
 		// Set up a connection to the sansshell-server (possibly via proxy).
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
 		if err != nil {
@@ -308,8 +401,6 @@ func Run(ctx context.Context, rs RunState) {
 
 	// Remainder or the fall through case of no targets (i.e. a proxy command).
 	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
-		ctx, cancel := context.WithTimeout(ctx, rs.Timeout)
-		defer cancel()
 		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)

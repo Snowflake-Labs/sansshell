@@ -47,8 +47,8 @@ type Conn struct {
 	// The targets we're proxying for currently.
 	Targets []string
 
-	// Possible dial timeouts for each target
-	timeouts []*time.Duration
+	// Possible dial dialTimeouts for each target
+	dialTimeouts []*time.Duration
 
 	// The RPC connection to the proxy.
 	cc *grpc.ClientConn
@@ -407,8 +407,8 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 					},
 				},
 			}
-			if p.timeouts[i] != nil {
-				req.GetStartStream().DialTimeout = durationpb.New(*p.timeouts[i])
+			if p.dialTimeouts[i] != nil {
+				req.GetStartStream().DialTimeout = durationpb.New(*p.dialTimeouts[i])
 			}
 			err = stream.Send(req)
 
@@ -650,6 +650,7 @@ func (p *Conn) Close() error {
 	return p.cc.Close()
 }
 
+// targets are in the form of host[:port][;<duration>]
 func parseTargets(targets []string) ([]string, []*time.Duration, error) {
 	var hostport []string
 	var timeouts []*time.Duration
@@ -736,6 +737,6 @@ func DialContext(ctx context.Context, proxy string, targets []string, opts ...gr
 	ret.cc = conn
 	// Make our own copy of these.
 	ret.Targets = append(ret.Targets, hostport...)
-	ret.timeouts = append(ret.timeouts, timeouts...)
+	ret.dialTimeouts = append(ret.dialTimeouts, timeouts...)
 	return ret, nil
 }
