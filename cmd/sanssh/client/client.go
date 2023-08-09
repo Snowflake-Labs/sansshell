@@ -308,13 +308,19 @@ func Run(ctx context.Context, rs RunState) {
 	ops := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
 	}
+	streamInterceptors := []grpc.StreamClientInterceptor{}
+	unaryInterceptors := []grpc.UnaryClientInterceptor{}
 	if clientAuthz != nil {
-		ops = append(ops, grpc.WithStreamInterceptor(clientAuthz.AuthorizeClientStream))
+		streamInterceptors = append(streamInterceptors, clientAuthz.AuthorizeClientStream)
+		unaryInterceptors = append(unaryInterceptors, clientAuthz.AuthorizeClient)
 	}
 	// timeout interceptor should be the last item in ops so that it's executed first.
+	streamInterceptors = append(streamInterceptors, StreamClientTimeoutInterceptor(rs.IdleTimeout))
+	unaryInterceptors = append(unaryInterceptors, UnaryClientTimeoutInterceptor(rs.IdleTimeout))
+
 	ops = append(ops,
-		grpc.WithStreamInterceptor(StreamClientTimeoutInterceptor(rs.IdleTimeout)),
-		grpc.WithUnaryInterceptor(UnaryClientTimeoutInterceptor(rs.IdleTimeout)),
+		grpc.WithChainStreamInterceptor(streamInterceptors...),
+		grpc.WithChainUnaryInterceptor(unaryInterceptors...),
 	)
 
 	state := &util.ExecuteState{
