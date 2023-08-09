@@ -118,12 +118,11 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 
 func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !(req.Id == s.id) {
-		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
 	if s.cmd == nil || s.stdout == nil || s.stderr == nil {
-		s.mu.Unlock()
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
 
@@ -154,18 +153,15 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 			}
 		}
 	}()
-	s.mu.Unlock()
 	err := s.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
 	}
-	s.mu.Lock()
 	// clear the cmd to allow another call
 	s.cmd = nil
 	s.stdout = nil
 	s.stderr = nil
 	s.id = 0
-	s.mu.Unlock()
 	return err
 }
 

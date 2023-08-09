@@ -156,9 +156,7 @@ func TestFDBMoveDataDouble(t *testing.T) {
 				Id: resp1.Id,
 			}
 			waitResp1, err1 := client1.FDBMoveDataWait(ctx, waitReq)
-			waitResp2, err2 := client2.FDBMoveDataWait(ctx, waitReq)
 			testutil.FatalOnErr("fdbmovedata wait1 failed", err1, t)
-			testutil.FatalOnErr("fdbmovedata wait2 failed", err2, t)
 			for _, want1 := range tc.outputWait {
 				rs, err1 := waitResp1.Recv()
 				if err1 != io.EOF {
@@ -168,6 +166,8 @@ func TestFDBMoveDataDouble(t *testing.T) {
 					t.Errorf("want: %v, got: %v", want1, rs)
 				}
 			}
+			waitResp2, err2 := client2.FDBMoveDataWait(ctx, waitReq)
+			testutil.FatalOnErr("fdbmovedata wait2 failed", err2, t)
 
 			rs, err2 := waitResp2.Recv()
 			if err2 != io.EOF {
