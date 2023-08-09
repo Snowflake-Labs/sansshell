@@ -22,14 +22,18 @@ package HTTPOverRPC;
 
 // The HTTPOverRPC service definition
 service HTTPOverRPC {
-  // Make an HTTP call to localhost
-  rpc Localhost(LocalhostHTTPRequest) returns (HTTPReply) {}
+  // Make an HTTP call to specified host
+  rpc Host(HostHTTPRequest) returns (HTTPReply) {}
 }
 
-message LocalhostHTTPRequest {
+message HostHTTPRequest {
   HTTPRequest request = 1;
   // The port to use for the request on the local host.
   int32 port = 2;
+  // Hostname can be specified as either an ip address or domain name
+  string hostname = 3;
+  // Protocols for communication like http and https 
+  string protocol = 4;
 }
 
 message Header {
