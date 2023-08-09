@@ -98,6 +98,7 @@ func init() {
 	flag.StringVar(&fdbserver.FDBCLI, "fdbcli", "/usr/bin/fdbcli", "Path to fdbcli binary. API assumes version 7.1. Older versions may not implement some commands.")
 	flag.StringVar(&fdbserver.FDBCLIUser, "fdbcli-user", "", "User to change to when running fdbcli")
 	flag.StringVar(&fdbserver.FDBCLIGroup, "fdbcli-group", "", "Group to change to when running fdbcli")
+	flag.StringVar(&fdbserver.FDBCLIEnvFile, "fdbcli-env-file", "/etc/fdb.env", "File with environmental variables to add to the environment for fdbcli invocations, ignored if nonexistent")
 	fdbCLIEnvList.Target = &fdbserver.FDBCLIEnvList
 	*fdbCLIEnvList.Target = append(*fdbCLIEnvList.Target, "") // To set a default
 	flag.Var(&fdbCLIEnvList, "fdbcli-env-list", "List of environment variable names (separated by comma) to retain before fork/exec'ing fdbcli")
