@@ -125,10 +125,13 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	if s.cmd == nil {
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
+	wg := &sync.WaitGroup{}
 
 	// Send stderr asynchronously
 	stderr := s.stderr
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			buf := make([]byte, 1024)
 			n, err := stderr.Read(buf)
@@ -143,7 +146,9 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 
 	// Send stdout asynchronously
 	stdout := s.stdout
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for {
 			buf := make([]byte, 1024)
 			n, err := stdout.Read(buf)
@@ -162,6 +167,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	// clear the cmd to allow another call
 	s.cmd = nil
 	s.id = 0
+	wg.Wait()
 	return err
 }
 

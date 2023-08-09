@@ -84,11 +84,10 @@ func TestFDBMoveData(t *testing.T) {
 			testutil.FatalOnErr("fdbmovedata wait failed", err, t)
 			for _, want := range tc.outputWait {
 				rs, err := waitResp.Recv()
-				if err == io.EOF {
-					// Expected when two wait calls race for the mu lock
-				} else if err != nil {
+				if err != nil {
 					testutil.FatalOnErr("fdbmovedata wait recv failed", err, t)
-				} else if !(proto.Equal(want, rs)) {
+				}
+				if !(proto.Equal(want, rs)) {
 					t.Errorf("want: %v, got: %v", want, rs)
 				}
 			}
@@ -160,11 +159,10 @@ func TestFDBMoveDataDouble(t *testing.T) {
 			testutil.FatalOnErr("fdbmovedata wait1 failed", err1, t)
 			for _, want1 := range tc.outputWait {
 				rs, err1 := waitResp1.Recv()
-				if err1 == io.EOF {
-					// Expected when two wait calls race for the mu lock
-				} else if err1 != nil {
+				if err1 != io.EOF {
 					testutil.FatalOnErr("fdbmovedata wait1 failed", err1, t)
-				} else if !(proto.Equal(want1, rs)) {
+				}
+				if !(proto.Equal(want1, rs)) {
 					t.Errorf("want: %v, got: %v", want1, rs)
 				}
 			}
