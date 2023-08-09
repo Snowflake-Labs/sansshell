@@ -78,6 +78,14 @@ func TestValidateAndAddPortAndTimeout(t *testing.T) {
 			expectedResult: "",
 			expectFatal:    true,
 		},
+		{
+			name:           "zero timeout shouldn't be added",
+			s:              "localhost",
+			port:           2345,
+			dialTimeout:    0,
+			expectedResult: "localhost:2345",
+			expectFatal:    false,
+		},
 	}
 	for _, tc := range tests {
 		fatalCalled := false

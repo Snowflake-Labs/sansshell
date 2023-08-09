@@ -64,6 +64,13 @@ func hasPort(s string) bool {
 // swappable for testing
 var logFatalf = log.Fatalf
 
+// ValidateAndAddPort will take a given target address and optionally add a default port
+// onto it if a port is missing. This will also take in account optional dial timeout
+// suffix and make sure the returned value has that if it exists.
+func ValidateAndAddPort(s string, port int) string {
+	return ValidateAndAddPortAndTimeout(s, port, 0)
+}
+
 // ValidateAndAddPortAndTimeout will take a given target address and optionally add a default port and timeout
 // onto it if a port or a timeout is missing.
 func ValidateAndAddPortAndTimeout(s string, port int, dialTimeout time.Duration) string {
@@ -86,7 +93,9 @@ func ValidateAndAddPortAndTimeout(s string, port int, dialTimeout time.Duration)
 			logFatalf("Invalid timeout %s - should be of the form time.Duration", timeout)
 		}
 	} else { // no timeout, let's add dialTimeout
-		new = fmt.Sprintf("%s;%s", new, dialTimeout.String())
+		if dialTimeout != 0 {
+			new = fmt.Sprintf("%s;%s", new, dialTimeout.String())
+		}
 	}
 	return new
 }
