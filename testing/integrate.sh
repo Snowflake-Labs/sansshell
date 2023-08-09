@@ -16,7 +16,6 @@
 # under the License.
 
 set -o nounset
-
 # check_status takes 3 args:
 #
 # A code to compare against
@@ -512,7 +511,7 @@ else
   echo "Skipping remote cloud setup on Github"
 fi
 
-SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --timeout=120s"
+SANSSH_NOPROXY_NO_JUSTIFY="./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --idle-timeout=120s"
 SANSSH_NOPROXY="${SANSSH_NOPROXY_NO_JUSTIFY} --justification=yes"
 SANSSH_PROXY_NOPORT="${SANSSH_NOPROXY} --proxy=localhost"
 SANSSH_PROXY="${SANSSH_PROXY_NOPORT}:50043 --batch-size=1"
@@ -560,7 +559,7 @@ allow {
   input.peer.cert.subject.organization[i] = "foo"
 }
 EOF
-${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego --timeout=10s healthcheck validate
+${SANSSH_PROXY} ${SINGLE_TARGET} --v=1 --client-policy-file=${LOGS}/client-policy.rego --idle-timeout=10s healthcheck validate
 if [ $? != 1 ]; then
   check_status 1 /dev/null policy check did not fail
 fi
@@ -606,7 +605,7 @@ check_status $? /dev/null cant find proxy version in logs
 
 echo "Checking prefix option functions"
 ${SANSSH_PROXY} -h ${SINGLE_TARGET} file read /etc/hosts >&${LOGS}/prefix-test
-prefix_lines=$(cat ${LOGS}/prefix-test | grep -E -c -e '^0-localhost:50042: ')
+prefix_lines=$(cat ${LOGS}/prefix-test | grep -E -c -e '^0-localhost:50042')
 total_lines=$(wc -l </etc/hosts)
 if [ "${prefix_lines}" != "${total_lines}" ]; then
   check_status 1 "line count different for prefix check - prefix log ${LOGS}/prefix-test ${prefix_lines} vs /etc/hosts ${total_lines}"
@@ -628,16 +627,16 @@ fi
 mkdir -p ${LOGS}/exec-testdir
 ${SANSSH_PROXY} ${MULTI_TARGETS} --output-dir=${LOGS}/exec-testdir exec run /bin/sh -c "echo foo >&2"
 check_status $? /dev/null exec failed emitting to stderr
-if [ ! -f ${LOGS}/exec-testdir/0-localhost:50042 ] || [ ! -f ${LOGS}/exec-testdir/1-localhost:50042 ]; then
+if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042" ]; then
   check_status 1 /dev/null "exec output files do not exist"
 fi
-if [ -s ${LOGS}/exec-testdir/0-localhost:50042 ] || [ -s ${LOGS}/exec-testdir/1-localhost:50042 ]; then
+if [ -s "${LOGS}/exec-testdir/0-localhost:50042" ] || [ -s "${LOGS}/exec-testdir/1-localhost:50042" ]; then
   check_status 1 /dev/null "exec output appeared in normal output files in ${LOGS}/exec-testdir"
 fi
-if [ ! -f ${LOGS}/exec-testdir/0-localhost:50042.error ] || [ ! -f ${LOGS}/exec-testdir/1-localhost:50042.error ]; then
+if [ ! -f "${LOGS}/exec-testdir/0-localhost:50042.error" ] || [ ! -f "${LOGS}/exec-testdir/1-localhost:50042.error" ]; then
   check_status 1 /dev/null "exec error output files do not exist"
 fi
-if [ ! -s ${LOGS}/exec-testdir/0-localhost:50042.error ] || [ ! -s ${LOGS}/exec-testdir/1-localhost:50042.error ]; then
+if [ ! -s "${LOGS}/exec-testdir/0-localhost:50042.error" ] || [ ! -s "${LOGS}/exec-testdir/1-localhost:50042.error" ]; then
   check_status 1 /dev/null "exec error output did not appear in ${LOGS}/exec-testdir error files"
 fi
 
@@ -979,7 +978,7 @@ check_mv
 echo "parallel work with some bad targets and various timeouts"
 mkdir -p "${LOGS}/parallel"
 start=$(date +%s)
-if ${SANSSH_NOPROXY} --proxy="localhost;2s" --timeout=10s --output-dir="${LOGS}/parallel" --targets="localhost:50042;3s,1.1.1.1;4s,0.0.0.1;5s,localhost;6s" healthcheck validate; then
+if ${SANSSH_NOPROXY} --proxy="localhost;2s" --idle-timeout=10s --output-dir="${LOGS}/parallel" --targets="localhost:50042;3s,1.1.1.1;4s,0.0.0.1;5s,localhost;6s" healthcheck validate; then
   check_status 1 /dev/null healthcheck did not error out
 fi
 end=$(date +%s)

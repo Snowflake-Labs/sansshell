@@ -62,14 +62,18 @@ const (
 )
 
 var (
-	defaultTimeout = 30 * time.Second
+	defaultDialTimeout = 10 * time.Second
+	defaultIdleTimeout = 15 * time.Minute
 
 	proxyAddr = flag.String("proxy", "", fmt.Sprintf(
 		`Address (host[:port]) to contact for proxy to sansshell-server.
 %s in the environment can also be set instead of setting this flag. The flag will take precedence.
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
-	timeout          = flag.Duration("timeout", defaultTimeout, "How long to wait for the command to complete")
+	// Deprecated: --timeout flag is deprecated. Use --idle-timeout or --dial-timeout instead
+	_                = flag.Duration("timeout", defaultDialTimeout, "DEPRECATED. Please use --idle-timeout or --dial-timeout instead")
+	dialTimeout      = flag.Duration("dial-timeout", defaultDialTimeout, "How long to wait for the connection to be accepted. Timeout specified in --targets or --proxy will take precedence")
+	idleTimeout      = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	outputsDir       = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
 	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
@@ -116,7 +120,18 @@ func init() {
 	subcommands.ImportantFlag("v")
 }
 
+func isFlagPassed(name string) bool {
+	result := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			result = true
+		}
+	})
+	return result
+}
+
 func main() {
+
 	// If this is blank it'll remain blank which is fine
 	// as that means just talk to --targets[0] instead.
 	// If the flag itself was set that will override.
@@ -126,6 +141,9 @@ func main() {
 		"targets": func(string) []string { return []string{"localhost"} },
 	})
 	flag.Parse()
+	if isFlagPassed("timeout") {
+		log.Fatalf("DEPRECATED: --timeout flag is deprecated. Please use --dial-timeout or --idle-timeout instead. Run `sanssh help` for details")
+	}
 
 	// If we're given a --targets-file read it in and stuff into targetsFlag
 	// so it can be processed below as if it was set that way.
@@ -150,11 +168,11 @@ func main() {
 
 	// Validate and add the default proxy port (if needed).
 	if *proxyAddr != "" {
-		*proxyAddr = cmdUtil.ValidateAndAddPort(*proxyAddr, defaultProxyPort)
+		*proxyAddr = cmdUtil.ValidateAndAddPortAndTimeout(*proxyAddr, defaultProxyPort, *dialTimeout)
 	}
 	// Validate and add the default target port (if needed) for each target.
 	for i, t := range *targetsFlag.Target {
-		(*targetsFlag.Target)[i] = cmdUtil.ValidateAndAddPort(t, defaultTargetPort)
+		(*targetsFlag.Target)[i] = cmdUtil.ValidateAndAddPortAndTimeout(t, defaultTargetPort, *dialTimeout)
 	}
 
 	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
@@ -169,7 +187,7 @@ func main() {
 		Outputs:      *outputsFlag.Target,
 		OutputsDir:   *outputsDir,
 		CredSource:   *credSource,
-		Timeout:      *timeout,
+		IdleTimeout:  *idleTimeout,
 		ClientPolicy: clientPolicy,
 		PrefixOutput: *prefixHeader,
 		BatchSize:    *batchSize,
