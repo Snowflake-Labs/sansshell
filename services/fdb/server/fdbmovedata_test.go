@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"strings"
@@ -113,11 +114,11 @@ func TestFDBMoveDataDouble(t *testing.T) {
 		generateFDBMoveDataArgs = savedGenerateFDBMoveDataArgs
 	})
 
-	bin := testutil.ResolvePath(t, "sleep")
+	sh := testutil.ResolvePath(t, "/bin/sh")
 
 	generateFDBMoveDataArgs = func(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
 		_, err = savedGenerateFDBMoveDataArgs(req)
-		return []string{bin, "5"}, err
+		return []string{sh, "-c", "/bin/sleep 1; echo done"}, err
 	}
 	for _, tc := range []struct {
 		name       string
@@ -133,7 +134,11 @@ func TestFDBMoveDataDouble(t *testing.T) {
 				DestinationCluster: "4",
 				NumProcs:           5,
 			},
-			outputWait: nil,
+			outputWait: []*pb.FDBMoveDataWaitResponse{
+				{
+					Stdout: []byte("done\n"),
+				},
+			},
 		},
 	} {
 		tc := tc
@@ -164,14 +169,9 @@ func TestFDBMoveDataDouble(t *testing.T) {
 				}
 			}
 
-			for _, want2 := range tc.outputWait {
-				rs, err2 := waitResp2.Recv()
-				if err2 != io.EOF {
-					testutil.FatalOnErr("fdbmovedata wait2 failed", err2, t)
-				}
-				if !(proto.Equal(want2, rs)) {
-					t.Errorf("want: %v, got: %v", want2, rs)
-				}
+			rs, err2 := waitResp2.Recv()
+			if err2 != io.EOF {
+				testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, rs), err2, t)
 			}
 		})
 	}
