@@ -148,8 +148,11 @@ func TestFDBMoveDataDouble(t *testing.T) {
 			testutil.FatalOnErr("fdbmovedata copy1 failed", errCopy1, t)
 			testutil.FatalOnErr("fdbmovedata copy2 failed", errCopy2, t)
 
-			if !(proto.Equal(resp1, resp2)) {
-				t.Errorf("want: %v, got: %v", resp1, resp2)
+			if !(resp1.Id == resp2.Id) {
+				t.Errorf("want: %v, got: %v", resp1.Id, resp2.Id)
+			}
+			if !(resp2.Existing) {
+				t.Errorf("Expected resp2 to return an existing run")
 			}
 
 			waitReq := &pb.FDBMoveDataWaitRequest{
