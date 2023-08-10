@@ -223,10 +223,15 @@ func (*getCmd) Name() string     { return "get" }
 func (*getCmd) Synopsis() string { return "Makes a HTTP call to a port on a remote host" }
 func (*getCmd) Usage() string {
 	return `get [-method METHOD] [-header Header...] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
-    Make a HTTP request to a specified port on the remote host.
+  Make a HTTP request to a specified port on the remote host.
 
-	Note: if we set the domain name other than localhost for flag --hostname, and want to use snsshell proxy action to proxy requests
-	don't forget to add --allow-any-host for proxy action
+  Example: 
+  httpoverrpc get --hostname 10.1.23.4 --protocol https 9090 /hello 
+
+  Note: 
+  1. The prefix / in request_uri is always needed, even there is nothing to put
+  2. If we use --hostname to send requests to a specified host instead of the default localhost, and want to use snsshell proxy action 
+  to proxy requests, don't forget to add --allow-any-host for proxy action
 `
 }
 
