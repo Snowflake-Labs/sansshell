@@ -58,11 +58,11 @@ var (
 			cmd = append(cmd, fmt.Sprintf("--lines=%d", p.TailLine))
 		}
 		if p.TimeSince != nil {
-			timeStr := p.TimeSince.AsTime().Format(util.TimeFormat_YYYYMMDDHHMMSS)
+			timeStr := p.TimeSince.AsTime().Format(pb.TimeFormat_YYYYMMDDHHMMSS)
 			cmd = append(cmd, fmt.Sprintf("--since=%v", timeStr))
 		}
 		if p.TimeUntil != nil {
-			timeStr := p.TimeUntil.AsTime().Format(util.TimeFormat_YYYYMMDDHHMMSS)
+			timeStr := p.TimeUntil.AsTime().Format(pb.TimeFormat_YYYYMMDDHHMMSS)
 			cmd = append(cmd, fmt.Sprintf("--until=%v", timeStr))
 		}
 		// since json output contains all necessary information we need for now

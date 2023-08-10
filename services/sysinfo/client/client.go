@@ -226,7 +226,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	// validate the tail number is set correctly
 	// reason we set this limit is due to the limit of DefRunBufLimit set for stdout
 	// https://github.com/Snowflake-Labs/sansshell/blob/989cb789586532eaa22b75303ea94c97ca246306/services/util/util.go#L161.
-	if p.tail > 10000 {
+	if p.tail > pb.JounalEntriesLimit {
 		fmt.Fprintln(os.Stderr, "cannot set tail number larger than 10000")
 		return subcommands.ExitUsageError
 	}
@@ -243,7 +243,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitUsageError
 	}
 	if p.since != "" {
-		sinceTime, err := time.ParseInLocation(util.TimeFormat_YYYYMMDDHHMMSS, p.since, loc)
+		sinceTime, err := time.ParseInLocation(pb.TimeFormat_YYYYMMDDHHMMSS, p.since, loc)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
 			return subcommands.ExitUsageError
@@ -252,7 +252,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	if p.until != "" {
-		untilTime, err := time.ParseInLocation(util.TimeFormat_YYYYMMDDHHMMSS, p.until, loc)
+		untilTime, err := time.ParseInLocation(pb.TimeFormat_YYYYMMDDHHMMSS, p.until, loc)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
 			return subcommands.ExitUsageError

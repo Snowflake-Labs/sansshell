@@ -439,6 +439,3 @@ func (i *IntSliceFlags) Set(val string) error {
 	}
 	return nil
 }
-
-// YYYY-MM-DD HH:MM:SS time format
-const TimeFormat_YYYYMMDDHHMMSS = "2006-01-02 15:04:05"

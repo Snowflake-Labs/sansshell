@@ -118,7 +118,7 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 func (s *server) Journal(req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {
 	ctx := stream.Context()
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	if req.TailLine > 10000 {
+	if req.TailLine > pb.JounalEntriesLimit {
 		recorder.CounterOrLog(ctx, sysinfoJournalFailureCounter, 1, attribute.String("reason", "bad_args"))
 		return status.Errorf(codes.InvalidArgument, "can't set tail number larger than 10000")
 	}
