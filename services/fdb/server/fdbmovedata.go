@@ -86,9 +86,7 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 
 	// Add env vars for python and python bindings
 	cmd := exec.Command(command[0], command[1:]...)
-	// TODO: change to finalized locations when ready
-	cmd.Env = append(cmd.Environ(), "PYTHONPATH=/home/teleport-jfu/python")
-	// cmd.Env = append(cmd.Environ(), "PYTHONPATH=/opt/rh/rh-python36/root/lib/python3.6/site-packages/")
+	cmd.Env = append(cmd.Environ(), "PYTHONPATH=/opt/rh/rh-python36/root/lib/python3.6/site-packages/")
 	cmd.Env = append(cmd.Environ(), "PATH=/opt/rh/rh-python36/root/bin")
 	cmd.Env = append(cmd.Environ(), "PYTHONUNBUFFERED=true")
 
