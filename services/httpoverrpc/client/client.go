@@ -285,6 +285,7 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	resp, err := proxy.HostOneMany(ctx, req)
+	retCode := subcommands.ExitSuccess
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
@@ -295,6 +296,7 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	for r := range resp {
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+			retCode = subcommands.ExitFailure
 			continue
 		}
 		if g.showResponseHeaders {
@@ -308,5 +310,5 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
 	}
-	return subcommands.ExitSuccess
+	return retCode
 }
