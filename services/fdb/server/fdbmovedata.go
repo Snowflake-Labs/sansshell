@@ -73,7 +73,8 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	if !(s.cmd == nil) {
 		logger.Info("existing command already running. returning early")
 		earlyresp := &pb.FDBMoveDataCopyResponse{
-			Id: s.id,
+			Id:       s.id,
+			Existing: true,
 		}
 		return earlyresp, nil
 	}
@@ -87,6 +88,7 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	cmd := exec.Command(command[0], command[1:]...)
 	// TODO: change to finalized locations when ready
 	cmd.Env = append(cmd.Environ(), "PYTHONPATH=/home/teleport-jfu/python")
+	// cmd.Env = append(cmd.Environ(), "PYTHONPATH=/opt/rh/rh-python36/root/lib/python3.6/site-packages/")
 	cmd.Env = append(cmd.Environ(), "PATH=/opt/rh/rh-python36/root/bin")
 	cmd.Env = append(cmd.Environ(), "PYTHONUNBUFFERED=true")
 
@@ -107,11 +109,13 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	err = s.cmd.Start()
 	if err != nil {
 		s.cmd = nil
+		s.id = 0
 		return nil, status.Errorf(codes.Internal, "error running fdbmovedata cmd (%+v): %v", command, err)
 	}
 
 	resp := &pb.FDBMoveDataCopyResponse{
-		Id: s.id,
+		Id:       s.id,
+		Existing: false,
 	}
 	return resp, nil
 }

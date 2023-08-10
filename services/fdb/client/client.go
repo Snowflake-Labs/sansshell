@@ -3569,41 +3569,26 @@ func (p *fdbServerVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args
 
 const fdbMoveDataCLIPackage = "fdbmovedata"
 
-func GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
+func (*fdbMoveDataCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(fdbMoveDataCLIPackage, f)
 	c.Register(&fdbMoveDataCopyCmd{}, "")
 	c.Register(&fdbMoveDataWaitCmd{}, "")
 	return c
 }
 
-// This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
-type noCancel struct {
-	ctx context.Context
-}
-
-func (c noCancel) Deadline() (time.Time, bool)       { return time.Time{}, false }
-func (c noCancel) Done() <-chan struct{}             { return nil }
-func (c noCancel) Err() error                        { return nil }
-func (c noCancel) Value(key interface{}) interface{} { return c.ctx.Value(key) }
-
-// WithoutCancel returns a context that is never canceled.
-func WithoutCancel(ctx context.Context) context.Context {
-	return noCancel{ctx: ctx}
-}
-
 type fdbMoveDataCmd struct{}
 
 func (*fdbMoveDataCmd) Name() string             { return fdbMoveDataCLIPackage }
 func (*fdbMoveDataCmd) SetFlags(_ *flag.FlagSet) {}
-func (*fdbMoveDataCmd) Synopsis() string {
-	return "Copy data across two tenant groups in a metacluster.\n" + client.GenerateSynopsis(GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
+func (r *fdbMoveDataCmd) Synopsis() string {
+	return "Copy data across two tenant groups in a metacluster.\n" + client.GenerateSynopsis(r.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
 func (r *fdbMoveDataCmd) Usage() string {
 	return client.GenerateUsage(fdbMoveDataCLIPackage, r.Synopsis())
 }
 
 func (r *fdbMoveDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	c := GetSubpackage(f)
+	c := r.GetSubpackage(f)
 	return c.Execute(ctx, args...)
 }
 
@@ -3616,7 +3601,7 @@ func (*fdbMoveDataCopyCmd) Synopsis() string {
 	return "Initiate data copy across two tenant groups in a metacluster. Starts a long-running command on the server."
 }
 func (r *fdbMoveDataCopyCmd) Usage() string {
-	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> [numProcs]"
+	return "fdbmovedata copy <clusterFile> <capacityGroupIdentifier> <sourceClusterName> <destinationClusterName> [numProcs](default=10)"
 }
 
 func (r *fdbMoveDataCopyCmd) SetFlags(f *flag.FlagSet) {
@@ -3668,7 +3653,10 @@ func (r *fdbMoveDataCopyCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 			fmt.Fprintf(state.Err[r.Index], "fdb move data copy error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
-		fmt.Fprintf(state.Out[r.Index], "Command ID to wait on: %d\n", r.Resp.Id)
+		if r.Resp.Existing {
+			fmt.Fprintf(state.Out[r.Index], "An existing command is already running on the server.\n")
+		}
+		fmt.Fprintf(state.Out[r.Index], "Run fdbmovedata wait %d to wait for the process to complete\n", r.Resp.Id)
 	}
 
 	return retCode
@@ -3713,6 +3701,21 @@ func (r *fdbMoveDataWaitCmd) printCommandOutput(state *util.ExecuteState, idx in
 	if resp.RetCode != 0 {
 		r.returnCode = subcommands.ExitFailure
 	}
+}
+
+// This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
+type noCancel struct {
+	ctx context.Context
+}
+
+func (c noCancel) Deadline() (time.Time, bool)       { return time.Time{}, false }
+func (c noCancel) Done() <-chan struct{}             { return nil }
+func (c noCancel) Err() error                        { return nil }
+func (c noCancel) Value(key interface{}) interface{} { return c.ctx.Value(key) }
+
+// WithoutCancel returns a context that is never canceled.
+func WithoutCancel(ctx context.Context) context.Context {
+	return noCancel{ctx: ctx}
 }
 
 func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {

@@ -66,6 +66,7 @@ message FDBMoveDataCopyRequest {
 
 message FDBMoveDataCopyResponse {
   int64 id = 1;
+  bool existing = 2;
 }
 
 message FDBMoveDataWaitRequest {
