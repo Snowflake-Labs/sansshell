@@ -226,7 +226,7 @@ func (*getCmd) Usage() string {
   Make a HTTP request to a specified port on the remote host.
 
   Example: 
-  httpoverrpc get --hostname localhost --protocol https 9090 /hello 
+  httpoverrpc get --hostname 10.1.23.4 --protocol https 9090 /hello 
 
   Note: 
   1. The prefix / in request_uri is always needed, even there is nothing to put
