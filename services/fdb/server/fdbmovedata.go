@@ -160,6 +160,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 			}
 		}
 	}()
+	wg.Wait()
 	err := s.cmd.Wait()
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
@@ -167,7 +168,6 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	// clear the cmd to allow another call
 	s.cmd = nil
 	s.id = 0
-	wg.Wait()
 	return err
 }
 
