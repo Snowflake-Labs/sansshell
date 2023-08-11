@@ -124,10 +124,16 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	ctx := stream.Context()
+	logger := logr.FromContextOrDiscard(ctx)
 	if !(req.Id == s.id) {
+		logger.Info("Provided ID and stored ID do not match")
+		logger.Info("Provided ID", "id", req.Id)
+		logger.Info("Stored ID", "id", s.id)
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
 	if s.cmd == nil {
+		logger.Info("No command running on the server")
 		return status.Errorf(codes.Internal, "No command running on the server")
 	}
 	wg := &sync.WaitGroup{}
