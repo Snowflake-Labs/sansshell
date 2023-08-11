@@ -72,6 +72,8 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	// The sansshell server should only run one copy command at a time
 	if !(s.cmd == nil) {
 		logger.Info("existing command already running. returning early")
+		logger.Info("command details", "cmd", s.cmd.String())
+		logger.Info("command running with id", "id", s.id)
 		earlyresp := &pb.FDBMoveDataCopyResponse{
 			Id:       s.id,
 			Existing: true,
@@ -101,6 +103,7 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	}
 
 	logger.Info("executing local command", "cmd", cmd.String())
+	logger.Info("command running with id", "id", s.id)
 	s.cmd = cmd
 	s.stdout = stdout
 	s.stderr = stderr
