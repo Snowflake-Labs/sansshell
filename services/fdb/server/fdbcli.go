@@ -402,6 +402,16 @@ func generateFDBCLITopArgs(req *pb.FDBCLIRequest) ([]string, []captureLogs, erro
 	args = stringFlag(args, req.Memory, "--memory")
 	args = boolFlag(args, req.BuildFlags, "--build-flags")
 	args = int32Flag(args, req.Timeout, "--timeout")
+	if req.Knobs != nil {
+		knobs := strings.Split(req.Knobs.GetValue(), ",")
+		for _, knobPair := range knobs {
+			knobPairSplit := strings.Split(knobPair, "=")
+			if len(knobPairSplit) != 2 {
+				return nil, nil, status.Errorf(codes.Internal, "can't parse knob: %s", knobPair)
+			}
+			args = append(args, fmt.Sprintf("--knob_%s=%s", knobPairSplit[0], knobPairSplit[1]))
+		}
+	}
 	return args, logs, nil
 }
 

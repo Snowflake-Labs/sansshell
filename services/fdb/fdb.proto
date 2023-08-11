@@ -558,7 +558,7 @@ message FDBCLIUnknownAction {}
 // FDBCLIRequest defines the fdbcli command(s) to run.
 // This will replicate fdbcli --exec "command(s)" (where N commands are
 // separated by ;)
-// NEXT: 19
+// NEXT: 20
 message FDBCLIRequest {
   reserved 11, 12, 13;
   // NOTE: Doesn't include status-from-json as that just prints a status
@@ -594,7 +594,10 @@ message FDBCLIRequest {
   google.protobuf.BoolValue build_flags = 17;
   // Maps to --timeout
   google.protobuf.Int32Value timeout = 18;
-  repeated FDBCLICommand commands = 19;
+  // Maps to --knob_<knob_name>=<knob_value>
+  // Provide a comma-separated list in the form "<knob_name1>=<knob_value1>,<knob_name2>=<knob_value2>, ..."
+  google.protobuf.StringValue knobs = 19;
+  repeated FDBCLICommand commands = 20;
 }
 
 message Log {

@@ -186,7 +186,7 @@ func (p *fdbCLICmd) Synopsis() string {
 	return "Run a fdbcli command on the given host.\n" + client.GenerateSynopsis(p.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
 }
 func (p *fdbCLICmd) Usage() string {
-	return `fdbcli [--cluster-file|-C=X] [--log] [--trace-format=X] [–-tls_certificate_file=X] [–-tls_ca_file=X] [–-tls_key_file=X] [–-tls_password=X] [--tls_verify_peers=X] [--debug-tls] [--version|-v] [--log-group=X] [--no-status] [--memory=X] [--build-flags] [--timeout=N] [--status-from-json] --exec "<command> <options>"
+	return `fdbcli [--cluster-file|-C=X] [--log] [--trace-format=X] [–-tls_certificate_file=X] [–-tls_ca_file=X] [–-tls_key_file=X] [–-tls_password=X] [--tls_verify_peers=X] [--debug-tls] [--version|-v] [--log-group=X] [--no-status] [--memory=X] [--build-flags] [--timeout=N] [--status-from-json] [--knobs=X] --exec "<command> <options>"
 
 	Run fdbcli for the given command with specified top level flags as well as any command specific flags.
 
@@ -309,6 +309,12 @@ func (r *fdbCLICmd) SetFlags(f *flag.FlagSet) {
 		}
 		r.req.Timeout = &wrapperspb.Int32Value{
 			Value: int32(v),
+		}
+		return nil
+	})
+	f.Func("knobs", "knobs for fdbcli, comma-separated in the form <knob_name1>=<knob_value1>,<knob_name2>=<knob_value2>, ...", func(s string) error {
+		r.req.Knobs = &wrapperspb.StringValue{
+			Value: s,
 		}
 		return nil
 	})
