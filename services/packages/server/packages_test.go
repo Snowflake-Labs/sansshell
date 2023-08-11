@@ -847,8 +847,8 @@ func TestSearch(t *testing.T) {
 			},
 			wantInstalledPackages: []string{firefoxInstalled},
 			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
-			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
-			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra --plugins %s --installed", RepoqueryBin, testPackageName),
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra --plugins %s --show-duplicates", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --installed flag",
@@ -857,7 +857,7 @@ func TestSearch(t *testing.T) {
 				Installed: true,
 			},
 			wantInstalledPackages: []string{firefoxInstalled},
-			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName),
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra --plugins %s --installed", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --latest flag",
@@ -866,7 +866,7 @@ func TestSearch(t *testing.T) {
 				Available: true,
 			},
 			wantAvailablePackages: []string{firefoxV1, firefoxV2, firefoxV3},
-			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName),
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra --plugins %s --show-duplicates", RepoqueryBin, testPackageName),
 		},
 		{
 			name: "specify --latest flag and the package not found in yum repos expect empty",
@@ -875,7 +875,7 @@ func TestSearch(t *testing.T) {
 				Available: true,
 			},
 			wantAvailablePackages: []string{},
-			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra %s --show-duplicates", RepoqueryBin, testPackageName+"9999"),
+			wantCmdLineAvailable:  fmt.Sprintf("%s --nevra --plugins %s --show-duplicates", RepoqueryBin, testPackageName+"9999"),
 		},
 		{
 			name: "specify --current flag and the package not found in current system expect empty",
@@ -884,7 +884,7 @@ func TestSearch(t *testing.T) {
 				Installed: true,
 			},
 			wantAvailablePackages: []string{},
-			wantCmdLineInstall:    fmt.Sprintf("%s --nevra %s --installed", RepoqueryBin, testPackageName+"9999"),
+			wantCmdLineInstall:    fmt.Sprintf("%s --nevra --plugins %s --installed", RepoqueryBin, testPackageName+"9999"),
 		},
 	} {
 		tc := tc
