@@ -127,9 +127,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 	ctx := stream.Context()
 	logger := logr.FromContextOrDiscard(ctx)
 	if !(req.Id == s.id) {
-		logger.Info("Provided ID and stored ID do not match")
-		logger.Info("Provided ID", "id", req.Id)
-		logger.Info("Stored ID", "id", s.id)
+		logger.Info("Provided ID and stored ID do not match", "providedID", req.Id, "storedID", s.id)
 		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
 	}
 	if s.cmd == nil {
