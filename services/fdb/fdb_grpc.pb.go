@@ -203,6 +203,159 @@ var Conf_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
+	FDBMove_FDBMoveDataCopy_FullMethodName = "/Fdb.FDBMove/FDBMoveDataCopy"
+	FDBMove_FDBMoveDataWait_FullMethodName = "/Fdb.FDBMove/FDBMoveDataWait"
+)
+
+// FDBMoveClient is the client API for FDBMove service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type FDBMoveClient interface {
+	FDBMoveDataCopy(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (*FDBMoveDataCopyResponse, error)
+	FDBMoveDataWait(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (FDBMove_FDBMoveDataWaitClient, error)
+}
+
+type fDBMoveClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewFDBMoveClient(cc grpc.ClientConnInterface) FDBMoveClient {
+	return &fDBMoveClient{cc}
+}
+
+func (c *fDBMoveClient) FDBMoveDataCopy(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (*FDBMoveDataCopyResponse, error) {
+	out := new(FDBMoveDataCopyResponse)
+	err := c.cc.Invoke(ctx, FDBMove_FDBMoveDataCopy_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBMoveClient) FDBMoveDataWait(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (FDBMove_FDBMoveDataWaitClient, error) {
+	stream, err := c.cc.NewStream(ctx, &FDBMove_ServiceDesc.Streams[0], FDBMove_FDBMoveDataWait_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &fDBMoveFDBMoveDataWaitClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type FDBMove_FDBMoveDataWaitClient interface {
+	Recv() (*FDBMoveDataWaitResponse, error)
+	grpc.ClientStream
+}
+
+type fDBMoveFDBMoveDataWaitClient struct {
+	grpc.ClientStream
+}
+
+func (x *fDBMoveFDBMoveDataWaitClient) Recv() (*FDBMoveDataWaitResponse, error) {
+	m := new(FDBMoveDataWaitResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// FDBMoveServer is the server API for FDBMove service.
+// All implementations should embed UnimplementedFDBMoveServer
+// for forward compatibility
+type FDBMoveServer interface {
+	FDBMoveDataCopy(context.Context, *FDBMoveDataCopyRequest) (*FDBMoveDataCopyResponse, error)
+	FDBMoveDataWait(*FDBMoveDataWaitRequest, FDBMove_FDBMoveDataWaitServer) error
+}
+
+// UnimplementedFDBMoveServer should be embedded to have forward compatible implementations.
+type UnimplementedFDBMoveServer struct {
+}
+
+func (UnimplementedFDBMoveServer) FDBMoveDataCopy(context.Context, *FDBMoveDataCopyRequest) (*FDBMoveDataCopyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBMoveDataCopy not implemented")
+}
+func (UnimplementedFDBMoveServer) FDBMoveDataWait(*FDBMoveDataWaitRequest, FDBMove_FDBMoveDataWaitServer) error {
+	return status.Errorf(codes.Unimplemented, "method FDBMoveDataWait not implemented")
+}
+
+// UnsafeFDBMoveServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to FDBMoveServer will
+// result in compilation errors.
+type UnsafeFDBMoveServer interface {
+	mustEmbedUnimplementedFDBMoveServer()
+}
+
+func RegisterFDBMoveServer(s grpc.ServiceRegistrar, srv FDBMoveServer) {
+	s.RegisterService(&FDBMove_ServiceDesc, srv)
+}
+
+func _FDBMove_FDBMoveDataCopy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBMoveDataCopyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBMoveServer).FDBMoveDataCopy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBMove_FDBMoveDataCopy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBMoveServer).FDBMoveDataCopy(ctx, req.(*FDBMoveDataCopyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBMove_FDBMoveDataWait_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FDBMoveDataWaitRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(FDBMoveServer).FDBMoveDataWait(m, &fDBMoveFDBMoveDataWaitServer{stream})
+}
+
+type FDBMove_FDBMoveDataWaitServer interface {
+	Send(*FDBMoveDataWaitResponse) error
+	grpc.ServerStream
+}
+
+type fDBMoveFDBMoveDataWaitServer struct {
+	grpc.ServerStream
+}
+
+func (x *fDBMoveFDBMoveDataWaitServer) Send(m *FDBMoveDataWaitResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+// FDBMove_ServiceDesc is the grpc.ServiceDesc for FDBMove service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var FDBMove_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Fdb.FDBMove",
+	HandlerType: (*FDBMoveServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "FDBMoveDataCopy",
+			Handler:    _FDBMove_FDBMoveDataCopy_Handler,
+		},
+	},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "FDBMoveDataWait",
+			Handler:       _FDBMove_FDBMoveDataWait_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "fdb.proto",
+}
+
+const (
 	CLI_FDBCLI_FullMethodName = "/Fdb.CLI/FDBCLI"
 )
 
