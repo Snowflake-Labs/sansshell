@@ -51,6 +51,34 @@ message DeleteRequest { Location location = 1; }
 
 message FdbConfResponse { string value = 1; }
 
+service FDBMove {
+  rpc FDBMoveDataCopy(FDBMoveDataCopyRequest) returns (FDBMoveDataCopyResponse);
+  rpc FDBMoveDataWait(FDBMoveDataWaitRequest) returns (stream FDBMoveDataWaitResponse);
+}
+
+message FDBMoveDataCopyRequest {
+  string cluster_file = 1;
+  string tenant_group = 2;
+  string source_cluster = 3;
+  string destination_cluster = 4;
+  int64 num_procs = 5;
+}
+
+message FDBMoveDataCopyResponse {
+  int64 id = 1;
+  bool existing = 2;
+}
+
+message FDBMoveDataWaitRequest {
+  int64 id = 1;
+}
+
+message FDBMoveDataWaitResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
+}
+
 service CLI {
   rpc FDBCLI(FDBCLIRequest) returns (stream FDBCLIResponse) {}
 }
@@ -410,6 +438,45 @@ message FDBCLISuspend {
   }
 }
 
+message FDBCLITenantEmergencyMoveStart {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveSwitch {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveFinish {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+message FDBCLITenantEmergencyMoveAbort {
+  string tenant_group = 1;
+  string source_cluster = 2;
+  string destination_cluster = 3;
+}
+
+
+message FDBCLITenantEmergencyMoveStatus {
+  string tenant_group = 1;
+}
+
+message FDBCLITenantEmergencyMove {
+  oneof request {
+    FDBCLITenantEmergencyMoveStart start = 1;
+    FDBCLITenantEmergencyMoveSwitch switch = 2;
+    FDBCLITenantEmergencyMoveFinish finish = 3;
+    FDBCLITenantEmergencyMoveAbort abort = 4;
+    FDBCLITenantEmergencyMoveStatus status = 5;
+  }
+}
+
 message FDBCLIThrottleActionOn {
   string tag = 1;
   google.protobuf.UInt32Value rate = 2;
@@ -496,7 +563,7 @@ message FDBCLIWaitopen {}
 // session such as reset or rollback.
 // This message is broken out separately for ease of use since it has
 // gotten so large.
-// NEXT: 49
+// NEXT: 50
 message FDBCLICommand {
   oneof command {
     // Does not include begin, commit, exit, help, reset, or rollback.
@@ -538,6 +605,7 @@ message FDBCLICommand {
     FDBCLISleep sleep = 22;
     FDBCLIStatus status = 23;
     FDBCLISuspend suspend = 43;
+    FDBCLITenantEmergencyMove tenant_emergency_move = 49;
     FDBCLIThrottle throttle = 24;
     FDBCLITriggerddteaminfolog triggerddteaminfolog = 25;
     FDBCLITssq tssq = 35;
