@@ -20,6 +20,7 @@ Copyright (c) 2023 Snowflake Inc. All rights reserved.
 package server
 
 import (
+	"context"
 	"time"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
@@ -33,4 +34,8 @@ var getUptime = func() (time.Duration, error) {
 
 var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 	return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
+}
+
+var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {
+	return status.Errorf(codes.Unimplemented, "journal is not supported")
 }

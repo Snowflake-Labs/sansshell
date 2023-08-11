@@ -19,12 +19,16 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
@@ -41,6 +45,7 @@ func (*sysinfoCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 	c.Register(&uptimeCmd{}, "")
 	c.Register(&dmesgCmd{}, "")
+	c.Register(&journalCmd{}, "")
 	return c
 }
 
@@ -183,6 +188,148 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			}
 			record := r.Resp.Record
 			fmt.Fprintf(state.Out[i], "[%s]: %s", record.Time.AsTime().Local(), record.Message)
+		}
+	}
+	return exit
+}
+
+type journalCmd struct {
+	since      string
+	until      string
+	tail       uint64
+	unit       string
+	enableJSON bool
+}
+
+func (*journalCmd) Name() string     { return "journalctl" }
+func (*journalCmd) Synopsis() string { return "Get the log entries stored in journald" }
+func (*journalCmd) Usage() string {
+	return `journalctl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X] [-o|--output=X]:
+	Get the log entries stored in journald by systemd-journald.service 
+`
+}
+
+func (p *journalCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&p.since, "since", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter from")
+	f.StringVar(&p.since, "S", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter from (the date time is included)")
+	f.StringVar(&p.until, "until", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until (the date time is not included)")
+	f.StringVar(&p.until, "U", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until")
+	f.StringVar(&p.unit, "unit", "", "Sets systemd unit to filter messages")
+	f.BoolVar(&p.enableJSON, "json", false, "Print the journal entries in JSON format(can work with jq for better visualization)")
+	f.Uint64Var(&p.tail, "tail", 100, "If positive, the latest n records to fetch. By default, fetch latest 100 records. The upper limit is 10000 for now")
+}
+
+func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewSysInfoClientProxy(state.Conn)
+
+	// validate the tail number is set correctly
+	// reason we set this limit is due to the limit of DefRunBufLimit set for stdout
+	// https://github.com/Snowflake-Labs/sansshell/blob/989cb789586532eaa22b75303ea94c97ca246306/services/util/util.go#L161.
+	if p.tail > pb.JounalEntriesLimit {
+		fmt.Fprintln(os.Stderr, "cannot set tail number larger than 10000")
+		return subcommands.ExitUsageError
+	}
+
+	req := &pb.JournalRequest{
+		TailLine:   uint32(p.tail),
+		Unit:       p.unit,
+		EnableJson: p.enableJSON,
+	}
+	// Note: if timestamp is passed, don't forget to conver to UTC before sending the rpc request
+	loc, err := time.LoadLocation("Local")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot get local location")
+		return subcommands.ExitUsageError
+	}
+	if p.since != "" {
+		sinceTime, err := time.ParseInLocation(pb.TimeFormat_YYYYMMDDHHMMSS, p.since, loc)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
+			return subcommands.ExitUsageError
+		}
+		req.TimeSince = timestamppb.New(sinceTime.UTC())
+	}
+
+	if p.until != "" {
+		untilTime, err := time.ParseInLocation(pb.TimeFormat_YYYYMMDDHHMMSS, p.until, loc)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "please specify correct time pattern YYYY-MM-DD HH:MM:SS")
+			return subcommands.ExitUsageError
+		}
+		req.TimeUntil = timestamppb.New(untilTime.UTC())
+	}
+
+	stream, err := c.JournalOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - could not info servers: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	targetsDone := make(map[int]bool)
+	exit := subcommands.ExitSuccess
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			// But...we only do this for targets that aren't complete. A complete target
+			// didn't have an error. i.e. we got N done then the context expired.
+			for i, e := range state.Err {
+				if !targetsDone[i] {
+					fmt.Fprintf(e, "Stream error: %v\n", err)
+				}
+			}
+			exit = subcommands.ExitFailure
+			break
+		}
+		for i, r := range resp {
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
+				targetsDone[r.Index] = true
+				// If any target had errors it needs to be reported for that target but we still
+				// need to process responses off the channel. Final return code though should
+				// indicate something failed.
+				exit = subcommands.ExitFailure
+				continue
+			}
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			// format the output in different way based on the given return type
+			switch t := r.Resp.Response.(type) {
+			case *pb.JournalReply_Journal:
+				journal := t.Journal
+				// some journal entries may not be generated by a process(no pid)
+				displayPid := ""
+				if journal.Pid != 0 {
+					displayPid = fmt.Sprintf("[%d]", journal.Pid)
+				}
+				fmt.Fprintf(state.Out[i], "[%s]  %s %s%s: %s\n", journal.RealtimeTimestamp.AsTime().Local(), journal.Hostname, journal.SyslogIdentifier, displayPid, journal.Message)
+			case *pb.JournalReply_JournalRaw:
+				journalRaw := t.JournalRaw
+				// Encode the map to JSON
+				var jsonData []byte
+				if p.enableJSON {
+					jsonData, err = json.Marshal(journalRaw.Entry)
+					if err != nil {
+						fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned cannot encode journal entry to JSON\n", r.Target, r.Index)
+						exit = subcommands.ExitFailure
+						continue
+					}
+				}
+				// Convert the JSON data to a string
+				jsonString := string(jsonData)
+				fmt.Fprintf(state.Out[i], "%s\n", jsonString)
+			}
 		}
 	}
 	return exit

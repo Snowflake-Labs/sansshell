@@ -30,6 +30,8 @@ service SysInfo {
   rpc Uptime(google.protobuf.Empty) returns (UptimeReply) {}
   // display kernel-related messages 
   rpc Dmesg(DmesgRequest) returns (stream DmesgReply) {}
+  // Journal returns journal entries collected by systemd journald service
+  rpc Journal(JournalRequest) returns (stream JournalReply) {}
 }
 
 message UptimeReply {
@@ -55,4 +57,43 @@ message DmesgReply {
 message DmsgRecord{
   google.protobuf.Timestamp time = 1;
   string message = 2;
+}
+
+message JournalRequest {
+  // The start time for query, timestamp format will be YYYY-MM-DD HH:MM:SS 
+  google.protobuf.Timestamp time_since = 1;
+  // The end time for query
+  google.protobuf.Timestamp time_until = 2;
+  // Tail the latest number of log entries from the journal, negative means display all messages 
+  uint32 tail_line = 3;
+  // Filter messages for specified systemd units  
+  string unit = 4;
+  // Controls the format of the journal entries
+  bool enable_json = 5;
+}
+
+message JournalReply {
+  oneof response {
+    JournalRecord journal = 1;
+    JournalRecordRaw journalRaw = 2;
+  }
+}
+
+// journal record is the default format
+// and contains fields the same as journalctl output in linux 
+message JournalRecord {
+  google.protobuf.Timestamp realtime_timestamp = 1;
+  string hostname = 2;
+  string syslog_identifier = 3;
+  int32 pid = 4;
+  string message = 5;
+}
+
+// raw journal record will contain most fields 
+// and display in specified output format
+message JournalRecordRaw {
+  // when output is set to json or json-pretty
+  // a list of key-value pairs will be set here
+  // the key-value pairs will be different with different messages
+  map<string, string> entry = 1;
 }

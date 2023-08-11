@@ -35,8 +35,9 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	SysInfo_Uptime_FullMethodName = "/SysInfo.SysInfo/Uptime"
-	SysInfo_Dmesg_FullMethodName  = "/SysInfo.SysInfo/Dmesg"
+	SysInfo_Uptime_FullMethodName  = "/SysInfo.SysInfo/Uptime"
+	SysInfo_Dmesg_FullMethodName   = "/SysInfo.SysInfo/Dmesg"
+	SysInfo_Journal_FullMethodName = "/SysInfo.SysInfo/Journal"
 )
 
 // SysInfoClient is the client API for SysInfo service.
@@ -47,6 +48,8 @@ type SysInfoClient interface {
 	Uptime(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*UptimeReply, error)
 	// display kernel-related messages
 	Dmesg(ctx context.Context, in *DmesgRequest, opts ...grpc.CallOption) (SysInfo_DmesgClient, error)
+	// Journal returns journal entries collected by systemd journald service
+	Journal(ctx context.Context, in *JournalRequest, opts ...grpc.CallOption) (SysInfo_JournalClient, error)
 }
 
 type sysInfoClient struct {
@@ -98,6 +101,38 @@ func (x *sysInfoDmesgClient) Recv() (*DmesgReply, error) {
 	return m, nil
 }
 
+func (c *sysInfoClient) Journal(ctx context.Context, in *JournalRequest, opts ...grpc.CallOption) (SysInfo_JournalClient, error) {
+	stream, err := c.cc.NewStream(ctx, &SysInfo_ServiceDesc.Streams[1], SysInfo_Journal_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &sysInfoJournalClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type SysInfo_JournalClient interface {
+	Recv() (*JournalReply, error)
+	grpc.ClientStream
+}
+
+type sysInfoJournalClient struct {
+	grpc.ClientStream
+}
+
+func (x *sysInfoJournalClient) Recv() (*JournalReply, error) {
+	m := new(JournalReply)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SysInfoServer is the server API for SysInfo service.
 // All implementations should embed UnimplementedSysInfoServer
 // for forward compatibility
@@ -106,6 +141,8 @@ type SysInfoServer interface {
 	Uptime(context.Context, *emptypb.Empty) (*UptimeReply, error)
 	// display kernel-related messages
 	Dmesg(*DmesgRequest, SysInfo_DmesgServer) error
+	// Journal returns journal entries collected by systemd journald service
+	Journal(*JournalRequest, SysInfo_JournalServer) error
 }
 
 // UnimplementedSysInfoServer should be embedded to have forward compatible implementations.
@@ -117,6 +154,9 @@ func (UnimplementedSysInfoServer) Uptime(context.Context, *emptypb.Empty) (*Upti
 }
 func (UnimplementedSysInfoServer) Dmesg(*DmesgRequest, SysInfo_DmesgServer) error {
 	return status.Errorf(codes.Unimplemented, "method Dmesg not implemented")
+}
+func (UnimplementedSysInfoServer) Journal(*JournalRequest, SysInfo_JournalServer) error {
+	return status.Errorf(codes.Unimplemented, "method Journal not implemented")
 }
 
 // UnsafeSysInfoServer may be embedded to opt out of forward compatibility for this service.
@@ -169,6 +209,27 @@ func (x *sysInfoDmesgServer) Send(m *DmesgReply) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _SysInfo_Journal_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(JournalRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SysInfoServer).Journal(m, &sysInfoJournalServer{stream})
+}
+
+type SysInfo_JournalServer interface {
+	Send(*JournalReply) error
+	grpc.ServerStream
+}
+
+type sysInfoJournalServer struct {
+	grpc.ServerStream
+}
+
+func (x *sysInfoJournalServer) Send(m *JournalReply) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // SysInfo_ServiceDesc is the grpc.ServiceDesc for SysInfo service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -185,6 +246,11 @@ var SysInfo_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Dmesg",
 			Handler:       _SysInfo_Dmesg_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "Journal",
+			Handler:       _SysInfo_Journal_Handler,
 			ServerStreams: true,
 		},
 	},
