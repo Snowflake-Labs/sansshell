@@ -18,6 +18,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -33,6 +34,7 @@ import (
 	"github.com/google/subcommands"
 
 	"github.com/Snowflake-Labs/sansshell/client"
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	pb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
@@ -311,4 +313,85 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
 	}
 	return retCode
+}
+
+type HTTPCaller struct {
+	conn *proxy.Conn
+}
+
+func NewHTTPCaller(ctx context.Context, conn *proxy.Conn) *HTTPCaller {
+	return &HTTPCaller{
+		conn,
+	}
+}
+
+func httpHeaderToPbHeader(h *http.Header) []*pb.Header {
+	result := []*pb.Header{}
+	for k, v := range *h {
+		result = append(result, &pb.Header{
+			Key:    k,
+			Values: v,
+		})
+	}
+
+	return result
+}
+
+func pbHeaderToHTTPHeader(header []*pb.Header) http.Header {
+	result := http.Header{}
+	for _, h := range header {
+		result[h.Key] = h.Values
+	}
+
+	return result
+}
+
+func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
+	reader := bytes.NewReader(rep.Body)
+	body := io.NopCloser(reader)
+	header := pbHeaderToHTTPHeader(rep.Headers)
+	result := &http.Response{
+		Body:       body,
+		StatusCode: int(rep.StatusCode),
+		Header:     header,
+	}
+
+	return result
+}
+
+func (c *HTTPCaller) RoundTrip(req *http.Request) (*http.Response, error) {
+	proxy := pb.NewHTTPOverRPCClientProxy(c.conn)
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	port, err := strconv.Atoi(req.URL.Port())
+	if err != nil {
+		return nil, err
+	}
+	reqPb := &pb.HostHTTPRequest{
+		Request: &pb.HTTPRequest{
+			RequestUri: req.RequestURI,
+			Method:     req.Method,
+			Headers:    httpHeaderToPbHeader(&req.Header),
+			Body:       body,
+		},
+		Port:     int32(port),
+		Protocol: "http",
+		Hostname: req.Host,
+	}
+
+	resp, err := proxy.HostOneMany(req.Context(), reqPb)
+	if err != nil {
+		return nil, err
+	}
+	for r := range resp {
+		if r.Error != nil {
+			return nil, r.Error
+		}
+		// only take the first response
+		re := pbReplytoHTTPResponse(r.Resp)
+		return re, nil
+	}
+	return nil, fmt.Errorf("no response received.")
 }
