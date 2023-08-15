@@ -385,13 +385,7 @@ func (c *HTTPCaller) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	for r := range resp {
-		if r.Error != nil {
-			return nil, r.Error
-		}
-		// only take the first response
-		re := pbReplytoHTTPResponse(r.Resp)
-		return re, nil
-	}
-	return nil, fmt.Errorf("no response received.")
+	ra := <-resp
+	result := pbReplytoHTTPResponse(ra.Resp)
+	return result, nil
 }
