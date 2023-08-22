@@ -170,6 +170,8 @@ var (
 		case pb.PackageSystem_PACKAGE_SYSTEM_YUM:
 			out = append(out, RepoqueryBin)
 			out = append(out, "--nevra")
+			// repoquery will load and use any YUM plugins that are installed and enabled on system.
+			out = append(out, "--plugins")
 			out = append(out, p.Name)
 			// add options based on search type
 			switch searchType {
