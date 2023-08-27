@@ -319,7 +319,7 @@ type HTTPCaller struct {
 	conn *proxy.Conn
 }
 
-func NewHTTPCaller(ctx context.Context, conn *proxy.Conn) *HTTPCaller {
+func NewHTTPCaller(conn *proxy.Conn) *HTTPCaller {
 	return &HTTPCaller{
 		conn,
 	}
