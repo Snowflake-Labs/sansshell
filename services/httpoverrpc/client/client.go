@@ -361,13 +361,13 @@ func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
 
 func (c *HTTPCaller) RoundTrip(req *http.Request) (*http.Response, error) {
 	proxy := pb.NewHTTPOverRPCClientProxy(c.conn)
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	port, err := strconv.Atoi(req.URL.Port())
-	if err != nil {
-		return nil, err
+	body := []byte{}
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			return nil, err
+		}
 	}
 	reqPb := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
@@ -376,9 +376,28 @@ func (c *HTTPCaller) RoundTrip(req *http.Request) (*http.Response, error) {
 			Headers:    httpHeaderToPbHeader(&req.Header),
 			Body:       body,
 		},
-		Port:     int32(port),
-		Protocol: "http",
-		Hostname: req.Host,
+		Hostname: req.URL.Hostname(),
+	}
+	// Add protocol
+	reqPb.Protocol = "http"
+	if req.URL.Scheme == "https" {
+		reqPb.Protocol = "https"
+	}
+
+	// Add port
+	if req.URL.Port() != "" {
+		port, err := strconv.Atoi(req.URL.Port())
+		if err != nil {
+			return nil, err
+		}
+		reqPb.Port = int32(port)
+	} else {
+		// No port in URL, add default port
+		if reqPb.Protocol == "http" {
+			reqPb.Port = 80
+		} else {
+			reqPb.Port = 443
+		}
 	}
 
 	resp, err := proxy.HostOneMany(req.Context(), reqPb)
