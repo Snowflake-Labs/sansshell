@@ -315,12 +315,12 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	return retCode
 }
 
-type HTTPCaller struct {
+type HTTPTransporter struct {
 	conn *proxy.Conn
 }
 
-func NewHTTPCaller(conn *proxy.Conn) *HTTPCaller {
-	return &HTTPCaller{
+func NewHTTPTransporter(conn *proxy.Conn) *HTTPTransporter {
+	return &HTTPTransporter{
 		conn,
 	}
 }
@@ -359,7 +359,7 @@ func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
 	return result
 }
 
-func (c *HTTPCaller) RoundTrip(req *http.Request) (*http.Response, error) {
+func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	proxy := pb.NewHTTPOverRPCClientProxy(c.conn)
 	body := []byte{}
 	if req.Body != nil {
