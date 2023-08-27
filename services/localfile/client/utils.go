@@ -13,28 +13,30 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
-// ReadRemoteFile is a helper function for reading a single file from a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
-func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte, error) {
-	if len(conn.Targets) != 1 {
-		return nil, errors.New("ReadRemoteFile only supports single targets")
-	}
+type ReadRemoteFileResponse struct {
+	Target  string
+	Index   int
+	Content []byte
+}
 
-	c := pb.NewLocalFileClient(conn)
-	stream, err := c.Read(ctx, &pb.ReadActionRequest{
+// ReadRemoteFile is a helper function for reading a single file from a remote host using a proxy.Conn.
+func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]ReadRemoteFileResponse, error) {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.ReadActionRequest{
 		Request: &pb.ReadActionRequest_File{
 			File: &pb.ReadRequest{
 				Filename: path,
 			},
 		},
-	})
+	}
+	stream, err := c.ReadOneMany(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("can't setup Read client stream: %v", err)
 	}
 
-	var ret []byte
+	ret := make([]ReadRemoteFileResponse, len(conn.Targets))
 	for {
-		resp, err := stream.Recv()
+		responses, err := stream.Recv()
 		// Stream is done.
 		if err == io.EOF {
 			break
@@ -43,7 +45,13 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte,
 		if err != nil {
 			return nil, fmt.Errorf("can't read file %s - %v", path, err)
 		}
-		ret = append(ret, resp.Contents...)
+		for _, r := range responses {
+			ret[r.Index] = ReadRemoteFileResponse{
+				Target:  r.Target,
+				Index:   r.Index,
+				Content: r.Resp.GetContents(),
+			}
+		}
 	}
 	return ret, nil
 }
