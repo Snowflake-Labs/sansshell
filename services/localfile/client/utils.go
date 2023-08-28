@@ -35,8 +35,27 @@ type ReadRemoteFileResponse struct {
 	Contents []byte
 }
 
-// ReadRemoteFile is a helper function for reading a single file from a remote host using a proxy.Conn.
-func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]ReadRemoteFileResponse, error) {
+// ReadRemoteFile is a helper function for reading a single file from a remote host
+// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte, error) {
+	if len(conn.Targets) != 1 {
+		return nil, errors.New("ReadRemoteFile only supports single targets")
+	}
+
+	result, err := ReadRemoteFileMany(ctx, conn, path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) < 1 {
+		return nil, fmt.Errorf("ReadRemoteFile error: received an empty result")
+	}
+
+	return result[0].Contents, nil
+}
+
+// ReadRemoteFileMany is a helper function for reading a single file from remote hosts using a proxy.Conn.
+func ReadRemoteFileMany(ctx context.Context, conn *proxy.Conn, path string) ([]ReadRemoteFileResponse, error) {
 	c := pb.NewLocalFileClientProxy(conn)
 	req := &pb.ReadActionRequest{
 		Request: &pb.ReadActionRequest_File{
