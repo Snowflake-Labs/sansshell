@@ -35,6 +35,7 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]ReadR
 	}
 
 	ret := make([]ReadRemoteFileResponse, len(conn.Targets))
+	targetsDone := make(map[int]bool)
 	for {
 		responses, err := stream.Recv()
 		// Stream is done.
@@ -46,10 +47,23 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]ReadR
 			return nil, fmt.Errorf("can't read file %s - %v", path, err)
 		}
 		for _, r := range responses {
-			ret[r.Index] = ReadRemoteFileResponse{
-				Target:  r.Target,
-				Index:   r.Index,
-				Content: r.Resp.GetContents(),
+			if r.Error != nil && r.Error != io.EOF {
+				return nil, fmt.Errorf("target %s (index %d) returned error - %v", r.Target, r.Index, r.Error)
+			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			// If we haven't previously had a problem keep writing. Otherwise we drop this and just keep processing.
+			if !targetsDone[r.Index] {
+				ret[r.Index] = ReadRemoteFileResponse{
+					Target:  r.Target,
+					Index:   r.Index,
+					Content: append(ret[r.Index].Content[:], r.Resp.Contents[:]...),
+				}
 			}
 		}
 	}
