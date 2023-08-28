@@ -201,31 +201,30 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 	return nil
 }
 
-// RemoveRemoteFile is a helper function for removing a file on a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+// RemoveRemoteFile is a helper function for removing a file on one or more remote hosts using a proxy.Conn.
 func RemoveRemoteFile(ctx context.Context, conn *proxy.Conn, path string) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("RemoveRemoteFile only supports single targets")
-	}
-
-	c := pb.NewLocalFileClient(conn)
-	_, err := c.Rm(ctx, &pb.RmRequest{
+	c := pb.NewLocalFileClientProxy(conn)
+	resp, err := c.RmOneMany(ctx, &pb.RmRequest{
 		Filename: path,
 	})
 	if err != nil {
-		return fmt.Errorf("remove problem - %v", err)
+		return fmt.Errorf("remove error - %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("remote file error: %s", errMsg)
 	}
 	return nil
 }
 
-// CopyRemoteFile is a helper function for copying a file on a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+// CopyRemoteFile is a helper function for copying a file on one or more remote hosts using a proxy.Conn.
 func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destination *FileConfig) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("CopyRemoteFile only supports single targets")
-	}
-
-	c := pb.NewLocalFileClient(conn)
+	c := pb.NewLocalFileClientProxy(conn)
 	// Copy the file to the backup path.
 	// Gets root:root as owner with 0644 as perms.
 	// Fails if it already exists
@@ -256,9 +255,18 @@ func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destin
 			},
 		},
 	}
-	_, err := c.Copy(ctx, req)
+	resp, err := c.CopyOneMany(ctx, req)
 	if err != nil {
 		return fmt.Errorf("copy problem for %s -> %s: %v", source, destination.Filename, err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("remote file error: %s", errMsg)
 	}
 	return nil
 }
