@@ -14,9 +14,9 @@ import (
 )
 
 type ReadRemoteFileResponse struct {
-	Target  string
-	Index   int
-	Content []byte
+	Target   string
+	Index    int
+	Contents []byte
 }
 
 // ReadRemoteFile is a helper function for reading a single file from a remote host using a proxy.Conn.
@@ -60,9 +60,9 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]ReadR
 			// If we haven't previously had a problem keep writing. Otherwise we drop this and just keep processing.
 			if !targetsDone[r.Index] {
 				ret[r.Index] = ReadRemoteFileResponse{
-					Target:  r.Target,
-					Index:   r.Index,
-					Content: append(ret[r.Index].Content[:], r.Resp.Contents[:]...),
+					Target:   r.Target,
+					Index:    r.Index,
+					Contents: append(ret[r.Index].Contents[:], r.Resp.Contents[:]...),
 				}
 			}
 		}
