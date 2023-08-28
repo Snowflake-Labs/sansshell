@@ -282,8 +282,8 @@ type MkdirRequest struct {
 	Gid   *int
 }
 
-// MakeRemoteDirMany is a helper function for creating a directory on one or more remote hosts using a proxy.Conn.
-func MakeRemoteDirMany(ctx context.Context, conn *proxy.Conn, req MkdirRequest) error {
+// MakeRemoteDir is a helper function for creating a directory on one or more remote hosts using a proxy.Conn.
+func MakeRemoteDir(ctx context.Context, conn *proxy.Conn, req MkdirRequest) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	dirAttrs := &pb.FileAttributes{
 		Filename: req.Path,
