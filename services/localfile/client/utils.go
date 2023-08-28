@@ -463,14 +463,14 @@ func ChangeRemoteFileGroup(ctx context.Context, conn *proxy.Conn, req ChgrpReque
 
 // ChangeRemoteFilePermission is a helper function for changing file permission
 // on one or more remote hosts using a proxy.Conn.
-func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, path string, mode int) error {
+func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, path string, mode uint32) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	attrs := &pb.FileAttributes{
 		Filename: path,
 		Attributes: []*pb.FileAttribute{
 			{
 				Value: &pb.FileAttribute_Mode{
-					Mode: uint32(mode),
+					Mode: mode,
 				},
 			},
 		},
