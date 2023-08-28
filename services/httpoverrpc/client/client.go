@@ -359,6 +359,11 @@ func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
 	return result
 }
 
+const (
+	defaultHTTPPort  = 80
+	defaultHTTPSPort = 443
+)
+
 func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	proxy := pb.NewHTTPOverRPCClientProxy(c.conn)
 	body := []byte{}
@@ -394,17 +399,20 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	} else {
 		// No port in URL, add default port
 		if reqPb.Protocol == "http" {
-			reqPb.Port = 80
+			reqPb.Port = defaultHTTPPort
 		} else {
-			reqPb.Port = 443
+			reqPb.Port = defaultHTTPSPort
 		}
 	}
 
-	resp, err := proxy.HostOneMany(req.Context(), reqPb)
+	respChan, err := proxy.HostOneMany(req.Context(), reqPb)
 	if err != nil {
 		return nil, err
 	}
-	ra := <-resp
-	result := pbReplytoHTTPResponse(ra.Resp)
+	resp := <-respChan
+	if resp.Error != nil {
+		return nil, fmt.Errorf("httpOverRPC failed: %v", resp.Error)
+	}
+	result := pbReplytoHTTPResponse(resp.Resp)
 	return result, nil
 }
