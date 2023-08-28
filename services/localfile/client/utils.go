@@ -29,6 +29,12 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
+type ReadRemoteFileResponse struct {
+	Target   string
+	Index    int
+	Contents []byte
+}
+
 // ReadRemoteFile is a helper function for reading a single file from a remote host
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
 func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte, error) {
@@ -36,21 +42,37 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte,
 		return nil, errors.New("ReadRemoteFile only supports single targets")
 	}
 
-	c := pb.NewLocalFileClient(conn)
-	stream, err := c.Read(ctx, &pb.ReadActionRequest{
+	result, err := ReadRemoteFileMany(ctx, conn, path)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(result) < 1 {
+		return nil, fmt.Errorf("ReadRemoteFile error: received an empty result")
+	}
+
+	return result[0].Contents, nil
+}
+
+// ReadRemoteFileMany is a helper function for reading a single file from one or more remote hosts using a proxy.Conn.
+func ReadRemoteFileMany(ctx context.Context, conn *proxy.Conn, path string) ([]ReadRemoteFileResponse, error) {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.ReadActionRequest{
 		Request: &pb.ReadActionRequest_File{
 			File: &pb.ReadRequest{
 				Filename: path,
 			},
 		},
-	})
+	}
+	stream, err := c.ReadOneMany(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("can't setup Read client stream: %v", err)
 	}
 
-	var ret []byte
+	ret := make([]ReadRemoteFileResponse, len(conn.Targets))
+	targetsDone := make(map[int]bool)
 	for {
-		resp, err := stream.Recv()
+		responses, err := stream.Recv()
 		// Stream is done.
 		if err == io.EOF {
 			break
@@ -59,7 +81,26 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte,
 		if err != nil {
 			return nil, fmt.Errorf("can't read file %s - %v", path, err)
 		}
-		ret = append(ret, resp.Contents...)
+		for _, r := range responses {
+			if r.Error != nil && r.Error != io.EOF {
+				return nil, fmt.Errorf("target %s (index %d) returned error - %v", r.Target, r.Index, r.Error)
+			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			// If we haven't previously had a problem keep writing. Otherwise we drop this and just keep processing.
+			if !targetsDone[r.Index] {
+				ret[r.Index] = ReadRemoteFileResponse{
+					Target:   r.Target,
+					Index:    r.Index,
+					Contents: append(ret[r.Index].Contents[:], r.Resp.Contents[:]...),
+				}
+			}
+		}
 	}
 	return ret, nil
 }
