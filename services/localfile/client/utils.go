@@ -54,7 +54,7 @@ func ReadRemoteFile(ctx context.Context, conn *proxy.Conn, path string) ([]byte,
 	return result[0].Contents, nil
 }
 
-// ReadRemoteFileMany is a helper function for reading a single file from remote hosts using a proxy.Conn.
+// ReadRemoteFileMany is a helper function for reading a single file from one or more remote hosts using a proxy.Conn.
 func ReadRemoteFileMany(ctx context.Context, conn *proxy.Conn, path string) ([]ReadRemoteFileResponse, error) {
 	c := pb.NewLocalFileClientProxy(conn)
 	req := &pb.ReadActionRequest{
