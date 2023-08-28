@@ -32,6 +32,9 @@ type ExecResponse struct {
 	Target string
 }
 
+// ExecRemoteCommand is a helper function for execing a command on one or remote hosts
+// using a proxy.Conn.
+// `binary` refers to the absolute path of the binary file on the remote host.
 func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string, args ...string) ([]ExecResponse, error) {
 	c := pb.NewExecClientProxy(conn)
 	req := &pb.ExecRequest{
