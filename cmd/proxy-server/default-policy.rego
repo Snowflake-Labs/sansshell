@@ -22,7 +22,7 @@ allow {
 
 # Allow proxying HTTP requests
 allow {
-	input.method = "/HTTPOverRPC.HTTPOverRPC/Localhost"
+	input.method = "/HTTPOverRPC.HTTPOverRPC/Host"
 }
 
 # Allow anyone to call healthcheck on any host
