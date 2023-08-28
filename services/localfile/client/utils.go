@@ -270,3 +270,71 @@ func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destin
 	}
 	return nil
 }
+
+type MkdirRequest struct {
+	Path     string
+	Username string
+	Uid      int
+	Group    string
+	Gid      int
+	Mode     int
+}
+
+// CopyRemoteFile is a helper function for creating a directory on one or more remote hosts using a proxy.Conn.
+func MakeRemoteDirMany(ctx context.Context, conn *proxy.Conn, req MkdirRequest) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	dirAttrs := &pb.FileAttributes{
+		Filename: req.Path,
+		Attributes: []*pb.FileAttribute{
+			{
+				Value: &pb.FileAttribute_Mode{
+					Mode: uint32(req.Mode),
+				},
+			},
+		},
+	}
+	if req.Uid >= 0 {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(req.Uid),
+			},
+		})
+	}
+	if req.Username != "" {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: req.Username,
+			},
+		})
+	}
+	if req.Gid >= 0 {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(req.Gid),
+			},
+		})
+	}
+	if req.Group != "" {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: req.Group,
+			},
+		})
+	}
+	resp, err := c.MkdirOneMany(ctx, &pb.MkdirRequest{
+		DirAttrs: dirAttrs,
+	})
+	if err != nil {
+		return fmt.Errorf("mkdir failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("remote file error: %s", errMsg)
+	}
+	return nil
+}
