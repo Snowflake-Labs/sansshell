@@ -461,21 +461,16 @@ func ChangeRemoteFileGroup(ctx context.Context, conn *proxy.Conn, req ChgrpReque
 	return nil
 }
 
-type ChmodRequest struct {
-	Path string
-	Mode int
-}
-
 // ChangeRemoteFilePermission is a helper function for changing file permission
 // on one or more remote hosts using a proxy.Conn.
-func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, req ChmodRequest) error {
+func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, path string, mode int) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	attrs := &pb.FileAttributes{
-		Filename: req.Path,
+		Filename: path,
 		Attributes: []*pb.FileAttribute{
 			{
 				Value: &pb.FileAttribute_Mode{
-					Mode: uint32(req.Mode),
+					Mode: uint32(mode),
 				},
 			},
 		},
@@ -484,7 +479,7 @@ func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, req Chmod
 		Attrs: attrs,
 	})
 	if err != nil {
-		return fmt.Errorf("change remote file group failed: %v", err)
+		return fmt.Errorf("change remote file permission failed: %v", err)
 	}
 	errMsg := ""
 	for r := range resp {
@@ -493,7 +488,29 @@ func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, req Chmod
 		}
 	}
 	if errMsg != "" {
-		return fmt.Errorf("change remote file group failed: %s", errMsg)
+		return fmt.Errorf("change remote file permission failed: %s", errMsg)
+	}
+	return nil
+}
+
+func SymlinkRemoteFile(ctx context.Context, conn *proxy.Conn, target, linkname string) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.SymlinkRequest{
+		Target:   target,
+		Linkname: linkname,
+	}
+	resp, err := c.SymlinkOneMany(ctx, req)
+	if err != nil {
+		return fmt.Errorf("symlink failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("symlink failed: %s", errMsg)
 	}
 	return nil
 }
