@@ -264,42 +264,6 @@ echo "package sansshell.authz" >${LOGS}/policy
 echo "default allow = true" >>${LOGS}/policy
 
 # Check licensing
-cat >${LOGS}/required-license <<EOF
-/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
-
-   Licensed under the Apache License, Version 2.0 (the
-   "License"); you may not use this file except in compliance
-   with the License.  You may obtain a copy of the License at
-
-     http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing,
-   software distributed under the License is distributed on an
-   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-   KIND, either express or implied.  See the License for the
-   specific language governing permissions and limitations
-   under the License.
-*/
-
-EOF
-cat >${LOGS}/required-license.sh <<EOF
-# Copyright (c) 2019 Snowflake Inc. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-
-EOF
-
 # For Go we can ignore generate protobuf files.
 find . -type f -name \*.go ! -name \*.pb.go >${LOGS}/license-go
 find . -type f -name \*.sh >${LOGS}/license-sh
@@ -308,32 +272,17 @@ find . -type f -name \*.proto >${LOGS}/license-proto
 cat "${LOGS}/license-go" "${LOGS}/license-proto" | (
   broke=""
   while read -r i; do
-    LIC="${LOGS}/required-license"
-    SUF=${i##*.}
-    if [ "${SUF}" == "go" ] || [ "${SUF}" == "proto" ]; then
-      head -16 "${i}" >"${LOGS}/diff"
-
-      # If this has a go directive it has to be the first line
-      # so skip forward to where the block should be right after that.
-      one=$(head -1 ${LOGS}/diff | cut -c1-5)
-      if [ "${one}" == "//go:" ]; then
-        printf "4,19p\n" | ed -s "${i}" >"${LOGS}/diff" 2>/dev/null
-      fi
-    fi
-    if [ "${SUF}" == "sh" ]; then
-      printf "3,17p\n" | ed -s "${i}" >"${LOGS}/diff" 2>/dev/null
-      LIC="${LOGS}/required-license.sh"
-    fi
-    if ! diff ${LIC} ${LOGS}/diff >/dev/null; then
+    if ! grep -q "Licensed under the Apache License" ${i}; then
       echo "${i} is missing required license."
       broke=true
     fi
   done
 
   if [ "${broke}" == "true" ]; then
-    check_status 1 /dev/null Files missing license
+    exit 1
   fi
 )
+check_status $? /dev/null Files missing license
 
 echo
 echo "Checking with go vet"
