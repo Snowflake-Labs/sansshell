@@ -493,6 +493,8 @@ func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, path stri
 	return nil
 }
 
+// SymlinkRemoteFile is a helper function for creating a symlink on one or more remote hosts using a proxy.Conn.
+// This is similar to `ln -s <target> <linkname>`
 func SymlinkRemoteFile(ctx context.Context, conn *proxy.Conn, target, linkname string) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	req := &pb.SymlinkRequest{
