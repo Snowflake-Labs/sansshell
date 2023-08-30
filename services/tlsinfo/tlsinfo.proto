@@ -28,6 +28,8 @@ service TLSInfo {
 
 message TLSCertificateRequest {
     string server_address = 1; // Server's address, including port (e.g. "example.com:443")
+    string server_name = 2;
+    bool insecure_skip_verify = 3;
 }
 
 message TLSCertificate {

@@ -60,6 +60,8 @@ func (c *tlsInfoCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 }
 
 type getCertsCmd struct {
+	serverName         string
+	insecureSkipVerify bool
 }
 
 func (*getCertsCmd) Name() string { return "get-certs" }
@@ -75,18 +77,23 @@ func (c *getCertsCmd) Usage() string {
 	This is similar to "openssl s_client -showcerts -connect serverAddr"
 	`
 }
-func (*getCertsCmd) SetFlags(f *flag.FlagSet) {}
+func (c *getCertsCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&c.insecureSkipVerify, "insecure-skip-verify", false, "If true, will skip verification of server's certificate chain and host name")
+	f.StringVar(&c.serverName, "server-name", "", "server-name is used to specify the Server Name Indication (SNI) during the TLS handshake. It allows client to indicate which hostname it's trying to connect to.")
+}
 
 func (c *getCertsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() != 1 {
-		fmt.Fprintf(os.Stderr, "Please speicfy server address.")
+		fmt.Fprintf(os.Stderr, "Please specify server address.\n")
 		return subcommands.ExitUsageError
 	}
 
 	proxy := pb.NewTLSInfoClientProxy(state.Conn)
 	req := &pb.TLSCertificateRequest{
-		ServerAddress: f.Arg(0),
+		ServerAddress:      f.Arg(0),
+		InsecureSkipVerify: c.insecureSkipVerify,
+		ServerName:         c.serverName,
 	}
 	respChan, err := proxy.GetTLSCertificateOneMany(ctx, req)
 	if err != nil {
