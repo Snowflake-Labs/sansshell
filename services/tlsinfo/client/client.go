@@ -60,7 +60,6 @@ func (c *tlsInfoCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 }
 
 type getCertsCmd struct {
-	serverAddr string
 }
 
 func (*getCertsCmd) Name() string { return "get-certs" }
