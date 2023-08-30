@@ -201,31 +201,30 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 	return nil
 }
 
-// RemoveRemoteFile is a helper function for removing a file on a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+// RemoveRemoteFile is a helper function for removing a file on one or more remote hosts using a proxy.Conn.
 func RemoveRemoteFile(ctx context.Context, conn *proxy.Conn, path string) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("RemoveRemoteFile only supports single targets")
-	}
-
-	c := pb.NewLocalFileClient(conn)
-	_, err := c.Rm(ctx, &pb.RmRequest{
+	c := pb.NewLocalFileClientProxy(conn)
+	resp, err := c.RmOneMany(ctx, &pb.RmRequest{
 		Filename: path,
 	})
 	if err != nil {
-		return fmt.Errorf("remove problem - %v", err)
+		return fmt.Errorf("remove error - %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("remote file error: %s", errMsg)
 	}
 	return nil
 }
 
-// CopyRemoteFile is a helper function for copying a file on a remote host
-// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+// CopyRemoteFile is a helper function for copying a file on one or more remote hosts using a proxy.Conn.
 func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destination *FileConfig) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("CopyRemoteFile only supports single targets")
-	}
-
-	c := pb.NewLocalFileClient(conn)
+	c := pb.NewLocalFileClientProxy(conn)
 	// Copy the file to the backup path.
 	// Gets root:root as owner with 0644 as perms.
 	// Fails if it already exists
@@ -256,9 +255,264 @@ func CopyRemoteFile(ctx context.Context, conn *proxy.Conn, source string, destin
 			},
 		},
 	}
-	_, err := c.Copy(ctx, req)
+	resp, err := c.CopyOneMany(ctx, req)
 	if err != nil {
 		return fmt.Errorf("copy problem for %s -> %s: %v", source, destination.Filename, err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("remote file error: %s", errMsg)
+	}
+	return nil
+}
+
+type MkdirRequest struct {
+	Path string
+	Mode int
+	// Exactly one of Username or Uid must be set.
+	Username *string
+	Uid      *int
+	// Exactly one of Group or Gid must be set.
+	Group *string
+	Gid   *int
+}
+
+// MakeRemoteDir is a helper function for creating a directory on one or more remote hosts using a proxy.Conn.
+func MakeRemoteDir(ctx context.Context, conn *proxy.Conn, req MkdirRequest) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	dirAttrs := &pb.FileAttributes{
+		Filename: req.Path,
+		Attributes: []*pb.FileAttribute{
+			{
+				Value: &pb.FileAttribute_Mode{
+					Mode: uint32(req.Mode),
+				},
+			},
+		},
+	}
+	// Validations
+	if req.Uid != nil && req.Username != nil {
+		return fmt.Errorf("cannot set both Uid and Username. Only one of them can be set.")
+	}
+	if req.Uid == nil && req.Username == nil {
+		return fmt.Errorf("One of Uid and Username must be set.")
+	}
+	if req.Gid != nil && req.Group != nil {
+		return fmt.Errorf("cannot set both Gid and Group. Only one of them can be set.")
+	}
+	if req.Gid == nil && req.Group == nil {
+		return fmt.Errorf("One of Gid and Group must be set.")
+	}
+
+	if req.Uid != nil {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(*req.Uid),
+			},
+		})
+	}
+	if req.Username != nil {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: *req.Username,
+			},
+		})
+	}
+	if req.Gid != nil {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(*req.Gid),
+			},
+		})
+	}
+	if req.Group != nil {
+		dirAttrs.Attributes = append(dirAttrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: *req.Group,
+			},
+		})
+	}
+	resp, err := c.MkdirOneMany(ctx, &pb.MkdirRequest{
+		DirAttrs: dirAttrs,
+	})
+	if err != nil {
+		return fmt.Errorf("mkdir failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("mkdir failed: %s", errMsg)
+	}
+	return nil
+}
+
+type ChownRequest struct {
+	Path string
+	// Exactly one of Username or Uid must be set.
+	Username *string
+	Uid      *int
+}
+
+// ChangeRemoteFileOwnership is a helper function for changing file ownership
+// on one or more remote hosts using a proxy.Conn.
+func ChangeRemoteFileOwnership(ctx context.Context, conn *proxy.Conn, req ChownRequest) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	attrs := &pb.FileAttributes{
+		Filename: req.Path,
+	}
+	if req.Uid != nil && req.Username != nil {
+		return fmt.Errorf("cannot set both Uid and Username. Only one of them can be set.")
+	}
+	if req.Uid == nil && req.Username == nil {
+		return fmt.Errorf("One of Uid and Username must be set.")
+	}
+	if req.Uid != nil {
+		attrs.Attributes = append(attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Uid{
+				Uid: uint32(*req.Uid),
+			},
+		})
+	}
+	if req.Username != nil {
+		attrs.Attributes = append(attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Username{
+				Username: *req.Username,
+			},
+		})
+	}
+
+	resp, err := c.SetFileAttributesOneMany(ctx, &pb.SetFileAttributesRequest{
+		Attrs: attrs,
+	})
+	if err != nil {
+		return fmt.Errorf("change remote file ownership failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("change remote file ownership failed: %s", errMsg)
+	}
+	return nil
+}
+
+type ChgrpRequest struct {
+	Path string
+	// Exactly one of Group or Uid must be set.
+	Group *string
+	Gid   *int
+}
+
+// ChangeRemoteFileGroup is a helper function for changing file group
+// on one or more remote hosts using a proxy.Conn.
+func ChangeRemoteFileGroup(ctx context.Context, conn *proxy.Conn, req ChgrpRequest) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	attrs := &pb.FileAttributes{
+		Filename: req.Path,
+	}
+	if req.Gid != nil && req.Group != nil {
+		return fmt.Errorf("cannot set both Gid and Group. Only one of them can be set.")
+	}
+	if req.Gid == nil && req.Group == nil {
+		return fmt.Errorf("One of Gid and Group must be set.")
+	}
+	if req.Gid != nil {
+		attrs.Attributes = append(attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Gid{
+				Gid: uint32(*req.Gid),
+			},
+		})
+	}
+	if req.Group != nil {
+		attrs.Attributes = append(attrs.Attributes, &pb.FileAttribute{
+			Value: &pb.FileAttribute_Group{
+				Group: *req.Group,
+			},
+		})
+	}
+
+	resp, err := c.SetFileAttributesOneMany(ctx, &pb.SetFileAttributesRequest{
+		Attrs: attrs,
+	})
+	if err != nil {
+		return fmt.Errorf("change remote file group failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("change remote file group failed: %s", errMsg)
+	}
+	return nil
+}
+
+// ChangeRemoteFilePermission is a helper function for changing file permission
+// on one or more remote hosts using a proxy.Conn.
+func ChangeRemoteFilePermission(ctx context.Context, conn *proxy.Conn, path string, mode uint32) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	attrs := &pb.FileAttributes{
+		Filename: path,
+		Attributes: []*pb.FileAttribute{
+			{
+				Value: &pb.FileAttribute_Mode{
+					Mode: mode,
+				},
+			},
+		},
+	}
+	resp, err := c.SetFileAttributesOneMany(ctx, &pb.SetFileAttributesRequest{
+		Attrs: attrs,
+	})
+	if err != nil {
+		return fmt.Errorf("change remote file permission failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("change remote file permission failed: %s", errMsg)
+	}
+	return nil
+}
+
+// SymlinkRemote is a helper function for creating a symlink on one or more remote hosts using a proxy.Conn.
+// This is similar to `ln -s <target> <linkname>`
+func SymlinkRemote(ctx context.Context, conn *proxy.Conn, target, linkname string) error {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.SymlinkRequest{
+		Target:   target,
+		Linkname: linkname,
+	}
+	resp, err := c.SymlinkOneMany(ctx, req)
+	if err != nil {
+		return fmt.Errorf("symlink failed: %v", err)
+	}
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("symlink failed: %s", errMsg)
 	}
 	return nil
 }
