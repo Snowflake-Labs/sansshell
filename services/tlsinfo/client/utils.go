@@ -25,9 +25,9 @@ import (
 )
 
 type TLSInfoRequest struct {
-	ServerAddress      string // hostname:port
-	ServerName         string
-	InsecureSkipVerify bool
+	ServerAddress      string // Server address including port (e.g. "example.com:443")
+	ServerName         string // Server Name Indication (SNI) used in the TLS handshake
+	InsecureSkipVerify bool   // If true, will skip TLS server cert verfication
 }
 
 func GetTLSInfo(ctx context.Context, conn *proxy.Conn, request TLSInfoRequest) ([]*pb.GetTLSCertificateManyResponse, error) {
