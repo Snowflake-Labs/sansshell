@@ -82,6 +82,9 @@ func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
 	return result
 }
 
+// getPort retrieves the port number from the request URL.
+// If the URL doesn't contain a port number, it returns the
+// default port associated with the HTTP protocol.
 func getPort(req *http.Request, protocol string) (int32, error) {
 	var ret int32
 	if req.URL.Port() != "" {
@@ -122,7 +125,7 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	reqPb := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
-			RequestUri: req.RequestURI,
+			RequestUri: req.URL.Path,
 			Method:     req.Method,
 			Headers:    httpHeaderToPbHeader(&req.Header),
 			Body:       body,

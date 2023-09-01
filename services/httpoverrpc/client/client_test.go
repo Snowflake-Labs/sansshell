@@ -182,7 +182,7 @@ func TestHTTPTransporter(t *testing.T) {
 
 	// Set up web server
 	m := http.NewServeMux()
-	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+	m.HandleFunc("/helloworld", func(httpResp http.ResponseWriter, httpReq *http.Request) {
 		_, _ = httpResp.Write([]byte("hello world"))
 	})
 	l, err := net.Listen("tcp4", "localhost:0")
@@ -206,7 +206,7 @@ func TestHTTPTransporter(t *testing.T) {
 	}
 
 	addr := l.Addr().String()
-	resp, err := httpClient.Get(fmt.Sprintf("http://%s", addr))
+	resp, err := httpClient.Get(fmt.Sprintf("http://%s/helloworld", addr))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +217,58 @@ func TestHTTPTransporter(t *testing.T) {
 	want := "hello world"
 	if string(body) != want {
 		t.Errorf("got %q, want %q", body, want)
+	}
+}
+
+func TestHTTPTransporterBody(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc("/returnbody", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		body := []byte{}
+		if httpReq.Body != nil {
+			var err error
+			body, err = io.ReadAll(httpReq.Body)
+			if err != nil {
+				_, _ = httpResp.Write([]byte(err.Error()))
+			}
+		}
+		_, _ = httpResp.Write(body)
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
+
+	httpClient := http.Client{
+		Transport: transporter,
+	}
+
+	addr := l.Addr().String()
+	reqBody := "hello sansshell"
+	resp, err := httpClient.Post(fmt.Sprintf("http://%s/returnbody", addr), "", strings.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := reqBody // should receive the sent request body
+	if string(respBody) != want {
+		t.Errorf("got %q, want %q", respBody, want)
 	}
 }
 
