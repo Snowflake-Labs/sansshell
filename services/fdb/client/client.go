@@ -315,7 +315,7 @@ func (r *fdbCLICmd) SetFlags(f *flag.FlagSet) {
 		}
 		return nil
 	})
-	f.Func("knobs", "knobs for fdbcli, comma-separated in the form <knob_name1>=<knob_value1>,<knob_name2>=<knob_value2>, ...", func(s string) error {
+	f.Func("knobs", "knobs for fdbcli, comma-separated in the form <knob_name1>=<knob_value1>,<knob_name2>=<knob_value2>,...", func(s string) error {
 		r.req.Knobs = &wrapperspb.StringValue{
 			Value: s,
 		}

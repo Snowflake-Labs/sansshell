@@ -277,6 +277,9 @@ func TestFDBCLI(t *testing.T) {
 				Timeout: &wrapperspb.Int32Value{
 					Value: 12345,
 				},
+				Knobs: &wrapperspb.StringValue{
+					Value: "my_knob=1",
+				},
 				Commands: []*pb.FDBCLICommand{
 					{
 						Command: &pb.FDBCLICommand_Status{},
@@ -316,6 +319,7 @@ func TestFDBCLI(t *testing.T) {
 				"--build-flags",
 				"--timeout",
 				"12345",
+				"--knob_my_knob=1",
 				"--exec",
 				"status",
 			},
