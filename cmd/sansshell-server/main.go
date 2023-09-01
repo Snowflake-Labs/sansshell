@@ -59,6 +59,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/tlsinfo/server"
 
 	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
