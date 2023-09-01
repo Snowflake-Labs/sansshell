@@ -19,6 +19,7 @@ package client
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -173,5 +174,136 @@ func TestGet(t *testing.T) {
 	want := "hello world\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHTTPTransporter(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		_, _ = httpResp.Write([]byte("hello world"))
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
+
+	httpClient := http.Client{
+		Transport: transporter,
+	}
+
+	addr := l.Addr().String()
+	resp, err := httpClient.Get(fmt.Sprintf("http://%s", addr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+}
+
+func TestHTTPTransporterMissingScheme(t *testing.T) {
+	ctx := context.Background()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
+
+	httpClient := http.Client{
+		Transport: transporter,
+	}
+
+	_, errGet := httpClient.Get("localhost:9090")
+	if !strings.Contains(errGet.Error(), errInvalidURLScheme.Error()) {
+		t.Fatal("must return error with descriptive message when there's no scheme in the request URL")
+	}
+}
+
+func TestHTTPTransporterMissingHost(t *testing.T) {
+	ctx := context.Background()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
+
+	httpClient := http.Client{
+		Transport: transporter,
+	}
+
+	_, errGet := httpClient.Get("http://:9090")
+	if !strings.Contains(errGet.Error(), errInvalidURLMissingHost.Error()) {
+		t.Fatal("must return error with descriptive message when there's no hostname in the request URL")
+	}
+}
+
+func TestGetPort(t *testing.T) {
+	req, err := http.NewRequest("GET", "http://localhost:9999", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := getPort(req, "http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != 9999 {
+		t.Fatalf("got wrong port: %d. Expected: %d", result, 9999)
+	}
+}
+
+func TestGetPortDefaultHTTP(t *testing.T) {
+	req, err := http.NewRequest("GET", "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := getPort(req, "http")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != defaultHTTPPort {
+		t.Fatalf("got wrong port: %d. Expected: %d", result, defaultHTTPPort)
+	}
+}
+
+func TestGetPortDefaultHTTPS(t *testing.T) {
+	req, err := http.NewRequest("GET", "https://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := getPort(req, "https")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != defaultHTTPSPort {
+		t.Fatalf("got wrong port: %d. Expected: %d", result, defaultHTTPSPort)
 	}
 }

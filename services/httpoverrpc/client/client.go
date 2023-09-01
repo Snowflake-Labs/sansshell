@@ -18,7 +18,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -34,7 +33,6 @@ import (
 	"github.com/google/subcommands"
 
 	"github.com/Snowflake-Labs/sansshell/client"
-	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	pb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
@@ -313,106 +311,4 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
 	}
 	return retCode
-}
-
-type HTTPTransporter struct {
-	conn *proxy.Conn
-}
-
-func NewHTTPTransporter(conn *proxy.Conn) *HTTPTransporter {
-	return &HTTPTransporter{
-		conn,
-	}
-}
-
-func httpHeaderToPbHeader(h *http.Header) []*pb.Header {
-	result := []*pb.Header{}
-	for k, v := range *h {
-		result = append(result, &pb.Header{
-			Key:    k,
-			Values: v,
-		})
-	}
-
-	return result
-}
-
-func pbHeaderToHTTPHeader(header []*pb.Header) http.Header {
-	result := http.Header{}
-	for _, h := range header {
-		result[h.Key] = h.Values
-	}
-
-	return result
-}
-
-func pbReplytoHTTPResponse(rep *pb.HTTPReply) *http.Response {
-	reader := bytes.NewReader(rep.Body)
-	body := io.NopCloser(reader)
-	header := pbHeaderToHTTPHeader(rep.Headers)
-	result := &http.Response{
-		Body:       body,
-		StatusCode: int(rep.StatusCode),
-		Header:     header,
-	}
-
-	return result
-}
-
-const (
-	defaultHTTPPort  = 80
-	defaultHTTPSPort = 443
-)
-
-func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
-	proxy := pb.NewHTTPOverRPCClientProxy(c.conn)
-	body := []byte{}
-	if req.Body != nil {
-		var err error
-		body, err = io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-	}
-	reqPb := &pb.HostHTTPRequest{
-		Request: &pb.HTTPRequest{
-			RequestUri: req.RequestURI,
-			Method:     req.Method,
-			Headers:    httpHeaderToPbHeader(&req.Header),
-			Body:       body,
-		},
-		Hostname: req.URL.Hostname(),
-	}
-	// Add protocol
-	reqPb.Protocol = "http"
-	if req.URL.Scheme == "https" {
-		reqPb.Protocol = "https"
-	}
-
-	// Add port
-	if req.URL.Port() != "" {
-		port, err := strconv.Atoi(req.URL.Port())
-		if err != nil {
-			return nil, err
-		}
-		reqPb.Port = int32(port)
-	} else {
-		// No port in URL, add default port
-		if reqPb.Protocol == "http" {
-			reqPb.Port = defaultHTTPPort
-		} else {
-			reqPb.Port = defaultHTTPSPort
-		}
-	}
-
-	respChan, err := proxy.HostOneMany(req.Context(), reqPb)
-	if err != nil {
-		return nil, err
-	}
-	resp := <-respChan
-	if resp.Error != nil {
-		return nil, fmt.Errorf("httpOverRPC failed: %v", resp.Error)
-	}
-	result := pbReplytoHTTPResponse(resp.Resp)
-	return result, nil
 }
