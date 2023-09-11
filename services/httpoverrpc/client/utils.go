@@ -125,7 +125,7 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	reqPb := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
-			RequestUri: req.URL.Path,
+			RequestUri: req.URL.RequestURI(),
 			Method:     req.Method,
 			Headers:    httpHeaderToPbHeader(&req.Header),
 			Body:       body,
