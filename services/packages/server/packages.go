@@ -346,6 +346,10 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 
 	// Make sure we actually installed the package.
 	postValidateCommand, err := generateValidate(req.PackageSystem, req.Name, req.Version)
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
 	validation, err := util.RunCommand(ctx, postValidateCommand[0], postValidateCommand[1:])
 	if err != nil {
 		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
@@ -468,6 +472,10 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 
 	// Make sure we actually installed the package.
 	postValidateCommand, err := generateValidate(req.PackageSystem, req.Name, req.NewVersion)
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
 	validation, err := util.RunCommand(ctx, postValidateCommand[0], postValidateCommand[1:])
 	if err != nil {
 		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
