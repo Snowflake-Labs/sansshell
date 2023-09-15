@@ -228,8 +228,6 @@ var (
 	}
 )
 
-var versionExtractorRe = regexp.MustCompile("")
-
 func parseToNumbers(version string) []int {
 	out := make([]int, 5)
 
