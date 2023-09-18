@@ -2,12 +2,12 @@
 
 ## Overview
 
-The Sansshell proxy is a standalone, optional component from the Sanshell
+The Sansshell proxy is a standalone, optional component from the Sansshell
 server, which can be deployed to act as an intermediary between clients
 and Sansshell instances.
 
 It is designed to enable larger deployments of Sansshell by providing:
- - a 'gateway' which can bridge connectivity to Sanshell instances to which
+ - a 'gateway' which can bridge connectivity to Sansshell instances to which
   clients may not have network visibility.
  - a centralized 'choke point' for logging and enforcement of fine-grained
   policy that may need to change rapidly.
