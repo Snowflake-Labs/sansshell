@@ -45,7 +45,13 @@ var (
 // connections (such as client credentials, deadlines, etc) which
 // the proxy can use without needing to understand them.
 type TargetDialer interface {
-	DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error)
+	DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (ClientConnCloser, error)
+}
+
+// ClientConnCloser is a closeable grpc.ClientConnInterface
+type ClientConnCloser interface {
+	grpc.ClientConnInterface
+	Close() error
 }
 
 // an optionsDialer implements TargetDialer using native grpc.Dial
@@ -54,7 +60,7 @@ type optionsDialer struct {
 }
 
 // See TargetDialer.DialContext
-func (o *optionsDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+func (o *optionsDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (ClientConnCloser, error) {
 	opts := o.opts
 	opts = append(opts, dialOpts...)
 	return grpc.DialContext(ctx, target, opts...)

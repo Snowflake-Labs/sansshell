@@ -65,7 +65,7 @@ type TargetStream struct {
 	serviceMethod *ServiceMethod
 
 	// The underlying grpc.ClientConnInterface to the target server
-	grpcConn grpc.ClientConnInterface
+	grpcConn ClientConnCloser
 
 	// The underlying grpc.ClientStream to the target server.
 	grpcStream grpc.ClientStream
@@ -198,13 +198,14 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		}
 		var err error
 		defer cancel()
-		s.grpcConn, err = s.dialer.DialContext(dialCtx, s.target, opts...)
+		grpcConn, err := s.dialer.DialContext(dialCtx, s.target, opts...)
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
 			s.cancelFunc()
 			return err
 		}
+		s.grpcConn = grpcConn
 		grpcStream, err := s.grpcConn.NewStream(s.ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
@@ -322,6 +323,14 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	// Wait for final status from the errgroup, and translate it into
 	// a server-close call
 	err := group.Wait()
+
+	// Once all calls are complete, we need to close our network connection
+	// to the server.
+	if s.grpcConn != nil {
+		if closeErr := s.grpcConn.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}
 
 	// The error status may by set/overidden if CloseWith was used to
 	// terminate the stream.
