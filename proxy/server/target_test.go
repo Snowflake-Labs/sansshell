@@ -35,7 +35,7 @@ import (
 // A TargetDialer than returns an error for all Dials
 type dialErrTargetDialer codes.Code
 
-func (e dialErrTargetDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+func (e dialErrTargetDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (ClientConnCloser, error) {
 	return nil, status.Error(codes.Code(e), "")
 }
 
@@ -150,10 +150,14 @@ func (b blockingClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc
 	return nil, ctx.Err()
 }
 
+func (b blockingClientConn) Close() error {
+	return nil
+}
+
 // a context dialer that returns blockingClientConn
 type blockingClientDialer struct{}
 
-func (b blockingClientDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
+func (b blockingClientDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (ClientConnCloser, error) {
 	return blockingClientConn{}, nil
 }
 
