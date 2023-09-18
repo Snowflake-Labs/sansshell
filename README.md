@@ -65,6 +65,32 @@ the project root directory.
 Building SansShell requires a recent version of Go (check the go.mod file for
 the current version).
 
+## Build and run
+
+You need to populate ~/.sansshell with certificates before running.
+
+```
+$ cp -r auth/mtls/testdata ~/.sanshell
+```
+
+Or copy the test certificates from auth/mtls/testdata to ~/.sanshell
+
+Then you can build and run the server, in separate terminal windows:
+```
+$ go run ./cmd/sansshell-server
+$ go run ./cmd/sanssh --targets=localhost file read /etc/hosts
+```
+
+You can also run the proxy to try the full flow:
+
+```
+$ go run ./cmd/sansshell-server
+$ go run ./cmd/proxy-server
+$ go run ./cmd/sanssh --proxy=localhost:50043 --targets=localhost:50042 file read /etc/hosts
+```
+
+Minimal debugging UIs are available at http://localhost:50044 for the server and http://localhost:50046 for the proxy by default.
+
 ## Environment setup : protoc
 
 When making any change to the protocol buffers, you'll also need the protocol
@@ -100,8 +126,9 @@ do this for you, as well as re-generating the service proto files.
 $ go generate tools.go
 ```
 
-## Build and run
-You only need to do these steps once to configure example mTLS certs:
+## Creating your own certificates
+
+As an alternative to copying auth/mtls/testdata, you can create your onwn example mTLS certs:
 ```
 $ go install github.com/meterup/generate-cert@latest
 $ mkdir -m 0700 certs
@@ -109,14 +136,6 @@ $ cd certs
 $ $(go env GOPATH)/bin/generate-cert --host=localhost,127.0.0.1,::1
 $ cd ../
 $ ln -s $(pwd)/certs ~/.sansshell
-```
-
-Or copy the test certificates from auth/mtls/testdata to ~/.sanshell
-
-Then you can build and run the server, in separate terminal windows:
-```
-$ cd cmd/sansshell-server && go build && ./sansshell-server
-$ cd cmd/sanssh && go build && ./sanssh --targets=localhost file read /etc/hosts
 ```
 
 ## Debugging
