@@ -664,8 +664,10 @@ message FDBCLIRequest {
   google.protobuf.Int32Value timeout = 18;
   // Maps to --knob_<knob_name>=<knob_value>
   // Provide a comma-separated list in the form "<knob_name1>=<knob_value1>,<knob_name2>=<knob_value2>, ..."
-  google.protobuf.StringValue knobs = 19;
-  repeated FDBCLICommand commands = 20;
+  google.protobuf.StringValue knobs = 21;
+  repeated FDBCLICommand commands = 19;
+
+  reserved 20;
 }
 
 message Log {
