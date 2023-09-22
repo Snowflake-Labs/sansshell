@@ -46,6 +46,7 @@ type ExecResponse struct {
 	*pb.ExecResponse
 	Index  int
 	Target string
+	Error  error
 }
 
 // ExecRemoteCommand is a helper function for execing a command on one or remote hosts
@@ -67,6 +68,7 @@ func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string,
 			r.Resp,
 			r.Index,
 			r.Target,
+			r.Error,
 		}
 	}
 
