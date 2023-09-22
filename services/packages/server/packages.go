@@ -228,8 +228,11 @@ var (
 	}
 )
 
-func parseToNumbers(version string) []int {
-	out := make([]int, 5)
+// parseToNumbers parses a string like 14:4.99.3-2.fc38.x86_64 into a slice
+// of integers like [14, 4, 99, 3, 2]. Callers should ensure that the input
+// is valid.
+func parseToNumbers(version string) [5]int {
+	var out [5]int
 
 	// Grab epoch
 	split := strings.SplitN(version, ":", 2)

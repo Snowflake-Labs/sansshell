@@ -97,6 +97,8 @@ func (*installCmd) Synopsis() string { return "Install a new package" }
 func (*installCmd) Usage() string {
 	return `install [--package_system=P] --name=X --version=Y [--disablerepo=A] [--repo|enablerepo=Z]:
   Install a new package on the remote machine.
+
+  Version format is NEVRA without the name, like --name bash --new_version 0:4.2.46-34.el7.x86_64
 `
 }
 
@@ -239,6 +241,8 @@ func (*updateCmd) Synopsis() string { return "Update an existing package" }
 func (*updateCmd) Usage() string {
 	return `update [--package_system=P] --name=X --old_version=Y --new_version=Z [--disablerepo=B] [--repo|enablerepo=A]:
   Update a package on the remote machine. The package must already be installed at a known version.
+
+  Version format is NEVRA without the name, like -name bash -old_version 0:4.2.46-34.el7.x86_64 -new_version 0:4.2.46-35.el7_9.x86_64
 `
 }
 
