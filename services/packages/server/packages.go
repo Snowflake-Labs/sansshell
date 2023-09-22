@@ -360,7 +360,7 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 	}
 	if err := validation.Error; validation.ExitCode != 0 || err != nil {
 		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
-		return nil, status.Errorf(codes.Internal, "failed to validate change\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+		return nil, status.Errorf(codes.Internal, "failed to confirm that package was installed\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return &pb.InstallReply{
@@ -486,7 +486,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	}
 	if err := validation.Error; validation.ExitCode != 0 || err != nil {
 		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
-		return nil, status.Errorf(codes.Internal, "failed to validate change\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+		return nil, status.Errorf(codes.Internal, "failed to confirm that package was installed\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return &pb.UpdateReply{
