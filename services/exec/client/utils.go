@@ -39,20 +39,13 @@ func ExecRemoteCommand(ctx context.Context, conn *proxy.Conn, binary string, arg
 	if len(result) < 1 {
 		return nil, fmt.Errorf("ExecRemoteCommand error: received empty response")
 	}
-	return result[0].ExecResponse, nil
-}
-
-type ExecResponse struct {
-	*pb.ExecResponse
-	Index  int
-	Target string
-	Error  error
+	return result[0].Resp, nil
 }
 
 // ExecRemoteCommand is a helper function for execing a command on one or remote hosts
 // using a proxy.Conn.
 // `binary` refers to the absolute path of the binary file on the remote host.
-func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string, args ...string) ([]ExecResponse, error) {
+func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string, args ...string) ([]*pb.RunManyResponse, error) {
 	c := pb.NewExecClientProxy(conn)
 	req := &pb.ExecRequest{
 		Command: binary,
@@ -62,14 +55,9 @@ func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string,
 	if err != nil {
 		return nil, err
 	}
-	result := make([]ExecResponse, len(conn.Targets))
+	result := make([]*pb.RunManyResponse, len(conn.Targets))
 	for r := range respChan {
-		result[r.Index] = ExecResponse{
-			r.Resp,
-			r.Index,
-			r.Target,
-			r.Error,
-		}
+		result[r.Index] = r
 	}
 
 	return result, nil
