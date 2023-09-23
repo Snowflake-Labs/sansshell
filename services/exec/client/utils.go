@@ -39,6 +39,9 @@ func ExecRemoteCommand(ctx context.Context, conn *proxy.Conn, binary string, arg
 	if len(result) < 1 {
 		return nil, fmt.Errorf("ExecRemoteCommand error: received empty response")
 	}
+	if result[0].Error != nil {
+		return nil, fmt.Errorf("ExecRemoteCommand error: %v", result[0].Error)
+	}
 	return result[0].Resp, nil
 }
 
