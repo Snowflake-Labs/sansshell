@@ -678,7 +678,8 @@ message Log {
 message FDBCLIResponseOutput {
   bytes stdout = 1;
   bytes stderr = 2;
-  int32 retCode = 3;
+  string hi = 3;
+  int32 retCode = 4;
 }
 
 message FDBCLIResponse {
