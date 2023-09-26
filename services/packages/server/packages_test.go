@@ -177,6 +177,11 @@ func TestInstall(t *testing.T) {
 		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
 	t.Cleanup(func() { generateInstall = savedGenerateInstall })
+	savedGenerateValidate := generateValidate
+	generateValidate = func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {
+		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
+	}
+	t.Cleanup(func() { generateValidate = savedGenerateValidate })
 
 	// Test 0: Bunch of permutations for invalid input.
 	for _, tc := range []struct {
@@ -399,22 +404,26 @@ func TestUpdate(t *testing.T) {
 	savedGenerateValidate := generateValidate
 	savedGenerateUpdate := generateUpdate
 	var cmdLine, validateCmdLine string
-	generateValidate = func(u *pb.UpdateRequest) ([]string, error) {
+	generateValidate = func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {
 		// Capture what was generated so we can validate it.
-		out, err := savedGenerateValidate(u)
+		out, err := savedGenerateValidate(packageSystem, name, version)
 		if err != nil {
 			return nil, err
 		}
-		validateCmdLine = strings.Join(out, " ")
+		if validateCmdLine == "" {
+			validateCmdLine = strings.Join(out, " ")
+		}
 		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
 	}
-	badValidate := func(u *pb.UpdateRequest) ([]string, error) {
+	badValidate := func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {
 		// Capture what was generated so we can validate it.
-		out, err := savedGenerateValidate(u)
+		out, err := savedGenerateValidate(packageSystem, name, version)
 		if err != nil {
 			return nil, err
 		}
-		validateCmdLine = strings.Join(out, " ")
+		if validateCmdLine == "" {
+			validateCmdLine = strings.Join(out, " ")
+		}
 		return []string{testutil.ResolvePath(t, "false")}, nil
 	}
 
@@ -550,6 +559,7 @@ func TestUpdate(t *testing.T) {
 		DisableRepo: "otherrepo",
 	}
 
+	validateCmdLine = "" // Clear on each test run
 	savedYumBin := YumBin
 	t.Cleanup(func() {
 		YumBin = savedYumBin
@@ -586,7 +596,7 @@ func TestUpdate(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		generate func(*pb.UpdateRequest) ([]string, error)
-		validate func(*pb.UpdateRequest) ([]string, error)
+		validate func(packageSystem pb.PackageSystem, name, version string) ([]string, error)
 	}{
 		{
 			name: "bad command",
@@ -596,7 +606,7 @@ func TestUpdate(t *testing.T) {
 		},
 		{
 			name: "bad path - validate",
-			validate: func(*pb.UpdateRequest) ([]string, error) {
+			validate: func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {
 				return []string{"bad path"}, nil
 			},
 		},
@@ -1178,5 +1188,42 @@ func TestCleanup(t *testing.T) {
 
 			}
 		})
+	}
+}
+
+func TestIsOlder(t *testing.T) {
+	for _, tc := range []struct {
+		first, second string
+		wantIsOlder   bool
+	}{
+		{
+			first:       "14:4.99.4-1.fc38.x86_64",
+			second:      "14:4.99.3-2.fc38.x86_64",
+			wantIsOlder: false,
+		},
+		{
+			first:       "14:4.99.3-2.fc38.x86_64",
+			second:      "14:4.99.4-1.fc38.x86_64",
+			wantIsOlder: true,
+		},
+		{
+			first:       "13:4.99.3-2.fc38.x86_64",
+			second:      "14:4.99.4-1.fc38.x86_64",
+			wantIsOlder: true,
+		},
+		{
+			first:       "4.99.3-2.fc38.x86_64",
+			second:      "14:4.99.4-1.fc38.x86_64",
+			wantIsOlder: true,
+		},
+		{
+			first:       "14:4.99.4-1.fc38.x86_64",
+			second:      "4.99.3-2.fc38.x86_64",
+			wantIsOlder: false,
+		},
+	} {
+		if older := isOlderVersion(tc.first, tc.second); older != tc.wantIsOlder {
+			t.Errorf("%q vs %q got %v for isOlderVersion, want %v", tc.first, tc.second, older, tc.wantIsOlder)
+		}
 	}
 }
