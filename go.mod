@@ -9,7 +9,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.5.9
 	github.com/google/subcommands v1.2.0
-	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.0-rc.0
+	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.0
 	github.com/open-policy-agent/opa v0.56.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.16.0
