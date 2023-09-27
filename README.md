@@ -27,7 +27,7 @@ subgraph proxy ["proxy (optional)"]
     opa_policy[(opa policy)];
     proxy_server --> opa_policy --> proxy_server
 end
-subgraph sansshell server ["sanshell server (on each host)"]
+subgraph sansshell server ["sansshell server (on each host)"]
     server[sansshell-server];
     host_apis;
     s_opa_policy[(opa policy)];
@@ -70,10 +70,8 @@ the current version).
 You need to populate ~/.sansshell with certificates before running.
 
 ```
-$ cp -r auth/mtls/testdata ~/.sanshell
+$ cp -r auth/mtls/testdata ~/.sansshell
 ```
-
-Or copy the test certificates from auth/mtls/testdata to ~/.sanshell
 
 Then you can build and run the server, in separate terminal windows:
 ```
