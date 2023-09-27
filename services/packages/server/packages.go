@@ -122,18 +122,18 @@ var (
 		return genCmd(p.PackageSystem, removeOpts)
 	}
 
-	generateValidate = func(p *pb.UpdateRequest) ([]string, error) {
+	generateValidate = func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {
 		validateOpts := map[pb.PackageSystem][]string{
 			pb.PackageSystem_PACKAGE_SYSTEM_YUM: {
 				"list",
 				"installed",
 			},
 		}
-		out, err := genCmd(p.PackageSystem, validateOpts)
+		out, err := genCmd(packageSystem, validateOpts)
 		if err != nil {
 			return nil, err
 		}
-		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.OldVersion, &repoData{}), nil
+		return addRepoAndPackage(out, packageSystem, name, version, &repoData{}), nil
 	}
 
 	generateUpdate = func(p *pb.UpdateRequest) ([]string, error) {
@@ -142,6 +142,9 @@ var (
 				"update-to",
 				"-y",
 			},
+		}
+		if isOlderVersion(p.NewVersion, p.OldVersion) {
+			updateOpts[pb.PackageSystem_PACKAGE_SYSTEM_YUM] = []string{"downgrade", "-y"}
 		}
 		out, err := genCmd(p.PackageSystem, updateOpts)
 		if err != nil {
@@ -225,6 +228,69 @@ var (
 	}
 )
 
+// parseToNumbers parses a string like 14:4.99.3-2.fc38.x86_64 into a slice
+// of integers like [14, 4, 99, 3, 2]. Callers should ensure that the input
+// is valid.
+func parseToNumbers(version string) [5]int {
+	var out [5]int
+
+	// Grab epoch
+	split := strings.SplitN(version, ":", 2)
+	if len(split) == 2 {
+		epoch, err := strconv.Atoi(split[0])
+		if err != nil {
+			return out
+		}
+		out[0] = epoch
+		version = split[1]
+	}
+
+	// Grab version numbers
+	split = strings.SplitN(version, "-", 2)
+	if len(split) < 2 {
+		return out
+	}
+	for i, n := range strings.SplitN(split[0], ".", 3) {
+		v, err := strconv.Atoi(n)
+		if err != nil {
+			return out
+		}
+		out[1+i] = v
+	}
+	remainder := split[1]
+
+	// Grab revision
+	split = strings.SplitN(remainder, ".", 2)
+	if len(split) < 2 {
+		return out
+	}
+	revision, err := strconv.Atoi(split[0])
+	if err != nil {
+		return out
+	}
+	out[4] = revision
+
+	return out
+}
+
+// isOlderVersion returns true if "a" is an older version than "b".
+// Input should be the same as version in the RPC, like
+// 14:4.99.3-2.fc38.x86_64 or 3.43.1-1.centos7.arm64.
+// Results are indeterminate if either string isn't a proper version.
+func isOlderVersion(a, b string) bool {
+	parsedA := parseToNumbers(a)
+	parsedB := parseToNumbers(b)
+	for i := 0; i < 5; i++ {
+		if parsedA[i] < parsedB[i] {
+			return true
+		}
+		if parsedA[i] > parsedB[i] {
+			return false
+		}
+	}
+	return false
+}
+
 // server is used to implement the gRPC server
 type server struct{}
 
@@ -279,6 +345,22 @@ func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.Insta
 		if needReboot {
 			isRebootRequired = pb.RebootRequired_REBOOT_REQUIRED_YES
 		}
+	}
+
+	// Make sure we actually installed the package.
+	postValidateCommand, err := generateValidate(req.PackageSystem, req.Name, req.Version)
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
+	validation, err := util.RunCommand(ctx, postValidateCommand[0], postValidateCommand[1:])
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
+	if err := validation.Error; validation.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesInstallFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, status.Errorf(codes.Internal, "failed to confirm that package was installed\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return &pb.InstallReply{
@@ -362,7 +444,7 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	}
 
 	// We can generate both commands since errors duplicate here.
-	validateCommand, valErr := generateValidate(req)
+	validateCommand, valErr := generateValidate(req.PackageSystem, req.Name, req.OldVersion)
 	updateCommand, upErr := generateUpdate(req)
 	if valErr != nil || upErr != nil {
 		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "generate_cmd_err"))
@@ -389,6 +471,22 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if err := run.Error; run.ExitCode != 0 || err != nil {
 		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, status.Errorf(codes.Internal, "error from running - %v\nstdout:\n%s\nstderr:\n%s", err, util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
+	}
+
+	// Make sure we actually installed the package.
+	postValidateCommand, err := generateValidate(req.PackageSystem, req.Name, req.NewVersion)
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
+	validation, err := util.RunCommand(ctx, postValidateCommand[0], postValidateCommand[1:])
+	if err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, err
+	}
+	if err := validation.Error; validation.ExitCode != 0 || err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "post_validate_err"))
+		return nil, status.Errorf(codes.Internal, "failed to confirm that package was installed\nstdout:\n%s\nstderr:\n%s\ninstall stdout:\n%s\ninstall stderr:\n%s", util.TrimString(validation.Stdout.String()), util.TrimString(validation.Stderr.String()), util.TrimString(run.Stdout.String()), util.TrimString(run.Stderr.String()))
 	}
 
 	return &pb.UpdateReply{

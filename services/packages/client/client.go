@@ -97,6 +97,8 @@ func (*installCmd) Synopsis() string { return "Install a new package" }
 func (*installCmd) Usage() string {
 	return `install [--package_system=P] --name=X --version=Y [--disablerepo=A] [--repo|enablerepo=Z]:
   Install a new package on the remote machine.
+
+  Version format is NEVRA without the name, like --name bash --new_version 0:4.2.46-34.el7.x86_64
 `
 }
 
@@ -118,7 +120,8 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, i)
+		return subcommands.ExitUsageError
 	}
 	if i.name == "" || i.version == "" {
 		fmt.Fprintln(os.Stderr, "Both --name and --version must be filled in")
@@ -186,7 +189,8 @@ func (r *removeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, r)
+		return subcommands.ExitUsageError
 	}
 	if r.name == "" || r.version == "" {
 		fmt.Fprintln(os.Stderr, "Both --name and --version must be filled in")
@@ -237,6 +241,8 @@ func (*updateCmd) Synopsis() string { return "Update an existing package" }
 func (*updateCmd) Usage() string {
 	return `update [--package_system=P] --name=X --old_version=Y --new_version=Z [--disablerepo=B] [--repo|enablerepo=A]:
   Update a package on the remote machine. The package must already be installed at a known version.
+
+  Version format is NEVRA without the name, like -name bash -old_version 0:4.2.46-34.el7.x86_64 -new_version 0:4.2.46-35.el7_9.x86_64
 `
 }
 
@@ -253,7 +259,8 @@ func (u *updateCmd) SetFlags(f *flag.FlagSet) {
 func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, u)
+		return subcommands.ExitUsageError
 	}
 	if u.name == "" || u.oldVersion == "" || u.newVersion == "" {
 		fmt.Fprintln(os.Stderr, "--name, --old_version and --new_version must be supplied")
@@ -301,24 +308,27 @@ func (u *updateCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 
 type listCmd struct {
 	packageSystem string
+	nevra         bool
 }
 
 func (*listCmd) Name() string     { return "list" }
 func (*listCmd) Synopsis() string { return "List installed packages" }
 func (*listCmd) Usage() string {
-	return `list [--package_system=P]:
+	return `list [--package_system=P] [--nevra]:
   List the installed packages on the remote machine.
 `
 }
 
 func (l *listCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&l.packageSystem, "package-system", "YUM", fmt.Sprintf("Package system to use(one of: [%s])", strings.Join(shortPackageSystemNames(), ",")))
+	f.BoolVar(&l.nevra, "nevra", false, "For YUM, print output in NEVRA format instead of trying to imitate `yum list-installed`")
 }
 
 func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, l)
+		return subcommands.ExitUsageError
 	}
 	ps, err := flagToType(l.packageSystem)
 	if err != nil {
@@ -347,21 +357,32 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 			retCode = subcommands.ExitFailure
 			continue
 		}
-		fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
-		for _, pkg := range r.Resp.Packages {
-			// Print the package name.arch, [epoch]:version-release and repo with some reasonable spacing.
-			na := pkg.Name
-			if pkg.Architecture != "" {
-				na = na + "." + pkg.Architecture
+		if l.nevra {
+			for _, pkg := range r.Resp.Packages {
+				ne := pkg.Name
+				if pkg.Epoch != 0 {
+					ne = fmt.Sprintf("%s-%d", pkg.Name, pkg.Epoch)
+				}
+				nevra := fmt.Sprintf("%v:%v-%v.%v", ne, pkg.Version, pkg.Release, pkg.Architecture)
+				fmt.Fprintln(state.Out[r.Index], nevra)
 			}
-			evr := pkg.Version
-			if pkg.Release != "" {
-				evr = evr + "-" + pkg.Release
+		} else {
+			fmt.Fprint(state.Out[r.Index], "Installed Packages\n")
+			for _, pkg := range r.Resp.Packages {
+				// Print the package name.arch, [epoch]:version-release and repo with some reasonable spacing.
+				na := pkg.Name
+				if pkg.Architecture != "" {
+					na = na + "." + pkg.Architecture
+				}
+				evr := pkg.Version
+				if pkg.Release != "" {
+					evr = evr + "-" + pkg.Release
+				}
+				if pkg.Epoch != 0 {
+					evr = fmt.Sprintf("%d:%s", pkg.Epoch, evr)
+				}
+				fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", na, evr, pkg.Repo)
 			}
-			if pkg.Epoch != 0 {
-				evr = fmt.Sprintf("%d:%s", pkg.Epoch, evr)
-			}
-			fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", na, evr, pkg.Repo)
 		}
 	}
 	return retCode
@@ -393,7 +414,8 @@ func (l *searchCmd) SetFlags(f *flag.FlagSet) {
 func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, l)
+		return subcommands.ExitUsageError
 	}
 	if l.name == "" {
 		fmt.Fprintln(os.Stderr, "--name must be supplied")
@@ -481,7 +503,8 @@ func (r *repoListCmd) SetFlags(f *flag.FlagSet) {
 func (r *repoListCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, r)
+		return subcommands.ExitUsageError
 	}
 	ps, err := flagToType(r.packageSystem)
 	if err != nil {
@@ -562,7 +585,8 @@ func (r *cleanupCmd) SetFlags(f *flag.FlagSet) {
 func (r *cleanupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	if f.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "All options are set via flags")
-		return subcommands.ExitFailure
+		subcommands.DefaultCommander.ExplainCommand(os.Stderr, r)
+		return subcommands.ExitUsageError
 	}
 	ps, err := flagToType(r.packageSystem)
 	if err != nil {
