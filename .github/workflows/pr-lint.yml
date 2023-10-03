@@ -1,11 +1,11 @@
-name: golangci-lint
+name: Lint
 on:
   pull_request:
 permissions:
   contents: read
 jobs:
   golangci:
-    name: lint
+    name: golangci lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -17,3 +17,12 @@ jobs:
         with:
           version: latest
           args: --timeout=5m
+  buf-breaking:
+    name: incompatible proto changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: bufbuild/buf-setup-action@v1
+      - uses: bufbuild/buf-breaking-action@v1
+        with:
+          against:  "https://github.com/Snowflake-Labs/sansshell.git#branch=main" 

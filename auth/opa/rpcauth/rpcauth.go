@@ -133,7 +133,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
 		}
 	}
-	logger.V(1).Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
+	logger.Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
 	if !result {
 		errRegister := recorder.Counter(ctx, authzDeniedPolicyCounter, 1, attribute.String("method", input.Method))
 		if errRegister != nil {
