@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -50,7 +51,7 @@ default allow = false
 
 allow {
   input.method = "/Foo.Bar/Baz"
-  input.type = "Mock.MockRequest"
+  input.type = "google.protobuf.Empty"
 }
 
 allow {
@@ -138,6 +139,8 @@ func TestAuthzHook(t *testing.T) {
 		},
 	})
 	testutil.FatalOnErr("json.Marshal extensions", err, t)
+	emptyMessage := emptypb.Empty{}
+	marshaledEmptyMessage, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(&emptyMessage)
 
 	for _, tc := range []struct {
 		name    string
@@ -164,7 +167,8 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = mockMessageType
+					input.Message = marshaledEmptyMessage
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 			},
@@ -187,11 +191,13 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = mockMessageType
+					input.Message = marshaledEmptyMessage
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = mockMessageType
+					input.Message = marshaledEmptyMessage
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 			},
@@ -250,11 +256,13 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = mockMessageType
+					input.MessageType = "google.protobuf.Empty"
+					input.Message = marshaledEmptyMessage
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = mockMessageType
+					input.MessageType = "google.protobuf.Empty"
+					input.Message = marshaledEmptyMessage
 					return nil
 				}),
 			},
