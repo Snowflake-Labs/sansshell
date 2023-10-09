@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
@@ -88,6 +90,71 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 	return New(p, authzHooks...), nil
 }
 
+func isMessage(descriptor protoreflect.FieldDescriptor) bool {
+	return descriptor.Kind() == protoreflect.MessageKind || descriptor.Kind() == protoreflect.GroupKind
+}
+
+func isDebugRedactEnabled(fd protoreflect.FieldDescriptor) bool {
+	opts, ok := fd.Options().(*descriptorpb.FieldOptions)
+	if !ok {
+		return false
+	}
+	return opts.GetDebugRedact()
+}
+
+func redactListField(value protoreflect.Value) {
+	for i := 0; i < value.List().Len(); i++ {
+		redactFields(value.List().Get(i).Message())
+	}
+}
+
+func redactMapField(value protoreflect.Value) {
+	value.Map().Range(func(mapKey protoreflect.MapKey, mapValue protoreflect.Value) bool {
+		redactFields(mapValue.Message())
+		return true
+	})
+}
+
+func redactNestedMessage(message protoreflect.Message, descriptor protoreflect.FieldDescriptor, value protoreflect.Value) {
+	switch {
+	case descriptor.IsList() && isMessage(descriptor):
+		redactListField(value)
+	case descriptor.IsMap() && isMessage(descriptor):
+		redactMapField(value)
+	case !descriptor.IsMap() && isMessage(descriptor):
+		redactFields(value.Message())
+	}
+}
+
+func redactSingleField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor) {
+	if descriptor.Kind() == protoreflect.StringKind {
+		if descriptor.Cardinality() != protoreflect.Repeated {
+			message.Set(descriptor, protoreflect.ValueOfString("--REDACTED--"))
+		} else {
+			list := message.Mutable(descriptor).List()
+			for i := 0; i < list.Len(); i++ {
+				list.Set(i, protoreflect.ValueOfString("--REDACTED--"))
+			}
+		}
+	} else {
+		// other than string, clear it
+		message.Clear(descriptor)
+	}
+}
+
+func redactFields(message protoreflect.Message) {
+	message.Range(
+		func(descriptor protoreflect.FieldDescriptor, value protoreflect.Value) bool {
+			if isDebugRedactEnabled(descriptor) {
+				redactSingleField(message, descriptor)
+				return true
+			}
+			redactNestedMessage(message, descriptor, value)
+			return true
+		},
+	)
+}
+
 // Eval will evalulate the supplied input against the authorization policy, returning
 // nil iff policy evaulation was successful, and the request is permitted, or
 // an appropriate status.Error otherwise. Any input hooks will be executed
@@ -96,18 +163,23 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	var redactedInput protoreflect.ProtoMessage // use this for logging
 	if input != nil {
-		logger.V(2).Info("evaluating authz policy", "input", input)
+		redactedInput = proto.Clone(input.Message)
+		redactFields(redactedInput.ProtoReflect())
+	}
+	if input != nil {
+		logger.V(2).Info("evaluating authz policy", "input", redactedInput)
 	}
 	if input == nil {
 		err := status.Error(codes.InvalidArgument, "policy input cannot be nil")
-		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
+		logger.V(1).Error(err, "failed to evaluate authz policy", "input", redactedInput)
 		recorder.CounterOrLog(ctx, authzFailureInputMissingCounter, 1)
 		return err
 	}
 	for _, hook := range g.hooks {
 		if err := hook.Hook(ctx, input); err != nil {
-			logger.V(1).Error(err, "authz hook error", "input", input)
+			logger.V(1).Error(err, "authz hook error", "input", redactedInput)
 			if _, ok := status.FromError(err); ok {
 				// error is already an appropriate status.Status
 				return err
@@ -115,10 +187,10 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			return status.Errorf(codes.Internal, "authz hook error: %v", err)
 		}
 	}
-	logger.V(2).Info("evaluating authz policy post hooks", "input", input)
+	logger.V(2).Info("evaluating authz policy post hooks", "input", redactedInput)
 	result, err := g.policy.Eval(ctx, input)
 	if err != nil {
-		logger.V(1).Error(err, "failed to evaluate authz policy", "input", input)
+		logger.V(1).Error(err, "failed to evaluate authz policy", "input", redactedInput)
 		recorder.CounterOrLog(ctx, authzFailureEvalErrorCounter, 1, attribute.String("method", input.Method))
 		return status.Errorf(codes.Internal, "authz policy evaluation error: %v", err)
 	}
@@ -133,7 +205,7 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			logger.V(1).Error(err, "failed to get hints for authz policy denial", "error", err)
 		}
 	}
-	logger.Info("authz policy evaluation result", "authorizationResult", result, "input", input, "denialHints", hints)
+	logger.Info("authz policy evaluation result", "authorizationResult", result, "input", redactedInput, "denialHints", hints)
 	if !result {
 		errRegister := recorder.Counter(ctx, authzDeniedPolicyCounter, 1, attribute.String("method", input.Method))
 		if errRegister != nil {

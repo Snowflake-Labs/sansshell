@@ -22,12 +22,9 @@ import (
 	"encoding/json"
 	"net"
 
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -37,8 +34,8 @@ type RPCAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
 
-	// The request protocol buffer, serialized as JSON.
-	Message json.RawMessage `json:"message"`
+	// The request protocol buffer message
+	Message proto.Message `json:"message"`
 
 	// The message type as 'Package.Message'
 	MessageType string `json:"type"`
@@ -143,11 +140,7 @@ func NewRPCAuthInput(ctx context.Context, method string, req proto.Message) (*RP
 
 	if req != nil {
 		out.MessageType = string(proto.MessageName(req))
-		marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(req)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
-		}
-		out.Message = json.RawMessage(marshaled)
+		out.Message = req
 	}
 	out.Peer = PeerInputFromContext(ctx)
 	return out, nil
