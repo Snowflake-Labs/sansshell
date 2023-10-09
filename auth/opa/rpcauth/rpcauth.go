@@ -20,6 +20,7 @@ package rpcauth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -158,6 +159,45 @@ func redactFields(message protoreflect.Message) {
 	)
 }
 
+const mockMessageType = "Mock.MockRequest"
+
+func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
+	if input == nil {
+		return RPCAuthInput{}, nil
+	}
+	redactedInput := RPCAuthInput{
+		Method:      input.Method,
+		MessageType: input.MessageType,
+		Metadata:    input.Metadata,
+		Peer:        input.Peer,
+		Host:        input.Host,
+		Environment: input.Environment,
+		Extensions:  input.Extensions,
+	}
+	if input.MessageType == mockMessageType || input.MessageType == "" {
+		return redactedInput, nil
+	}
+	var redactedMessage protoreflect.ProtoMessage
+	if input != nil {
+		// Transform the rpcauth input into the original proto
+		messageType, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
+		if err != nil {
+			return RPCAuthInput{}, fmt.Errorf("unable to find proto type %v: %v", input.MessageType, err)
+		}
+		redactedMessage = messageType.New().Interface()
+		if err := protojson.Unmarshal([]byte(input.Message), redactedMessage); err != nil {
+			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
+		}
+		redactFields(redactedMessage.ProtoReflect())
+	}
+	marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(redactedMessage)
+	if err != nil {
+		return RPCAuthInput{}, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
+	}
+	redactedInput.Message = json.RawMessage(marshaled)
+	return redactedInput, nil
+}
+
 // Eval will evalulate the supplied input against the authorization policy, returning
 // nil iff policy evaulation was successful, and the request is permitted, or
 // an appropriate status.Error otherwise. Any input hooks will be executed
@@ -166,18 +206,10 @@ func redactFields(message protoreflect.Message) {
 func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	var redactedInput protoreflect.ProtoMessage // use this for logging
-	if input != nil {
-		// Transform the rpcauth input into the original proto
-		messageType, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
-		if err != nil {
-			return fmt.Errorf("unable to find proto type: %v", err)
-		}
-		redactedInput = messageType.New().Interface()
-		if err := protojson.Unmarshal([]byte(input.Message), redactedInput); err != nil {
-			return fmt.Errorf("could not marshal input into %v: %v", input.Message, err)
-		}
-		redactFields(redactedInput.ProtoReflect())
+
+	redactedInput, err := getRedactedInput(input)
+	if err != nil {
+		return fmt.Errorf("failed to get redacted input: %v", err)
 	}
 	if input != nil {
 		logger.V(2).Info("evaluating authz policy", "input", redactedInput)
@@ -197,6 +229,10 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			}
 			return status.Errorf(codes.Internal, "authz hook error: %v", err)
 		}
+	}
+	redactedInput, err = getRedactedInput(input)
+	if err != nil {
+		return fmt.Errorf("failed to get redacted input post hooks: %v", err)
 	}
 	logger.V(2).Info("evaluating authz policy post hooks", "input", redactedInput)
 	result, err := g.policy.Eval(ctx, input)

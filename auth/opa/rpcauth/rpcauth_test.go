@@ -50,7 +50,7 @@ default allow = false
 
 allow {
   input.method = "/Foo.Bar/Baz"
-  input.type = "Foo.BazRequest"
+  input.type = "Mock.MockRequest"
 }
 
 allow {
@@ -164,7 +164,7 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = "Foo.BazRequest"
+					input.MessageType = mockMessageType
 					return nil
 				}),
 			},
@@ -187,10 +187,11 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
+					input.MessageType = mockMessageType
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = "Foo.BazRequest"
+					input.MessageType = mockMessageType
 					return nil
 				}),
 			},
@@ -249,11 +250,11 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = "Foo.BarRequest"
+					input.MessageType = mockMessageType
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = "Foo.BazRequest"
+					input.MessageType = mockMessageType
 					return nil
 				}),
 			},
