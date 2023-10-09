@@ -294,8 +294,8 @@ func TestPstackNative(t *testing.T) {
 	})
 	testutil.FatalOnErr("can't get native pstack", err, t)
 
-	// We're a go program. We have multiple threads.
-	if len(resp.Stacks) <= 1 {
+	// We're a go program. We have one or more threads.
+	if len(resp.Stacks) < 1 {
 		t.Fatalf("Not enough threads in native response. Response: %+v", prototext.Format(resp))
 	}
 
@@ -370,6 +370,20 @@ func TestPstack(t *testing.T) {
 			command:  testutil.ResolvePath(t, "cat"),
 			input:    testdataPstackThreads,
 			validate: testdataPstackThreadsTextProto,
+			pid:      1,
+		},
+		{
+			name:     "A program with a single thread",
+			command:  testutil.ResolvePath(t, "cat"),
+			input:    testdataPstackSingleThread,
+			validate: testdataPstackSingleThreadTextProto,
+			pid:      1,
+		},
+		{
+			name:     "A program with a single thread with an lwp",
+			command:  testutil.ResolvePath(t, "cat"),
+			input:    testdataPstackSingleThreadWithLWP,
+			validate: testdataPstackSingleThreadWithLWPTextProto,
 			pid:      1,
 		},
 		{
