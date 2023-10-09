@@ -55,7 +55,8 @@ func TestGetRedactedInput(t *testing.T) {
 			assertionFn: func(result RPCAuthInput) {
 				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(mockInput.MessageType)
 				resultMessage := messageType.New().Interface()
-				protojson.Unmarshal([]byte(result.Message), resultMessage)
+				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
+				assert.NoError(t, err)
 
 				req := resultMessage.(*httpPB.HostHTTPRequest)
 
