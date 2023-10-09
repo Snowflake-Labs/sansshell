@@ -20,6 +20,7 @@ package rpcauth
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -27,8 +28,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
@@ -165,7 +168,15 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	var redactedInput protoreflect.ProtoMessage // use this for logging
 	if input != nil {
-		redactedInput = proto.Clone(input.Message)
+		// Transform the rpcauth input into the original proto
+		messageType, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
+		if err != nil {
+			return fmt.Errorf("unable to find proto type: %v", err)
+		}
+		redactedInput = messageType.New().Interface()
+		if err := protojson.Unmarshal([]byte(input.Message), redactedInput); err != nil {
+			return fmt.Errorf("could not marshal input into %v: %v", input.Message, err)
+		}
 		redactFields(redactedInput.ProtoReflect())
 	}
 	if input != nil {
