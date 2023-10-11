@@ -50,7 +50,7 @@ default allow = false
 
 allow {
   input.method = "/Foo.Bar/Baz"
-  input.type = "Foo.BazRequest"
+  input.type = "google.protobuf.Empty"
 }
 
 allow {
@@ -164,7 +164,8 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = "Foo.BazRequest"
+					input.Message = []byte("{}")
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 			},
@@ -187,10 +188,13 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
+					input.Message = []byte("{}")
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = "Foo.BazRequest"
+					input.Message = []byte("{}")
+					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 			},
@@ -249,11 +253,13 @@ func TestAuthzHook(t *testing.T) {
 			hooks: []RPCAuthzHook{
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
-					input.MessageType = "Foo.BarRequest"
+					input.MessageType = "google.protobuf.Empty"
+					input.Message = []byte("{}")
 					return nil
 				}),
 				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
-					input.MessageType = "Foo.BazRequest"
+					input.MessageType = "google.protobuf.Empty"
+					input.Message = []byte("{}")
 					return nil
 				}),
 			},
