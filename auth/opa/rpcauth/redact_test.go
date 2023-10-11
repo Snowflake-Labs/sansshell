@@ -20,21 +20,21 @@ import (
 	"context"
 	"testing"
 
-	httpPB "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
+	httppb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 func TestGetRedactedInput(t *testing.T) {
-	httpReq := httpPB.HostHTTPRequest{
+	httpReq := httppb.HostHTTPRequest{
 		Port:     8080,
 		Hostname: "localhost",
 		Protocol: "https",
-		Request: &httpPB.HTTPRequest{
+		Request: &httppb.HTTPRequest{
 			Method:     "POST",
 			RequestUri: "/",
-			Headers: []*httpPB.Header{
+			Headers: []*httppb.Header{
 				{Key: "key0", Values: []string{"val0"}},
 			},
 		},
@@ -58,7 +58,7 @@ func TestGetRedactedInput(t *testing.T) {
 				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
 				assert.NoError(t, err)
 
-				req := resultMessage.(*httpPB.HostHTTPRequest)
+				req := resultMessage.(*httppb.HostHTTPRequest)
 
 				assert.Equal(t, "--REDACTED--", req.Request.Headers[0].Values[0]) // field with debug_redact should be redacted
 				assert.Equal(t, "key0", req.Request.Headers[0].Key)               // field without debug_redact should not be redacted
