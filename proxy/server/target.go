@@ -226,6 +226,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					return nil
 				}
 				if err != nil {
+					s.CloseWith(err)
 					return err
 				}
 				// otherwise, this is a streamData reply
