@@ -16,6 +16,8 @@
 
 syntax = "proto3";
 
+import "google/protobuf/descriptor.proto";
+
 option go_package = "github.com/Snowflake-Labs/sansshell/httpoverrpc";
 
 package HTTPOverRPC;
@@ -38,7 +40,7 @@ message HostHTTPRequest {
 
 message Header {
   string key = 1;
-  repeated string values = 2;
+  repeated string values = 2 [debug_redact = true];
 }
 
 // HTTPRequest describes the HTTP request
