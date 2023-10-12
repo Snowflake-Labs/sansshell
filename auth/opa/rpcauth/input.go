@@ -153,9 +153,26 @@ func NewRPCAuthInput(ctx context.Context, method string, req proto.Message) (*RP
 	return out, nil
 }
 
+type peerInfoKey struct{}
+
+func addPeerToContext(ctx context.Context, p *PeerAuthInput) context.Context {
+	if p == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, peerInfoKey{}, p)
+}
+
 // PeerInputFromContext populates peer information from the supplied
 // context, if available.
 func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
+	// If this runs after rpcauth hooks, we can return richer data that includes
+	// information added by the hooks.
+	cached, ok := ctx.Value(peerInfoKey{}).(*PeerAuthInput)
+	if ok {
+		return cached
+	}
+
+	// If it runs before our rpcauth hooks, let's return the data as best we can.
 	out := &PeerAuthInput{}
 	p, ok := peer.FromContext(ctx)
 	if !ok {

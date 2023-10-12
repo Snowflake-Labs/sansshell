@@ -34,6 +34,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 )
@@ -188,6 +189,12 @@ func (s *TargetStream) Send(req proto.Message) error {
 // status of the target stream
 func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.ctx)
+
+	peer := rpcauth.PeerInputFromContext(ctx)
+	if peer != nil && peer.Principal != nil {
+		// Unconditionally add information on the original caller to outgoing RPCs
+		ctx = proxiedidentity.AppendToMetadataInOutgoingContext(ctx, peer.Principal)
+	}
 
 	group.Go(func() error {
 		dialCtx, cancel := context.WithCancel(ctx)

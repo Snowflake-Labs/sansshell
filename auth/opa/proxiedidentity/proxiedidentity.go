@@ -1,0 +1,81 @@
+// Package proxiedidentity provides a way to pass the identity of an end user
+// through the SansShell proxy
+package proxiedidentity
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+)
+
+const reqProxiedIdentityKey = "sansshell-proxied-identity"
+
+// ServerProxiedIdentityUnaryInterceptor adds information about a proxied caller to the RPC context
+// if the provided function returns true. Allow functions will typically pull out information on the
+// caller's identity from the context with https://godoc.org/google.golang.org/grpc/peer to decide
+// if the addition is allowed.
+func ServerProxiedIdentityUnaryInterceptor(allow func(context.Context) bool) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		identity, ok := fromMetadataInContext(ctx)
+		if !ok {
+			// No need to do anything more if there's no proxied identity
+			return handler(ctx, req)
+		}
+		if !allow(ctx) {
+			return nil, errors.New("peer not allowed to proxy identities")
+		}
+		ctx = newContext(ctx, identity)
+		return handler(ctx, req)
+	}
+}
+
+type proxiedIdentityKey struct{}
+
+// newContext creates a new context with the identity attached.
+func newContext(ctx context.Context, p *rpcauth.PrincipalAuthInput) context.Context {
+	return context.WithValue(ctx, proxiedIdentityKey{}, p)
+}
+
+// FromContext returns the identity in ctx if it exists. It will typically
+// only exist if ServerProxiedIdentityUnaryInterceptor was used.
+func FromContext(ctx context.Context) (p *rpcauth.PrincipalAuthInput, ok bool) {
+	p, ok = ctx.Value(proxiedIdentityKey{}).(*rpcauth.PrincipalAuthInput)
+	return
+}
+
+// AppendToMetadataInOutgoingContext includes the identity in the grpc metadata
+// used in outgoing calls with the context.
+func AppendToMetadataInOutgoingContext(ctx context.Context, p *rpcauth.PrincipalAuthInput) context.Context {
+	b, err := json.Marshal(p)
+	if err != nil {
+		// There shouldn't be any possible value of PrincipalAuthInput that fails to marshal, so let's
+		// return the original context so that the caller doesn't need to consider failures.
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, reqProxiedIdentityKey, string(b))
+}
+
+// fromMetadataInContext fetches the identity from the grpc metadata
+// embedded within the context if it exists. If using this, ensure
+// that the metadata comes from a trusted source.
+func fromMetadataInContext(ctx context.Context) (p *rpcauth.PrincipalAuthInput, ok bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, false
+	}
+	identity := md.Get(reqProxiedIdentityKey)
+	if len(identity) != 1 {
+		// No need to do anything more if there's no proxied identity
+		return nil, false
+	}
+
+	parsed := new(rpcauth.PrincipalAuthInput)
+	if err := json.Unmarshal([]byte(identity[0]), parsed); err != nil {
+		return nil, false
+	}
+	return parsed, true
+}
