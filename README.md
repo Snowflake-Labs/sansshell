@@ -222,6 +222,26 @@ autoload -U +X bashcompinit && bashcompinit
 complete -C /path/to/sanssh -o dirnames sanssh
 ```
 
+# Multi party authorization
+
+MPA, or [multi party authorization](https://en.wikipedia.org/wiki/Multi-party_authorization),
+allows guarding sensitive commands behind additional approval. SansShell
+supports writing authorization policies that only pass when a command is
+approved by additional entities beyond the caller. See
+[services/mpa/README.md](/services/mpa/README.md) for details on
+implementation and usage.
+
+To try this out in the reference client, run the following commands in parallel
+in separate terminals. This will run a server that accepts any command from a
+proxy and a proxy that allows MPA requests from the "sanssh" user when approved by the "approver" user.
+
+```
+go run ./cmd/sansshell-server -server-cert ./auth/mtls/testdata/leaf.pem -server-key ./auth/mtls/testdata/leaf.key
+go run ./cmd/proxy-server -client-cert ./services/mpa/testdata/proxy.pem -client-key ./services/mpa/testdata/proxy.key -server-cert ./services/mpa/testdata/proxy.pem -server-key ./services/mpa/testdata/proxy.key
+go run ./cmd/sanssh -client-cert ./auth/mtls/testdata/client.pem -client-key ./auth/mtls/testdata/client.key -mpa -proxy localhost -targets localhost exec run /bin/echo hello world
+go run ./cmd/sanssh -client-cert ./services/mpa/testdata/approver.pem -client-key ./services/mpa/testdata/approver.key -proxy localhost -targets localhost mpa approve a59c2fef-748944da-336c9d35
+```
+
 # Extending SansShell
 
 SansShell is built on a principle of "Don't pay for what you don't use". This

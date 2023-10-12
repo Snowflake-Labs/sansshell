@@ -85,6 +85,11 @@ allow {
 	input.method = "/SysInfo.SysInfo/Dmesg"
 }
 
+# Allow anything from a proxy
+allow {
+	input.peer.principal.id = "proxy"
+}
+
 # Allow anything with MPA
 allow {
 	input.peer.principal.id = "sanssh"

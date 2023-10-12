@@ -397,6 +397,10 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
+		if rs.EnableMPA {
+			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
+			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
+		}
 		state.Conn = conn
 		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
 		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
@@ -414,6 +418,10 @@ func Run(ctx context.Context, rs RunState) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
 			os.Exit(1)
+		}
+		if rs.EnableMPA {
+			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
+			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
 		}
 		state.Conn = conn
 		state.Out = output[batchCnt*rs.BatchSize:]

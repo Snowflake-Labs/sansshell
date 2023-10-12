@@ -46,6 +46,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
@@ -165,6 +166,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	allowProxyToImpersonate := func(ctx context.Context) bool {
+		peer := rpcauth.PeerInputFromContext(ctx)
+		if peer == nil {
+			return false
+		}
+		return peer.Cert.Subject.CommonName == "proxy"
+	}
+
 	server.Run(ctx,
 		server.WithLogger(logger),
 		server.WithCredSource(*credSource),
@@ -173,6 +182,8 @@ func main() {
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
+		server.WithUnaryInterceptor(proxiedidentity.ServerProxiedIdentityUnaryInterceptor(allowProxyToImpersonate)),
+		server.WithStreamInterceptor(proxiedidentity.ServerProxiedIdentityStreamInterceptor(allowProxyToImpersonate)),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithDebugPort(*debugport),

@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
@@ -59,7 +60,7 @@ func ServerMPAAuthzHook() rpcauth.RPCAuthzHook {
 			return err
 		}
 
-		if err := mpahooks.ActionMatchesInput(resp.Action, input); err != nil {
+		if err := mpahooks.ActionMatchesInput(ctx, resp.Action, input); err != nil {
 			return err
 		}
 		for _, a := range resp.Approver {
@@ -109,7 +110,11 @@ type server struct {
 }
 
 func callerIdentity(ctx context.Context) (*rpcauth.PrincipalAuthInput, bool) {
-	// TODO(#346): Prefer using a proxied identity if provided
+	// Prefer using a proxied identity if provided
+	p, ok := proxiedidentity.FromContext(ctx)
+	if ok {
+		return p, true
+	}
 	peer := rpcauth.PeerInputFromContext(ctx)
 	if peer != nil {
 		return peer.Principal, true
