@@ -420,6 +420,7 @@ func Run(ctx context.Context, opts ...Option) {
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
 		grpc.WithChainStreamInterceptor(streamClient...),
+		grpc.WithAuthority("test.example.com"),
 	}
 	targetDialer := server.NewDialer(dialOpts...)
 

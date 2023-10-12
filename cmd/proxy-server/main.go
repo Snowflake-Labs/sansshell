@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/go-logr/logr/funcr"
 	"github.com/go-logr/stdr"
 	"go.opentelemetry.io/otel"
 	prometheus_exporter "go.opentelemetry.io/otel/exporters/prometheus"
@@ -98,8 +99,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	logOpts := log.Ldate | log.Ltime | log.Lshortfile
-	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanshell-proxy")
+	logger := funcr.NewJSON(func(obj string) {
+		fmt.Println(obj)
+	}, funcr.Options{
+		LogCaller:    funcr.All,
+		LogTimestamp: true,
+		Verbosity:    *verbosity,
+		MaxLogDepth:  99,
+	}).WithName("sansshell-proxy")
 	stdr.SetVerbosity(*verbosity)
 
 	// Setup exporter using the default prometheus registry

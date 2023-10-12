@@ -74,9 +74,10 @@ func internalLoadClientCredentials(ctx context.Context, loaderName string) (cred
 // NewClientCredentials returns transport credentials for SansShell clients.
 func NewClientCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentials.TransportCredentials {
 	return credentials.NewTLS(&tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      CAPool,
-		MinVersion:   tls.VersionTLS13,
+		Certificates:       []tls.Certificate{cert},
+		RootCAs:            CAPool,
+		MinVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: true,
 	})
 }
 
