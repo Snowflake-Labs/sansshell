@@ -26,6 +26,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
 func isMessage(descriptor protoreflect.FieldDescriptor) bool {
@@ -120,7 +123,21 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 		if err := protojson.Unmarshal([]byte(input.Message), redactedMessage); err != nil {
 			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
 		}
-		redactFields(redactedMessage.ProtoReflect())
+		if proxyReq, ok := redactedMessage.(*proxypb.ProxyRequest); ok && proxyReq.GetStreamData() != nil {
+			streamData := proxyReq.GetStreamData()
+			payload, err := streamData.Payload.UnmarshalNew()
+			if err != nil {
+				return RPCAuthInput{}, fmt.Errorf("failed to unmarshal stream data: %v", err)
+			}
+			redactFields(payload.ProtoReflect())
+			any, err := anypb.New(payload)
+			if err != nil {
+				return RPCAuthInput{}, fmt.Errorf("failed to create new anypb while redacting: %v", err)
+			}
+			streamData.Payload = any
+		} else {
+			redactFields(redactedMessage.ProtoReflect())
+		}
 	}
 	marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(redactedMessage)
 	if err != nil {
