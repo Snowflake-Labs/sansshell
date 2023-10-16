@@ -124,17 +124,18 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
 		}
 		if proxyReq, ok := redactedMessage.(*proxypb.ProxyRequest); ok && proxyReq.GetStreamData() != nil {
+			// redact the payload of proxypb.StreamData
 			streamData := proxyReq.GetStreamData()
-			payload, err := streamData.Payload.UnmarshalNew()
+			payload, err := streamData.Payload.UnmarshalNew() // unmarshal the payload contents for redaction
 			if err != nil {
 				return RPCAuthInput{}, fmt.Errorf("failed to unmarshal stream data: %v", err)
 			}
-			redactFields(payload.ProtoReflect())
-			any, err := anypb.New(payload)
+			redactFields(payload.ProtoReflect()) // redact the payload
+			any, err := anypb.New(payload)       // cast it into anypb
 			if err != nil {
 				return RPCAuthInput{}, fmt.Errorf("failed to create new anypb while redacting: %v", err)
 			}
-			streamData.Payload = any
+			streamData.Payload = any // set redactedMessage streamData's payload to the redacted one
 		} else {
 			redactFields(redactedMessage.ProtoReflect())
 		}
