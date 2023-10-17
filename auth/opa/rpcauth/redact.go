@@ -54,15 +54,39 @@ func redactMapField(value protoreflect.Value) {
 	})
 }
 
-func redactNestedMessage(message protoreflect.Message, descriptor protoreflect.FieldDescriptor, value protoreflect.Value) {
+var anypbFullName = (&anypb.Any{}).ProtoReflect().Descriptor().FullName()
+
+func redactAny(message protoreflect.Message, descriptor protoreflect.FieldDescriptor, value protoreflect.Value) error {
+	anyMsg, ok := value.Message().Interface().(*anypb.Any) // cast value to redactAny
+	if !ok {
+		return fmt.Errorf("failed to cast message into any")
+	}
+	originalMsg, errUnmarshal := anyMsg.UnmarshalNew() // unmarshal any into original message
+	if errUnmarshal != nil {
+		return fmt.Errorf("failed to unmarshal anypb: %v", errUnmarshal)
+	}
+	redactFields(originalMsg.ProtoReflect())      // redact original message
+	redactedAny, errAny := anypb.New(originalMsg) // cast redacted message back to any
+	if errAny != nil {
+		return fmt.Errorf("failed to cast into anypb: %v", errAny)
+	}
+	message.Set(descriptor, protoreflect.ValueOf(redactedAny.ProtoReflect())) // set the redacted
+
+	return nil
+}
+
+func redactNestedField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor, value protoreflect.Value) error {
 	switch {
 	case descriptor.IsList() && isMessage(descriptor):
 		redactListField(value)
 	case descriptor.IsMap() && isMessage(descriptor):
 		redactMapField(value)
+	case descriptor.Message() != nil && descriptor.Message().FullName() == anypbFullName:
+		return redactAny(message, descriptor, value)
 	case !descriptor.IsMap() && isMessage(descriptor):
 		redactFields(value.Message())
 	}
+	return nil
 }
 
 func redactSingleField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor) {
@@ -81,29 +105,23 @@ func redactSingleField(message protoreflect.Message, descriptor protoreflect.Fie
 	}
 }
 
-func redactFields(message protoreflect.Message) {
+func redactFields(message protoreflect.Message) error {
+	var err error
 	message.Range(
 		func(descriptor protoreflect.FieldDescriptor, value protoreflect.Value) bool {
 			if isDebugRedactEnabled(descriptor) {
 				redactSingleField(message, descriptor)
 				return true
-			} else if descriptor.Message() != nil && descriptor.FullName() == anypb.File_google_protobuf_any_proto.FullName() {
-				val := message.Get(descriptor)
-				anyMsg, ok := val.Message().Interface().(*anypb.Any)
-				if !ok {
-					// handle err
-				}
-				originalMsg, errUnmarshal := anyMsg.UnmarshalNew()
-				if errUnmarshal != nil {
-
-				}
-				redactFields(originalMsg.ProtoReflect())
-				message.Set(descriptor, protoreflect.ValueOf(originalMsg))
 			}
-			redactNestedMessage(message, descriptor, value)
+			errNested := redactNestedField(message, descriptor, value)
+			if errNested != nil {
+				err = errNested
+				return false
+			}
 			return true
 		},
 	)
+	return err
 }
 
 func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
@@ -133,7 +151,10 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 		if err := protojson.Unmarshal([]byte(input.Message), redactedMessage); err != nil {
 			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
 		}
-		redactFields(redactedMessage.ProtoReflect())
+		errRedact := redactFields(redactedMessage.ProtoReflect())
+		if errRedact != nil {
+			return RPCAuthInput{}, fmt.Errorf("failed to redact message fields: %v", errRedact)
+		}
 	}
 	marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(redactedMessage)
 	if err != nil {
