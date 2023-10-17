@@ -27,8 +27,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
-
-	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
 func isMessage(descriptor protoreflect.FieldDescriptor) bool {
@@ -89,6 +87,18 @@ func redactFields(message protoreflect.Message) {
 			if isDebugRedactEnabled(descriptor) {
 				redactSingleField(message, descriptor)
 				return true
+			} else if descriptor.Message() != nil && descriptor.FullName() == anypb.File_google_protobuf_any_proto.FullName() {
+				val := message.Get(descriptor)
+				anyMsg, ok := val.Message().Interface().(*anypb.Any)
+				if !ok {
+					// handle err
+				}
+				originalMsg, errUnmarshal := anyMsg.UnmarshalNew()
+				if errUnmarshal != nil {
+
+				}
+				redactFields(originalMsg.ProtoReflect())
+				message.Set(descriptor, protoreflect.ValueOf(originalMsg))
 			}
 			redactNestedMessage(message, descriptor, value)
 			return true
@@ -123,22 +133,7 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 		if err := protojson.Unmarshal([]byte(input.Message), redactedMessage); err != nil {
 			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
 		}
-		if proxyReq, ok := redactedMessage.(*proxypb.ProxyRequest); ok && proxyReq.GetStreamData() != nil {
-			// redact the payload of proxypb.StreamData
-			streamData := proxyReq.GetStreamData()
-			payload, err := streamData.Payload.UnmarshalNew() // unmarshal the payload contents for redaction
-			if err != nil {
-				return RPCAuthInput{}, fmt.Errorf("failed to unmarshal stream data: %v", err)
-			}
-			redactFields(payload.ProtoReflect()) // redact the payload
-			any, err := anypb.New(payload)       // cast it into anypb
-			if err != nil {
-				return RPCAuthInput{}, fmt.Errorf("failed to create new anypb while redacting: %v", err)
-			}
-			streamData.Payload = any // set redactedMessage streamData's payload to the redacted one
-		} else {
-			redactFields(redactedMessage.ProtoReflect())
-		}
+		redactFields(redactedMessage.ProtoReflect())
 	}
 	marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(redactedMessage)
 	if err != nil {
