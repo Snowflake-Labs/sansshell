@@ -24,6 +24,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -177,12 +179,15 @@ func TestUnary(t *testing.T) {
 		bufMap[k] = v
 	}
 
+	interceptorCnt := make(map[string]int)
+
 	for _, tc := range []struct {
-		name           string
-		proxy          string
-		targets        []string
-		wantErrOneMany bool
-		wantErr        bool
+		name              string
+		proxy             string
+		targets           []string
+		unaryInterceptors []proxy.UnaryInterceptor
+		wantErrOneMany    bool
+		wantErr           bool
 	}{
 		{
 			name:    "proxy N targets",
@@ -206,14 +211,57 @@ func TestUnary(t *testing.T) {
 			name:    "no proxy 1 target",
 			targets: []string{"foo:123"},
 		},
+		{
+			name:  "proxy interceptor error",
+			proxy: "proxy",
+			unaryInterceptors: []proxy.UnaryInterceptor{
+				func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+					if method == "bad_method" {
+						return invoker(ctx, method, args, opts...)
+					}
+					return nil, fmt.Errorf("interceptor err")
+				},
+			},
+			wantErr:        true,
+			wantErrOneMany: true,
+			targets:        []string{"foo:123"},
+		},
+		{
+			name: "no proxy no error",
+			unaryInterceptors: []proxy.UnaryInterceptor{
+				func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+					return nil, fmt.Errorf("interceptor err")
+				},
+			},
+			targets: []string{"foo:123"},
+		},
+		{
+			name:  "chained proxy",
+			proxy: "proxy",
+			unaryInterceptors: []proxy.UnaryInterceptor{
+				func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+					interceptorCnt[method]++
+					return invoker(ctx, method+"chain", args, opts...)
+				},
+				func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+					if !strings.HasSuffix(method, "chain") {
+						return nil, fmt.Errorf("method should have chain: %v", method)
+					}
+					interceptorCnt[method]++
+					return invoker(ctx, strings.TrimSuffix(method, "chain"), args, opts...)
+				},
+			},
+			targets: []string{"foo:123"},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			conn, err := proxy.Dial(tc.proxy, tc.targets, testutil.WithBufDialer(bufMap), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			tu.FatalOnErr("Dial", err, t)
+			conn.UnaryInterceptors = tc.unaryInterceptors
 
 			ts := tdpb.NewTestServiceClientProxy(conn)
-			resp, err := ts.TestUnaryOneMany(context.Background(), &tdpb.TestRequest{Input: "input"})
+			resp, err := ts.TestUnaryOneMany(ctx, &tdpb.TestRequest{Input: "input"})
 			t.Log(err)
 
 			for r := range resp {
@@ -223,11 +271,11 @@ func TestUnary(t *testing.T) {
 				}
 			}
 
-			_, err = ts.TestUnary(context.Background(), &tdpb.TestRequest{Input: "input"})
+			_, err = ts.TestUnary(ctx, &tdpb.TestRequest{Input: "input"})
 			t.Log(err)
 			tu.WantErr(tc.name, err, tc.wantErr, t)
 
-			resp, err = ts.TestUnaryOneMany(context.Background(), &tdpb.TestRequest{Input: "error"})
+			resp, err = ts.TestUnaryOneMany(ctx, &tdpb.TestRequest{Input: "error"})
 			tu.FatalOnErr("TestUnaryOneMany error", err, t)
 			for r := range resp {
 				t.Logf("%+v", r)
@@ -236,12 +284,12 @@ func TestUnary(t *testing.T) {
 
 			// Check pass through cases
 			if tc.proxy != "" {
-				_, err = ts.TestUnary(context.Background(), &tdpb.TestRequest{Input: "error"})
+				_, err = ts.TestUnary(ctx, &tdpb.TestRequest{Input: "error"})
 				tu.FatalOnNoErr("TestUnary error", err, t)
 			}
 
 			// Do some direct calls against the conn to get at error cases
-			resp2, err := conn.InvokeOneMany(context.Background(), "bad_method", &tdpb.TestRequest{Input: "input"})
+			resp2, err := conn.InvokeOneMany(ctx, "bad_method", &tdpb.TestRequest{Input: "input"})
 			if tc.proxy == "" {
 				tu.FatalOnNoErr("InvokeOneMany bad msg", err, t)
 			} else {
@@ -250,12 +298,22 @@ func TestUnary(t *testing.T) {
 					tu.FatalOnNoErr("InvokeOneMany bad method", r.Error, t)
 				}
 			}
-			_, err = conn.InvokeOneMany(context.Background(), "/Testdata.TestService/TestUnary", nil)
+			_, err = conn.InvokeOneMany(ctx, "/Testdata.TestService/TestUnary", nil)
 			tu.FatalOnNoErr("InvokeOneMany bad msg", err, t)
 
 			err = conn.Close()
 			tu.FatalOnErr("conn Close()", err, t)
 		})
+	}
+
+	wantCalled := map[string]int{
+		"/Testdata.TestService/TestUnary":      5,
+		"/Testdata.TestService/TestUnarychain": 5,
+		"bad_method":                           1,
+		"bad_methodchain":                      1,
+	}
+	if !reflect.DeepEqual(wantCalled, interceptorCnt) {
+		t.Errorf("wrong callers from interceptors: got %v, want %v", interceptorCnt, wantCalled)
 	}
 }
 
@@ -269,12 +327,15 @@ func TestStreaming(t *testing.T) {
 		bufMap[k] = v
 	}
 
+	interceptorCnt := make(map[string]int)
+
 	for _, tc := range []struct {
-		name           string
-		proxy          string
-		targets        []string
-		wantErrOneMany bool
-		wantErr        bool
+		name               string
+		proxy              string
+		targets            []string
+		streamInterceptors []proxy.StreamInterceptor
+		wantErrOneMany     bool
+		wantErr            bool
 	}{
 		{
 			name:    "proxy N targets",
@@ -291,14 +352,42 @@ func TestStreaming(t *testing.T) {
 			name:    "no proxy 1 target",
 			targets: []string{"foo:123"},
 		},
+		{
+			name: "no proxy no err",
+			streamInterceptors: []proxy.StreamInterceptor{
+				func(ctx context.Context, desc *grpc.StreamDesc, cc *proxy.Conn, method string, streamer proxy.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+					return nil, fmt.Errorf("interceptor fail")
+				},
+			},
+			targets: []string{"foo:123"},
+		},
+		{
+			name:  "proxy 1 target chained",
+			proxy: "proxy",
+			streamInterceptors: []proxy.StreamInterceptor{
+				func(ctx context.Context, desc *grpc.StreamDesc, cc *proxy.Conn, method string, streamer proxy.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+					interceptorCnt[method]++
+					return streamer(ctx, desc, method+"chain", opts...)
+				},
+				func(ctx context.Context, desc *grpc.StreamDesc, cc *proxy.Conn, method string, streamer proxy.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+					if !strings.HasSuffix(method, "chain") {
+						return nil, fmt.Errorf("method should have chain: %v", method)
+					}
+					interceptorCnt[method]++
+					return streamer(ctx, desc, strings.TrimSuffix(method, "chain"), opts...)
+				},
+			},
+			targets: []string{"foo:123"},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name+" direct", func(t *testing.T) {
 			conn, err := proxy.Dial(tc.proxy, tc.targets, testutil.WithBufDialer(bufMap), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			tu.FatalOnErr("Dial", err, t)
+			conn.StreamInterceptors = tc.streamInterceptors
 
 			ts := tdpb.NewTestServiceClientProxy(conn)
-			stream, err := ts.TestBidiStream(context.Background())
+			stream, err := ts.TestBidiStream(ctx)
 			tu.FatalOnErr("getting stream", err, t)
 
 			// We only care about validating Send/Recv work cleanly in 1:1 or error in 1:N
@@ -403,6 +492,13 @@ func TestStreaming(t *testing.T) {
 		})
 	}
 
+	wantCalled := map[string]int{
+		"/Testdata.TestService/TestBidiStream":      1,
+		"/Testdata.TestService/TestBidiStreamchain": 1,
+	}
+	if !reflect.DeepEqual(wantCalled, interceptorCnt) {
+		t.Errorf("wrong callers from interceptors: got %v, want %v", interceptorCnt, wantCalled)
+	}
 }
 
 type fakeProxy struct {

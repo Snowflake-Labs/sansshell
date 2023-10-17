@@ -41,6 +41,26 @@ import (
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 )
 
+// UnaryInterceptor intercepts the execution of an RPC through the proxy. Interceptors
+// can be added to a Conn by modifying its Interceptors field. When an interceptor
+// is set on a ClientConn, all proxy RPC invocations are delegated to the interceptor,
+// and it is the responsibility of the interceptor to call invoker to complete the
+// processing of the RPC.
+type UnaryInterceptor func(ctx context.Context, conn *Conn, method string, args any, invoker UnaryInvoker, opts ...grpc.CallOption) (<-chan *Ret, error)
+
+// UnaryInvoker is called by UnaryInterceptor to complete RPCs.
+type UnaryInvoker func(ctx context.Context, method string, args any, opts ...grpc.CallOption) (<-chan *Ret, error)
+
+// StreamInterceptor intercepts the execution of an RPC through the proxy. Interceptors
+// can be added to a Conn by modifying its Interceptors field. When an interceptor
+// is set on a ClientConn, all proxy RPC invocations are delegated to the interceptor,
+// and it is the responsibility of the interceptor to call invoker to complete the
+// processing of the RPC.
+type StreamInterceptor func(ctx context.Context, desc *grpc.StreamDesc, cc *Conn, method string, streamer Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error)
+
+// Streamer is called by StreamInterceptor to complete RPCs.
+type Streamer func(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error)
+
 // Conn is a grpc.ClientConnInterface which is connected to the proxy
 // converting calls into RPC the proxy understands.
 type Conn struct {
@@ -55,6 +75,15 @@ type Conn struct {
 
 	// If this is true we're not proxy but instead direct connect.
 	direct bool
+
+	// UnaryInterceptors allow intercepting Invoke and InvokeOneMany calls
+	// that go through a proxy.
+	// It is unsafe to modify Intercepters while calls are in progress.
+	UnaryInterceptors []UnaryInterceptor
+
+	// StreamInterceptors allow intercepting NewStream calls that go through a proxy.
+	// It is unsafe to modify Intercepters while calls are in progress.
+	StreamInterceptors []StreamInterceptor
 }
 
 // Ret defines the internal API for getting responses from the proxy.
@@ -91,7 +120,7 @@ type proxyStream struct {
 }
 
 // Invoke - see grpc.ClientConnInterface
-func (p *Conn) Invoke(ctx context.Context, method string, args interface{}, reply interface{}, opts ...grpc.CallOption) error {
+func (p *Conn) Invoke(ctx context.Context, method string, args any, reply any, opts ...grpc.CallOption) error {
 	if p.Direct() {
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.Invoke(ctx, method, args, reply, opts...)
@@ -149,7 +178,18 @@ func (p *Conn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 		// TODO(jchacon): Add V1 style logging indicating pass through in use.
 		return p.cc.NewStream(ctx, desc, method, opts...)
 	}
+	stream := p.newStream
+	for i := len(p.StreamInterceptors) - 1; i >= 0; i-- {
+		intercept := p.StreamInterceptors[i]
+		inner := stream
+		stream = func(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			return intercept(ctx, desc, p, method, inner, opts...)
+		}
+	}
+	return stream(ctx, desc, method, opts...)
+}
 
+func (p *Conn) newStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	stream, streamIds, errors, err := p.createStreams(ctx, method)
 	if err != nil {
 		return nil, err
@@ -247,7 +287,7 @@ func (p *proxyStream) closeClients() error {
 }
 
 // see grpc.ClientStream
-func (p *proxyStream) SendMsg(args interface{}) error {
+func (p *proxyStream) SendMsg(args any) error {
 	if p.sendClosed {
 		return status.Error(codes.FailedPrecondition, "sending on a closed connection")
 	}
@@ -262,13 +302,13 @@ func (p *proxyStream) SendMsg(args interface{}) error {
 }
 
 // see grpc.ClientStream
-func (p *proxyStream) RecvMsg(m interface{}) error {
+func (p *proxyStream) RecvMsg(m any) error {
 	// Up front check for nothing left since we closed all streams.
 	if len(p.ids) == 0 {
 		return io.EOF
 	}
 
-	// Since the API is an interface{} we can change what this normally
+	// Since the API is an any we can change what this normally
 	// expects from a proto.Message to a *[]*Ret instead.
 	//
 	// Anything else is an error if we have > 1 target. In the one target
@@ -515,7 +555,7 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 	return stream, streamIds, errors, nil
 }
 
-// InvokeOneMany is used in proto generated code to implemened unary OneMany methods doing 1:N calls to the proxy.
+// InvokeOneMany is used in proto generated code to implement unary OneMany methods doing 1:N calls to the proxy.
 // This returns ProxyRet objects from the channel which contain anypb.Any so the caller (generally generated code)
 // will need to convert those to the proper expected specific types.
 //
@@ -525,9 +565,19 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 // invoked with a context timeout lower than the remote server Dial timeout.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-//
-// TODO(jchacon): Should add the ability to specify remote dial timeout in the connection to the proxy.
-func (p *Conn) InvokeOneMany(ctx context.Context, method string, args interface{}, opts ...grpc.CallOption) (<-chan *Ret, error) {
+func (p *Conn) InvokeOneMany(ctx context.Context, method string, args any, opts ...grpc.CallOption) (<-chan *Ret, error) {
+	invoke := p.invokeOneMany
+	for i := len(p.UnaryInterceptors) - 1; i >= 0; i-- {
+		intercept := p.UnaryInterceptors[i]
+		inner := invoke
+		invoke = func(ctx context.Context, method string, args any, opts ...grpc.CallOption) (<-chan *Ret, error) {
+			return intercept(ctx, p, method, args, inner, opts...)
+		}
+	}
+	return invoke(ctx, method, args, opts...)
+}
+
+func (p *Conn) invokeOneMany(ctx context.Context, method string, args any, opts ...grpc.CallOption) (<-chan *Ret, error) {
 	requestMsg, ok := args.(proto.Message)
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "args must be a proto.Message")
