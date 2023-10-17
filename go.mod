@@ -7,7 +7,7 @@ require (
 	github.com/euank/go-kmsg-parser/v2 v2.1.0
 	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/stdr v1.2.2
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/google/subcommands v1.2.0
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.0
 	github.com/open-policy-agent/opa v0.57.0
