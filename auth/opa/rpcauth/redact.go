@@ -41,17 +41,27 @@ func isDebugRedactEnabled(fd protoreflect.FieldDescriptor) bool {
 	return opts.GetDebugRedact()
 }
 
-func redactListField(value protoreflect.Value) {
+func redactListField(value protoreflect.Value) error {
 	for i := 0; i < value.List().Len(); i++ {
-		redactFields(value.List().Get(i).Message())
+		errRedact := redactFields(value.List().Get(i).Message())
+		if errRedact != nil {
+			return errRedact
+		}
 	}
+	return nil
 }
 
-func redactMapField(value protoreflect.Value) {
+func redactMapField(value protoreflect.Value) error {
+	var err error
 	value.Map().Range(func(mapKey protoreflect.MapKey, mapValue protoreflect.Value) bool {
-		redactFields(mapValue.Message())
+		errRedact := redactFields(mapValue.Message())
+		if errRedact != nil {
+			err = errRedact
+			return false
+		}
 		return true
 	})
+	return err
 }
 
 var anypbFullName = (&anypb.Any{}).ProtoReflect().Descriptor().FullName()
@@ -65,7 +75,10 @@ func redactAny(message protoreflect.Message, descriptor protoreflect.FieldDescri
 	if errUnmarshal != nil {
 		return fmt.Errorf("failed to unmarshal anypb: %v", errUnmarshal)
 	}
-	redactFields(originalMsg.ProtoReflect())      // redact original message
+	errRedact := redactFields(originalMsg.ProtoReflect()) // redact original message
+	if errRedact != nil {
+		return errRedact
+	}
 	redactedAny, errAny := anypb.New(originalMsg) // cast redacted message back to any
 	if errAny != nil {
 		return fmt.Errorf("failed to cast into anypb: %v", errAny)
@@ -78,13 +91,13 @@ func redactAny(message protoreflect.Message, descriptor protoreflect.FieldDescri
 func redactNestedField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor, value protoreflect.Value) error {
 	switch {
 	case descriptor.IsList() && isMessage(descriptor):
-		redactListField(value)
+		return redactListField(value)
 	case descriptor.IsMap() && isMessage(descriptor):
-		redactMapField(value)
+		return redactMapField(value)
 	case descriptor.Message() != nil && descriptor.Message().FullName() == anypbFullName:
 		return redactAny(message, descriptor, value)
 	case !descriptor.IsMap() && isMessage(descriptor):
-		redactFields(value.Message())
+		return redactFields(value.Message())
 	}
 	return nil
 }
