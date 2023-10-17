@@ -20,10 +20,12 @@ import (
 	"context"
 	"testing"
 
+	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
 	httppb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func TestGetRedactedInput(t *testing.T) {
@@ -39,8 +41,18 @@ func TestGetRedactedInput(t *testing.T) {
 			},
 		},
 	}
-	mockInput, _ := NewRPCAuthInput(context.TODO(), "/HTTPOverRPC.HTTPOverRPC/Host", httpReq.ProtoReflect().Interface())
+	httpReqInput, _ := NewRPCAuthInput(context.TODO(), "/HTTPOverRPC.HTTPOverRPC/Host", httpReq.ProtoReflect().Interface())
 
+	payload, _ := anypb.New(httpReq.ProtoReflect().Interface())
+	proxyReq := &proxypb.ProxyRequest{
+		Request: &proxypb.ProxyRequest_StreamData{
+			StreamData: &proxypb.StreamData{
+				StreamIds: []uint64{1},
+				Payload:   payload,
+			},
+		},
+	}
+	proxyReqInput, _ := NewRPCAuthInput(context.TODO(), "/Proxy.Proxy/Proxy", proxyReq.ProtoReflect().Interface())
 	for _, tc := range []struct {
 		name          string
 		createInputFn func() *RPCAuthInput
@@ -50,10 +62,10 @@ func TestGetRedactedInput(t *testing.T) {
 		{
 			name: "redacted fields should be redacted",
 			createInputFn: func() *RPCAuthInput {
-				return mockInput
+				return httpReqInput
 			},
 			assertionFn: func(result RPCAuthInput) {
-				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(mockInput.MessageType)
+				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(httpReqInput.MessageType)
 				resultMessage := messageType.New().Interface()
 				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
 				assert.NoError(t, err)
@@ -62,6 +74,29 @@ func TestGetRedactedInput(t *testing.T) {
 
 				assert.Equal(t, "--REDACTED--", req.Request.Headers[0].Values[0]) // field with debug_redact should be redacted
 				assert.Equal(t, "key0", req.Request.Headers[0].Key)               // field without debug_redact should not be redacted
+			},
+			errFunc: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "any containing redacted_fields should be redacted",
+			createInputFn: func() *RPCAuthInput {
+				return proxyReqInput
+			},
+			assertionFn: func(result RPCAuthInput) {
+				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(proxyReqInput.MessageType)
+				resultMessage := messageType.New().Interface()
+				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
+				assert.NoError(t, err)
+
+				proxyReq := resultMessage.(*proxypb.ProxyRequest)
+				proxyReqPayload := proxyReq.GetStreamData().Payload
+				payloadMsg, _ := proxyReqPayload.UnmarshalNew()
+				httpReq := payloadMsg.(*httppb.HostHTTPRequest)
+
+				assert.Equal(t, "--REDACTED--", httpReq.Request.Headers[0].Values[0]) // field with debug_redact should be redacted
+				assert.Equal(t, "key0", httpReq.Request.Headers[0].Key)               // field without debug_redact should not be redacted
 			},
 			errFunc: func(t *testing.T, err error) {
 				assert.NoError(t, err)
