@@ -660,3 +660,7 @@ func (u *unconnectedClientStream) SendMsg(interface{}) error {
 func (u *unconnectedClientStream) RecvMsg(interface{}) error {
 	return fmt.Errorf("%w: RecvMsg", errUnconnectedClient)
 }
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}

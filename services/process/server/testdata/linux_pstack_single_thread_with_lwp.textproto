@@ -1,6 +1,0 @@
-stacks : <
-  thread_number : 9
-  lwp : 19049
-  stacks : "#0  0x00000000000807ec in runtime.futex.abi0 ()"
-  stacks : "#1  0x000000000004556c in runtime.futexsleep ()"
->

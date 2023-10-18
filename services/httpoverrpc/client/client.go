@@ -28,6 +28,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 
@@ -85,6 +86,21 @@ func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.allowAnyHost, "allow-any-host", false, "Serve data regardless of the Host in HTTP requests instead of only allowing localhost and IPs. False by default to prevent DNS rebinding attacks.")
 }
 
+// This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
+type noCancel struct {
+	ctx context.Context
+}
+
+func (c noCancel) Deadline() (time.Time, bool)       { return time.Time{}, false }
+func (c noCancel) Done() <-chan struct{}             { return nil }
+func (c noCancel) Err() error                        { return nil }
+func (c noCancel) Value(key interface{}) interface{} { return c.ctx.Value(key) }
+
+// WithoutCancel returns a context that is never canceled.
+func WithoutCancel(ctx context.Context) context.Context {
+	return noCancel{ctx: ctx}
+}
+
 func sendError(resp http.ResponseWriter, code int, err error) {
 	resp.WriteHeader(code)
 	if _, err := resp.Write([]byte(err.Error())); err != nil {
@@ -98,7 +114,7 @@ func validatePort(port int) bool {
 
 func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	// Ignore the parent context timeout because we don't want to time out here.
-	ctx = context.WithoutCancel(ctx)
+	ctx = WithoutCancel(ctx)
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "Please specify a port to proxy.")
