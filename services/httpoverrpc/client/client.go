@@ -201,6 +201,7 @@ type getCmd struct {
 	showResponseHeaders bool
 	protocol            string
 	hostname            string
+	insecureSkipVerify  bool
 }
 
 func (*getCmd) Name() string     { return "get" }
@@ -226,6 +227,7 @@ func (g *getCmd) SetFlags(f *flag.FlagSet) {
 	f.Var(&g.headers, "header", "Header to send in the request, may be specified multiple times.")
 	f.StringVar(&g.body, "body", "", "Body to send in request")
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")
+	f.BoolVar(&g.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
 }
 
 func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -266,6 +268,9 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		Port:     int32(port),
 		Protocol: g.protocol,
 		Hostname: g.hostname,
+		Tlsconfig: &pb.TLSConfig{
+			InsecureSkipVerify: g.insecureSkipVerify,
+		},
 	}
 
 	resp, err := proxy.HostOneMany(ctx, req)

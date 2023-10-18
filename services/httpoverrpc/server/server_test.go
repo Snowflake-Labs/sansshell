@@ -32,6 +32,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -161,7 +162,7 @@ func TestServer(t *testing.T) {
 	server := httptest.NewTLSServer(m)
 	l = server.Listener
 
-	httpClient = server.Client()
+	httpClient := server.Client()
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -184,6 +185,9 @@ func TestServer(t *testing.T) {
 		Port:     int32(httpPort),
 		Protocol: "https",
 		Hostname: "localhost",
+		Tlsconfig: &httpoverrpc.TLSConfig{
+			InsecureSkipVerify: true,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -212,4 +216,16 @@ func TestServer(t *testing.T) {
 	if !cmp.Equal(got, want, protocmp.Transform()) {
 		t.Fatalf("want %v, got %v", want, got)
 	}
+
+	// without insecureSkipVerify, should get an error
+	got, err = client.Host(ctx, &httpoverrpc.HostHTTPRequest{
+		Request: &httpoverrpc.HTTPRequest{
+			Method:     "POST",
+			RequestUri: "/register",
+		},
+		Port:     int32(httpPort),
+		Protocol: "https",
+		Hostname: "localhost",
+	})
+	assert.ErrorContains(t, err, "failed to verify certificate:")
 }
