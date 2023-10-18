@@ -20,6 +20,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,10 +38,6 @@ import (
 var (
 	localhostFailureCounter = metrics.MetricDefinition{Name: "actions_httpoverrpc_localhost_failure",
 		Description: "number of failures when performing HTTPOverRPC/Localhost"}
-)
-
-var (
-	httpClient = &http.Client{}
 )
 
 // Server is used to implement the gRPC Server
@@ -68,9 +65,16 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 	for _, header := range req.Request.Headers {
 		httpReq.Header[header.Key] = header.Values
 	}
-	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: req.Tlsconfig.InsecureSkipVerify,
+			},
+		},
+	}
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	httpResp, err := httpClient.Do(httpReq)
+	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}

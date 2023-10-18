@@ -161,7 +161,7 @@ func TestServer(t *testing.T) {
 	server := httptest.NewTLSServer(m)
 	l = server.Listener
 
-	httpClient = server.Client()
+	httpClient := server.Client()
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}

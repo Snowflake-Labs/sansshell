@@ -36,6 +36,12 @@ message HostHTTPRequest {
   string hostname = 3;
   // Protocols for communication like http and https 
   string protocol = 4;
+  // TLS Config for the request
+  TLSConfig tlsconfig = 5;
+}
+
+message TLSConfig {
+  bool insecureSkipVerify = 1;
 }
 
 message Header {

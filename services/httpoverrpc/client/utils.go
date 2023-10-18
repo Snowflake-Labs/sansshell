@@ -39,12 +39,41 @@ var (
 )
 
 type HTTPTransporter struct {
-	conn *proxy.Conn
+	conn               *proxy.Conn
+	insecureSkipVerify bool
 }
 
-func NewHTTPTransporter(conn *proxy.Conn) *HTTPTransporter {
+type httpTransporterOptions struct {
+	insecureSkipVerify bool
+}
+
+type Option interface {
+	apply(*httpTransporterOptions)
+}
+
+type optionFunc func(*httpTransporterOptions)
+
+func (o optionFunc) apply(opts *httpTransporterOptions) {
+	o(opts)
+}
+
+func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
+	return optionFunc(func(o *httpTransporterOptions) {
+		o.insecureSkipVerify = insecureSkipVerify
+	})
+}
+
+func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) *HTTPTransporter {
+	options := &httpTransporterOptions{
+		insecureSkipVerify: false,
+	}
+
+	for _, opt := range opts {
+		opt.apply(options)
+	}
 	return &HTTPTransporter{
-		conn,
+		conn:               conn,
+		insecureSkipVerify: options.insecureSkipVerify,
 	}
 }
 
@@ -132,6 +161,9 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 		},
 		Protocol: req.URL.Scheme,
 		Hostname: req.URL.Hostname(),
+		Tlsconfig: &pb.TLSConfig{
+			InsecureSkipVerify: c.insecureSkipVerify,
+		},
 	}
 
 	port, errPort := getPort(req, reqPb.Protocol)
