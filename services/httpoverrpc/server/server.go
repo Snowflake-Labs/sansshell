@@ -65,12 +65,13 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 	for _, header := range req.Request.Headers {
 		httpReq.Header[header.Key] = header.Values
 	}
-	client := &http.Client{
-		Transport: &http.Transport{
+	client := &http.Client{}
+	if req.Tlsconfig != nil {
+		client.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: req.Tlsconfig.InsecureSkipVerify,
 			},
-		},
+		}
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
