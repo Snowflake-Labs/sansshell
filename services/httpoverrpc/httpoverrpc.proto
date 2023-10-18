@@ -41,6 +41,7 @@ message HostHTTPRequest {
 }
 
 message TLSConfig {
+  // insecureSkipVerify disables TLS verification if set to true.
   bool insecureSkipVerify = 1;
 }
 
