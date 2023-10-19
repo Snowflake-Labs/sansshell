@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -3708,9 +3709,24 @@ func (r *fdbMoveDataWaitCmd) printCommandOutput(state *util.ExecuteState, idx in
 	}
 }
 
+// This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
+type noCancel struct {
+	ctx context.Context
+}
+
+func (c noCancel) Deadline() (time.Time, bool)       { return time.Time{}, false }
+func (c noCancel) Done() <-chan struct{}             { return nil }
+func (c noCancel) Err() error                        { return nil }
+func (c noCancel) Value(key interface{}) interface{} { return c.ctx.Value(key) }
+
+// WithoutCancel returns a context that is never canceled.
+func WithoutCancel(ctx context.Context) context.Context {
+	return noCancel{ctx: ctx}
+}
+
 func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	// Ignore the parent context timeout because we don't want to time out here.
-	ctx = context.WithoutCancel(ctx)
+	ctx = WithoutCancel(ctx)
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewFDBMoveClientProxy(state.Conn)
 

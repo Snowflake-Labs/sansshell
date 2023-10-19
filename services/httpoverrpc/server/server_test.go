@@ -227,5 +227,5 @@ func TestServer(t *testing.T) {
 		Protocol: "https",
 		Hostname: "localhost",
 	})
-	assert.ErrorContains(t, err, "failed to verify certificate:")
+	assert.Error(t, err)
 }
