@@ -32,7 +32,7 @@ MPA must be explicitly requested. When requested, the MPA flow will be used rega
    $ sanssh -targets=1.2.3.4 mpa approve 1-2345-6789
    ```
 
-3. If the user's command is still running, it will complete. If the user had stopped their command, they can rerun it and the approval will still be valid as long as the command's input remains the same.
+3. If the user's command is still running, it will complete. If the user had stopped their command, they can rerun it and the approval will still be valid as long as the command's input remains the same and the sansshell-server still has the approval in memory. Approvals are lost if the server restarts, if the server evicts the approval due to age or staleness, or if a user calls `sanssh mpa clear` oon the request id.
 
 ## Enabling MPA
 
@@ -75,19 +75,19 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
 
    You'll also need to set an additional interceptor on the server to make proxied identity information available.
 
-   DO NOT SUBMIT: Do unary and streaming here, prevent blank and self users
-
    ```go
-   proxiedidentity.ServerProxiedIdentityUnaryInterceptor(func(ctx context.Context){
+   func(ctx context.Context) bool {
       peer := rpcauth.PeerInputFromContext(ctx)
       if peer == nil {
          return false
       }
       // Custom business logic goes here.
-   })
+   }
+   proxiedidentity.ServerProxiedIdentityUnaryInterceptor()
+   proxiedidentity.ServerProxiedIdentityStreamInterceptor()
    ```
 
-4. Any approvers must be able to call `/Mpa.Mpa/Approve` and any requestor must be able to call `/Mpa.Mpa/Store`. It's highly recommended to additionally allow `/Mpa.Mpa/List`, `/Mpa.Mpa/Get`, and `/Mpa.Mpa/WaitForApproval` calls for better user experiences. `/Mpa.Mpa/Clear` can be used for cancelling MPA requests.
+4. Any approvers must be able to call `/Mpa.Mpa/Approve` and any requestor must be able to call `/Mpa.Mpa/Store`. It's highly recommended to additionally let potential approvers call `/Mpa.Mpa/Get` and potential requestors call `/Mpa.Mpa/WaitForApproval` for better user experiences. `/Mpa.Mpa/Clear` can be used for cancelling MPA requests.
 
 Approvers will show up in [RPCAuthInput](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth#RPCAuthInput). Match on these in the OPA policies.
 
