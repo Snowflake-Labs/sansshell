@@ -84,6 +84,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	verbosity        = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
 	prefixHeader     = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
 	batchSize        = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
+	mpa              = flag.Bool("mpa", false, "Request multi-party approval for changes")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceCommaOrWhitespaceFlag
@@ -118,6 +119,7 @@ func init() {
 	subcommands.ImportantFlag("justification")
 	subcommands.ImportantFlag("client-policy")
 	subcommands.ImportantFlag("client-policy-file")
+	subcommands.ImportantFlag("mpa")
 	subcommands.ImportantFlag("v")
 }
 
@@ -192,6 +194,7 @@ func main() {
 		ClientPolicy: clientPolicy,
 		PrefixOutput: *prefixHeader,
 		BatchSize:    *batchSize,
+		EnableMPA:    *mpa,
 	}
 	ctx := logr.NewContext(context.Background(), logger)
 

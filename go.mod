@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/subcommands v1.2.0
+	github.com/gowebpki/jcs v1.0.1
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.0
 	github.com/open-policy-agent/opa v0.57.1
 	github.com/pkg/errors v0.9.1
@@ -21,6 +22,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
 	go.opentelemetry.io/otel/trace v1.19.0
 	gocloud.dev v0.32.0
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.4.0
 	golang.org/x/sys v0.13.0
 	google.golang.org/grpc v1.59.0

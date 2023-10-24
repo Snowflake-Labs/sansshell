@@ -37,6 +37,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
+	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
@@ -74,6 +75,8 @@ type RunState struct {
 	// BatchSize if non-zero will do the requested operation to the targets but in
 	// N calls to the proxy where N is the target list size divided by BatchSize.
 	BatchSize int
+	// If true, add an interceptor that performs the multi-party auth flow
+	EnableMPA bool
 }
 
 const (
@@ -316,6 +319,10 @@ func Run(ctx context.Context, rs RunState) {
 	if clientAuthz != nil {
 		streamInterceptors = append(streamInterceptors, clientAuthz.AuthorizeClientStream)
 		unaryInterceptors = append(unaryInterceptors, clientAuthz.AuthorizeClient)
+	}
+	if rs.EnableMPA {
+		unaryInterceptors = append(unaryInterceptors, mpahooks.UnaryClientIntercepter())
+		streamInterceptors = append(streamInterceptors, mpahooks.StreamClientIntercepter())
 	}
 	// timeout interceptor should be the last item in ops so that it's executed first.
 	streamInterceptors = append(streamInterceptors, StreamClientTimeoutInterceptor(rs.IdleTimeout))
