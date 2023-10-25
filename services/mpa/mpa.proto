@@ -1,0 +1,120 @@
+/* Copyright (c) 2022 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/mpa";
+
+import "google/protobuf/any.proto";
+
+package Mpa;
+
+// The Mpa service definition
+service Mpa {
+  // Store a request that we'd like to try running in the future. Requests
+  // are stored in-memory and older requests may be cleared automatically.
+  // This call is idempotent - requests from the same user with the same
+  // contents will return the same id.
+  //
+  // The user for the request and any justification is implicitly passed in
+  // via inspecting the peer of the RPC or via gRPC metadata.
+  rpc Store(StoreRequest) returns (StoreResponse) {}
+  // Approve a previously stored request. A request can have multiple approvals
+  // and can be approved by anybody but the original user that stored the request.
+  //
+  // The user for the request is implicitly passed in via inspecting the
+  // peer of the RPC or via gRPC metadata.
+  rpc Approve(ApproveRequest) returns (ApproveResponse) {}
+  // Block until at least one approval has been granted. This is used
+  // as an optimization to avoid needing to poll for MPA approval.
+  rpc WaitForApproval(WaitForApprovalRequest) returns (WaitForApprovalResponse) {}
+  // List available requests.
+  rpc List(ListRequest) returns (ListResponse) {}
+  // Get a request and all approvals associated with it.
+  rpc Get(GetRequest) returns (GetResponse) {}
+  // Clear a stored request.
+  //
+  // This is typically unnecessary due to how requests are stored in memory
+  // and forgotten after a process restart.
+  rpc Clear(ClearRequest) returns (ClearResponse) {}
+}
+
+message Action {
+  // The user that created the request.
+  string user = 1;
+  // User-supplied information on why the request is being made.
+  string justification = 2;
+  // The GRPC method name, as '/Package.Service/Method'
+  string method = 3;
+  // The request protocol buffer.
+  google.protobuf.Any message = 4;
+}
+
+message Principal {
+  // The principal identifier (e.g. a username or service role)
+  string id = 1;
+  // Auxiliary groups associated with this principal.
+  repeated string groups = 2;
+}
+
+
+message StoreRequest {
+  // The GRPC method name, as '/Package.Service/Method'
+  string method = 1;
+  // The request protocol buffer. 
+  google.protobuf.Any message = 2;
+}
+
+message StoreResponse {
+  string id = 1;
+  Action action = 2;
+  // All approvers of the request. Storing is idempotent, so
+  // approvers may be non-empty if we're storing a previously
+  // approved command.
+  repeated Principal approver = 3;
+}
+
+message ApproveRequest {
+  // Approve takes an action instead of an ID to improve auditability
+  // and allow richer authorization logic.
+  Action action = 1;
+}
+message ApproveResponse {}
+
+message WaitForApprovalRequest { string id = 1; }
+message WaitForApprovalResponse {}
+
+message ListRequest {}
+message ListResponse {
+  message Item {
+    Action action = 1;  
+    repeated Principal approver = 2;
+    string id = 3;
+  }
+  repeated Item item = 1;
+}
+
+message GetRequest { string id = 1; }
+
+message GetResponse {
+  Action action = 1;
+  
+  // All approvers of the request.
+  repeated Principal approver = 2;
+}
+
+message ClearRequest { Action action = 1; }
+message ClearResponse {}
