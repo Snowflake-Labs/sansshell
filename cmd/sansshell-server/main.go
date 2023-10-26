@@ -170,6 +170,7 @@ func main() {
 		server.WithHostPort(*hostport),
 		server.WithParsedPolicy(parsed),
 		server.WithJustification(*justification),
+		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithDebugPort(*debugport),

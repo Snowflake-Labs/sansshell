@@ -62,7 +62,7 @@ allow {
     input.peer.net.network = "something else"
 }
 `
-	allowPeerSerialPolicy = `
+	allowPeerCommonName = `
 package sansshell.authz
 
 default allow = false
@@ -70,10 +70,10 @@ default allow = false
 allow {
     input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.peer.cert.subject.SerialNumber = "18469474828185269013890292403630281187"
+    input.peer.cert.subject.CommonName = "sanssh"
 }
 `
-	denyPeerSerialPolicy = `
+	denyPeerCommonName = `
 package sansshell.authz
 
 default allow = false
@@ -81,7 +81,33 @@ default allow = false
 allow {
     input.type = "google.protobuf.Empty"
     input.method = "/HealthCheck.HealthCheck/Ok"
-		input.peer.cert.subject.SerialNumber = "12345"
+    input.peer.cert.subject.CommonName = "not-sanssh"
+}
+`
+
+	allowPeerPrincipal = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+    input.type = "google.protobuf.Empty"
+    input.method = "/HealthCheck.HealthCheck/Ok"
+    input.peer.principal.id = "sanssh"
+    input.peer.principal.groups[_] = "group2"
+}
+`
+
+	denyPeerPrincipal = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+    input.type = "google.protobuf.Empty"
+    input.method = "/HealthCheck.HealthCheck/Ok"
+    input.peer.principal.id = "sanssh"
+    input.peer.principal.groups[_]= "group3"
 }
 `
 )
@@ -144,6 +170,7 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 		server.WithCredentials(creds),
 		server.WithPolicy(policy),
 		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 	)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
@@ -302,13 +329,23 @@ func TestHealthCheck(t *testing.T) {
 			err:    "OPA policy does not permit this request",
 		},
 		{
-			name:   "allowed peer by subject serial",
-			policy: allowPeerSerialPolicy,
+			name:   "allowed peer by subject common name",
+			policy: allowPeerCommonName,
 			err:    "",
 		},
 		{
-			name:   "denied peer by subject serial",
-			policy: denyPeerSerialPolicy,
+			name:   "denied peer by subject common name",
+			policy: denyPeerCommonName,
+			err:    "OPA policy does not permit this request",
+		},
+		{
+			name:   "allowed peer by principal parsed from cert",
+			policy: allowPeerPrincipal,
+			err:    "",
+		},
+		{
+			name:   "denied peer by principal parsed from cert",
+			policy: denyPeerPrincipal,
 			err:    "OPA policy does not permit this request",
 		},
 	} {
@@ -330,6 +367,10 @@ func TestHealthCheck(t *testing.T) {
 					t.Errorf("unexpected error; tc: %s, got: %s", tc.err, err)
 				}
 				return
+			}
+			if err == nil && tc.err != "" {
+				t.Errorf("Passed, but expected error: %v", tc.err)
+
 			}
 			t.Logf("Response: %+v", resp)
 			s.GracefulStop()
