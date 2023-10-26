@@ -123,6 +123,21 @@ func TestActionMatchesInput(t *testing.T) {
 	}
 }
 
+func pollForAction(ctx context.Context, m mpa.MpaClient, method string) (*mpa.Action, error) {
+	for {
+		l, err := m.List(ctx, &mpa.ListRequest{})
+		if err != nil {
+			return nil, err
+		}
+		for _, i := range l.Item {
+			if i.Action.Method == method {
+				return i.Action, nil
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 var serverPolicy = `
 package sansshell.authz
 
@@ -219,53 +234,25 @@ func TestClientInterceptors(t *testing.T) {
 		}
 		m := mpa.NewMpaClient(conn)
 
-		var firstItem *mpa.ListResponse_Item
-		for {
-			l, err := m.List(ctx, &mpa.ListRequest{})
-			if err != nil {
-				return err
-			}
-			if len(l.Item) > 1 {
-				return fmt.Errorf("too many items: %v", l)
-			}
-			if len(l.Item) == 1 {
-				firstItem = l.Item[0]
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
+		healthcheckAction, err := pollForAction(ctx, m, "/HealthCheck.HealthCheck/Ok")
+		if err != nil {
+			return err
 		}
-		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: firstItem.Action}); err != nil {
-			return fmt.Errorf("unable to approve %v: %v", firstItem, err)
+		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: healthcheckAction}); err != nil {
+			return fmt.Errorf("unable to approve %v: %v", healthcheckAction, err)
 		}
 
-		var secondItem *mpa.ListResponse_Item
-		for {
-			l, err := m.List(ctx, &mpa.ListRequest{})
-			if err != nil {
-				return err
-			}
-			if len(l.Item) > 2 {
-				return fmt.Errorf("too many items: %v", l)
-			}
-			for _, i := range l.Item {
-				if i.Id != firstItem.Id {
-					secondItem = i
-				}
-			}
-			if secondItem != nil {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
+		fileReadAction, err := pollForAction(ctx, m, "/LocalFile.LocalFile/Read")
+		if err != nil {
+			return err
 		}
-		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: secondItem.Action}); err != nil {
-			return fmt.Errorf("unable to approve %v: %v", secondItem, err)
+		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: fileReadAction}); err != nil {
+			return fmt.Errorf("unable to approve %v: %v", healthcheckAction, err)
 		}
 		return nil
 	})
 
 	// Make our calls
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	conn, err := grpc.DialContext(ctx, lis.Addr().String(),
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
