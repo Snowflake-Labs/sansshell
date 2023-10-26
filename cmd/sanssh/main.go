@@ -47,6 +47,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/mpa/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"

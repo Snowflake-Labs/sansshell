@@ -157,6 +157,8 @@ func NewRPCAuthInput(ctx context.Context, method string, req proto.Message) (*RP
 
 type peerInfoKey struct{}
 
+// AddPeerToContext adds a PeerAuthInput to the context. This is typically
+// added by the rpcauth grpc interceptors.
 func AddPeerToContext(ctx context.Context, p *PeerAuthInput) context.Context {
 	if p == nil {
 		return ctx

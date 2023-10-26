@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
@@ -171,6 +172,7 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 	if err := g.Eval(ctx, authInput); err != nil {
 		return nil, err
 	}
+	ctx = AddPeerToContext(ctx, authInput.Peer)
 	return handler(ctx, req)
 }
 
@@ -187,6 +189,7 @@ func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, re
 	if err := g.Eval(ctx, authInput); err != nil {
 		return err
 	}
+	ctx = AddPeerToContext(ctx, authInput.Peer)
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
@@ -209,6 +212,16 @@ type wrappedClientStream struct {
 	grpc.ClientStream
 	method string
 	authz  *Authorizer
+
+	peerMu            sync.Mutex
+	lastPeerAuthInput *PeerAuthInput
+}
+
+func (e *wrappedClientStream) Context() context.Context {
+	e.peerMu.Lock()
+	ctx := AddPeerToContext(e.ClientStream.Context(), e.lastPeerAuthInput)
+	e.peerMu.Unlock()
+	return ctx
 }
 
 // see: grpc.ClientStream.SendMsg
@@ -225,6 +238,9 @@ func (e *wrappedClientStream) SendMsg(req interface{}) error {
 	if err := e.authz.Eval(ctx, authInput); err != nil {
 		return err
 	}
+	e.peerMu.Lock()
+	e.lastPeerAuthInput = authInput.Peer
+	e.peerMu.Unlock()
 	return e.ClientStream.SendMsg(req)
 }
 
@@ -243,6 +259,16 @@ type wrappedStream struct {
 	grpc.ServerStream
 	info  *grpc.StreamServerInfo
 	authz *Authorizer
+
+	peerMu            sync.Mutex
+	lastPeerAuthInput *PeerAuthInput
+}
+
+func (e *wrappedStream) Context() context.Context {
+	e.peerMu.Lock()
+	ctx := AddPeerToContext(e.ServerStream.Context(), e.lastPeerAuthInput)
+	e.peerMu.Unlock()
+	return ctx
 }
 
 // see: grpc.ServerStream.RecvMsg
@@ -266,5 +292,8 @@ func (e *wrappedStream) RecvMsg(req interface{}) error {
 	if err := e.authz.Eval(ctx, authInput); err != nil {
 		return err
 	}
+	e.peerMu.Lock()
+	e.lastPeerAuthInput = authInput.Peer
+	e.peerMu.Unlock()
 	return nil
 }
