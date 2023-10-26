@@ -171,6 +171,7 @@ func TestClientInterceptors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	srvAddr := lis.Addr().String()
 	authz, err := rpcauth.NewWithPolicy(ctx, serverPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +205,7 @@ func TestClientInterceptors(t *testing.T) {
 	}
 
 	// Confirm that we get Permission Denied without MPA
-	noInterceptorConn, err := grpc.DialContext(ctx, lis.Addr().String(),
+	noInterceptorConn, err := grpc.DialContext(ctx, srvAddr,
 		grpc.WithTransportCredentials(clientCreds),
 	)
 	if err != nil {
@@ -226,9 +227,7 @@ func TestClientInterceptors(t *testing.T) {
 	var g errgroup.Group
 	g.Go(func() error {
 		// Set up an approver loop
-		conn, err := grpc.DialContext(ctx, lis.Addr().String(),
-			grpc.WithTransportCredentials(approverCreds),
-		)
+		conn, err := grpc.DialContext(ctx, srvAddr, grpc.WithTransportCredentials(approverCreds))
 		if err != nil {
 			return err
 		}
@@ -253,7 +252,7 @@ func TestClientInterceptors(t *testing.T) {
 	})
 
 	// Make our calls
-	conn, err := grpc.DialContext(ctx, lis.Addr().String(),
+	conn, err := grpc.DialContext(ctx, srvAddr,
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
 		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter()),
