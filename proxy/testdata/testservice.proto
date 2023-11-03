@@ -20,8 +20,19 @@ package Testdata;
 
 option go_package = "github.com/Snowflake-Labs/sansshell/proxy/testdata";
 
+message MyNested {
+  string fine = 1;
+  string sensitive = 2 [debug_redact = true];
+}
+
 message TestRequest {
   string input = 1;
+
+  repeated string list_scalar = 2;
+  repeated MyNested list_msg = 3;
+
+  map<string, string> map_scalar = 4;
+  map<string, MyNested> map_msg = 5;
 }
 
 message TestResponse {
