@@ -92,7 +92,8 @@ func redactNestedField(message protoreflect.Message, descriptor protoreflect.Fie
 	switch {
 	case descriptor.IsList() && isMessage(descriptor):
 		return redactListField(value)
-	case descriptor.IsMap() && isMessage(descriptor):
+	case descriptor.IsMap() && isMessage(descriptor.MapValue()):
+		// Only when map value are of Message type, we recurse.
 		return redactMapField(value)
 	case descriptor.Message() != nil && descriptor.Message().FullName() == anypbFullName:
 		return redactAny(message, descriptor, value)
