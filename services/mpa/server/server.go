@@ -31,7 +31,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
 	"github.com/gowebpki/jcs"
-	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -183,6 +182,16 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 		Approver: act.approvers,
 	}, nil
 }
+
+func containsPrincipal(principals []*mpa.Principal, p *rpcauth.PrincipalAuthInput) bool {
+	for _, s := range principals {
+		if s.Id == p.ID && reflect.DeepEqual(s.Groups, p.Groups) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.ApproveResponse, error) {
 	p, ok := callerIdentity(ctx)
 	if !ok {
@@ -203,9 +212,7 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	}
 	act.lastModified = time.Now()
 	// Only add the approver if it's new compared to existing approvals
-	if !slices.ContainsFunc(act.approvers, func(s *mpa.Principal) bool {
-		return s.Id == p.ID && reflect.DeepEqual(s.Groups, p.Groups)
-	}) {
+	if !containsPrincipal(act.approvers, p) {
 		act.approvers = append(act.approvers, &mpa.Principal{
 			Id:     p.ID,
 			Groups: p.Groups,
