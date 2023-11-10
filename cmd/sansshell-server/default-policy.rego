@@ -84,3 +84,13 @@ allow {
 allow {
 	input.method = "/SysInfo.SysInfo/Dmesg"
 }
+
+# Allow anything with MPA
+allow {
+	input.peer.principal.id = "sanssh"
+	input.approvers[_].id = "approver"
+}
+
+allow {
+	startswith(input.method, "/Mpa.Mpa/")
+}
