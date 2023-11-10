@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	httppb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -53,6 +54,25 @@ func TestGetRedactedInput(t *testing.T) {
 		},
 	}
 	proxyReqInput, _ := NewRPCAuthInput(context.TODO(), "/Proxy.Proxy/Proxy", proxyReq.ProtoReflect().Interface())
+
+	testReq := testdata.TestRequest{
+		ListScalar: []string{"s1"},
+		ListMsg: []*testdata.MyNested{
+			&testdata.MyNested{
+				Fine:      "ok",
+				Sensitive: "358===",
+			},
+		},
+		MapScalar: map[string]string{"key": "value"},
+		MapMsg: map[string]*testdata.MyNested{
+			"key2": &testdata.MyNested{
+				Fine:      "also ok",
+				Sensitive: "456----",
+			},
+		},
+	}
+	testdataInput, _ := NewRPCAuthInput(context.TODO(), "/Testdata.TestService/TestUnary",
+		testReq.ProtoReflect().Interface())
 	for _, tc := range []struct {
 		name          string
 		createInputFn func() *RPCAuthInput
@@ -97,6 +117,26 @@ func TestGetRedactedInput(t *testing.T) {
 
 				assert.Equal(t, "--REDACTED--", httpReq.Request.Headers[0].Values[0]) // field with debug_redact should be redacted
 				assert.Equal(t, "key0", httpReq.Request.Headers[0].Key)               // field without debug_redact should not be redacted
+			},
+			errFunc: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "redacted nested message in map or list fields",
+			createInputFn: func() *RPCAuthInput {
+				return testdataInput
+			},
+			assertionFn: func(result RPCAuthInput) {
+				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(testdataInput.MessageType)
+				resultMessage := messageType.New().Interface()
+				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
+				assert.NoError(t, err)
+
+				req := resultMessage.(*testdata.TestRequest)
+
+				assert.Equal(t, "--REDACTED--", req.ListMsg[0].Sensitive)
+				assert.Equal(t, "--REDACTED--", req.MapMsg["key2"].Sensitive)
 			},
 			errFunc: func(t *testing.T, err error) {
 				assert.NoError(t, err)

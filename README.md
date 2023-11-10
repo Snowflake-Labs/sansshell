@@ -9,7 +9,7 @@ A non-interactive daemon for host management
 
 ```mermaid
 flowchart LR;
- 
+
 subgraph sanssh ["sansshell client (sanssh)"]
     cli;
     client;
@@ -55,11 +55,12 @@ audited in advance or after the fact, and is ideally deterministic (for a given
 state of the local machine).
 
 sanssh is a simple CLI with a friendly API for dumping debugging state and
-interacting with a remote machine.  It also includes a set of convenient but
+interacting with a remote machine. It also includes a set of convenient but
 perhaps-less-friendly subcommands to address the raw SansShell API endpoints.
 
 # Getting Started
-How to set up, build and run locally for testing.  All commands are relative to
+
+How to set up, build and run locally for testing. All commands are relative to
 the project root directory.
 
 Building SansShell requires a recent version of Go (check the go.mod file for
@@ -74,6 +75,7 @@ $ cp -r auth/mtls/testdata ~/.sansshell
 ```
 
 Then you can build and run the server, in separate terminal windows:
+
 ```
 $ go run ./cmd/sansshell-server
 $ go run ./cmd/sanssh --targets=localhost file read /etc/hosts
@@ -96,6 +98,7 @@ buffer compiler (`protoc`) (version 3 or above) as well as the protoc plugins
 for Go and Go-GRPC
 
 On MacOS, the protocol buffer can be installed via homebrew using
+
 ```
 brew install protobuf
 ```
@@ -105,7 +108,7 @@ directly installing a release version from the [protocol buffers github][1]
 
 ## Environment setup : protoc plugins.
 
-On any platform, Once protoc has been installed, you can install the required 
+On any platform, once protoc has been installed, you can install the required
 code generation plugins using `go install`.
 
 ```
@@ -126,17 +129,11 @@ $ go generate tools.go
 
 ## Creating your own certificates
 
-As an alternative to copying auth/mtls/testdata, you can create your onwn example mTLS certs:
-```
-$ go install github.com/meterup/generate-cert@latest
-$ mkdir -m 0700 certs
-$ cd certs
-$ $(go env GOPATH)/bin/generate-cert --host=localhost,127.0.0.1,::1
-$ cd ../
-$ ln -s $(pwd)/certs ~/.sansshell
-```
+As an alternative to copying auth/mtls/testdata, you can create your own example mTLS certs. See the
+[mtls testdata readme](/auth/mtls/testdata/README.md) for steps.
 
 ## Debugging
+
 Reflection is included in the RPC servers (proxy and sansshell-server)
 allowing for the use of [grpc_cli](https://github.com/grpc/grpc/blob/master/doc/command_line_tool.md).
 
@@ -152,25 +149,29 @@ $ GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=$HOME/.sansshell/root.pem grpc_cli \
 NOTE: This connects to the proxy. Change to 50042 if you want to connect to the sansshell-server.
 
 # A tour of the codebase
+
 SansShell is composed of 5 primary concepts:
-   1. A series of services, which live in the `services/` directory.
-   1. A server which wraps these services into a local host agent.
-   1. A proxy server which can be used as an entry point to processing sansshell
-      RPCs by validating policy and then doing fanout to 1..N actual
-      sansshell servers. This can be done as a one to many RPC where
-      a single incoming RPC is replicated to N backend hosts in one RPC call.
-   1. A reference server binary, which includes all of the services.
-   1. A CLI, which serves as the reference implementation of how to use the
-      services via the agent.
+
+1.  A series of services, which live in the `services/` directory.
+1.  A server which wraps these services into a local host agent.
+1.  A proxy server which can be used as an entry point to processing sansshell
+    RPCs by validating policy and then doing fanout to 1..N actual
+    sansshell servers. This can be done as a one to many RPC where
+    a single incoming RPC is replicated to N backend hosts in one RPC call.
+1.  A reference server binary, which includes all of the services.
+1.  A CLI, which serves as the reference implementation of how to use the
+    services via the agent.
 
 ## Services
+
 Services implement at least one gRPC API endpoint, and expose it by calling
-`RegisterSansShellService` from `init()`.  The goal is to allow custom
+`RegisterSansShellService` from `init()`. The goal is to allow custom
 implementations of the SansShell Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
 
 ### List of available Services:
+
 1. Ansible: Run a local ansible playbook and return output
 1. Execute: Execute a command
 1. HealthCheck
@@ -180,29 +181,32 @@ time.
 1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
 1. Service operations: List, Status, Start/stop/restart
 
-
 TODO: Document service/.../client expectations.
 
 ## The Server class
+
 Most of the logic of instantiating a local SansShell server lives in the
-`server` directory.  This instantiates a gRPC server, registers the imported
+`server` directory. This instantiates a gRPC server, registers the imported
 services with that server, and constraints them with the supplied OPA policy.
 
 ## The reference Proxy Server binary
+
 There is a reference implementation of a SansShell Proxy Server in
 `cmd/proxy-server`, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
 ## The reference Server binary
+
 There is a reference implementation of a SansShell Server in
 `cmd/sansshell-server`, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
 ## The reference CLI client
+
 There is a reference implementation of a SansShell CLI Client in
-`cmd/sanssh`.  It provides raw access to each gRPC endpoint, as well
+`cmd/sanssh`. It provides raw access to each gRPC endpoint, as well
 as a way to implement "convenience" commands which chain together a series of
 actions.
 
@@ -219,11 +223,12 @@ complete -C /path/to/sanssh -o dirnames sanssh
 ```
 
 # Extending SansShell
-SansShell is built on a principle of "Don't pay for what you don't use".  This
+
+SansShell is built on a principle of "Don't pay for what you don't use". This
 is advantageous in both minimizing the resources of SansShell server (binary
 size, memory footprint, etc) as well as reducing the security risk of running
-it.  To accomplish that, all of the SansShell services are independent modules,
-which can be optionally included at build time.  The reference server and
+it. To accomplish that, all of the SansShell services are independent modules,
+which can be optionally included at build time. The reference server and
 client provide access to the features of all of the built-in modules, and come
 with exposure to all of their potential bugs and bloat.
 
@@ -236,6 +241,7 @@ That same extensibility makes it easy to add additional functionality by
 implementing your own module.
 
 To quickly rebuild all binaries you can run:
+
 ```
 $ go generate build.go
 ```
@@ -244,7 +250,7 @@ and they will be placed in a bin directory (which is ignored by git).
 
 TODO: Add example client and server, building in different SansShell modules.
 
-If you need to edit a proto file (to augment an existing service or 
+If you need to edit a proto file (to augment an existing service or
 create a new one) you'll need to generate proto outputs.
 
 ```
