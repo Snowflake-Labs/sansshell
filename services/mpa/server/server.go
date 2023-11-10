@@ -159,7 +159,7 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 		var oldestID string
 		oldestTime := time.Now()
 		for id, act := range s.actions {
-			if act.lastModified.Before((oldestTime)) {
+			if act.lastModified.Before(oldestTime) {
 				oldestID = id
 				oldestTime = act.lastModified
 			}
@@ -225,17 +225,21 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	return &mpa.ApproveResponse{}, nil
 }
 func (s *server) WaitForApproval(ctx context.Context, in *mpa.WaitForApprovalRequest) (*mpa.WaitForApprovalResponse, error) {
-	s.mu.Lock()
-	act, ok := s.actions[in.Id]
-	if !ok {
-		return nil, status.Error(codes.NotFound, "MPA request not found")
-	}
-	s.mu.Unlock()
-	select {
-	case <-act.approved:
-		return &mpa.WaitForApprovalResponse{}, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	for {
+		s.mu.Lock()
+		act, ok := s.actions[in.Id]
+		if !ok {
+			return nil, status.Error(codes.NotFound, "MPA request not found")
+		}
+		s.mu.Unlock()
+		select {
+		case <-act.approved:
+			return &mpa.WaitForApprovalResponse{}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Minute):
+			// Loop around again so that we can make sure that the request still exists
+		}
 	}
 }
 func (s *server) List(ctx context.Context, in *mpa.ListRequest) (*mpa.ListResponse, error) {

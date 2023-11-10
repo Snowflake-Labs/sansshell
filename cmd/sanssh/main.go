@@ -85,7 +85,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	verbosity        = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
 	prefixHeader     = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
 	batchSize        = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
-	mpa              = flag.Bool("mpa", false, "Request multi-party approval for changes")
+	mpa              = flag.Bool("mpa", false, "Request multi-party approval for commands. This will create an MPA request, wait for approval, and then execute the command.")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceCommaOrWhitespaceFlag
