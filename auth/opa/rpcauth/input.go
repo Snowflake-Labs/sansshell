@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -60,6 +61,13 @@ type RPCAuthInput struct {
 
 	// Implementation specific extensions.
 	Extensions json.RawMessage `json:"extensions"`
+
+	// TargetConn is a connection to the target under evaluation. It is only non-nil when
+	// the policy evaluation is being performed by some entity other than the host and
+	// can be used in rpcauth hooks to gather information by making RPC calls to the
+	// host.
+	// TargetConn is not exposed to policy evaluation.
+	TargetConn grpc.ClientConnInterface `json:"-"`
 }
 
 // EnvironmentInput contains information about the environment in which the policy evaluation is
