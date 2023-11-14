@@ -28,7 +28,11 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const reqProxiedIdentityKey = "sansshell-proxied-identity"
+// We don't expose the key so that people aren't tempted to use it directly.
+// We intentionally prefix this with something other than sansshell- so that
+// https://github.com/Snowflake-Labs/sansshell/blob/main/telemetry/telemetry.go
+// doesn't accidentally send untrusted data in passAlongMetadata().
+const reqProxiedIdentityKey = "proxied-sansshell-identity"
 
 // ServerProxiedIdentityUnaryInterceptor adds information about a proxied caller to the RPC context
 // if the provided function returns true. Allow functions will typically pull out information on the
