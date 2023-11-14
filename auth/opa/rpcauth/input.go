@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"net"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
@@ -32,7 +33,6 @@ import (
 )
 
 // RPCAuthInput is used as policy input to validate Sansshell RPCs
-// NOTE: RPCAuthInputForLogging must be updated when this changes.
 type RPCAuthInput struct {
 	// The GRPC method name, as '/Package.Service/Method'
 	Method string `json:"method"`
@@ -52,12 +52,22 @@ type RPCAuthInput struct {
 	// Information about the host serving the RPC.
 	Host *HostAuthInput `json:"host"`
 
+	// Information about approvers when using multi-party authentication.
+	Approvers []*PrincipalAuthInput `json:"approvers"`
+
 	// Information about the environment in which the policy evaluation is
 	// happening.
 	Environment *EnvironmentInput `json:"environment"`
 
 	// Implementation specific extensions.
 	Extensions json.RawMessage `json:"extensions"`
+
+	// TargetConn is a connection to the target under evaluation. It is only non-nil when
+	// the policy evaluation is being performed by some entity other than the host and
+	// can be used in rpcauth hooks to gather information by making RPC calls to the
+	// host.
+	// TargetConn is not exposed to policy evaluation.
+	TargetConn grpc.ClientConnInterface `json:"-"`
 }
 
 // EnvironmentInput contains information about the environment in which the policy evaluation is
@@ -155,7 +165,9 @@ func NewRPCAuthInput(ctx context.Context, method string, req proto.Message) (*RP
 
 type peerInfoKey struct{}
 
-func addPeerToContext(ctx context.Context, p *PeerAuthInput) context.Context {
+// AddPeerToContext adds a PeerAuthInput to the context. This is typically
+// added by the rpcauth grpc interceptors.
+func AddPeerToContext(ctx context.Context, p *PeerAuthInput) context.Context {
 	if p == nil {
 		return ctx
 	}
@@ -172,7 +184,6 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 		return cached
 	}
 
-	// If it runs before our rpcauth hooks, let's return the data as best we can.
 	out := &PeerAuthInput{}
 	p, ok := peer.FromContext(ctx)
 	if !ok {

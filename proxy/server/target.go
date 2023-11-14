@@ -296,6 +296,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			authinput.Environment = &rpcauth.EnvironmentInput{
 				NonHostPolicyCheck: true,
 			}
+			authinput.TargetConn = grpcConn
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {

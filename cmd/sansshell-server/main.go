@@ -64,6 +64,7 @@ import (
 	fdbserver "github.com/Snowflake-Labs/sansshell/services/fdb/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
+	mpa "github.com/Snowflake-Labs/sansshell/services/mpa/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
 
 	// Packages needs a real import to bind flags.
@@ -171,6 +172,7 @@ func main() {
 		server.WithParsedPolicy(parsed),
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
+		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithDebugPort(*debugport),

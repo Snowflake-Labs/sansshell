@@ -172,7 +172,7 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 	if err := g.Eval(ctx, authInput); err != nil {
 		return nil, err
 	}
-	ctx = addPeerToContext(ctx, authInput.Peer)
+	ctx = AddPeerToContext(ctx, authInput.Peer)
 	return handler(ctx, req)
 }
 
@@ -189,7 +189,7 @@ func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, re
 	if err := g.Eval(ctx, authInput); err != nil {
 		return err
 	}
-	ctx = addPeerToContext(ctx, authInput.Peer)
+	ctx = AddPeerToContext(ctx, authInput.Peer)
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
@@ -219,7 +219,7 @@ type wrappedClientStream struct {
 
 func (e *wrappedClientStream) Context() context.Context {
 	e.peerMu.Lock()
-	ctx := addPeerToContext(e.ClientStream.Context(), e.lastPeerAuthInput)
+	ctx := AddPeerToContext(e.ClientStream.Context(), e.lastPeerAuthInput)
 	e.peerMu.Unlock()
 	return ctx
 }
@@ -266,7 +266,7 @@ type wrappedStream struct {
 
 func (e *wrappedStream) Context() context.Context {
 	e.peerMu.Lock()
-	ctx := addPeerToContext(e.ServerStream.Context(), e.lastPeerAuthInput)
+	ctx := AddPeerToContext(e.ServerStream.Context(), e.lastPeerAuthInput)
 	e.peerMu.Unlock()
 	return ctx
 }
