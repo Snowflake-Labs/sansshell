@@ -402,6 +402,11 @@ func Run(ctx context.Context, rs RunState) {
 		state.Conn = conn
 		state.Out = output[start:end]
 		state.Err = errors[start:end]
+		if len(rs.Targets) == 0 {
+			// Special case - if we're talking directly to the proxy, we have an output of size 1
+			state.Out = output[:1]
+			state.Err = errors[:1]
+		}
 		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
 			exitCode = subcommands.ExitFailure
 		}
