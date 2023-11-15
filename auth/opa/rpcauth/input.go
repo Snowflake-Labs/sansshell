@@ -197,8 +197,11 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	// PeerInputFromContext on the context of a client stream, which has a peer
 	// of the target being called and may have the cached value from an earlier
 	// server authorization.
-	if cached != nil && reflect.DeepEqual(out.Net, cached.Net) {
-		return cached
+	if cached != nil && cached.Principal != nil && reflect.DeepEqual(out.Net, cached.Net) {
+		out.Principal = &PrincipalAuthInput{
+			ID:     cached.Principal.ID,
+			Groups: cached.Principal.Groups,
+		}
 	}
 	return out
 }
