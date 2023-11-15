@@ -383,12 +383,12 @@ func Run(ctx context.Context, rs RunState) {
 	output := state.Out
 	errors := state.Err
 
-	batchCnt := 0
+	batchCnt := 1
 	if len(rs.Targets) > 0 {
-		batchCnt = len(rs.Targets) / rs.BatchSize
+		// How many batches? Integer math truncates so we have to do one more for remainder.
+		batchCnt = (len(rs.Targets)-1)/rs.BatchSize + 1
 	}
-	// How many batches? Integer math truncates so we have to do one more for remainder.
-	for i := 0; i < batchCnt+1; i++ {
+	for i := 0; i < batchCnt; i++ {
 		start, end := i*rs.BatchSize, rs.BatchSize*(i+1)
 		if end > len(rs.Targets) {
 			end = len(rs.Targets)
