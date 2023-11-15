@@ -52,6 +52,7 @@ func mustAny(a *anypb.Any, err error) *anypb.Any {
 }
 
 func TestActionMatchesInput(t *testing.T) {
+	ctx := context.Background()
 	for _, tc := range []struct {
 		desc    string
 		action  *mpa.Action
@@ -112,7 +113,7 @@ func TestActionMatchesInput(t *testing.T) {
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			err := mpahooks.ActionMatchesInput(tc.action, tc.input)
+			err := mpahooks.ActionMatchesInput(ctx, tc.action, tc.input)
 			if err != nil && tc.matches {
 				t.Errorf("expected match: %v", err)
 			}

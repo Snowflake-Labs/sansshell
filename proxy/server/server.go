@@ -177,7 +177,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 		ctx, cancel := context.WithCancel(ctx)
 
 		// Invoke dispatch to handle incoming requests
-		err := dispatch(ctx, requestChan, replyChan, streamSet)
+		err := dispatch(ctx, stream, requestChan, replyChan, streamSet)
 
 		// If dispatch returned with an error, we can cancel all
 		// running streams by cancelling their context.
@@ -243,7 +243,7 @@ func receive(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan 
 }
 
 // dispatch manages incoming requests from `requestChan` by routing them to the supplied stream set
-func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan chan *pb.ProxyReply, streamSet *TargetStreamSet) error {
+func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan *pb.ProxyRequest, replyChan chan *pb.ProxyReply, streamSet *TargetStreamSet) error {
 	// Channel to track streams that have completed and should
 	// be removed from the stream set
 	doneChan := make(chan uint64)
@@ -274,6 +274,10 @@ func dispatch(ctx context.Context, requestChan chan *pb.ProxyRequest, replyChan 
 				streamSet.ClientCloseAll()
 				return nil
 			}
+			// Peer information might not be properly populated until rpcauth
+			// evaluates the initial received message, so let's grab fresh
+			// peer information when we know we've gotten at least one message.
+			ctx = rpcauth.AddPeerToContext(ctx, rpcauth.PeerInputFromContext(stream.Context()))
 			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:

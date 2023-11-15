@@ -99,3 +99,39 @@ func fromMetadataInContext(ctx context.Context) (p *rpcauth.PrincipalAuthInput, 
 	}
 	return parsed, true
 }
+
+// wrappedSS wraps a server stream so that we can insert an appropriate
+// value into the context.
+type wrappedSS struct {
+	allow func(context.Context) bool
+	grpc.ServerStream
+}
+
+func (w *wrappedSS) Context() context.Context {
+	ctx := w.ServerStream.Context()
+	identity, ok := fromMetadataInContext(ctx)
+	if !ok || !w.allow(ctx) {
+		// Under most conditions allow would have failed loudly earlier,
+		// so here we fail silently.
+		return ctx
+	}
+	return newContext(ctx, identity)
+}
+
+// ServerProxiedIdentityStreamInterceptor adds information about a proxied caller to the RPC context
+// if the provided function returns true. Allow functions will typically pull out information on the
+// caller's identity from the context with https://godoc.org/google.golang.org/grpc/peer to decide
+// if the addition is allowed.
+func ServerProxiedIdentityStreamInterceptor(allow func(context.Context) bool) grpc.StreamServerInterceptor {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		ctx := ss.Context()
+		if _, ok := fromMetadataInContext(ctx); !ok {
+			// No need to do anything more if there's no proxied identity
+			return handler(srv, ss)
+		}
+		if !allow(ctx) {
+			return errors.New("peer not allowed to proxy identities")
+		}
+		return handler(srv, &wrappedSS{allow, ss})
+	}
+}
