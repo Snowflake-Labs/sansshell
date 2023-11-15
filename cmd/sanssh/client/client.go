@@ -313,6 +313,8 @@ func Run(ctx context.Context, rs RunState) {
 	// We may need an option for doing client OPA checks.
 	ops := []grpc.DialOption{
 		grpc.WithTransportCredentials(creds),
+		// Use 16MB instead of the default 4MB to allow larger responses
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
 	}
 	streamInterceptors := []grpc.StreamClientInterceptor{}
 	unaryInterceptors := []grpc.UnaryClientInterceptor{}

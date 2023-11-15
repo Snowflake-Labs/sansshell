@@ -420,6 +420,8 @@ func Run(ctx context.Context, opts ...Option) {
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
 		grpc.WithChainStreamInterceptor(streamClient...),
+		// Use 16MB instead of the default 4MB to allow larger responses
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
 	}
 	targetDialer := server.NewDialer(dialOpts...)
 
