@@ -387,35 +387,21 @@ func Run(ctx context.Context, rs RunState) {
 	if len(rs.Targets) > 0 {
 		batchCnt = len(rs.Targets) / rs.BatchSize
 	}
-	// How many batches? Integer math truncates so we have to do one more after for remainder.
-	for i := 0; i < batchCnt; i++ {
+	// How many batches? Integer math truncates so we have to do one more for remainder.
+	for i := 0; i < batchCnt+1; i++ {
+		start, end := i*rs.BatchSize, rs.BatchSize*(i+1)
+		if end > len(rs.Targets) {
+			end = len(rs.Targets)
+		}
 		// Set up a connection to the sansshell-server (possibly via proxy).
-		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
+		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[start:end], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
 		state.Conn = conn
-		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
-		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
-		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
-			exitCode = subcommands.ExitFailure
-		}
-		if err := conn.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
-		}
-	}
-
-	// Remainder or the fall through case of no targets (i.e. a proxy command).
-	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
-		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
-			os.Exit(1)
-		}
-		state.Conn = conn
-		state.Out = output[batchCnt*rs.BatchSize:]
-		state.Err = errors[batchCnt*rs.BatchSize:]
+		state.Out = output[start:end]
+		state.Err = errors[start:end]
 		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
 			exitCode = subcommands.ExitFailure
 		}
