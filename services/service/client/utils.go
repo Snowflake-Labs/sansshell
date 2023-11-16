@@ -96,6 +96,32 @@ func StopRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemTy
 	return nil
 }
 
+// StartManyRemoteServices is a helper function for starting a service on multiple remote targets.
+func StartManyRemoteServices(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	c := pb.NewServiceClientProxy(conn)
+	if _, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_START,
+	}); err != nil {
+		return fmt.Errorf("can't start service %s - %v", service, err)
+	}
+	return nil
+}
+
+// StopManyRemoteService is a helper function for stopping a service on multiple remote targets.
+func StopManyRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	c := pb.NewServiceClientProxy(conn)
+	if _, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_STOP,
+	}); err != nil {
+		return fmt.Errorf("can't stop service %s - %v", service, err)
+	}
+	return nil
+}
+
 // RestartService was the original exported name for RestartRemoteService and now
 // exists for backwards compatibility.
 //
