@@ -189,7 +189,6 @@ func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, re
 	if err := g.Eval(ctx, authInput); err != nil {
 		return err
 	}
-	ctx = AddPeerToContext(ctx, authInput.Peer)
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
@@ -212,16 +211,6 @@ type wrappedClientStream struct {
 	grpc.ClientStream
 	method string
 	authz  *Authorizer
-
-	peerMu            sync.Mutex
-	lastPeerAuthInput *PeerAuthInput
-}
-
-func (e *wrappedClientStream) Context() context.Context {
-	e.peerMu.Lock()
-	ctx := AddPeerToContext(e.ClientStream.Context(), e.lastPeerAuthInput)
-	e.peerMu.Unlock()
-	return ctx
 }
 
 // see: grpc.ClientStream.SendMsg
@@ -238,9 +227,6 @@ func (e *wrappedClientStream) SendMsg(req interface{}) error {
 	if err := e.authz.Eval(ctx, authInput); err != nil {
 		return err
 	}
-	e.peerMu.Lock()
-	e.lastPeerAuthInput = authInput.Peer
-	e.peerMu.Unlock()
 	return e.ClientStream.SendMsg(req)
 }
 
