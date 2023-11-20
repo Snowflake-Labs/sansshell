@@ -42,7 +42,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -480,7 +479,6 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	})
 
 	// Make our calls
-	ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, "justification")
 	conn, err := proxy.DialContext(ctx, proxyAddr, []string{srvAddr},
 		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
@@ -539,5 +537,4 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	if err := clearAll(ctx, mpa.NewMpaClientProxy(conn)); err != nil {
 		t.Error(err)
 	}
-	fmt.Println("hi")
 }

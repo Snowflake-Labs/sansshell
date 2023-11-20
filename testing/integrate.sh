@@ -924,6 +924,14 @@ ${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/
 check_status $? /dev/null mv failed
 check_mv
 
+echo "healthcheck with mpa"
+# MPA ID is deterministic, so we approve it in parallel
+sleep 1 && ./bin/sanssh --root-ca=./auth/mtls/testdata/root.pem --client-cert=./services/mpa/testdata/approver.pem --client-key=./services/mpa/testdata/approver.key mpa approve dc83bd71-8945e78a-ff01a54c &
+${SANSSH_NOPROXY} ${SINGLE_TARGET} -mpa healthcheck validate
+check_status $? /dev/null mv failed
+
+
+
 echo "parallel work with some bad targets and various timeouts"
 mkdir -p "${LOGS}/parallel"
 start=$(date +%s)
