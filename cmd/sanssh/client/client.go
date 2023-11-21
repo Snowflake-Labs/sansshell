@@ -385,39 +385,30 @@ func Run(ctx context.Context, rs RunState) {
 	output := state.Out
 	errors := state.Err
 
-	batchCnt := 0
+	batchCnt := 1
 	if len(rs.Targets) > 0 {
-		batchCnt = len(rs.Targets) / rs.BatchSize
+		// How many batches? Integer math truncates so we have to do one more for remainder.
+		batchCnt = (len(rs.Targets)-1)/rs.BatchSize + 1
 	}
-	// How many batches? Integer math truncates so we have to do one more after for remainder.
 	for i := 0; i < batchCnt; i++ {
+		start, end := i*rs.BatchSize, rs.BatchSize*(i+1)
+		if end > len(rs.Targets) {
+			end = len(rs.Targets)
+		}
 		// Set up a connection to the sansshell-server (possibly via proxy).
-		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[i*rs.BatchSize:rs.BatchSize*(i+1)], ops...)
+		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[start:end], ops...)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
 		state.Conn = conn
-		state.Out = output[i*rs.BatchSize : rs.BatchSize*(i+1)]
-		state.Err = errors[i*rs.BatchSize : rs.BatchSize*(i+1)]
-		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
-			exitCode = subcommands.ExitFailure
+		state.Out = output[start:end]
+		state.Err = errors[start:end]
+		if len(rs.Targets) == 0 {
+			// Special case - if we're talking directly to the proxy, we have an output of size 1
+			state.Out = output[:1]
+			state.Err = errors[:1]
 		}
-		if err := conn.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "error closing connection - %v\n", err)
-		}
-	}
-
-	// Remainder or the fall through case of no targets (i.e. a proxy command).
-	if len(rs.Targets)-batchCnt*rs.BatchSize > 0 || len(rs.Targets) == 0 {
-		conn, err := proxy.DialContext(ctx, rs.Proxy, rs.Targets[batchCnt*rs.BatchSize:], ops...)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in last batch: %v\n", rs.Proxy, err)
-			os.Exit(1)
-		}
-		state.Conn = conn
-		state.Out = output[batchCnt*rs.BatchSize:]
-		state.Err = errors[batchCnt*rs.BatchSize:]
 		if subcommands.Execute(ctx, state) != subcommands.ExitSuccess {
 			exitCode = subcommands.ExitFailure
 		}
