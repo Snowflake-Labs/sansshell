@@ -21,6 +21,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"net"
+	"reflect"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -177,20 +178,31 @@ func AddPeerToContext(ctx context.Context, p *PeerAuthInput) context.Context {
 // PeerInputFromContext populates peer information from the supplied
 // context, if available.
 func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
-	// If this runs after rpcauth hooks, we can return richer data that includes
-	// information added by the hooks.
-	cached, ok := ctx.Value(peerInfoKey{}).(*PeerAuthInput)
-	if ok {
-		return cached
-	}
+	cached, _ := ctx.Value(peerInfoKey{}).(*PeerAuthInput)
 
 	out := &PeerAuthInput{}
 	p, ok := peer.FromContext(ctx)
 	if !ok {
-		return nil
+		// If there's no peer info, returned cached data so that invocations
+		// of AddPeerToContext can work outside of RPC contexts.
+		return cached
 	}
+
 	out.Net = NetInputFromAddr(p.Addr)
 	out.Cert = CertInputFrom(p.AuthInfo)
+
+	// If this runs after rpcauth hooks, we can return richer data that includes
+	// information added by the hooks.
+	// We need to compare cached data to peer info because we might be calling
+	// PeerInputFromContext on the context of a client stream, which has a peer
+	// of the target being called and may have the cached value from an earlier
+	// server authorization.
+	if cached != nil && cached.Principal != nil && reflect.DeepEqual(out.Net, cached.Net) {
+		out.Principal = &PrincipalAuthInput{
+			ID:     cached.Principal.ID,
+			Groups: cached.Principal.Groups,
+		}
+	}
 	return out
 }
 
