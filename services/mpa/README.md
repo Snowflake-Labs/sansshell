@@ -11,23 +11,30 @@ MPA must be explicitly requested. When requested, the MPA flow will be used rega
    ```bash
    $ sanssh -mpa -targets=1.2.3.4 -justification emergency exec run /bin/echo hi
    Waiting for multi-party approval on all targets, ask an approver to run:
-     sanssh --targets 1.2.3.4 mpa approve 86da6993-a8641390-d687dfc2
+     sanssh --targets 1.2.3.4 mpa approve 244407fc-6b9b338a-db0760b8
    ```
 
 2. The approver views the commands and approves it.
 
    ```bash
    $ sanssh -targets=1.2.3.4 mpa list
-   86da6993-a8641390-d687dfc2
-   $ sanssh -targets=1.2.3.4 mpa get 86da6993-a8641390-d687dfc2
-   user: firstuser
-   justification: emergency
-   method: /Exec.Exec/Run
-   message: {
-      "command": "/bin/echo",
-      "args": ["hi"]
+   244407fc-6b9b338a-db0760b8 /Exec.Exec/Run from sanssh for emergency
+   $ sanssh -targets=1.2.3.4 mpa get 244407fc-6b9b338a-db0760b8
+   {
+   "action": {
+      "user": "sanssh",
+      "justification": "emergency",
+      "method": "/Exec.Exec/Run",
+      "message": {
+         "@type": "type.googleapis.com/Exec.ExecRequest",
+         "command": "/bin/echo",
+         "args": [
+         "hi"
+         ]
+      }
    }
-   $ sanssh -targets=1.2.3.4 mpa approve 86da6993-a8641390-d687dfc2
+   }
+   $ sanssh -targets=1.2.3.4 mpa approve 244407fc-6b9b338a-db0760b8
    ```
 
 3. If the user's command is still running, it will complete. If the user had stopped their command, they can rerun it and the approval will still be valid as long as the command's input remains the same and the sansshell-server still has the approval in memory. Approvals are lost if the server restarts, if the server evicts the approval due to age or staleness, or if a user calls `sanssh mpa clear` oon the request id.

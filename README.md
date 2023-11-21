@@ -58,7 +58,7 @@ sanssh is a simple CLI with a friendly API for dumping debugging state and
 interacting with a remote machine. It also includes a set of convenient but
 perhaps-less-friendly subcommands to address the raw SansShell API endpoints.
 
-# Getting Started
+## Getting Started
 
 How to set up, build and run locally for testing. All commands are relative to
 the project root directory.
@@ -66,7 +66,7 @@ the project root directory.
 Building SansShell requires a recent version of Go (check the go.mod file for
 the current version).
 
-## Build and run
+### Build and run
 
 You need to populate ~/.sansshell with certificates before running.
 
@@ -91,7 +91,7 @@ $ go run ./cmd/sanssh --proxy=localhost:50043 --targets=localhost:50042 file rea
 
 Minimal debugging UIs are available at http://localhost:50044 for the server and http://localhost:50046 for the proxy by default.
 
-## Environment setup : protoc
+### Environment setup : protoc
 
 When making any change to the protocol buffers, you'll also need the protocol
 buffer compiler (`protoc`) (version 3 or above) as well as the protoc plugins
@@ -106,7 +106,7 @@ brew install protobuf
 On Linux, protoc can be installed using either the OS package manager, or by
 directly installing a release version from the [protocol buffers github][1]
 
-## Environment setup : protoc plugins.
+### Environment setup : protoc plugins
 
 On any platform, once protoc has been installed, you can install the required
 code generation plugins using `go install`.
@@ -127,12 +127,12 @@ do this for you, as well as re-generating the service proto files.
 $ go generate tools.go
 ```
 
-## Creating your own certificates
+### Creating your own certificates
 
 As an alternative to copying auth/mtls/testdata, you can create your own example mTLS certs. See the
 [mtls testdata readme](/auth/mtls/testdata/README.md) for steps.
 
-## Debugging
+### Debugging
 
 Reflection is included in the RPC servers (proxy and sansshell-server)
 allowing for the use of [grpc_cli](https://github.com/grpc/grpc/blob/master/doc/command_line_tool.md).
@@ -148,7 +148,7 @@ $ GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=$HOME/.sansshell/root.pem grpc_cli \
 
 NOTE: This connects to the proxy. Change to 50042 if you want to connect to the sansshell-server.
 
-# A tour of the codebase
+## A tour of the codebase
 
 SansShell is composed of 5 primary concepts:
 
@@ -162,7 +162,7 @@ SansShell is composed of 5 primary concepts:
 1.  A CLI, which serves as the reference implementation of how to use the
     services via the agent.
 
-## Services
+### Services
 
 Services implement at least one gRPC API endpoint, and expose it by calling
 `RegisterSansShellService` from `init()`. The goal is to allow custom
@@ -170,7 +170,7 @@ implementations of the SansShell Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
 
-### List of available Services:
+#### List of available Services
 
 1. Ansible: Run a local ansible playbook and return output
 1. Execute: Execute a command
@@ -179,31 +179,32 @@ time.
    and immutable operations (if OS supported).
 1. Package operations: Install, Upgrade, List, Repolist
 1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
+1. MPA operations: Multi party authorization for commands
 1. Service operations: List, Status, Start/stop/restart
 
 TODO: Document service/.../client expectations.
 
-## The Server class
+### The Server class
 
 Most of the logic of instantiating a local SansShell server lives in the
 `server` directory. This instantiates a gRPC server, registers the imported
 services with that server, and constraints them with the supplied OPA policy.
 
-## The reference Proxy Server binary
+### The reference Proxy Server binary
 
 There is a reference implementation of a SansShell Proxy Server in
 `cmd/proxy-server`, which should be suitable as-written for many use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
-## The reference Server binary
+### The reference Server binary
 
 There is a reference implementation of a SansShell Server in
-`cmd/sansshell-server`, which should be suitable as-written for many use cases.
+`cmd/sansshell-server`, which should be suitable as-written for some use cases.
 It's intentionally kept relatively short, so that it can be copied to another
 repository and customized by adjusting only the imported services.
 
-## The reference CLI client
+### The reference CLI client
 
 There is a reference implementation of a SansShell CLI Client in
 `cmd/sanssh`. It provides raw access to each gRPC endpoint, as well
@@ -222,7 +223,7 @@ autoload -U +X bashcompinit && bashcompinit
 complete -C /path/to/sanssh -o dirnames sanssh
 ```
 
-# Multi party authorization
+## Multi party authorization
 
 MPA, or [multi party authorization](https://en.wikipedia.org/wiki/Multi-party_authorization),
 allows guarding sensitive commands behind additional approval. SansShell
@@ -235,14 +236,18 @@ To try this out in the reference client, run the following commands in parallel
 in separate terminals. This will run a server that accepts any command from a
 proxy and a proxy that allows MPA requests from the "sanssh" user when approved by the "approver" user.
 
-```
-go run ./cmd/sansshell-server -server-cert ./auth/mtls/testdata/leaf.pem -server-key ./auth/mtls/testdata/leaf.key
+```bash
+# Start the server
+go run ./cmd/sansshell-server -proxy-identity proxy -server-cert ./auth/mtls/testdata/leaf.pem -server-key ./auth/mtls/testdata/leaf.key
+# Start the proxy
 go run ./cmd/proxy-server -client-cert ./services/mpa/testdata/proxy.pem -client-key ./services/mpa/testdata/proxy.key -server-cert ./services/mpa/testdata/proxy.pem -server-key ./services/mpa/testdata/proxy.key
+# Run a command gated on MPA
 go run ./cmd/sanssh -client-cert ./auth/mtls/testdata/client.pem -client-key ./auth/mtls/testdata/client.key -mpa -proxy localhost -targets localhost exec run /bin/echo hello world
-go run ./cmd/sanssh -client-cert ./services/mpa/testdata/approver.pem -client-key ./services/mpa/testdata/approver.key -proxy localhost -targets localhost mpa approve a59c2fef-748944da-336c9d35
+# Approve the command above
+go run ./cmd/sanssh -client-cert ./services/mpa/testdata/approver.pem -client-key ./services/mpa/testdata/approver.key -proxy localhost -targets localhost mpa approve 53feec22-5447f403-c0e0a419
 ```
 
-# Extending SansShell
+## Extending SansShell
 
 SansShell is built on a principle of "Don't pay for what you don't use". This
 is advantageous in both minimizing the resources of SansShell server (binary

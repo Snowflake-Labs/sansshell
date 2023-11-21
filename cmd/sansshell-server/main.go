@@ -91,6 +91,7 @@ var (
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	proxyIdentity = flag.String("proxy-identity", "", "Identity of the sansshell proxy, used for permitting proxied identities if present")
 	version       bool
 
 	fdbCLIEnvList ssutil.StringSliceFlag
@@ -166,15 +167,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	allowProxyToImpersonate := func(ctx context.Context) bool {
-		peer := rpcauth.PeerInputFromContext(ctx)
-		if peer == nil {
-			return false
-		}
-		return peer.Cert.Subject.CommonName == "proxy"
-	}
-
-	server.Run(ctx,
+	opts := []server.Option{
 		server.WithLogger(logger),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
@@ -182,12 +175,26 @@ func main() {
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
-		server.WithUnaryInterceptor(proxiedidentity.ServerProxiedIdentityUnaryInterceptor(allowProxyToImpersonate)),
-		server.WithStreamInterceptor(proxiedidentity.ServerProxiedIdentityStreamInterceptor(allowProxyToImpersonate)),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
 		server.WithMetricsRecorder(recorder),
-	)
+	}
+
+	if *proxyIdentity != "" {
+		allowProxyToImpersonate := func(ctx context.Context) bool {
+			peer := rpcauth.PeerInputFromContext(ctx)
+			if peer == nil {
+				return false
+			}
+			return peer.Cert.Subject.CommonName == *proxyIdentity
+		}
+		opts = append(opts,
+			server.WithUnaryInterceptor(proxiedidentity.ServerProxiedIdentityUnaryInterceptor(allowProxyToImpersonate)),
+			server.WithStreamInterceptor(proxiedidentity.ServerProxiedIdentityStreamInterceptor(allowProxyToImpersonate)),
+		)
+	}
+
+	server.Run(ctx, opts...)
 }
