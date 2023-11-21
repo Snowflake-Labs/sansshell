@@ -288,7 +288,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 			exit = subcommands.ExitFailure
 			break
 		}
-		for i, r := range resp {
+		for _, r := range resp {
 			if r.Error != nil && r.Error != io.EOF {
 				fmt.Fprintf(state.Err[r.Index], "Target %s (%d) returned error - %v\n", r.Target, r.Index, r.Error)
 				targetsDone[r.Index] = true
@@ -313,7 +313,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 				if journal.Pid != 0 {
 					displayPid = fmt.Sprintf("[%d]", journal.Pid)
 				}
-				fmt.Fprintf(state.Out[i], "[%s]  %s %s%s: %s\n", journal.RealtimeTimestamp.AsTime().Local(), journal.Hostname, journal.SyslogIdentifier, displayPid, journal.Message)
+				fmt.Fprintf(state.Out[r.Index], "[%s]  %s %s%s: %s\n", journal.RealtimeTimestamp.AsTime().Local(), journal.Hostname, journal.SyslogIdentifier, displayPid, journal.Message)
 			case *pb.JournalReply_JournalRaw:
 				journalRaw := t.JournalRaw
 				// Encode the map to JSON
@@ -328,7 +328,7 @@ func (p *journalCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 				}
 				// Convert the JSON data to a string
 				jsonString := string(jsonData)
-				fmt.Fprintf(state.Out[i], "%s\n", jsonString)
+				fmt.Fprintf(state.Out[r.Index], "%s\n", jsonString)
 			}
 		}
 	}
