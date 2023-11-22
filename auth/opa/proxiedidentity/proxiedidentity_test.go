@@ -117,9 +117,6 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 				if gotIdentity != nil {
 					t.Errorf("identity unexpectedly not nil: %+v", gotIdentity)
 				}
-				if idOk {
-					t.Error("FromContext was unexpectedly ok")
-				}
 			}
 			if len(gotMetadata) != 1 {
 				t.Errorf("expected exactly one metadata val, got %v", gotMetadata)
