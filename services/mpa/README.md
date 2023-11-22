@@ -103,7 +103,7 @@ MPA requests and approvals are stored in memory in sansshell-server. The id for 
 
 To support proxying, there are multiple ways of populating the user identity used in `/Mpa.Mpa/Store` and `/Mpa.Mpa/Approve`.
 
-1. From the `sansshell-proxied-identity` key in the [gRPC metadata](https://grpc.io/docs/what-is-grpc/core-concepts/#metadata), used if the identity is set and the server has been configured to accept a proxied identity. The value of this is a JSON representation of `rpcauth.Principal`.
+1. From the `proxied-sansshell-identity` key in the [gRPC metadata](https://grpc.io/docs/what-is-grpc/core-concepts/#metadata), used if the identity is set and the server has been configured to accept a proxied identity. The value of this is a JSON representation of `rpcauth.Principal`.
 2. From the peer identity of the call, used in all other cases.
 
 Justification information can be provided via a `sansshell-justification` key in the gRPC metadata, available as a constant at `rpcauth.ReqJustKey`.

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/google/go-cmp/cmp"
@@ -60,7 +61,7 @@ func MPAFromIncomingContext(ctx context.Context) (mpaID string, ok bool) {
 
 // ActionMatchesInput returns an error if an MPA action doesn't match the
 // message being checked in the RPCAuthInput.
-func ActionMatchesInput(action *mpa.Action, input *rpcauth.RPCAuthInput) error {
+func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.RPCAuthInput) error {
 	var justification string
 	if j := input.Metadata[rpcauth.ReqJustKey]; len(j) > 0 {
 		justification = j[0]
@@ -83,8 +84,14 @@ func ActionMatchesInput(action *mpa.Action, input *rpcauth.RPCAuthInput) error {
 		return fmt.Errorf("missing peer information")
 	}
 
+	// Prefer using a proxied identity if provided
+	user := input.Peer.Principal.ID
+	if p := proxiedidentity.FromContext(ctx); p != nil {
+		user = p.ID
+	}
+
 	sentAct := &mpa.Action{
-		User:          input.Peer.Principal.ID,
+		User:          user,
 		Method:        input.Method,
 		Justification: justification,
 		Message:       &msg,
