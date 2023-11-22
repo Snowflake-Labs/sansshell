@@ -118,8 +118,8 @@ type server struct {
 
 func callerIdentity(ctx context.Context) (*rpcauth.PrincipalAuthInput, bool) {
 	// Prefer using a proxied identity if provided
-
-	if p := proxiedidentity.FromContext(ctx); p != nil {
+	p := proxiedidentity.FromContext(ctx)
+	if p != nil {
 		return p, true
 	}
 	peer := rpcauth.PeerInputFromContext(ctx)
