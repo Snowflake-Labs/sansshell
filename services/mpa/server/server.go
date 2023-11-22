@@ -59,6 +59,13 @@ func ServerMPAAuthzHook() rpcauth.RPCAuthzHook {
 		if err != nil {
 			return err
 		}
+		if resp.Action.Method != input.Method {
+			// Proxies may make extra calls to the server as part of authz hooks. If
+			// we get an MPA id that corresponds to a different method than the one
+			// being called, it's probably from the proxy and can be ignored.
+			// The right method but wrong args indicates a bigger issue and checked below.
+			return nil
+		}
 
 		if err := mpahooks.ActionMatchesInput(ctx, resp.Action, input); err != nil {
 			return err
