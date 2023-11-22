@@ -55,6 +55,7 @@ enum Action {
   ACTION_RESTART = 3;
   ACTION_ENABLE = 4;
   ACTION_DISABLE = 5;
+  ACTION_KILL = 6;
 }
 
 // ServiceStatus pairs a service with it's current status.

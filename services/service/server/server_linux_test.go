@@ -58,6 +58,7 @@ func (e errConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbu
 func (e errConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
 	return false, nil, errors.New(string(e))
 }
+func (e errConn) KillUnitContext(context.Context, string, int32) {}
 func (e errConn) ReloadContext(ctx context.Context) error {
 	return errors.New(string(e))
 }
@@ -119,6 +120,7 @@ func (l listConn) DisableUnitFilesContext(context.Context, []string, bool) ([]db
 func (l listConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
 	return false, nil, notImplementedError
 }
+func (l listConn) KillUnitContext(context.Context, string, int32) {}
 func (l listConn) ReloadContext(ctx context.Context) error {
 	return notImplementedError
 }
@@ -248,6 +250,7 @@ func (g getConn) DisableUnitFilesContext(context.Context, []string, bool) ([]dbu
 func (g getConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (bool, []dbus.EnableUnitFileChange, error) {
 	return false, nil, notImplementedError
 }
+func (g getConn) KillUnitContext(context.Context, string, int32) {}
 func (g getConn) ReloadContext(ctx context.Context) error {
 	return notImplementedError
 }
@@ -451,6 +454,7 @@ func (a actionConn) EnableUnitFilesContext(context.Context, []string, bool, bool
 		},
 	}, a.err
 }
+func (a actionConn) KillUnitContext(context.Context, string, int32) {}
 func (a actionConn) ReloadContext(ctx context.Context) error {
 	return a.reloadErr
 }
@@ -572,6 +576,19 @@ func TestAction(t *testing.T) {
 			errFunc: wantStatusErr(codes.Internal, "error reloading"),
 		},
 		{
+			name: "kill failed",
+			conn: actionConn{"failed", nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_KILL,
+			},
+			want: &pb.ActionReply{
+				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceName: "foo",
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
 			name: "start success",
 			conn: actionConn{operationResultDone, nil, nil},
 			req: &pb.ActionRequest{
@@ -629,6 +646,19 @@ func TestAction(t *testing.T) {
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_DISABLE,
+			},
+			want: &pb.ActionReply{
+				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceName: "foo",
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "kill",
+			conn: actionConn{operationResultDone, nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_KILL,
 			},
 			want: &pb.ActionReply{
 				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,

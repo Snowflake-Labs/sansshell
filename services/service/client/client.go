@@ -48,6 +48,7 @@ func (*serviceCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&actionCmd{action: pb.Action_ACTION_STOP}, "")
 	c.Register(&actionCmd{action: pb.Action_ACTION_ENABLE}, "")
 	c.Register(&actionCmd{action: pb.Action_ACTION_DISABLE}, "")
+	c.Register(&actionCmd{action: pb.Action_ACTION_KILL}, "")
 	return c
 }
 

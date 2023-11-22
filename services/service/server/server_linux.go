@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/go-logr/logr"
@@ -125,6 +126,7 @@ type systemdConnection interface {
 	RestartUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	DisableUnitFilesContext(ctx context.Context, files []string, runtime bool) ([]dbus.DisableUnitFileChange, error)
 	EnableUnitFilesContext(ctx context.Context, files []string, runtime bool, force bool) (bool, []dbus.EnableUnitFileChange, error)
+	KillUnitContext(ctx context.Context, name string, signal int32)
 	ReloadContext(ctx context.Context) error
 	Close()
 }
@@ -296,6 +298,8 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 		_, _, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
 	case pb.Action_ACTION_DISABLE:
 		_, err = conn.DisableUnitFilesContext(ctx, []string{unitName}, false)
+	case pb.Action_ACTION_KILL:
+		conn.KillUnitContext(ctx, unitName, int32(syscall.SIGKILL))
 	default:
 		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "invalid_action"))
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v", req.Action)
@@ -322,6 +326,7 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 			recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "reload_err"))
 			return nil, status.Errorf(codes.Internal, "error reloading: %v", err)
 		}
+	case pb.Action_ACTION_KILL:
 	default:
 		recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "invalid_action"))
 		return nil, status.Errorf(codes.InvalidArgument, "invalid action type %v for post actions", req.Action)

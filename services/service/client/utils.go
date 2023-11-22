@@ -155,3 +155,21 @@ func DisableRemoteService(ctx context.Context, conn *proxy.Conn, system pb.Syste
 	}
 	return nil
 }
+
+// KillRemoteService is a helper function for killing a service on a remote target
+// using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+func KillRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	if len(conn.Targets) != 1 {
+		return errors.New("KillRemoteService only supports single targets")
+	}
+
+	c := pb.NewServiceClient(conn)
+	if _, err := c.Action(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_KILL,
+	}); err != nil {
+		return fmt.Errorf("can't kill service %s - %v", service, err)
+	}
+	return nil
+}
