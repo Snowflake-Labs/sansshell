@@ -86,8 +86,7 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 
 	// Prefer using a proxied identity if provided
 	user := input.Peer.Principal.ID
-	p, ok := proxiedidentity.FromContext(ctx)
-	if ok {
+	if p := proxiedidentity.FromContext(ctx); p != nil {
 		user = p.ID
 	}
 

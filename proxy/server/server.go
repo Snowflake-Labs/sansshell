@@ -248,6 +248,7 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 	// be removed from the stream set
 	doneChan := make(chan uint64)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	var addedPeerToContext bool
 	for {
 		select {
 		case <-ctx.Done():
@@ -274,10 +275,13 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 				streamSet.ClientCloseAll()
 				return nil
 			}
-			// Peer information might not be properly populated until rpcauth
-			// evaluates the initial received message, so let's grab fresh
-			// peer information when we know we've gotten at least one message.
-			ctx = rpcauth.AddPeerToContext(ctx, rpcauth.PeerInputFromContext(stream.Context()))
+			if !addedPeerToContext {
+				// Peer information might not be properly populated until rpcauth
+				// evaluates the initial received message, so let's grab fresh
+				// peer information when we know we've gotten at least one message.
+				ctx = rpcauth.AddPeerToContext(ctx, rpcauth.PeerInputFromContext(stream.Context()))
+				addedPeerToContext = true
+			}
 			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:

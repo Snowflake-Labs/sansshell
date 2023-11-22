@@ -93,10 +93,9 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 
 			ctx = AppendToMetadataInOutgoingContext(ctx, identity)
 			var gotIdentity *rpcauth.PrincipalAuthInput
-			var idOk bool
 			var gotMetadata []string
 			healthcheck.callback = func(ctx context.Context) {
-				gotIdentity, idOk = FromContext(ctx)
+				gotIdentity = FromContext(ctx)
 				md, _ := metadata.FromIncomingContext(ctx)
 				gotMetadata = md.Get(reqProxiedIdentityKey)
 			}
@@ -113,9 +112,6 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			if tc.identityProxied {
 				if !reflect.DeepEqual(gotIdentity, identity) {
 					t.Errorf("got %+v, want %+v", gotIdentity, identity)
-				}
-				if !idOk {
-					t.Error("FromContext was unexpectedly not ok")
 				}
 			} else {
 				if gotIdentity != nil {

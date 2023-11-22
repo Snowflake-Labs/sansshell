@@ -62,9 +62,12 @@ func newContext(ctx context.Context, p *rpcauth.PrincipalAuthInput) context.Cont
 
 // FromContext returns the identity in ctx if it exists. It will typically
 // only exist if ServerProxiedIdentityUnaryInterceptor was used.
-func FromContext(ctx context.Context) (p *rpcauth.PrincipalAuthInput, ok bool) {
-	p, ok = ctx.Value(proxiedIdentityKey{}).(*rpcauth.PrincipalAuthInput)
-	return
+func FromContext(ctx context.Context) *rpcauth.PrincipalAuthInput {
+	p, ok := ctx.Value(proxiedIdentityKey{}).(*rpcauth.PrincipalAuthInput)
+	if !ok {
+		return nil
+	}
+	return p
 }
 
 // AppendToMetadataInOutgoingContext includes the identity in the grpc metadata
