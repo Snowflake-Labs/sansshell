@@ -129,6 +129,9 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	state := args[0].(*util.ExecuteState)
+
+	//err := InstallManyRemoteServices(ctx, state.Conn, req.PackageSystem, req.Name, req.Version, req.Repo, req.DisableRepo)
+	//Comment the following section for testing util
 	c := pb.NewPackagesClientProxy(state.Conn)
 
 	req := &pb.InstallRequest{
@@ -148,6 +151,7 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitFailure
 	}
 
+	// TODO: How do we handle respChan when InstallManyRemoteServices only returns error?
 	retCode := subcommands.ExitSuccess
 	for r := range resp {
 		if r.Error != nil {

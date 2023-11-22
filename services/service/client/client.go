@@ -148,6 +148,10 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		Action:      a.action,
 	}
 
+	// TODO: How do we determine which function to call? StartManyRemoteServices or StopStartManyRemoteServices?
+	//err := StartManyRemoteServices(ctx, state.Conn, req.SystemType, req.ServiceName)
+
+	//Comment the following section for testing util
 	c := pb.NewServiceClientProxy(state.Conn)
 	respChan, err := c.ActionOneMany(ctx, req)
 	if err != nil {
@@ -158,6 +162,7 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		return subcommands.ExitFailure
 	}
 
+	// TODO: How do we handle respChan when StartManyRemoteServices only returns error?
 	// Error holding the last observed non-nil error, which will
 	// determine the exit status of the command.
 	// The contract with the proxy and 'many' functions requires
