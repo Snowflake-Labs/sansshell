@@ -238,7 +238,7 @@ proxy and a proxy that allows MPA requests from the "sanssh" user when approved 
 
 ```bash
 # Start the server
-go run ./cmd/sansshell-server -proxy-identity proxy -server-cert ./auth/mtls/testdata/leaf.pem -server-key ./auth/mtls/testdata/leaf.key
+go run ./cmd/sansshell-server -server-cert ./auth/mtls/testdata/leaf.pem -server-key ./auth/mtls/testdata/leaf.key
 # Start the proxy
 go run ./cmd/proxy-server -client-cert ./services/mpa/testdata/proxy.pem -client-key ./services/mpa/testdata/proxy.key -server-cert ./services/mpa/testdata/proxy.pem -server-key ./services/mpa/testdata/proxy.key
 # Run a command gated on MPA

@@ -81,15 +81,23 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
    You'll also need to set additional interceptors on the server to make proxied identity information available.
 
    ```go
-   func(ctx context.Context) bool {
-      peer := rpcauth.PeerInputFromContext(ctx)
-      if peer == nil {
-         return false
-      }
-      // Custom business logic goes here.
-   }
    proxiedidentity.ServerProxiedIdentityUnaryInterceptor()
    proxiedidentity.ServerProxiedIdentityStreamInterceptor()
+   ```
+
+   When setting these interceptors, make sure to update the server's rego policies if it allows callers other than the proxy to make direct calls. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
+
+   ```rego
+   package sansshell.authz
+   default authz = false
+   authz {
+      allow
+      not deny
+   }
+   deny {
+      input.metadata["proxied-sansshell-identity"]
+      not input.peer.principal.id = "proxy"
+   }
    ```
 
 4. Any approvers must be able to call `/Mpa.Mpa/Approve` and any requestor must be able to call `/Mpa.Mpa/Store`. It's highly recommended to additionally let potential approvers call `/Mpa.Mpa/Get` and potential requestors call `/Mpa.Mpa/WaitForApproval` for better user experiences. `/Mpa.Mpa/Clear` can be used for cancelling MPA requests.

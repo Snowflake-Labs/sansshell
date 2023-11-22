@@ -377,20 +377,13 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowProxyToImpersonate := func(ctx context.Context) bool {
-		peer := rpcauth.PeerInputFromContext(ctx)
-		if peer == nil {
-			return false
-		}
-		return peer.Cert.Subject.CommonName == "proxy"
-	}
 	s := grpc.NewServer(
 		grpc.ChainStreamInterceptor(
-			proxiedidentity.ServerProxiedIdentityStreamInterceptor(allowProxyToImpersonate),
+			proxiedidentity.ServerProxiedIdentityStreamInterceptor(),
 			authz.AuthorizeStream,
 		),
 		grpc.ChainUnaryInterceptor(
-			proxiedidentity.ServerProxiedIdentityUnaryInterceptor(allowProxyToImpersonate),
+			proxiedidentity.ServerProxiedIdentityUnaryInterceptor(),
 			authz.Authorize,
 		),
 		grpc.Creds(srvCreds),

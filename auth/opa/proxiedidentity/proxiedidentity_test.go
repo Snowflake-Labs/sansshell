@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	healthcheckpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	"google.golang.org/grpc"
@@ -40,8 +41,47 @@ func (h *fakeHealthCheck) Ok(ctx context.Context, req *emptypb.Empty) (*emptypb.
 	return &emptypb.Empty{}, nil
 }
 
+var passingPolicy = `
+package sansshell.authz
+default authz = false
+authz {
+  allow
+  not deny
+}
+deny {
+  input.metadata["nonexistent-metadata"]
+}
+allow {
+  input.method = "/HealthCheck.HealthCheck/Ok"
+}
+`
+
+var failingPolicy = `
+package sansshell.authz
+default authz = false
+authz {
+  allow
+  not deny
+}
+deny {
+  input.metadata["proxied-sansshell-identity"]
+}
+allow {
+  input.method = "/HealthCheck.HealthCheck/Ok"
+}
+`
+
 func TestProxyingIdentityOverRPC(t *testing.T) {
 	ctx := context.Background()
+
+	passingAuthz, err := opa.NewAuthzPolicy(ctx, passingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	failingAuthz, err := opa.NewAuthzPolicy(ctx, failingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	for _, tc := range []struct {
 		desc            string
@@ -54,13 +94,19 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			identityProxied: false,
 		},
 		{
-			desc:            "passed",
-			srvInterceptors: []grpc.UnaryServerInterceptor{ServerProxiedIdentityUnaryInterceptor(func(context.Context) bool { return true })},
+			desc: "passed",
+			srvInterceptors: []grpc.UnaryServerInterceptor{
+				ServerProxiedIdentityUnaryInterceptor(),
+				rpcauth.New(passingAuthz).Authorize,
+			},
 			identityProxied: true,
 		},
 		{
-			desc:            "interceptor says no",
-			srvInterceptors: []grpc.UnaryServerInterceptor{ServerProxiedIdentityUnaryInterceptor(func(context.Context) bool { return false })},
+			desc: "interceptor says no",
+			srvInterceptors: []grpc.UnaryServerInterceptor{
+				ServerProxiedIdentityUnaryInterceptor(),
+				rpcauth.New(failingAuthz).Authorize,
+			},
 			rpcError:        true,
 			identityProxied: false,
 		},
@@ -93,10 +139,9 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 
 			ctx = AppendToMetadataInOutgoingContext(ctx, identity)
 			var gotIdentity *rpcauth.PrincipalAuthInput
-			var idOk bool
 			var gotMetadata []string
 			healthcheck.callback = func(ctx context.Context) {
-				gotIdentity, idOk = FromContext(ctx)
+				gotIdentity = FromContext(ctx)
 				md, _ := metadata.FromIncomingContext(ctx)
 				gotMetadata = md.Get(reqProxiedIdentityKey)
 			}
@@ -114,15 +159,9 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 				if !reflect.DeepEqual(gotIdentity, identity) {
 					t.Errorf("got %+v, want %+v", gotIdentity, identity)
 				}
-				if !idOk {
-					t.Error("FromContext was unexpectedly not ok")
-				}
 			} else {
 				if gotIdentity != nil {
 					t.Errorf("identity unexpectedly not nil: %+v", gotIdentity)
-				}
-				if idOk {
-					t.Error("FromContext was unexpectedly ok")
 				}
 			}
 			if len(gotMetadata) != 1 {
