@@ -354,13 +354,6 @@ func ProxyMPAAuthzHook() rpcauth.RPCAuthzHook {
 			return nil
 		}
 
-		// We need to clear out any MPA request metadata before sending over our request.
-		md, ok := metadata.FromIncomingContext(ctx)
-		if ok {
-			md.Delete(reqMPAKey)
-			ctx = metadata.NewIncomingContext(ctx, md)
-		}
-
 		client := mpa.NewMpaClient(input.TargetConn)
 		resp, err := client.Get(ctx, &mpa.GetRequest{Id: mpaID})
 		if err != nil {
