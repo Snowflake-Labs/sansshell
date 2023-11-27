@@ -401,6 +401,10 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
+		if rs.EnableMPA {
+			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
+			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
+		}
 		state.Conn = conn
 		state.Out = output[start:end]
 		state.Err = errors[start:end]

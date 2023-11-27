@@ -40,6 +40,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
 	ss "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
@@ -49,6 +50,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
+	_ "github.com/Snowflake-Labs/sansshell/services/mpa"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
@@ -141,6 +143,7 @@ func main() {
 		server.WithHostPort(*hostport),
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
+		server.WithAuthzHook(mpahooks.ProxyMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
 		server.WithRawServerOption(srv.Register),

@@ -22,16 +22,23 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
+	proxyserver "github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	"github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
+	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/telemetry"
+	"github.com/go-logr/logr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -137,6 +144,19 @@ func pollForAction(ctx context.Context, m mpa.MpaClient, method string) (*mpa.Ac
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func clearAll(ctx context.Context, m mpa.MpaClient) error {
+	l, err := m.List(ctx, &mpa.ListRequest{})
+	if err != nil {
+		return err
+	}
+	for _, i := range l.Item {
+		if _, err := m.Clear(ctx, &mpa.ClearRequest{Action: i.Action}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var serverPolicy = `
@@ -285,6 +305,229 @@ func TestClientInterceptors(t *testing.T) {
 	}
 
 	if err := g.Wait(); err != nil {
+		t.Error(err)
+	}
+
+	// MPA approvals are stored in a global singleton, so let's clear them
+	// to prevent interference with other tests
+	if err := clearAll(ctx, mpa.NewMpaClient(noInterceptorConn)); err != nil {
+		t.Error(err)
+	}
+}
+
+var serverBehindProxyPolicy = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+	input.peer.principal.id = "proxy"
+}
+`
+
+var proxyPolicy = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+	input.method = "/HealthCheck.HealthCheck/Ok"
+	input.peer.principal.id = "sanssh"
+	input.approvers[_].id = "approver"
+}
+
+
+allow {
+	input.method = "/LocalFile.LocalFile/Read"
+	input.peer.principal.id = "sanssh"
+	input.approvers[_].id = "approver"
+}
+
+allow {
+	startswith(input.method, "/Mpa.Mpa/")
+}
+
+allow {
+	input.method = "/Proxy.Proxy/Proxy"
+}
+`
+
+func TestProxiedClientInterceptors(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	rot, err := mtls.LoadRootOfTrust("../../../auth/mtls/testdata/root.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyLis, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvAddr := lis.Addr().String()
+	proxyAddr := proxyLis.Addr().String()
+	authz, err := rpcauth.NewWithPolicy(ctx, serverBehindProxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srvCreds, err := mtls.LoadServerTLS("../../../auth/mtls/testdata/leaf.pem", "../../../auth/mtls/testdata/leaf.key", rot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := grpc.NewServer(
+		grpc.ChainStreamInterceptor(
+			proxiedidentity.ServerProxiedIdentityStreamInterceptor(),
+			authz.AuthorizeStream,
+		),
+		grpc.ChainUnaryInterceptor(
+			proxiedidentity.ServerProxiedIdentityUnaryInterceptor(),
+			authz.Authorize,
+		),
+		grpc.Creds(srvCreds),
+	)
+	for _, svc := range services.ListServices() {
+		svc.Register(s)
+	}
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("Server exited with error: %v", err)
+		}
+	}()
+	defer s.GracefulStop()
+
+	proxyAuthz, err := rpcauth.NewWithPolicy(ctx, proxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpahooks.ProxyMPAAuthzHook())
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyCreds, err := mtls.LoadServerTLS("../testdata/proxy.pem", "../testdata/proxy.key", rot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyClientCreds, err := mtls.LoadClientTLS("../testdata/proxy.pem", "../testdata/proxy.key", rot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxySrv := grpc.NewServer(
+		grpc.Creds(proxyCreds),
+		grpc.ChainUnaryInterceptor(proxyAuthz.Authorize),
+		grpc.ChainStreamInterceptor(proxyAuthz.AuthorizeStream),
+	)
+	proxyserver := proxyserver.New(
+		proxyserver.NewDialer(
+			grpc.WithTransportCredentials(proxyClientCreds),
+			// Telemetry interceptors will forward justification
+			grpc.WithChainUnaryInterceptor(telemetry.UnaryClientLogInterceptor(logr.Discard())),
+			grpc.WithChainStreamInterceptor(telemetry.StreamClientLogInterceptor(logr.Discard())),
+		),
+		proxyAuthz,
+	)
+	proxyserver.Register(proxySrv)
+	go func() {
+		if err := proxySrv.Serve(proxyLis); err != nil {
+			log.Fatalf("Server exited with error: %v", err)
+		}
+	}()
+	defer proxySrv.GracefulStop()
+
+	clientCreds, err := mtls.LoadClientTLS("../../../auth/mtls/testdata/client.pem", "../../../auth/mtls/testdata/client.key", rot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	approverCreds, err := mtls.LoadClientTLS("../testdata/approver.pem", "../testdata/approver.key", rot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// We test a single target behind the proxy to keep the tests simpler. The underlying
+	// MPA code treats a single target as a list of size one, so this should still be
+	// representative of MPA across multiple targets.
+	var g errgroup.Group
+	g.Go(func() error {
+		conn, err := proxy.DialContext(ctx, proxyAddr, []string{srvAddr}, grpc.WithTransportCredentials(approverCreds))
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		m := mpa.NewMpaClientProxy(conn)
+
+		healthcheckAction, err := pollForAction(ctx, m, "/HealthCheck.HealthCheck/Ok")
+		if err != nil {
+			return err
+		}
+		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: healthcheckAction}); err != nil {
+			return fmt.Errorf("unable to approve %v: %v", healthcheckAction, err)
+		}
+
+		fileReadAction, err := pollForAction(ctx, m, "/LocalFile.LocalFile/Read")
+		if err != nil {
+			return err
+		}
+		if _, err := m.Approve(ctx, &mpa.ApproveRequest{Action: fileReadAction}); err != nil {
+			return fmt.Errorf("unable to approve %v: %v", healthcheckAction, err)
+		}
+		return nil
+	})
+
+	// Make our calls
+	conn, err := proxy.DialContext(ctx, proxyAddr, []string{srvAddr},
+		grpc.WithTransportCredentials(clientCreds),
+		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
+		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter()),
+	)
+	if err != nil {
+		t.Error(err)
+	}
+	defer conn.Close()
+	// Confirm that we get Permission Denied before we add the MPA interceptors
+	hc := healthcheck.NewHealthCheckClientProxy(conn)
+	if _, err := hc.Ok(ctx, &emptypb.Empty{}); status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("got something other than permission denied: %v", err)
+	}
+
+	state := &util.ExecuteState{
+		Conn: conn,
+		Out:  []io.Writer{os.Stdout},
+		Err:  []io.Writer{os.Stderr},
+	}
+	conn.StreamInterceptors = []proxy.StreamInterceptor{
+		mpahooks.ProxyClientStreamInterceptor(state),
+	}
+	conn.UnaryInterceptors = []proxy.UnaryInterceptor{
+		mpahooks.ProxyClientUnaryInterceptor(state),
+	}
+	if _, err := hc.Ok(ctx, &emptypb.Empty{}); err != nil {
+		t.Error(err)
+	}
+
+	file := localfile.NewLocalFileClientProxy(conn)
+	bytes, err := file.Read(ctx, &localfile.ReadActionRequest{
+		Request: &localfile.ReadActionRequest_File{File: &localfile.ReadRequest{Filename: "/etc/passwd"}},
+	})
+	if err != nil {
+		t.Error(err)
+	} else {
+		for {
+			_, err := bytes.Recv()
+			if err != nil {
+				if err != io.EOF {
+					t.Error(err)
+				}
+				break
+			}
+		}
+	}
+
+	if err := g.Wait(); err != nil {
+		t.Error(err)
+	}
+	// MPA approvals are stored in a global singleton, so let's clear them
+	// to prevent interference with other tests
+	conn.StreamInterceptors = nil
+	conn.UnaryInterceptors = nil
+	if err := clearAll(ctx, mpa.NewMpaClientProxy(conn)); err != nil {
 		t.Error(err)
 	}
 }

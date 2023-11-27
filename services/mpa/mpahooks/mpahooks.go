@@ -19,12 +19,17 @@ package mpahooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
+	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -124,7 +129,7 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 	}
 	if len(result.Approver) == 0 {
 		fmt.Fprintln(os.Stderr, "Multi party auth requested, ask an approver to run:")
-		fmt.Fprintf(os.Stderr, "  sanssh --targets %v mpa approve %v\n", cc.Target(), result.Id)
+		fmt.Fprintf(os.Stderr, "  sanssh -targets %v mpa approve %v\n", cc.Target(), result.Id)
 		_, err := mpaClient.WaitForApproval(ctx, &mpa.WaitForApprovalRequest{Id: result.Id})
 		if err != nil {
 			return "", err
@@ -225,4 +230,144 @@ func StreamClientIntercepter() grpc.StreamClientInterceptor {
 			return streamer(ctx, desc, cc, method, opts...)
 		}), nil
 	}
+}
+
+func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, conn *proxy.Conn, state *util.ExecuteState) (mpaID string, err error) {
+	p, ok := args.(proto.Message)
+	if !ok {
+		return "", fmt.Errorf("unable to cast args to proto: %v", args)
+	}
+	var msg anypb.Any
+	if err := msg.MarshalFrom(p); err != nil {
+		return "", fmt.Errorf("unable to marshal into anyproto: %v", err)
+	}
+	mpaClient := mpa.NewMpaClientProxy(conn)
+	ch, err := mpaClient.StoreOneMany(ctx, &mpa.StoreRequest{
+		Method:  method,
+		Message: &msg,
+	})
+	if err != nil {
+		return "", err
+	}
+	mpaIdToTargets := make(map[string][]string)
+	var targetsNeedingApproval []string
+	for r := range ch {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Unable to request MPA: %v\n", r.Error)
+		}
+		mpaIdToTargets[r.Resp.Id] = append(mpaIdToTargets[r.Resp.Id], r.Target)
+		if len(r.Resp.Approver) == 0 {
+			// Only print out messages for not-yet-approved requests
+			targetsNeedingApproval = append(targetsNeedingApproval, r.Target)
+		}
+		mpaID = r.Resp.Id
+	}
+
+	if len(mpaIdToTargets) > 1 {
+		var idMsgs []string
+		for id, targets := range mpaIdToTargets {
+			sort.Strings(targets)
+			idMsgs = append(idMsgs, id+": "+strings.Join(targets, ","))
+		}
+		sort.Strings(idMsgs)
+		for _, m := range idMsgs {
+			fmt.Fprintln(os.Stderr, m)
+		}
+		return "", errors.New("Multiple MPA IDs generated, command needs to be run separately for each id.")
+	}
+
+	if len(targetsNeedingApproval) > 0 {
+		fmt.Fprintln(os.Stderr, "Waiting for multi-party approval on all targets, ask an approver to run:")
+		fmt.Fprintf(os.Stderr, "  sanssh -proxy %v -targets %v mpa approve %v\n", conn.Proxy().Target(), strings.Join(targetsNeedingApproval, ","), mpaID)
+		// We call WaitForApproval on all targets, even ones already approved. This is silly but not harmful.
+		waitCh, err := mpaClient.WaitForApprovalOneMany(ctx, &mpa.WaitForApprovalRequest{Id: mpaID})
+		if err != nil {
+			return "", err
+		}
+		for r := range waitCh {
+			if r.Error != nil {
+				fmt.Fprintf(state.Err[r.Index], "Error when waiting for MPA approval: %v\n", r.Error)
+			}
+		}
+	}
+	return mpaID, nil
+}
+
+// ProxyClientUnaryInterceptor will perform the MPA flow prior to making the desired RPC
+// calls through the proxy.
+func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryInterceptor {
+	return func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+		// Our hook will run for all gRPC calls, including ones used inside the interceptor.
+		// We need to bail early on MPA-related ones to prevent infinite recursion.
+		if method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
+			return invoker(ctx, method, args, opts...)
+		}
+
+		mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, conn, state)
+		if err != nil {
+			return nil, err
+		}
+
+		// Now that we have our approvals, make our call.
+		ctx = WithMPAInMetadata(ctx, mpaID)
+		return invoker(ctx, method, args, opts...)
+	}
+}
+
+// ProxyClientStreamInterceptor will perform the MPA flow prior to making the desired streaming
+// RPC calls through the proxy.
+func ProxyClientStreamInterceptor(state *util.ExecuteState) proxy.StreamInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *proxy.Conn, method string, streamer proxy.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		return newStreamAfterFirstSend(func(args any) (grpc.ClientStream, error) {
+			// Figure out the MPA request
+			mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, cc, state)
+			if err != nil {
+				return nil, err
+			}
+
+			// Now establish the stream we actually want because we can only do so after
+			// we put the MPA ID in the metadata.
+			ctx := WithMPAInMetadata(ctx, mpaID)
+			return streamer(ctx, desc, method, opts...)
+		}), nil
+	}
+}
+
+// ProxyMPAAuthzHook populates MPA information in the input message
+func ProxyMPAAuthzHook() rpcauth.RPCAuthzHook {
+	return rpcauth.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauth.RPCAuthInput) error {
+		mpaID, ok := MPAFromIncomingContext(ctx)
+		if !ok {
+			// No need to call out if MPA wasn't requested
+			return nil
+		}
+
+		if input.Environment == nil || !input.Environment.NonHostPolicyCheck {
+			// Proxies will evaluate OPA polices on both proxy-level calls and host-level
+			// calls. We want to only gather MPA info for host-level calls.
+			return nil
+		}
+
+		if input.TargetConn == nil {
+			// If there's no host, we can't call out to the host.
+			return nil
+		}
+
+		client := mpa.NewMpaClient(input.TargetConn)
+		resp, err := client.Get(ctx, &mpa.GetRequest{Id: mpaID})
+		if err != nil {
+			return fmt.Errorf("failed getting MPA info: %v", err)
+		}
+
+		if err := ActionMatchesInput(ctx, resp.Action, input); err != nil {
+			return err
+		}
+		for _, a := range resp.Approver {
+			input.Approvers = append(input.Approvers, &rpcauth.PrincipalAuthInput{
+				ID:     a.Id,
+				Groups: a.Groups,
+			})
+		}
+		return nil
+	})
 }

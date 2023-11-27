@@ -1,6 +1,4 @@
-# Multi Party Authentication
-
-WARNING: This document describes the intended state. https://github.com/Snowflake-Labs/sansshell/issues/346 tracks implementation.
+# Multi Party Authorization
 
 This module enables [multi-party authorization](https://en.wikipedia.org/wiki/Multi-party_authorization) for any sansshell command. Approval data is stored in-memory in sansshell-server.
 
@@ -12,24 +10,31 @@ MPA must be explicitly requested. When requested, the MPA flow will be used rega
 
    ```bash
    $ sanssh -mpa -targets=1.2.3.4 -justification emergency exec run /bin/echo hi
-   Waiting for approval for 1-2345-6789. Command for approving:
-       sanssh -targets=1.2.3.4 mpa approve 1-2345-6789
+   Waiting for multi-party approval on all targets, ask an approver to run:
+     sanssh --targets 1.2.3.4 mpa approve 244407fc-6b9b338a-db0760b8
    ```
 
 2. The approver views the commands and approves it.
 
    ```bash
    $ sanssh -targets=1.2.3.4 mpa list
-   1-2345-6789
-   $ sanssh -targets=1.2.3.4 mpa get 1-2345-6789
-   user: firstuser
-   justification: emergency
-   method: /Exec.Exec/Run
-   message: {
-      "command": "/bin/echo",
-      "args": ["hi"]
+   244407fc-6b9b338a-db0760b8 /Exec.Exec/Run from sanssh for emergency
+   $ sanssh -targets=1.2.3.4 mpa get 244407fc-6b9b338a-db0760b8
+   {
+   "action": {
+      "user": "sanssh",
+      "justification": "emergency",
+      "method": "/Exec.Exec/Run",
+      "message": {
+         "@type": "type.googleapis.com/Exec.ExecRequest",
+         "command": "/bin/echo",
+         "args": [
+         "hi"
+         ]
+      }
    }
-   $ sanssh -targets=1.2.3.4 mpa approve 1-2345-6789
+   }
+   $ sanssh -targets=1.2.3.4 mpa approve 244407fc-6b9b338a-db0760b8
    ```
 
 3. If the user's command is still running, it will complete. If the user had stopped their command, they can rerun it and the approval will still be valid as long as the command's input remains the same and the sansshell-server still has the approval in memory. Approvals are lost if the server restarts, if the server evicts the approval due to age or staleness, or if a user calls `sanssh mpa clear` oon the request id.
@@ -73,18 +78,26 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
    proxy.WithAuthzHook(mpa.ProxyMPAAuthzHook)
    ```
 
-   You'll also need to set an additional interceptor on the server to make proxied identity information available.
+   You'll also need to set additional interceptors on the server to make proxied identity information available.
 
    ```go
-   func(ctx context.Context) bool {
-      peer := rpcauth.PeerInputFromContext(ctx)
-      if peer == nil {
-         return false
-      }
-      // Custom business logic goes here.
-   }
    proxiedidentity.ServerProxiedIdentityUnaryInterceptor()
    proxiedidentity.ServerProxiedIdentityStreamInterceptor()
+   ```
+
+   When setting these interceptors, make sure to update the server's rego policies if it allows callers other than the proxy to make direct calls. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
+
+   ```rego
+   package sansshell.authz
+   default authz = false
+   authz {
+      allow
+      not deny
+   }
+   deny {
+      input.metadata["proxied-sansshell-identity"]
+      not input.peer.principal.id = "proxy"
+   }
    ```
 
 4. Any approvers must be able to call `/Mpa.Mpa/Approve` and any requestor must be able to call `/Mpa.Mpa/Store`. It's highly recommended to additionally let potential approvers call `/Mpa.Mpa/Get` and potential requestors call `/Mpa.Mpa/WaitForApproval` for better user experiences. `/Mpa.Mpa/Clear` can be used for cancelling MPA requests.

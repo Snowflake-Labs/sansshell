@@ -101,7 +101,7 @@ func TestAuthzHook(t *testing.T) {
 	}
 
 	// An action not matching the input should fail
-	wrongInput, err := rpcauth.NewRPCAuthInput(mpaCtx, "foobaz", &emptypb.Empty{})
+	wrongInput, err := rpcauth.NewRPCAuthInput(mpaCtx, "foobar", &mpa.ApproveRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}

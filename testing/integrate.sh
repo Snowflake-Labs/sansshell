@@ -431,7 +431,7 @@ check_status $? /dev/null cant find --version for sansshell-server
 
 echo
 echo "Starting servers. Logs in ${LOGS}"
-./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./auth/mtls/testdata/client.pem --client-key=./auth/mtls/testdata/client.key --policy-file=${LOGS}/policy >&${LOGS}/proxy.log &
+./bin/proxy-server --justification --root-ca=./auth/mtls/testdata/root.pem --server-cert=./auth/mtls/testdata/leaf.pem --server-key=./auth/mtls/testdata/leaf.key --client-cert=./services/mpa/testdata/proxy.pem --client-key=./services/mpa/testdata/proxy.key --policy-file=${LOGS}/policy >&${LOGS}/proxy.log &
 PROXY_PID=$!
 # Since we're controlling lifetime the shell can ignore this (avoids useless termination messages).
 disown %%
@@ -923,6 +923,13 @@ setup_mv
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} file mv ${LOGS}/testdir/file ${LOGS}/testdir/rename
 check_status $? /dev/null mv failed
 check_mv
+
+echo "healthcheck with mpa"
+# MPA ID is deterministic, so we approve it in parallel
+sleep 1 && ./bin/sanssh ${SINGLE_TARGET} --justification 'approving' --root-ca=./auth/mtls/testdata/root.pem --client-cert=./services/mpa/testdata/approver.pem --client-key=./services/mpa/testdata/approver.key mpa approve dc83bd71-8945e78a-ff01a54c &
+${SANSSH_NOPROXY} ${SINGLE_TARGET} -mpa healthcheck validate
+${SANSSH_PROXY} ${SINGLE_TARGET} -mpa healthcheck validate
+check_status $? /dev/null mv failed
 
 echo "parallel work with some bad targets and various timeouts"
 mkdir -p "${LOGS}/parallel"

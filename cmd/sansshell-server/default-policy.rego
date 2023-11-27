@@ -85,12 +85,24 @@ allow {
 	input.method = "/SysInfo.SysInfo/Dmesg"
 }
 
+# Allow anything from a proxy
+allow {
+	input.peer.principal.id = "proxy"
+}
+
 # Allow anything with MPA
 allow {
 	input.peer.principal.id = "sanssh"
 	input.approvers[_].id = "approver"
 }
 
+# Allow MPA listing commands
 allow {
-	startswith(input.method, "/Mpa.Mpa/")
+	input.method = ["/Mpa.Mpa/Get", "/Mpa.Mpa/List", "/Mpa.Mpa/WaitForApproval"][_]
+}
+
+# Allow MPA setting when not sending a proxied identity. The proxy is allowed above.
+allow {
+	not input.metadata["proxied-sansshell-identity"]
+	input.method = ["/Mpa.Mpa/Store", "/Mpa.Mpa/Approve"][_]
 }
