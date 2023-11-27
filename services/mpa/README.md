@@ -75,7 +75,7 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
 3. If using the proxy-server, add an authz hook to consult the server for MPA info.
 
    ```go
-   proxy.WithAuthzHook(mpa.ProxyMPAAuthzHook)
+   proxy.WithAuthzHook(mpahooks.ProxyMPAAuthzHook())
    ```
 
    You'll also need to set additional interceptors on the server to make proxied identity information available.
