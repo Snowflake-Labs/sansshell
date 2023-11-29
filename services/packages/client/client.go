@@ -129,34 +129,38 @@ func (i *installCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	state := args[0].(*util.ExecuteState)
-	c := pb.NewPackagesClientProxy(state.Conn)
+	//TODO: Unresolved reference, missing import util?
+	err = InstallManyRemoteServices(ctx, state.Conn, ps, i.name, i.version, i.repo, i.disable)
 
-	req := &pb.InstallRequest{
-		PackageSystem: ps,
-		Name:          i.name,
-		Version:       i.version,
-		Repo:          i.repo,
-		DisableRepo:   i.disable,
-	}
+	// Comment out the following code temporarily for testing utils
+	//c := pb.NewPackagesClientProxy(state.Conn)
+	//
+	//req := &pb.InstallRequest{
+	//	PackageSystem: ps,
+	//	Name:          i.name,
+	//	Version:       i.version,
+	//	Repo:          i.repo,
+	//	DisableRepo:   i.disable,
+	//}
 
-	resp, err := c.InstallOneMany(ctx, req)
+	//resp, err := c.InstallOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
-		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - Install returned error: %v\n", err)
-		}
+		//for _, e := range state.Err {
+		//	fmt.Fprintf(e, "All targets - Install returned error: %v\n", err)
+		//}
 		return subcommands.ExitFailure
 	}
 
 	retCode := subcommands.ExitSuccess
-	for r := range resp {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
-			retCode = subcommands.ExitFailure
-			continue
-		}
-		fmt.Fprintf(state.Out[r.Index], "Success!\n\nOutput from installation:\n%s\n", r.Resp.DebugOutput)
-	}
+	//for r := range resp {
+	//	if r.Error != nil {
+	//		fmt.Fprintf(state.Err[r.Index], "Install for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+	//		retCode = subcommands.ExitFailure
+	//		continue
+	//	}
+	//	fmt.Fprintf(state.Out[r.Index], "Success!\n\nOutput from installation:\n%s\n", r.Resp.DebugOutput)
+	//}
 	return retCode
 }
 
