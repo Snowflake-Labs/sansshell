@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
@@ -97,10 +96,10 @@ func StopRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemTy
 	return nil
 }
 
-// StartManyRemoteServices is a helper function for starting a service on multiple remote targets.
-func StartManyRemoteServices(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+// StartRemoteServiceManys is a helper function for starting a service on multiple remote targets.
+func StartRemoteServiceMany(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
 	c := pb.NewServiceClientProxy(conn)
-	respChan, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+	resp, err := c.ActionOneMany(ctx, &pb.ActionRequest{
 		ServiceName: service,
 		SystemType:  system,
 		Action:      pb.Action_ACTION_START,
@@ -110,30 +109,23 @@ func StartManyRemoteServices(ctx context.Context, conn *proxy.Conn, system pb.Sy
 		return fmt.Errorf("can't start service %s - %v", service, err)
 	}
 
-	var errorList []error
-	for resp := range respChan {
-		if resp.Error != nil {
-			err := fmt.Errorf("can't start service on target %s: %w", resp.Target, resp.Error)
-			errorList = append(errorList, err)
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
 		}
 	}
-
-	if len(errorList) == 0 {
-		return nil
+	if errMsg != "" {
+		return fmt.Errorf("StartRemoteServiceMany failed: %s", errMsg)
 	}
 
-	var errorMessages []string
-	for _, err := range errorList {
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	return fmt.Errorf("%s", strings.Join(errorMessages, "\n"))
+	return nil
 }
 
-// StopManyRemoteService is a helper function for stopping a service on multiple remote targets.
-func StopManyRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+// StopRemoteServiceMany is a helper function for stopping a service on multiple remote targets.
+func StopRemoteServiceMany(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
 	c := pb.NewServiceClientProxy(conn)
-	respChan, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+	resp, err := c.ActionOneMany(ctx, &pb.ActionRequest{
 		ServiceName: service,
 		SystemType:  system,
 		Action:      pb.Action_ACTION_STOP,
@@ -143,24 +135,17 @@ func StopManyRemoteService(ctx context.Context, conn *proxy.Conn, system pb.Syst
 		return fmt.Errorf("can't stop service %s - %v", service, err)
 	}
 
-	var errorList []error
-	for resp := range respChan {
-		if resp.Error != nil {
-			err := fmt.Errorf("can't stop service on target %s: %w", resp.Target, resp.Error)
-			errorList = append(errorList, err)
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
 		}
 	}
-
-	if len(errorList) == 0 {
-		return nil
+	if errMsg != "" {
+		return fmt.Errorf("StopRemoteServiceMany failed: %s", errMsg)
 	}
 
-	var errorMessages []string
-	for _, err := range errorList {
-		errorMessages = append(errorMessages, err.Error())
-	}
-
-	return fmt.Errorf("%s", strings.Join(errorMessages, "\n"))
+	return nil
 }
 
 // RestartService was the original exported name for RestartRemoteService and now
