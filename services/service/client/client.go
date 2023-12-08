@@ -303,13 +303,13 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		return subcommands.ExitFailure
 	}
 
-	//	// Error holding the last observed non-nil error, which will
-	//	// determine the exit status of the command.
-	//	// The contract with the proxy and 'many' functions requires
-	//	// that we completely drain the response channel, so we cannot
-	//	// return early here.
-	//	// Note that this is only the last non-nil error, and previous
-	//	// error values may be lost.
+	// Error holding the last observed non-nil error, which will
+	// determine the exit status of the command.
+	// The contract with the proxy and 'many' functions requires
+	// that we completely drain the response channel, so we cannot
+	// return early here.
+	// Note that this is only the last non-nil error, and previous
+	// error values may be lost.
 	var lastErr error
 	for resp := range respChan {
 		out := state.Out[resp.Index]
