@@ -20,8 +20,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"runtime/pprof"
 	"time"
 
 	"strings"
@@ -220,7 +218,6 @@ func TestFDBMoveDataResumed(t *testing.T) {
 	testutil.WantErr("fdbmovedata wait", err, true, t)
 
 	time.Sleep(20 * time.Millisecond)
-	pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
 
 	waitResp, err := client.FDBMoveDataWait(ctx, waitReq)
 	testutil.FatalOnErr("second fdbmovedata wait failed", err, t)
