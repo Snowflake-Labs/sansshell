@@ -20,6 +20,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"runtime/pprof"
+	"time"
 
 	"strings"
 	"testing"
@@ -177,5 +180,56 @@ func TestFDBMoveDataDouble(t *testing.T) {
 				testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, rs), err2, t)
 			}
 		})
+	}
+}
+
+func TestFDBMoveDataResumed(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewFDBMoveClient(conn)
+
+	savedGenerateFDBMoveDataArgs := generateFDBMoveDataArgs
+	t.Cleanup(func() {
+		generateFDBMoveDataArgs = savedGenerateFDBMoveDataArgs
+	})
+
+	sh := testutil.ResolvePath(t, "/bin/sh")
+
+	generateFDBMoveDataArgs = func(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
+		_, err = savedGenerateFDBMoveDataArgs(req)
+		return []string{sh, "-c", "/bin/sleep 1; for i in {1..16000}; do echo filling-up-pipe-buffer; done"}, err
+	}
+
+	resp, err := client.FDBMoveDataCopy(ctx, &pb.FDBMoveDataCopyRequest{
+		ClusterFile:        "1",
+		TenantGroup:        "2",
+		SourceCluster:      "3",
+		DestinationCluster: "4",
+		NumProcs:           5,
+	})
+	testutil.FatalOnErr("fdbmovedata copy failed", err, t)
+	waitReq := &pb.FDBMoveDataWaitRequest{Id: resp.Id}
+	shortCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	shortWaitResp, err := client.FDBMoveDataWait(shortCtx, waitReq)
+	testutil.FatalOnErr("fdbmovedata wait failed", err, t)
+	_, err = shortWaitResp.Recv()
+	testutil.WantErr("fdbmovedata wait", err, true, t)
+
+	time.Sleep(20 * time.Millisecond)
+	pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+
+	waitResp, err := client.FDBMoveDataWait(ctx, waitReq)
+	testutil.FatalOnErr("second fdbmovedata wait failed", err, t)
+	for {
+		if _, err := waitResp.Recv(); err != nil {
+			if err != io.EOF {
+				testutil.FatalOnErr("fdbmovedata wait exited with error", err, t)
+			}
+			break
+		}
 	}
 }

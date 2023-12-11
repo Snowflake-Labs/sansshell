@@ -27,9 +27,11 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -40,12 +42,88 @@ var (
 	generateFDBMoveDataArgs = generateFDBMoveDataArgsImpl
 )
 
+const maxHistoryBytes = 1024 * 1024
+
+// reader allows reading incoming data from a multiReader
+type reader struct {
+	next   chan []byte
+	parent *multiReader
+}
+
+func (r *reader) Next(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case b := <-r.next:
+		return b, nil
+	case <-r.parent.finished:
+		return nil, r.parent.finalErr
+	}
+}
+
+// multiReader continuously reads from the provided io.Reader and provides ways
+// for multiple callers to read from the data it provides. It internally retains
+// maxHistoryBytes of past data.
+type multiReader struct {
+	src      io.Reader
+	history  []byte
+	readers  []*reader
+	finalErr error
+	finished chan struct{}
+	mu       sync.Mutex
+}
+
+func newMultiReader(src io.Reader) *multiReader {
+	m := &multiReader{src: src, finished: make(chan struct{})}
+	go m.backgroundRead()
+	return m
+}
+
+func (m *multiReader) backgroundRead() {
+	for {
+		b := make([]byte, 512)
+		n, err := m.src.Read(b)
+		if err != nil {
+			m.finalErr = err
+			close(m.finished)
+			return
+		}
+		b = b[:n]
+		m.mu.Lock()
+		for _, r := range m.readers {
+			select {
+			case r.next <- b:
+			default:
+			}
+		}
+		m.history = append(m.history, b...)
+		if len(m.history) > maxHistoryBytes {
+			m.history = m.history[maxHistoryBytes/2:]
+		}
+		m.mu.Unlock()
+	}
+}
+
+// Reader returns the bytes read so far and a reader to use for subsequent reads.
+func (m *multiReader) Reader() ([]byte, *reader) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r := &reader{next: make(chan []byte, 10), parent: m}
+	m.readers = append(m.readers, r)
+	return m.history, r
+}
+
+type moveOperation struct {
+	req     *pb.FDBMoveDataCopyRequest
+	stdout  *multiReader
+	stderr  *multiReader
+	done    chan struct{}
+	exitErr *exec.ExitError
+}
+
 type fdbmovedata struct {
-	mu     sync.Mutex
-	id     int64
-	cmd    *exec.Cmd
-	stdout io.ReadCloser
-	stderr io.ReadCloser
+	mu         sync.Mutex
+	operations map[int64]*moveOperation
 }
 
 func generateFDBMoveDataArgsImpl(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
@@ -63,24 +141,22 @@ func generateFDBMoveDataArgsImpl(req *pb.FDBMoveDataCopyRequest) ([]string, erro
 }
 
 func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCopyRequest) (*pb.FDBMoveDataCopyResponse, error) {
-	lockSuccess := s.mu.TryLock()
-	if !(lockSuccess) {
-		return nil, status.Errorf(codes.Internal, "Copy or Wait command already running")
-	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
-	logger := logr.FromContextOrDiscard(ctx)
 	// The sansshell server should only run one copy command at a time
-	if !(s.cmd == nil) {
-		logger.Info("existing command already running. returning early")
-		logger.Info("command details", "cmd", s.cmd.String())
-		logger.Info("command running with id", "id", s.id)
-		earlyresp := &pb.FDBMoveDataCopyResponse{
-			Id:       s.id,
-			Existing: true,
+	for id, o := range s.operations {
+		if proto.Equal(o.req, req) {
+			return &pb.FDBMoveDataCopyResponse{
+				Id:       id,
+				Existing: true,
+			}, nil
 		}
-		return earlyresp, nil
 	}
-	s.id = rand.Int63()
+	if len(s.operations) > 0 {
+		return nil, status.Errorf(codes.Internal, "Copy command already running")
+	}
+	logger := logr.FromContextOrDiscard(ctx)
+	id := rand.Int63()
 	command, err := generateFDBMoveDataArgs(req)
 	if err != nil {
 		return nil, err
@@ -103,81 +179,105 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	}
 
 	logger.Info("executing local command", "cmd", cmd.String())
-	logger.Info("command running with id", "id", s.id)
-	s.cmd = cmd
-	s.stdout = stdout
-	s.stderr = stderr
-	err = s.cmd.Start()
-	if err != nil {
-		s.cmd = nil
-		s.id = 0
+	logger.Info("command running with id", "id", id)
+	if err = cmd.Start(); err != nil {
 		return nil, status.Errorf(codes.Internal, "error running fdbmovedata cmd (%+v): %v", command, err)
 	}
 
+	op := &moveOperation{
+		req:    req,
+		done:   make(chan struct{}),
+		stdout: newMultiReader(stdout),
+		stderr: newMultiReader(stderr),
+	}
+	s.operations[id] = op
+	go func() {
+		err := cmd.Wait()
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			op.exitErr = exitErr
+		}
+		logger.Info("fdbmovedata command finished", "id", id, "err", err)
+		close(op.done)
+	}()
+
 	resp := &pb.FDBMoveDataCopyResponse{
-		Id:       s.id,
+		Id:       id,
 		Existing: false,
 	}
 	return resp, nil
 }
 
 func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.FDBMove_FDBMoveDataWaitServer) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	ctx := stream.Context()
 	logger := logr.FromContextOrDiscard(ctx)
-	if !(req.Id == s.id) {
-		logger.Info("Provided ID and stored ID do not match", "providedID", req.Id, "storedID", s.id)
-		return status.Errorf(codes.Internal, "Provided ID %d does not match stored ID %d", req.Id, s.id)
-	}
-	if s.cmd == nil {
-		logger.Info("No command running on the server")
-		return status.Errorf(codes.Internal, "No command running on the server")
-	}
-	wg := &sync.WaitGroup{}
 
-	// Send stderr asynchronously
-	stderr := s.stderr
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	s.mu.Lock()
+	op, found := s.operations[req.Id]
+	var ids []int64
+	for id := range s.operations {
+		ids = append(ids, id)
+	}
+	s.mu.Unlock()
+	if !found {
+		logger.Info("Provided ID and stored IDs do not match", "providedID", req.Id, "storedID", ids)
+		return status.Errorf(codes.Internal, "Provided ID %d does not match stored IDs %v", req.Id, ids)
+	}
+
+	stdoutHistory, stdout := op.stdout.Reader()
+	stderrHistory, stderr := op.stderr.Reader()
+	if stdoutHistory != nil || stderrHistory != nil {
+		if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: stdoutHistory, Stderr: stderrHistory}); err != nil {
+			return err
+		}
+	}
+
+	// Send output asynchronously
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
 		for {
-			buf := make([]byte, 1024)
-			n, err := stderr.Read(buf)
+			buf, err := stderr.Next(gCtx)
 			if err != nil {
-				return
+				if err == io.EOF {
+					return nil
+				}
+				return err
 			}
-			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stderr: buf[:n]}); err != nil {
-				return
+			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stderr: buf}); err != nil {
+				return err
 			}
 		}
-	}()
-
-	// Send stdout asynchronously
-	stdout := s.stdout
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	g.Go(func() error {
 		for {
-			buf := make([]byte, 1024)
-			n, err := stdout.Read(buf)
+			buf, err := stdout.Next(ctx)
 			if err != nil {
-				return
+				if err == io.EOF {
+					return nil
+				}
+				return err
 			}
-			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf[:n]}); err != nil {
-				return
+			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf}); err != nil {
+				return err
 			}
 		}
-	}()
-	wg.Wait()
-	err := s.cmd.Wait()
-	if exitErr, ok := err.(*exec.ExitError); ok {
-		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(exitErr.ExitCode())})
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-op.done:
+	}
+	if op.exitErr != nil {
+		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(op.exitErr.ExitCode())})
 	}
 	// clear the cmd to allow another call
-	s.cmd = nil
-	s.id = 0
-	return err
+	s.mu.Lock()
+	delete(s.operations, req.Id)
+	s.mu.Unlock()
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server
@@ -186,5 +286,5 @@ func (s *fdbmovedata) Register(gs *grpc.Server) {
 }
 
 func init() {
-	services.RegisterSansShellService(&fdbmovedata{})
+	services.RegisterSansShellService(&fdbmovedata{operations: make(map[int64]*moveOperation)})
 }
