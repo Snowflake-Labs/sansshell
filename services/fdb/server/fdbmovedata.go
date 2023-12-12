@@ -192,6 +192,9 @@ func (s *fdbmovedata) FDBMoveDataCopy(ctx context.Context, req *pb.FDBMoveDataCo
 	}
 	s.operations[id] = op
 	go func() {
+		// Wait for output to be done, then check command status
+		<-op.stdout.finished
+		<-op.stderr.finished
 		err := cmd.Wait()
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			op.exitErr = exitErr
@@ -240,7 +243,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 				if err == io.EOF {
 					return nil
 				}
-				return err
+				return fmt.Errorf("could not read stdout: %v", err)
 			}
 			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stderr: buf}); err != nil {
 				return err
@@ -254,7 +257,7 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 				if err == io.EOF {
 					return nil
 				}
-				return err
+				return fmt.Errorf("could not read stderr: %v", err)
 			}
 			if err := stream.Send(&pb.FDBMoveDataWaitResponse{Stdout: buf}); err != nil {
 				return err
@@ -270,13 +273,14 @@ func (s *fdbmovedata) FDBMoveDataWait(req *pb.FDBMoveDataWaitRequest, stream pb.
 		return ctx.Err()
 	case <-op.done:
 	}
-	if op.exitErr != nil {
-		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(op.exitErr.ExitCode())})
-	}
 	// clear the cmd to allow another call
 	s.mu.Lock()
 	delete(s.operations, req.Id)
 	s.mu.Unlock()
+
+	if op.exitErr != nil {
+		return stream.Send(&pb.FDBMoveDataWaitResponse{RetCode: int32(op.exitErr.ExitCode())})
+	}
 	return nil
 }
 
