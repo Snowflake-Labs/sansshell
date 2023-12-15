@@ -52,7 +52,7 @@ func TestMain(m *testing.M) {
 	fds := &fdbserver{}
 	fds.Register(s)
 
-	fdbm := &fdbmovedata{}
+	fdbm := &fdbmovedata{operations: make(map[int64]*moveOperation)}
 	fdbm.Register(s)
 
 	go func() {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"strings"
 	"testing"
@@ -93,7 +94,7 @@ func TestFDBMoveData(t *testing.T) {
 			}
 			_, err = waitResp.Recv()
 			if err != io.EOF {
-				t.Error("unexpected")
+				t.Errorf("unexpected err %v", err)
 			}
 		})
 	}
@@ -118,7 +119,7 @@ func TestFDBMoveDataDouble(t *testing.T) {
 
 	generateFDBMoveDataArgs = func(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
 		_, err = savedGenerateFDBMoveDataArgs(req)
-		return []string{sh, "-c", "/bin/sleep 1; echo done"}, err
+		return []string{sh, "-c", "/bin/sleep 0.1; echo done"}, err
 	}
 	for _, tc := range []struct {
 		name       string
@@ -161,13 +162,14 @@ func TestFDBMoveDataDouble(t *testing.T) {
 			waitResp1, err1 := client1.FDBMoveDataWait(ctx, waitReq)
 			testutil.FatalOnErr("fdbmovedata wait1 failed", err1, t)
 			for _, want1 := range tc.outputWait {
-				rs, err1 := waitResp1.Recv()
-				if err1 != io.EOF {
-					testutil.FatalOnErr("fdbmovedata wait1 failed", err1, t)
-				}
+				rs, err := waitResp1.Recv()
+				testutil.FatalOnErr("fdbmovedata wait1 failed", err, t)
 				if !(proto.Equal(want1, rs)) {
 					t.Errorf("want: %v, got: %v", want1, rs)
 				}
+			}
+			if _, err := waitResp1.Recv(); err != io.EOF {
+				testutil.FatalOnErr("fdbmovedata wait1 EOF failed", err, t)
 			}
 			waitResp2, err2 := client2.FDBMoveDataWait(ctx, waitReq)
 			testutil.FatalOnErr("fdbmovedata wait2 failed", err2, t)
@@ -177,5 +179,55 @@ func TestFDBMoveDataDouble(t *testing.T) {
 				testutil.FatalOnNoErr(fmt.Sprintf("%v - resp %v", tc.name, rs), err2, t)
 			}
 		})
+	}
+}
+
+func TestFDBMoveDataResumed(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewFDBMoveClient(conn)
+
+	savedGenerateFDBMoveDataArgs := generateFDBMoveDataArgs
+	t.Cleanup(func() {
+		generateFDBMoveDataArgs = savedGenerateFDBMoveDataArgs
+	})
+
+	sh := testutil.ResolvePath(t, "/bin/sh")
+
+	generateFDBMoveDataArgs = func(req *pb.FDBMoveDataCopyRequest) ([]string, error) {
+		_, err = savedGenerateFDBMoveDataArgs(req)
+		return []string{sh, "-c", "/bin/sleep 0.2; for i in {1..16000}; do echo filling-up-pipe-buffer; done"}, err
+	}
+
+	resp, err := client.FDBMoveDataCopy(ctx, &pb.FDBMoveDataCopyRequest{
+		ClusterFile:        "1",
+		TenantGroup:        "2",
+		SourceCluster:      "3",
+		DestinationCluster: "4",
+		NumProcs:           5,
+	})
+	testutil.FatalOnErr("fdbmovedata copy failed", err, t)
+	waitReq := &pb.FDBMoveDataWaitRequest{Id: resp.Id}
+	shortCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	shortWaitResp, err := client.FDBMoveDataWait(shortCtx, waitReq)
+	testutil.FatalOnErr("fdbmovedata wait failed", err, t)
+	_, err = shortWaitResp.Recv()
+	testutil.WantErr("fdbmovedata wait", err, true, t)
+
+	time.Sleep(20 * time.Millisecond)
+
+	waitResp, err := client.FDBMoveDataWait(ctx, waitReq)
+	testutil.FatalOnErr("second fdbmovedata wait failed", err, t)
+	for {
+		if _, err := waitResp.Recv(); err != nil {
+			if err != io.EOF {
+				testutil.FatalOnErr("fdbmovedata wait exited with error", err, t)
+			}
+			break
+		}
 	}
 }
