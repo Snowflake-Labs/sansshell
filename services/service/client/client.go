@@ -218,19 +218,21 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 		return subcommands.ExitUsageError
 	}
 
-	req := &pb.StatusRequest{
-		SystemType:  system,
-		ServiceName: serviceName,
-	}
-	c := pb.NewServiceClientProxy(state.Conn)
+	err = StopRemoteServiceMany(ctx, state.Conn, system, serviceName)
 
-	respChan, err := c.StatusOneMany(ctx, req)
+	//req := &pb.StatusRequest{
+	//	SystemType:  system,
+	//	ServiceName: serviceName,
+	//}
+	//c := pb.NewServiceClientProxy(state.Conn)
+	//
+	//respChan, err := c.StatusOneMany(ctx, req)
 
 	if err != nil {
-		// Emit this to every error file as it's not specific to a given target.
-		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - error executing 'status' for service %s: %v\n", serviceName, err)
-		}
+		//// Emit this to every error file as it's not specific to a given target.
+		//for _, e := range state.Err {
+		//	fmt.Fprintf(e, "All targets - error executing 'status' for service %s: %v\n", serviceName, err)
+		//}
 		return subcommands.ExitFailure
 	}
 
@@ -241,24 +243,24 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	// return early here.
 	// Note that this is only the last non-nil error, and previous
 	// error values may be lost.
-	var lastErr error
-	for resp := range respChan {
-		out := state.Out[resp.Index]
-		system, status := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus()
-		output := fmt.Sprintf("[%s] %s : %s", systemTypeString(system), serviceName, statusString(status))
-		if resp.Error != nil {
-			lastErr = fmt.Errorf("target %s [%d] error: %w\n", resp.Target, resp.Index, resp.Error)
-			fmt.Fprint(state.Err[resp.Index], lastErr)
-			continue
-		}
-		if _, err := fmt.Fprintln(out, output); err != nil {
-			lastErr = fmt.Errorf("target %s [%d] write error: %w\n", resp.Target, resp.Index, err)
-			fmt.Fprint(state.Err[resp.Index], lastErr)
-		}
-	}
-	if lastErr != nil {
-		return subcommands.ExitFailure
-	}
+	//var lastErr error
+	//for resp := range respChan {
+	//	out := state.Out[resp.Index]
+	//	system, status := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus()
+	//	output := fmt.Sprintf("[%s] %s : %s", systemTypeString(system), serviceName, statusString(status))
+	//	if resp.Error != nil {
+	//		lastErr = fmt.Errorf("target %s [%d] error: %w\n", resp.Target, resp.Index, resp.Error)
+	//		fmt.Fprint(state.Err[resp.Index], lastErr)
+	//		continue
+	//	}
+	//	if _, err := fmt.Fprintln(out, output); err != nil {
+	//		lastErr = fmt.Errorf("target %s [%d] write error: %w\n", resp.Target, resp.Index, err)
+	//		fmt.Fprint(state.Err[resp.Index], lastErr)
+	//	}
+	//}
+	//if lastErr != nil {
+	//	return subcommands.ExitFailure
+	//}
 	return subcommands.ExitSuccess
 }
 
@@ -293,7 +295,6 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		SystemType: system,
 	}
 	c := pb.NewServiceClientProxy(state.Conn)
-
 	respChan, err := c.ListOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
