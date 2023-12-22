@@ -85,14 +85,15 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 	if err := msg.MarshalFrom(m2); err != nil {
 		return fmt.Errorf("unable to marshal into anyproto: %v", err)
 	}
-	if input.Peer == nil || input.Peer.Principal == nil {
-		return fmt.Errorf("missing peer information")
-	}
 
 	// Prefer using a proxied identity if provided
-	user := input.Peer.Principal.ID
+	var user string
 	if p := proxiedidentity.FromContext(ctx); p != nil {
 		user = p.ID
+	} else if input.Peer != nil && input.Peer.Principal != nil {
+		user = input.Peer.Principal.ID
+	} else {
+		return fmt.Errorf("missing peer information")
 	}
 
 	sentAct := &mpa.Action{
