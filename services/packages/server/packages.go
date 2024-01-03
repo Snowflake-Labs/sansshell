@@ -119,7 +119,15 @@ var (
 				"-y",
 			},
 		}
-		return genCmd(p.PackageSystem, removeOpts)
+		out, err := genCmd(p.PackageSystem, removeOpts)
+		if err != nil {
+			return nil, err
+		}
+		repos := &repoData{
+			enable:  p.Repo,
+			disable: p.DisableRepo,
+		}
+		return addRepoAndPackage(out, p.PackageSystem, p.Name, p.Version, repos), nil
 	}
 
 	generateValidate = func(packageSystem pb.PackageSystem, name, version string) ([]string, error) {

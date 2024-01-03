@@ -74,6 +74,10 @@ message RemoveRequest {
   //
   // i.e. epoch:version.arch
   string version = 3;
+  // If set enables this repo for resolving package/version.
+  string repo = 4;
+  // If set disables this repo before resolving package/version.
+  string disable_repo = 5;
 }
 
 message RemoveReply { string debug_output = 1;}
