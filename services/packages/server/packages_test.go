@@ -369,6 +369,20 @@ func TestRemove(t *testing.T) {
 
 	client := pb.NewPackagesClient(conn)
 
+	testdataInput := "This is output we expect to see\n\nMore output\n"
+	savedGenerateRemove := generateRemove
+	var cmdLine string
+	generateRemove = func(i *pb.RemoveRequest) ([]string, error) {
+		// Capture what was generated so we can validate it.
+		out, err := savedGenerateRemove(i)
+		if err != nil {
+			return nil, err
+		}
+		cmdLine = strings.Join(out, " ")
+		return []string{testutil.ResolvePath(t, "echo"), "-n", testdataInput}, nil
+	}
+	t.Cleanup(func() { generateRemove = savedGenerateRemove })
+
 	for _, tc := range []struct {
 		name string
 		req  *pb.RemoveRequest
@@ -389,6 +403,39 @@ func TestRemove(t *testing.T) {
 			t.Logf("%s: %v", tc.name, err)
 		})
 	}
+
+	req := &pb.RemoveRequest{
+		Name:        "package",
+		Version:     "1.2.3",
+		Repo:        "somerepo",
+		DisableRepo: "otherrepo",
+	}
+
+	savedYumBin := YumBin
+	t.Cleanup(func() {
+		YumBin = savedYumBin
+	})
+
+	// Test 1: Should fail on a blank yum
+	YumBin = ""
+	_, err = client.Remove(ctx, req)
+	testutil.FatalOnNoErr("clean install request", err, t)
+
+	// Test 2: A clean install. Validate we got expected output back.
+	// This is assuming yum based installs for testing command builder.
+	YumBin = "yum"
+	wantCmdLine := fmt.Sprintf("%s remove-nevra -y --disablerepo=otherrepo --enablerepo=somerepo package-1.2.3", YumBin)
+
+	resp, err := client.Remove(ctx, req)
+	testutil.FatalOnErr("clean install request", err, t)
+	if got, want := resp.DebugOutput, testdataInput; got != want {
+		t.Fatalf("Output from clean install differs. Got:\n%q\nWant:\n%q", got, want)
+	}
+	if got, want := cmdLine, wantCmdLine; got != want {
+		t.Fatalf("command lines differ. Got %q Want %q", got, want)
+	}
+	t.Logf("clean install response: %+v", resp)
+
 }
 
 func TestUpdate(t *testing.T) {
