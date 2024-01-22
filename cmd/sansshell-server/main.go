@@ -66,6 +66,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
 	mpa "github.com/Snowflake-Labs/sansshell/services/mpa/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/network/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/server"
 
 	// Packages needs a real import to bind flags.

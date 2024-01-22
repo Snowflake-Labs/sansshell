@@ -43,6 +43,7 @@ import (
 //go:generate go generate ./services/fdb
 //go:generate go generate ./services/healthcheck
 //go:generate go generate ./services/localfile
+//go:generate go generate ./services/network
 //go:generate go generate ./services/packages
 //go:generate go generate ./services/process
 //go:generate go generate ./services/sansshell

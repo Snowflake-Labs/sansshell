@@ -1,0 +1,70 @@
+/* Copyright (c) 2024 Snowflake Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the
+   "License"); you may not use this file except in compliance
+   with the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing,
+   software distributed under the License is distributed on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+   KIND, either express or implied.  See the License for the
+   specific language governing permissions and limitations
+   under the License.
+*/
+
+syntax = "proto3";
+
+option go_package = "github.com/Snowflake-Labs/sansshell/services/network";
+
+package Network;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service PacketCapture {
+  rpc RawStream(RawStreamRequest) returns (stream RawStreamReply);
+  rpc ListInterfaces(google.protobuf.Empty) returns (ListInterfacesReply);
+}
+
+message RawStreamRequest {
+	// BPF filter to apply during the capture process.
+	// See https://www.tcpdump.org/manpages/pcap-filter.7.html for syntax.
+	string filter = 1;
+
+	// Network interface to listen on.
+	// If empty, the first non-loopback interface will be used.
+	string interface = 2;
+
+	// Capture only up to `capture_length` bytes from each packet.
+	int32 capture_length = 3;
+
+	// Stop after capturing `count_limit` packets.
+	int32 count_limit = 4;
+}
+
+message RawStreamReply {
+	// Raw bytes captured from the interface.
+	bytes data = 1;
+
+	// Timestamp when the packet arrived.
+	google.protobuf.Timestamp timestamp = 2;
+
+	// Original size of the packet (before the truncation).
+	int32 full_length = 3;
+}
+
+// Modeled after Go's [net.Interface] <https://pkg.go.dev/net#Interface>
+message Interface {
+	int32 index = 1;
+	int32 mtu = 2;
+	string name = 3;
+	bytes hwaddr = 4;
+	// See [net.Flags] <https://pkg.go.dev/net#Flags>
+	uint32 flags = 5;
+}
+
+message ListInterfacesReply {
+	repeated Interface interfaces = 1;
+}

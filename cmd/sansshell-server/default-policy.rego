@@ -35,6 +35,14 @@ allow {
 }
 
 allow {
+	input.method = "/Network.PacketCapture/ListInterfaces"
+}
+
+allow {
+	input.method = "/Network.PacketCapture/RawStream"
+}
+
+allow {
 	input.type = "Exec.ExecRequest"
 	input.message.command = "/bin/echo"
 	input.message.args = ["hello", "world"]
