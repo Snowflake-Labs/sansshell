@@ -96,6 +96,58 @@ func StopRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemTy
 	return nil
 }
 
+// StartRemoteServiceManys is a helper function for starting a service on multiple remote targets.
+func StartRemoteServiceMany(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	c := pb.NewServiceClientProxy(conn)
+	resp, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_START,
+	})
+
+	if err != nil {
+		return fmt.Errorf("can't start service %s - %v", service, err)
+	}
+
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("StartRemoteServiceMany failed: %s", errMsg)
+	}
+
+	return nil
+}
+
+// StopRemoteServiceMany is a helper function for stopping a service on multiple remote targets.
+func StopRemoteServiceMany(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	c := pb.NewServiceClientProxy(conn)
+	resp, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_STOP,
+	})
+
+	if err != nil {
+		return fmt.Errorf("can't stop service %s - %v", service, err)
+	}
+
+	errMsg := ""
+	for r := range resp {
+		if r.Error != nil {
+			errMsg += fmt.Sprintf("target %s (%d): %v", r.Target, r.Index, r.Error)
+		}
+	}
+	if errMsg != "" {
+		return fmt.Errorf("StopRemoteServiceMany failed: %s", errMsg)
+	}
+
+	return nil
+}
+
 // RestartService was the original exported name for RestartRemoteService and now
 // exists for backwards compatibility.
 //
