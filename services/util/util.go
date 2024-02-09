@@ -439,3 +439,7 @@ func (i *IntSliceFlags) Set(val string) error {
 	}
 	return nil
 }
+
+func ValidatePort(port int) bool {
+	return port >= 0 && port <= 65535
+}

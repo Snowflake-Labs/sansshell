@@ -56,6 +56,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
 	_ "github.com/Snowflake-Labs/sansshell/services/service"
 	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo"
+	_ "github.com/Snowflake-Labs/sansshell/services/tcpoverrpc"
 	_ "github.com/Snowflake-Labs/sansshell/services/tlsinfo"
 
 	_ "github.com/Snowflake-Labs/sansshell/services/fdb/server"

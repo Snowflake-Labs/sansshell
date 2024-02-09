@@ -76,6 +76,7 @@ import (
 	ssserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/server"
 	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo/server"
+	_ "github.com/Snowflake-Labs/sansshell/services/tcpoverrpc/server"
 )
 
 var (
