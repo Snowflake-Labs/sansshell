@@ -41,6 +41,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/stats"
 )
 
 // runState encapsulates all of the variable state needed
@@ -61,6 +62,7 @@ type runState struct {
 	justificationFunc  func(string) error
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
+	statsHandler       stats.Handler
 	authzHooks         []rpcauth.RPCAuthzHook
 	services           []func(*grpc.Server)
 }
@@ -264,12 +266,7 @@ func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 		interceptorOpts = append(interceptorOpts,
 			otelgrpc.WithMeterProvider(noop.MeterProvider{}), // We don't want otel grpc metrics so discard them
 		)
-		r.unaryInterceptors = append(r.unaryInterceptors,
-			otelgrpc.UnaryServerInterceptor(interceptorOpts...),
-		)
-		r.streamInterceptors = append(r.streamInterceptors,
-			otelgrpc.StreamServerInterceptor(interceptorOpts...),
-		)
+		r.statsHandler = otelgrpc.NewServerHandler(interceptorOpts...)
 		return nil
 	})
 }
@@ -327,6 +324,9 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	for _, s := range rs.services {
 		serverOpts = append(serverOpts, server.WithRawServerOption(s))
+	}
+	if rs.statsHandler != nil {
+		serverOpts = append(serverOpts, server.WithStatsHandler(rs.statsHandler))
 	}
 	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
 		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)

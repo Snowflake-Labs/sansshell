@@ -26,6 +26,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/stats"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
@@ -48,6 +49,7 @@ type serveSetup struct {
 	authzHooks         []rpcauth.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
+	statsHandler       stats.Handler
 	services           []func(*grpc.Server)
 }
 
@@ -131,6 +133,14 @@ func WithRawServerOption(s func(*grpc.Server)) Option {
 	})
 }
 
+// WithStatsHandler adds a stats handler for telemetry.
+func WithStatsHandler(h stats.Handler) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
+		s.statsHandler = h
+		return nil
+	})
+}
+
 // Serve wraps up BuildServer in a succinct API for callers passing along various parameters. It will automatically add
 // an authz hook for HostNet based on the listener address. Additional hooks are passed along after this one.
 func Serve(hostport string, opts ...Option) error {
@@ -197,6 +207,9 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 		// The first interceptor is outermost, and the final interceptor will wrap the real handler.
 		grpc.ChainUnaryInterceptor(unary...),
 		grpc.ChainStreamInterceptor(streaming...),
+	}
+	if ss.statsHandler != nil {
+		serverOpts = append(serverOpts, grpc.StatsHandler(ss.statsHandler))
 	}
 
 	s := grpc.NewServer(serverOpts...)
