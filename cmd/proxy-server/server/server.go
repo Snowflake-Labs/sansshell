@@ -44,6 +44,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/stats"
 )
 
 // runState encapsulates all of the variable state needed
@@ -66,6 +67,8 @@ type runState struct {
 	unaryClientInterceptors  []grpc.UnaryClientInterceptor
 	streamInterceptors       []grpc.StreamServerInterceptor
 	streamClientInterceptors []grpc.StreamClientInterceptor
+	statsHandler             stats.Handler
+	statsClientHandler       stats.Handler
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
 	metricsRecorder          metrics.MetricsRecorder
@@ -325,18 +328,8 @@ func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 		interceptorOpts = append(interceptorOpts,
 			otelgrpc.WithMeterProvider(noop.MeterProvider{}), // We don't want otel grpc metrics so discard them
 		)
-		r.unaryClientInterceptors = append(r.unaryClientInterceptors,
-			otelgrpc.UnaryClientInterceptor(interceptorOpts...),
-		)
-		r.streamClientInterceptors = append(r.streamClientInterceptors,
-			otelgrpc.StreamClientInterceptor(interceptorOpts...),
-		)
-		r.unaryInterceptors = append(r.unaryInterceptors,
-			otelgrpc.UnaryServerInterceptor(interceptorOpts...),
-		)
-		r.streamInterceptors = append(r.streamInterceptors,
-			otelgrpc.StreamServerInterceptor(interceptorOpts...),
-		)
+		r.statsHandler = otelgrpc.NewServerHandler(interceptorOpts...)
+		r.statsClientHandler = otelgrpc.NewClientHandler(interceptorOpts...)
 		return nil
 	})
 }
@@ -423,6 +416,9 @@ func Run(ctx context.Context, opts ...Option) {
 		// Use 16MB instead of the default 4MB to allow larger responses
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
 	}
+	if rs.statsClientHandler != nil {
+		dialOpts = append(dialOpts, grpc.WithStatsHandler(rs.statsClientHandler))
+	}
 	targetDialer := server.NewDialer(dialOpts...)
 
 	svcMap := server.LoadGlobalServiceMap()
@@ -451,6 +447,9 @@ func Run(ctx context.Context, opts ...Option) {
 		grpc.Creds(serverCreds),
 		grpc.ChainUnaryInterceptor(unaryServer...),
 		grpc.ChainStreamInterceptor(streamServer...),
+	}
+	if rs.statsHandler != nil {
+		serverOpts = append(serverOpts, grpc.StatsHandler(rs.statsHandler))
 	}
 	g := grpc.NewServer(serverOpts...)
 
