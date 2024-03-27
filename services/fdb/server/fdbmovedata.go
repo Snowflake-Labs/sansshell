@@ -57,7 +57,14 @@ func (r *reader) Next(ctx context.Context) ([]byte, error) {
 	case b := <-r.next:
 		return b, nil
 	case <-r.parent.finished:
-		return nil, r.parent.finalErr
+		// Double-check that there's no pending data to return. We may not have
+		// returned all pending data before the parent is marked as finished.
+		select {
+		case b := <-r.next:
+			return b, nil
+		default:
+			return nil, r.parent.finalErr
+		}
 	}
 }
 
