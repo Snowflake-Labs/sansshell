@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/euank/go-kmsg-parser/v2 v2.1.0
-	github.com/go-logr/logr v1.3.0
+	github.com/go-logr/logr v1.4.1
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/subcommands v1.2.0
