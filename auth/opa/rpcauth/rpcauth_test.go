@@ -90,10 +90,7 @@ type IntExtension struct {
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
 	var logs string
-	fn := func(p, a string) {
-		logs = a
-	}
-	logger := funcr.New(fn, funcr.Options{Verbosity: 2})
+	logger := funcr.NewJSON(func(obj string) { logs = obj }, funcr.Options{Verbosity: 2})
 	ctx = logr.NewContext(ctx, logger)
 	// This way the tests exercise the logging code.
 	policy, err := opa.NewAuthzPolicy(ctx, policyString)
