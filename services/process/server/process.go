@@ -230,7 +230,7 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 		// New thread so append last entry and start over.
 		if fields[0] == "Thread" {
 			// Depending on wrapper/gdb this may have additional fields but we don't need them.
-			if len(fields) < 6 {
+			if len(fields) < 4 {
 				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "unparsable pstack output for new thread: %s", text)
 			}
@@ -244,13 +244,21 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
 				return nil, status.Errorf(codes.Internal, "can't parse thread number: %s : %v", text, err)
 			}
-			if n, err := fmt.Sscanf(fields[3], "0x%x", &stack.ThreadId); n != 1 || err != nil {
-				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
-				return nil, status.Errorf(codes.Internal, "can't parse thread id: %s : %v", text, err)
+			if fields[2] == "(Thread" && len(fields) >= 6 {
+				if n, err := fmt.Sscanf(fields[3], "0x%x", &stack.ThreadId); n != 1 || err != nil {
+					recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
+					return nil, status.Errorf(codes.Internal, "can't parse thread id: %s : %v", text, err)
+				}
+				if n, err := fmt.Sscanf(fields[5], "%d", &stack.Lwp); n != 1 || err != nil {
+					recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
+					return nil, status.Errorf(codes.Internal, "can't parse lwp: %s : %v", text, err)
+				}
 			}
-			if n, err := fmt.Sscanf(fields[5], "%d", &stack.Lwp); n != 1 || err != nil {
-				recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
-				return nil, status.Errorf(codes.Internal, "can't parse lwp: %s : %v", text, err)
+			if fields[2] == "(LWP" {
+				if n, err := fmt.Sscanf(fields[3], "%d", &stack.Lwp); n != 1 || err != nil {
+					recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "parse_err"))
+					return nil, status.Errorf(codes.Internal, "can't parse lwp: %s : %v", text, err)
+				}
 			}
 			numEntries++
 			continue
