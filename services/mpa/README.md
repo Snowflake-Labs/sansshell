@@ -78,14 +78,7 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
    proxy.WithAuthzHook(mpa.ProxyMPAAuthzHook)
    ```
 
-   You'll also need to set additional interceptors on the server to make proxied identity information available.
-
-   ```go
-   proxiedidentity.ServerProxiedIdentityUnaryInterceptor()
-   proxiedidentity.ServerProxiedIdentityStreamInterceptor()
-   ```
-
-   When setting these interceptors, make sure to update the server's rego policies if it allows callers other than the proxy to make direct calls. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
+   You'll also need to update the server's rego policies to reject requests that unexpectedly set `proxied-sansshell-identity` metadata if it allows callers other than the proxy to make direct calls. If you fail to do so, a direct caller can manipulate the metadata to approve their own request. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
 
    ```rego
    package sansshell.authz

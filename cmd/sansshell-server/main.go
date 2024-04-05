@@ -46,7 +46,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
@@ -172,8 +171,6 @@ func main() {
 		server.WithHostPort(*hostport),
 		server.WithParsedPolicy(parsed),
 		server.WithJustification(*justification),
-		server.WithUnaryInterceptor(proxiedidentity.ServerProxiedIdentityUnaryInterceptor()),
-		server.WithStreamInterceptor(proxiedidentity.ServerProxiedIdentityStreamInterceptor()),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),

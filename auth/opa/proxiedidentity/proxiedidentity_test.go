@@ -91,7 +91,7 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 	}{
 		{
 			desc:            "interceptor missing",
-			identityProxied: false,
+			identityProxied: true,
 		},
 		{
 			desc: "passed",
