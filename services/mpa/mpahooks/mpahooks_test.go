@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	proxyserver "github.com/Snowflake-Labs/sansshell/proxy/server"
@@ -61,15 +60,7 @@ func mustAny(a *anypb.Any, err error) *anypb.Any {
 
 func TestActionMatchesInput(t *testing.T) {
 	ctx := context.Background()
-	var ctxWithIdentity context.Context
-	if _, err := proxiedidentity.ServerProxiedIdentityUnaryInterceptor()(
-		metadata.NewIncomingContext(ctx, metadata.Pairs("proxied-sansshell-identity", `{"id":"proxied"}`)),
-		nil, nil, func(ctx context.Context, req any) (any, error) {
-			ctxWithIdentity = ctx
-			return nil, nil
-		}); err != nil {
-		t.Fatal(err)
-	}
+	ctxWithIdentity := metadata.NewIncomingContext(ctx, metadata.Pairs("proxied-sansshell-identity", `{"id":"proxied"}`))
 
 	for _, tc := range []struct {
 		desc    string
@@ -429,11 +420,9 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}
 	s := grpc.NewServer(
 		grpc.ChainStreamInterceptor(
-			proxiedidentity.ServerProxiedIdentityStreamInterceptor(),
 			authz.AuthorizeStream,
 		),
 		grpc.ChainUnaryInterceptor(
-			proxiedidentity.ServerProxiedIdentityUnaryInterceptor(),
 			authz.Authorize,
 		),
 		grpc.Creds(srvCreds),
