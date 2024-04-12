@@ -18,6 +18,7 @@
 package client
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -103,7 +104,9 @@ func getAction(ctx context.Context, state *util.ExecuteState, c pb.MpaClientProx
 	return anyAction
 }
 
-type approveCmd struct{}
+type approveCmd struct {
+	skipConfirmation bool
+}
 
 func (*approveCmd) Name() string     { return "approve" }
 func (*approveCmd) Synopsis() string { return "Approves an MPA request" }
@@ -113,7 +116,9 @@ func (*approveCmd) Usage() string {
 `
 }
 
-func (p *approveCmd) SetFlags(f *flag.FlagSet) {}
+func (p *approveCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&p.skipConfirmation, "skip-confirmation", false, "If true won't ask for confirmation")
+}
 
 func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
@@ -121,11 +126,36 @@ func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		fmt.Fprintln(os.Stderr, "Please specify a single ID to approve.")
 		return subcommands.ExitUsageError
 	}
+	id := f.Args()[0]
 	c := pb.NewMpaClientProxy(state.Conn)
-	action := getAction(ctx, state, c, f.Args()[0])
+	action := getAction(ctx, state, c, id)
 	if action == nil {
 		return subcommands.ExitFailure
 	}
+
+	if !p.skipConfirmation {
+		// ask for confirmation
+		fmt.Printf("MPA Request:\n%s\n", protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(action))
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			fmt.Printf("Would you like to approve the request? (yes/no): ")
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				fmt.Println("Error reading input. Please try again.")
+				continue
+			}
+			input = strings.TrimSpace(input)
+			if strings.ToLower(input) == "yes" || strings.ToLower(input) == "y" {
+				break
+			}
+			if strings.ToLower(input) == "no" || strings.ToLower(input) == "n" {
+				fmt.Print("Request is not approved. Exiting.\n")
+				return subcommands.ExitSuccess
+			}
+			fmt.Println("Invalid input. Please enter 'yes' or 'no'")
+		}
+	}
+	fmt.Print("Approving the request..\n")
 
 	approved, err := c.ApproveOneMany(ctx, &pb.ApproveRequest{
 		Action: action,
