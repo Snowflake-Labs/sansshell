@@ -208,9 +208,11 @@ bar = baz`)
 
 	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
-		name     string
-		req      *pb.DeleteRequest
-		expected string
+		name            string
+		req             *pb.DeleteRequest
+		expected        string
+		expectErr       bool
+		expectErrString string
 	}{
 		{
 			name: "delete existing key",
@@ -237,6 +239,19 @@ cluster_file = /etc/foundatindb/fdb.cluster
 bar = baz`,
 		},
 		{
+			name: "delete section that doesnt exist",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "foo.42", Key: "234"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundatindb/fdb.cluster
+
+[foo.1]
+bar = baz`,
+			expectErr:       true,
+			expectErrString: "section foo.42 does not exist",
+		},
+		{
 			name: "delete whole section with keys",
 			req: &pb.DeleteRequest{
 				Location: &pb.Location{File: name, Section: "foo.1", Key: ""},
@@ -248,7 +263,17 @@ cluster_file = /etc/foundatindb/fdb.cluster`,
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Delete(ctx, tc.req)
-			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			if err != nil {
+				if tc.expectErr {
+					if !strings.Contains(err.Error(), tc.expectErrString) {
+						t.Fatalf("\nIncorrect error. Expected \"%v\" to contain \"%v\"", err, tc.expectErrString)
+					} else {
+						return
+					}
+				} else {
+					testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+				}
+			}
 			got, err := os.ReadFile(name)
 			testutil.FatalOnErr("failed reading config file", err, t)
 			sGot, sExpected := strings.TrimSpace(string(got)), strings.TrimSpace(tc.expected)
