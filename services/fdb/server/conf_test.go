@@ -208,10 +208,11 @@ bar = baz`)
 
 	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
-		name      string
-		req       *pb.DeleteRequest
-		expected  string
-		expectErr bool
+		name            string
+		req             *pb.DeleteRequest
+		expected        string
+		expectErr       bool
+		expectErrString string
 	}{
 		{
 			name: "delete existing key",
@@ -247,7 +248,8 @@ cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
 bar = baz`,
-			expectErr: true,
+			expectErr:       true,
+			expectErrString: "section foo.42 does not exist",
 		},
 		{
 			name: "delete whole section with keys",
@@ -263,7 +265,11 @@ cluster_file = /etc/foundatindb/fdb.cluster`,
 			resp, err := client.Delete(ctx, tc.req)
 			if err != nil {
 				if tc.expectErr {
-					return
+					if !strings.Contains(err.Error(), tc.expectErrString) {
+						t.Fatalf("\nIncorrect error. Expected \"%v\" to contain \"%v\"", err, tc.expectErrString)
+					} else {
+						return
+					}
 				} else {
 					testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 				}
