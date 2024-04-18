@@ -77,22 +77,16 @@ type packetWriter interface {
 
 type textWriter struct {
 	Out       io.Writer
-	Dump      bool
-	layerType gopacket.LayerType
+	Stringify func(gopacket.Packet) string
+	Decoder   gopacket.Decoder
 }
 
 // Ensure that textWriter implements packetWriter
 var _ packetWriter = (*textWriter)(nil)
 
 func (w textWriter) WritePacket(ci gopacket.CaptureInfo, data []byte) error {
-	pkt := gopacket.NewPacket(data, w.layerType, gopacket.Default)
-	var s string
-	if w.Dump {
-		s = pkt.Dump()
-	} else {
-		s = pkt.String()
-	}
-	fmt.Fprintf(w.Out, "[%s]: %s\n", ci.Timestamp.Local(), s)
+	pkt := gopacket.NewPacket(data, w.Decoder, gopacket.Default)
+	fmt.Fprintf(w.Out, "[%s]: %s\n", ci.Timestamp.Local(), w.Stringify(pkt))
 	return nil
 }
 
@@ -147,9 +141,9 @@ func (p *rawStreamCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 			defer w.Flush()
 			writers[i] = w
 		case dumpFormat:
-			writers[i] = textWriter{Out: state.Out[i], Dump: true, layerType: linkType.LayerType()}
+			writers[i] = textWriter{Out: state.Out[i], Decoder: linkType, Stringify: gopacket.Packet.Dump}
 		case textFormat:
-			writers[i] = textWriter{Out: state.Out[i], layerType: linkType.LayerType()}
+			writers[i] = textWriter{Out: state.Out[i], Decoder: linkType, Stringify: gopacket.Packet.String}
 		default:
 			fmt.Fprintln(os.Stderr, "unknown output format:", p.format)
 			return subcommands.ExitFailure
