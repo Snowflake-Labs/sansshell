@@ -185,13 +185,13 @@ func (p *rawStreamCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...int
 				continue
 			}
 
-			resp := r.Resp
+			reply := r.Resp
 			metadata := gopacket.CaptureInfo{
-				Length:        int(resp.FullLength),
-				CaptureLength: len(resp.Data),
-				Timestamp:     resp.Timestamp.AsTime(),
+				Length:        int(reply.FullLength),
+				CaptureLength: len(reply.Data),
+				Timestamp:     reply.Timestamp.AsTime(),
 			}
-			if err := writers[r.Index].WritePacket(metadata, resp.Data); err != nil {
+			if err := writers[r.Index].WritePacket(metadata, reply.Data); err != nil {
 				fmt.Fprintln(state.Err[r.Index], "unable to write packet:", err)
 			}
 		}
