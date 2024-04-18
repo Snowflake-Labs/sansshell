@@ -50,7 +50,7 @@ func (*rawStreamCmd) Usage() string {
 }
 
 func (p *rawStreamCmd) SetFlags(f *flag.FlagSet) {
-	f.IntVar(&p.maxPackets, "c", 0, "exit after receiving N packets")
+	f.IntVar(&p.maxPackets, "c", 0, "exit after receiving N packets (0 == no limit)")
 	f.StringVar(&p.iface, "i", "", "network interface to listen on")
 	f.StringVar(&p.format, "f", string(textFormat), fmt.Sprintf("output format: %s, %s, %s, %s", textFormat, dumpFormat, pcapFormat, pcapNgFormat))
 	f.IntVar(&p.linkType, "link-type", int(layers.LinkTypeEthernet), "link type as per pcap-linktype(7)")
