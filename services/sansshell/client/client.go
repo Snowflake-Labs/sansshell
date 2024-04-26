@@ -288,3 +288,5 @@ func (g *proxyVersionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...
 	fmt.Fprintf(state.Out[0], "Proxy version %s\n", resp.Version)
 	return subcommands.ExitSuccess
 }
+
+// TODO: mtatoczenko - Potentially add actions for flag 'whoami' here?

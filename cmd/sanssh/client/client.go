@@ -77,6 +77,8 @@ type RunState struct {
 	BatchSize int
 	// If true, add an interceptor that performs the multi-party auth flow
 	EnableMPA bool
+	// If true, output information about the calling peer's certificate to the console.
+	WhoAmI bool
 }
 
 const (
@@ -307,6 +309,13 @@ func Run(ctx context.Context, rs RunState) {
 		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.ClientPolicy)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Could not load policy: %v\n", err)
+		}
+	}
+
+	if rs.WhoAmI {
+		var peerAuthInput = rpcauth.PeerInputFromContext(ctx)
+		if peerAuthInput != nil {
+			fmt.Println(peerAuthInput.Cert.Subject)
 		}
 	}
 
