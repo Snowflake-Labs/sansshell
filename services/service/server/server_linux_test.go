@@ -24,10 +24,12 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -254,6 +256,8 @@ func (g getConn) ReloadContext(ctx context.Context) error {
 func (getConn) Close() {}
 
 func TestStatus(t *testing.T) {
+	activeEnterTimestamp := uint64(1714766015324711)
+	inactiveEnterTimestamp := uint64(1714765926639587)
 	for _, tc := range []struct {
 		name    string
 		conn    systemdConnection
@@ -300,6 +304,16 @@ func TestStatus(t *testing.T) {
 				},
 			},
 			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "unknown service get timestamp error",
+			conn: getConn([]map[string]interface{}{}),
+			req: &pb.StatusRequest{
+				ServiceName:      "foo",
+				DisplayTimestamp: true,
+			},
+			want:    nil,
+			errFunc: wantStatusErr(codes.Internal, "Unknown status won't be able to get timestamp"),
 		},
 		{
 			name: "accept with service suffix",
@@ -381,6 +395,56 @@ func TestStatus(t *testing.T) {
 				ServiceStatus: &pb.ServiceStatus{
 					ServiceName: "foo",
 					Status:      pb.Status_STATUS_STOPPED,
+				},
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "running service get timestamp reach that state",
+			conn: getConn([]map[string]interface{}{
+				{
+					"Name":                 "foo.service",
+					"LoadState":            loadStateLoaded,
+					"ActiveState":          activeStateActive,
+					"SubState":             substateRunning,
+					"ActiveEnterTimestamp": activeEnterTimestamp,
+				},
+			}),
+			req: &pb.StatusRequest{
+				ServiceName:      "foo",
+				DisplayTimestamp: true,
+			},
+			want: &pb.StatusReply{
+				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceStatus: &pb.ServiceStatus{
+					ServiceName:                       "foo",
+					Status:                            pb.Status_STATUS_RUNNING,
+					RecentTimestampReachCurrentStatus: timestamppb.New(time.UnixMicro(int64(activeEnterTimestamp))),
+				},
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "stopped service get timestamp reach that state",
+			conn: getConn([]map[string]interface{}{
+				{
+					"Name":                   "foo.service",
+					"LoadState":              loadStateLoaded,
+					"ActiveState":            activeStateActive,
+					"SubState":               "dead",
+					"InactiveEnterTimestamp": inactiveEnterTimestamp,
+				},
+			}),
+			req: &pb.StatusRequest{
+				ServiceName:      "foo",
+				DisplayTimestamp: true,
+			},
+			want: &pb.StatusReply{
+				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceStatus: &pb.ServiceStatus{
+					ServiceName:                       "foo",
+					Status:                            pb.Status_STATUS_STOPPED,
+					RecentTimestampReachCurrentStatus: timestamppb.New(time.UnixMicro(int64(inactiveEnterTimestamp))),
 				},
 			},
 			errFunc: testutil.FatalOnErr,
