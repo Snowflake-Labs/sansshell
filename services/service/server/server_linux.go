@@ -24,12 +24,14 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
@@ -113,6 +115,26 @@ func unitStateToStatus(u dbus.UnitStatus) pb.Status {
 		// If the unit definition is not loaded, the status is unknown.
 	default:
 		return pb.Status_STATUS_UNKNOWN
+	}
+}
+
+// if service status is running/stopped, get the recent timestamp that service reach the running/stopped status
+func getTimestampReachCurrentStatus(s pb.Status, unitProerties map[string]interface{}) (*timestamppb.Timestamp, error) {
+	switch s {
+	case pb.Status_STATUS_RUNNING:
+		activeEnterTimestamp, ok := unitProerties["ActiveEnterTimestamp"].(uint64)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert ActiveEnterTimestamp %T to uint64", unitProerties["ActiveEnterTimestamp"])
+		}
+		return timestamppb.New(time.UnixMicro(int64(activeEnterTimestamp))), nil
+	case pb.Status_STATUS_STOPPED:
+		inactiveEnterTimestamp, ok := unitProerties["InactiveEnterTimestamp"].(uint64)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert InactiveEnterTimestamp %T to uint64", unitProerties["inactiveEnterTimestamp"])
+		}
+		return timestamppb.New(time.UnixMicro(int64(inactiveEnterTimestamp))), nil
+	default:
+		return nil, status.Errorf(codes.InvalidArgument, "Unknown status won't be able to get timestamp")
 	}
 }
 
@@ -207,6 +229,7 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
+	// req.DisplayTimestamp = true
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger := logr.FromContextOrDiscard(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
@@ -244,17 +267,31 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		logger.V(3).Info("failed to marshal properties: " + err.Error())
 		return nil, status.Errorf(codes.Internal, "failed to marshal unit properties to json")
 	}
+
 	unitState := dbus.UnitStatus{}
 	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
 		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
 		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
 		return nil, status.Errorf(codes.Internal, "failed to unmarshal unit properties to json")
 	}
+
+	unitStatus := unitStateToStatus(unitState)
+	var recentTimestampReachCurrentStatus *timestamppb.Timestamp
+	if req.DisplayTimestamp {
+		timestampReachCurrentStatus, err := getTimestampReachCurrentStatus(unitStatus, properties)
+		if err != nil {
+			recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_timestamp_reach_current_status_err"))
+			logger.V(3).Info("getTimestampReachCurrentStatus err:" + err.Error())
+			return nil, status.Errorf(codes.Internal, "failed to get recent timestmap reach current status %v", err.Error())
+		}
+		recentTimestampReachCurrentStatus = timestampReachCurrentStatus
+	}
 	return &pb.StatusReply{
 		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 		ServiceStatus: &pb.ServiceStatus{
-			ServiceName: req.GetServiceName(),
-			Status:      unitStateToStatus(unitState),
+			ServiceName:                       req.GetServiceName(),
+			Status:                            unitStatus,
+			RecentTimestampReachCurrentStatus: recentTimestampReachCurrentStatus,
 		},
 	}, nil
 }
