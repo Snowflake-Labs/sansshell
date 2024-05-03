@@ -229,7 +229,6 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
-	// req.DisplayTimestamp = true
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger := logr.FromContextOrDiscard(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
