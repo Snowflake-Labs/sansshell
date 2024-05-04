@@ -204,7 +204,7 @@ type journalCmd struct {
 func (*journalCmd) Name() string     { return "journalctl" }
 func (*journalCmd) Synopsis() string { return "Get the log entries stored in journald" }
 func (*journalCmd) Usage() string {
-	return `journalctl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X] [-o|--output=X]:
+	return `journalctl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X]:
 	Get the log entries stored in journald by systemd-journald.service 
 `
 }
@@ -215,6 +215,7 @@ func (p *journalCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.until, "until", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until (the date time is not included)")
 	f.StringVar(&p.until, "U", "", "Sets the date (YYYY-MM-DD HH:MM:SS) we want to filter until")
 	f.StringVar(&p.unit, "unit", "", "Sets systemd unit to filter messages")
+	f.StringVar(&p.unit, "u", "", "Sets systemd unit to filter messages")
 	f.BoolVar(&p.enableJSON, "json", false, "Print the journal entries in JSON format(can work with jq for better visualization)")
 	f.Uint64Var(&p.tail, "tail", 100, "If positive, the latest n records to fetch. By default, fetch latest 100 records. The upper limit is 10000 for now")
 }
