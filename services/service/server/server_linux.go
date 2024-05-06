@@ -119,18 +119,18 @@ func unitStateToStatus(u dbus.UnitStatus) pb.Status {
 }
 
 // if service status is running/stopped, get the recent timestamp that service reach the running/stopped status
-func getTimestampReachCurrentStatus(s pb.Status, unitProerties map[string]interface{}) (*timestamppb.Timestamp, error) {
+func getTimestampReachCurrentStatus(s pb.Status, unitProperties map[string]interface{}) (*timestamppb.Timestamp, error) {
 	switch s {
 	case pb.Status_STATUS_RUNNING:
-		activeEnterTimestamp, ok := unitProerties["ActiveEnterTimestamp"].(uint64)
+		activeEnterTimestamp, ok := unitProperties["ActiveEnterTimestamp"].(uint64)
 		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert ActiveEnterTimestamp %T to uint64", unitProerties["ActiveEnterTimestamp"])
+			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert ActiveEnterTimestamp %T to uint64", unitProperties["ActiveEnterTimestamp"])
 		}
 		return timestamppb.New(time.UnixMicro(int64(activeEnterTimestamp))), nil
 	case pb.Status_STATUS_STOPPED:
-		inactiveEnterTimestamp, ok := unitProerties["InactiveEnterTimestamp"].(uint64)
+		inactiveEnterTimestamp, ok := unitProperties["InactiveEnterTimestamp"].(uint64)
 		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert InactiveEnterTimestamp %T to uint64", unitProerties["inactiveEnterTimestamp"])
+			return nil, status.Errorf(codes.InvalidArgument, "Failed to convert InactiveEnterTimestamp %T to uint64", unitProperties["inactiveEnterTimestamp"])
 		}
 		return timestamppb.New(time.UnixMicro(int64(inactiveEnterTimestamp))), nil
 	default:
