@@ -24,6 +24,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/subcommands"
 
@@ -187,18 +188,39 @@ func (a *actionCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 }
 
 type statusCmd struct {
-	systemType string
+	systemType       string
+	displayTimestamp bool
 }
 
 func (*statusCmd) Name() string     { return "status" }
 func (*statusCmd) Synopsis() string { return "retrieve service status" }
 func (*statusCmd) Usage() string {
-	return `status [--system-type <type>] <service>
+	return `status [--system-type <type>] [-t] <service> 
     return the status of the specified service
   `
 }
 func (s *statusCmd) SetFlags(f *flag.FlagSet) {
 	systemTypeFlag(f, &s.systemType)
+	f.BoolVar(&s.displayTimestamp, "t", false, "display recent timestamp that the service reach the current status")
+}
+
+func formatTimeAgo(t time.Time) string {
+	duration := time.Since(t)
+	secondsAgo := int(duration.Seconds())
+
+	switch {
+	case secondsAgo < 60:
+		return fmt.Sprintf("%d sec ago", secondsAgo)
+	case secondsAgo < 3600:
+		minutesAgo := secondsAgo / 60
+		return fmt.Sprintf("%d min ago", minutesAgo)
+	case secondsAgo < 86400:
+		hoursAgo := secondsAgo / 3600
+		return fmt.Sprintf("%d hour ago", hoursAgo)
+	default:
+		daysAgo := secondsAgo / 86400
+		return fmt.Sprintf("%d day ago", daysAgo)
+	}
 }
 
 func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -219,8 +241,9 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	}
 
 	req := &pb.StatusRequest{
-		SystemType:  system,
-		ServiceName: serviceName,
+		SystemType:       system,
+		ServiceName:      serviceName,
+		DisplayTimestamp: s.displayTimestamp,
 	}
 	c := pb.NewServiceClientProxy(state.Conn)
 
@@ -244,8 +267,12 @@ func (s *statusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 	var lastErr error
 	for resp := range respChan {
 		out := state.Out[resp.Index]
-		system, status := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus()
+		system, status, timestamp := resp.Resp.GetSystemType(), resp.Resp.GetServiceStatus().GetStatus(), resp.Resp.GetServiceStatus().GetRecentTimestampReachCurrentStatus()
 		output := fmt.Sprintf("[%s] %s : %s", systemTypeString(system), serviceName, statusString(status))
+		if s.displayTimestamp {
+			output = fmt.Sprintf("[%s] %s : %s since %s; %s", systemTypeString(system), serviceName, statusString(status), timestamp.AsTime().Format("Mon 2006-01-02 15:04:05 MST"), formatTimeAgo(timestamp.AsTime()))
+		}
+
 		if resp.Error != nil {
 			lastErr = fmt.Errorf("target %s [%d] error: %w\n", resp.Target, resp.Index, resp.Error)
 			fmt.Fprint(state.Err[resp.Index], lastErr)
