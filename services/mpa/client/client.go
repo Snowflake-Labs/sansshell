@@ -111,8 +111,11 @@ type approveCmd struct {
 func (*approveCmd) Name() string     { return "approve" }
 func (*approveCmd) Synopsis() string { return "Approves an MPA request" }
 func (*approveCmd) Usage() string {
-	return `approve <id>:
+	return `approve <id> [--skip-confirmation]:
     Approves an MPA request with the specified ID.
+
+	The --skip-confirmation flag can be used to bypass 
+	the confirmation prompt, proceeding with the request approval.
 `
 }
 
@@ -133,9 +136,10 @@ func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitFailure
 	}
 
+	fmt.Printf("MPA Request:\n%s\n", protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(action))
+
 	if !p.skipConfirmation {
 		// ask for confirmation
-		fmt.Printf("MPA Request:\n%s\n", protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(action))
 		reader := bufio.NewReader(os.Stdin)
 		for {
 			fmt.Printf("Would you like to approve the request? (yes/no): ")
@@ -148,14 +152,10 @@ func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 			if strings.ToLower(input) == "yes" || strings.ToLower(input) == "y" {
 				break
 			}
-			if strings.ToLower(input) == "no" || strings.ToLower(input) == "n" {
-				fmt.Print("Request is not approved. Exiting.\n")
-				return subcommands.ExitSuccess
-			}
-			fmt.Println("Invalid input. Please enter 'yes' or 'no'")
+			fmt.Print("Request is not approved. Exiting.\n")
+			return subcommands.ExitSuccess
 		}
 	}
-	fmt.Print("Approving the request..\n")
 
 	approved, err := c.ApproveOneMany(ctx, &pb.ApproveRequest{
 		Action: action,
