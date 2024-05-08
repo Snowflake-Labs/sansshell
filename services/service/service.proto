@@ -18,6 +18,7 @@ syntax = "proto3";
 
 package Service;
 option go_package = "github.com/Snowflake-Labs/sansshell/services/service";
+import "google/protobuf/timestamp.proto";
 
 service Service {
   // List returns a list of services with attendent status.
@@ -61,6 +62,7 @@ enum Action {
 message ServiceStatus {
   string service_name = 1;
   Status status = 2;
+  google.protobuf.Timestamp recent_timestamp_reach_current_status = 3;
 }
 
 // A request to list all configured services for a single
@@ -78,6 +80,7 @@ message ListReply {
 message StatusRequest {
   SystemType system_type = 1;
   string service_name = 2;
+  bool display_timestamp = 3;
 }
 
 // A StatusReply contains the operational status of

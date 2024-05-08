@@ -100,6 +100,10 @@ func (s *cserver) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Emp
 		return nil, status.Errorf(codes.Internal, "could not load config file %s: %v", req.Location.File, err)
 	}
 
+	if !cfg.HasSection(section) {
+		return nil, status.Errorf(codes.Internal, "section %s does not exist", section)
+	}
+
 	sectionKey := req.Location.Key
 	if sectionKey != "" {
 		cfg.Section(section).DeleteKey(sectionKey)
