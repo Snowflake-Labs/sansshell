@@ -926,7 +926,7 @@ check_mv
 
 echo "healthcheck with mpa"
 # MPA ID is deterministic, so we approve it in parallel
-sleep 1 && ./bin/sanssh ${SINGLE_TARGET} --justification 'approving' --root-ca=./auth/mtls/testdata/root.pem --client-cert=./services/mpa/testdata/approver.pem --client-key=./services/mpa/testdata/approver.key mpa approve dc83bd71-8945e78a-ff01a54c &
+sleep 1 && ./bin/sanssh ${SINGLE_TARGET} --justification 'approving' --root-ca=./auth/mtls/testdata/root.pem --client-cert=./services/mpa/testdata/approver.pem --client-key=./services/mpa/testdata/approver.key mpa approve --skip-confirmation dc83bd71-8945e78a-ff01a54c &
 ${SANSSH_NOPROXY} ${SINGLE_TARGET} -mpa healthcheck validate
 ${SANSSH_PROXY} ${SINGLE_TARGET} -mpa healthcheck validate
 check_status $? /dev/null mv failed
