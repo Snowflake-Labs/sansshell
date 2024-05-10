@@ -227,10 +227,53 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 	return resp, nil
 }
 
+func GetServiceStatus(ctx context.Context, conn systemdConnection, serviceName string, displayTimestamp bool) (*pb.StatusReply, error) {
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	logger := logr.FromContextOrDiscard(ctx)
+	properties, err := conn.GetUnitPropertiesContext(ctx, serviceName)
+	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_unit_properties_err"))
+		logger.V(3).Info("GetUnitPropertiesContext err: " + err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to get unit properties of %s", serviceName)
+	}
+	// cast map[string]interface{} to dbus.UnitStatus{} using json marshal + unmarshal
+	propertiesJson, err := json.Marshal(properties)
+	if err != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_marshal_err"))
+		logger.V(3).Info("failed to marshal properties: " + err.Error())
+		return nil, status.Errorf(codes.Internal, "failed to marshal unit properties to json")
+	}
+	unitState := dbus.UnitStatus{}
+	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
+		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
+		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
+		return nil, status.Errorf(codes.Internal, "failed to unmarshal unit properties to json")
+	}
+
+	unitStatus := unitStateToStatus(unitState)
+	var recentTimestampReachCurrentStatus *timestamppb.Timestamp
+	if displayTimestamp {
+		timestampReachCurrentStatus, err := getTimestampReachCurrentStatus(unitStatus, properties)
+		if err != nil {
+			recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_timestamp_reach_current_status_err"))
+			logger.V(3).Info("getTimestampReachCurrentStatus err:" + err.Error())
+			return nil, status.Errorf(codes.Internal, "failed to get recent timestmap reach current status %v", err.Error())
+		}
+		recentTimestampReachCurrentStatus = timestampReachCurrentStatus
+	}
+	return &pb.StatusReply{
+		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+		ServiceStatus: &pb.ServiceStatus{
+			ServiceName:                       serviceName,
+			Status:                            unitStatus,
+			RecentTimestampReachCurrentStatus: recentTimestampReachCurrentStatus,
+		},
+	}, nil
+}
+
 // See: pb.ServiceServer.Status
 func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger := logr.FromContextOrDiscard(ctx)
 	if err := checkSupportedSystem(req.SystemType); err != nil {
 		return nil, err
 	}
@@ -253,46 +296,7 @@ func (s *server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	}
 	defer conn.Close()
 
-	properties, err := conn.GetUnitPropertiesContext(ctx, unitName)
-	if err != nil {
-		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_unit_properties_err"))
-		logger.V(3).Info("GetUnitPropertiesContext err: " + err.Error())
-		return nil, status.Errorf(codes.Internal, "failed to get unit properties of %s", req.GetServiceName())
-	}
-	// cast map[string]interface{} to dbus.UnitStatus{} using json marshal + unmarshal
-	propertiesJson, err := json.Marshal(properties)
-	if err != nil {
-		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_marshal_err"))
-		logger.V(3).Info("failed to marshal properties: " + err.Error())
-		return nil, status.Errorf(codes.Internal, "failed to marshal unit properties to json")
-	}
-
-	unitState := dbus.UnitStatus{}
-	if errUnmarshal := json.Unmarshal(propertiesJson, &unitState); errUnmarshal != nil {
-		recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "json_unmarshal_err"))
-		logger.V(3).Info("failed to unmarshal properties: " + errUnmarshal.Error())
-		return nil, status.Errorf(codes.Internal, "failed to unmarshal unit properties to json")
-	}
-
-	unitStatus := unitStateToStatus(unitState)
-	var recentTimestampReachCurrentStatus *timestamppb.Timestamp
-	if req.DisplayTimestamp {
-		timestampReachCurrentStatus, err := getTimestampReachCurrentStatus(unitStatus, properties)
-		if err != nil {
-			recorder.CounterOrLog(ctx, serviceStatusFailureCounter, 1, attribute.String("reason", "get_timestamp_reach_current_status_err"))
-			logger.V(3).Info("getTimestampReachCurrentStatus err:" + err.Error())
-			return nil, status.Errorf(codes.Internal, "failed to get recent timestmap reach current status %v", err.Error())
-		}
-		recentTimestampReachCurrentStatus = timestampReachCurrentStatus
-	}
-	return &pb.StatusReply{
-		SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
-		ServiceStatus: &pb.ServiceStatus{
-			ServiceName:                       req.GetServiceName(),
-			Status:                            unitStatus,
-			RecentTimestampReachCurrentStatus: recentTimestampReachCurrentStatus,
-		},
-	}, nil
+	return GetServiceStatus(ctx, conn, unitName, req.DisplayTimestamp)
 }
 
 // See: pb.ServiceServer.Action

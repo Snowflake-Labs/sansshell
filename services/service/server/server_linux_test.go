@@ -299,7 +299,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: "foo",
+					ServiceName: "foo.service",
 					Status:      pb.Status_STATUS_UNKNOWN,
 				},
 			},
@@ -365,7 +365,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: "foo",
+					ServiceName: "foo.service",
 					Status:      pb.Status_STATUS_RUNNING,
 				},
 			},
@@ -393,7 +393,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName: "foo",
+					ServiceName: "foo.service",
 					Status:      pb.Status_STATUS_STOPPED,
 				},
 			},
@@ -417,7 +417,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName:                       "foo",
+					ServiceName:                       "foo.service",
 					Status:                            pb.Status_STATUS_RUNNING,
 					RecentTimestampReachCurrentStatus: timestamppb.New(time.UnixMicro(int64(activeEnterTimestamp))),
 				},
@@ -442,7 +442,7 @@ func TestStatus(t *testing.T) {
 			want: &pb.StatusReply{
 				SystemType: pb.SystemType_SYSTEM_TYPE_SYSTEMD,
 				ServiceStatus: &pb.ServiceStatus{
-					ServiceName:                       "foo",
+					ServiceName:                       "foo.service",
 					Status:                            pb.Status_STATUS_STOPPED,
 					RecentTimestampReachCurrentStatus: timestamppb.New(time.UnixMicro(int64(inactiveEnterTimestamp))),
 				},

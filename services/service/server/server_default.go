@@ -20,8 +20,17 @@
 package server
 
 import (
+	"context"
+
 	pb "github.com/Snowflake-Labs/sansshell/services/service"
+	"github.com/coreos/go-systemd/v22/dbus"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+func GetServiceStatus(ctx context.Context, conn *dbus.Conn, serviceName string, displayTimestamp bool) (*pb.StatusReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "check service status is not supported in OS other than linux")
+}
 
 func createServer() pb.ServiceServer {
 	return pb.UnimplementedServiceServer{}
