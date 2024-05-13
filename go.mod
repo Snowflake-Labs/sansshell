@@ -13,7 +13,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.1
 	github.com/open-policy-agent/opa v0.64.1
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_golang v1.19.1
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.51.0
 	go.opentelemetry.io/otel v1.26.0
