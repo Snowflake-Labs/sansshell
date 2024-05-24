@@ -576,16 +576,18 @@ func parseYumListInstallOutput(r io.Reader) (*pb.ListInstalledReply, error) {
 		case 2, 1:
 			// 2: Sometime the version name is so long it continues onto the next line.
 			// 1: Sometime the package name is so long it continues onto the next line.
-			if !scanner.Scan() {
-				return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and no continuation line", text)
+			for len(fields) < 3 {
+				if !scanner.Scan() {
+					return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and no continuation line", fields)
+				}
+				text2 := scanner.Text()
+				remaining := strings.Fields(text2)
+				if len(remaining) > 3-len(fields) {
+					return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and then %q on next line", fields, text2)
+				}
+				// Now setup fields so below has everything where we expect.
+				fields = append(fields, remaining...)
 			}
-			text2 := scanner.Text()
-			remaining := strings.Fields(text2)
-			if len(remaining) != 3-len(fields) {
-				return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q and then %q on next line", text, text2)
-			}
-			// Now setup fields so below has everything where we expect.
-			fields = append(fields, remaining...)
 		default:
 			// Anything else? No idea.
 			return nil, status.Errorf(codes.Internal, "invalid input line. Expecting 3 fields and got %q which is invalid", text)

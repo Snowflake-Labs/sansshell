@@ -22,3 +22,11 @@ packages : <
   version : "1.8.0.292.b10"
   repo : "@updates"
 >
+packages : <
+  name : "fakepackagesplitacross3lines-1.8.0-openjdk"
+  epoch: 1
+  release: "1.el7_9"
+  architecture: "x86_64"
+  version : "1.8.0.292.b10"
+  repo : "@updates"
+>
