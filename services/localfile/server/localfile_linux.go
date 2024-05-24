@@ -20,6 +20,7 @@
 package server
 
 import (
+	"io"
 	"io/fs"
 	"os"
 	"syscall"
@@ -184,7 +185,7 @@ func dataPrep(f *os.File) (obj interface{}, closer func(), retErr error) {
 
 	// Setup inotify and set a watch on our path.
 	var err error
-	in.iFD, err = inotifyInit1(0)
+	in.iFD, err = inotifyInit1(unix.IN_NONBLOCK)
 	if err != nil {
 		return nil, closer, status.Errorf(codes.Internal, "can't allocate inotify fd: %v", err)
 
@@ -211,6 +212,24 @@ func dataPrep(f *os.File) (obj interface{}, closer func(), retErr error) {
 		return nil, closer, status.Errorf(codes.Internal, "epollctl failed: %v", err)
 	}
 	return in, closer, nil
+}
+
+func consumeInotifyEvents(iFD int) error {
+	buffer := make([]byte, 4096)
+	for {
+		n, err := unix.Read(iFD, buffer)
+		switch err {
+		case nil:
+			if n == 0 {
+				return io.ErrUnexpectedEOF
+			}
+		case unix.EINTR: // Do nothing
+		case unix.EAGAIN:
+			return nil
+		default:
+			return err
+		}
+	}
 }
 
 // dataReady is the OS specific version to indicate the given
@@ -240,8 +259,11 @@ func dataReady(fd interface{}, stream pb.LocalFile_ReadServer) error {
 			if events[0].Fd != int32(inotify.iFD) {
 				return status.Errorf(codes.Internal, "epoll event for wrong FD? got %+v", events[0])
 			}
-			// In theory we should read the event from the inotify FD and interpret it but we're only
-			// monitoring one thing and there's no errors that report in-band (just via errno).
+
+			err := consumeInotifyEvents(inotify.iFD)
+			if err != nil {
+				return status.Errorf(codes.Internal, "read error: %v", err)
+			}
 			break
 		}
 		// Nothing (timed out) so just loop
