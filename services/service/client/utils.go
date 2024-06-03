@@ -159,12 +159,8 @@ func DisableRemoteService(ctx context.Context, conn *proxy.Conn, system pb.Syste
 // ReloadRemoteService is a helper function for reloading a service on a remote target
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
 func ReloadRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
-	if len(conn.Targets) != 1 {
-		return errors.New("ReloadRemoteService only supports single targets")
-	}
-
-	c := pb.NewServiceClient(conn)
-	if _, err := c.Action(ctx, &pb.ActionRequest{
+	c := pb.NewServiceClientProxy(conn)
+	if _, err := c.ActionOneMany(ctx, &pb.ActionRequest{
 		ServiceName: service,
 		SystemType:  system,
 		Action:      pb.Action_ACTION_RELOAD,
