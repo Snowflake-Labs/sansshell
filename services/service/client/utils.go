@@ -155,3 +155,17 @@ func DisableRemoteService(ctx context.Context, conn *proxy.Conn, system pb.Syste
 	}
 	return nil
 }
+
+// ReloadRemoteService is a helper function for reloading a service on a remote target
+// using a proxy.Conn.
+func ReloadRemoteService(ctx context.Context, conn *proxy.Conn, system pb.SystemType, service string) error {
+	c := pb.NewServiceClientProxy(conn)
+	if _, err := c.ActionOneMany(ctx, &pb.ActionRequest{
+		ServiceName: service,
+		SystemType:  system,
+		Action:      pb.Action_ACTION_RELOAD,
+	}); err != nil {
+		return fmt.Errorf("can't reload service %s - %v", service, err)
+	}
+	return nil
+}

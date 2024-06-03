@@ -148,6 +148,7 @@ type systemdConnection interface {
 	DisableUnitFilesContext(ctx context.Context, files []string, runtime bool) ([]dbus.DisableUnitFileChange, error)
 	EnableUnitFilesContext(ctx context.Context, files []string, runtime bool, force bool) (bool, []dbus.EnableUnitFileChange, error)
 	ReloadContext(ctx context.Context) error
+	ReloadUnitContext(ctx context.Context, name string, mode string, ch chan<- string) (int, error)
 	Close()
 }
 
@@ -332,6 +333,8 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 		_, err = conn.RestartUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_STOP:
 		_, err = conn.StopUnitContext(ctx, unitName, modeReplace, resultChan)
+	case pb.Action_ACTION_RELOAD:
+		_, err = conn.ReloadUnitContext(ctx, unitName, modeReplace, resultChan)
 	case pb.Action_ACTION_ENABLE:
 		_, _, err = conn.EnableUnitFilesContext(ctx, []string{unitName}, false, true)
 	case pb.Action_ACTION_DISABLE:
@@ -351,7 +354,7 @@ func (s *server) Action(ctx context.Context, req *pb.ActionRequest) (*pb.ActionR
 	// Enable/disable don't use this method so we skip the channel (since it would hang)
 	// and instead force a reload which is what systemctl does when it enables/disables.
 	switch req.Action {
-	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP:
+	case pb.Action_ACTION_START, pb.Action_ACTION_RESTART, pb.Action_ACTION_STOP, pb.Action_ACTION_RELOAD:
 		result := <-resultChan
 		if result != operationResultDone {
 			recorder.CounterOrLog(ctx, serviceActionFailureCounter, 1, attribute.String("reason", "action_err"))

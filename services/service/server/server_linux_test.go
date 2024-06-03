@@ -63,6 +63,9 @@ func (e errConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (
 func (e errConn) ReloadContext(ctx context.Context) error {
 	return errors.New(string(e))
 }
+func (e errConn) ReloadUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, errors.New(string(e))
+}
 func (errConn) Close() {}
 
 func TestDialError(t *testing.T) {
@@ -123,6 +126,9 @@ func (l listConn) EnableUnitFilesContext(context.Context, []string, bool, bool) 
 }
 func (l listConn) ReloadContext(ctx context.Context) error {
 	return notImplementedError
+}
+func (l listConn) ReloadUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, notImplementedError
 }
 func (listConn) Close() {}
 
@@ -252,6 +258,9 @@ func (g getConn) EnableUnitFilesContext(context.Context, []string, bool, bool) (
 }
 func (g getConn) ReloadContext(ctx context.Context) error {
 	return notImplementedError
+}
+func (g getConn) ReloadUnitContext(context.Context, string, string, chan<- string) (int, error) {
+	return 0, notImplementedError
 }
 func (getConn) Close() {}
 
@@ -518,6 +527,12 @@ func (a actionConn) EnableUnitFilesContext(context.Context, []string, bool, bool
 func (a actionConn) ReloadContext(ctx context.Context) error {
 	return a.reloadErr
 }
+func (a actionConn) ReloadUnitContext(ctx context.Context, name string, mode string, c chan<- string) (int, error) {
+	go func() {
+		c <- string(a.action)
+	}()
+	return 1, a.err
+}
 func (actionConn) Close() {}
 
 func TestAction(t *testing.T) {
@@ -636,6 +651,16 @@ func TestAction(t *testing.T) {
 			errFunc: wantStatusErr(codes.Internal, "error reloading"),
 		},
 		{
+			name: "reload failed",
+			conn: actionConn{"failed", nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_RELOAD,
+			},
+			want:    nil,
+			errFunc: wantStatusErr(codes.Internal, "error performing action"),
+		},
+		{
 			name: "start success",
 			conn: actionConn{operationResultDone, nil, nil},
 			req: &pb.ActionRequest{
@@ -693,6 +718,19 @@ func TestAction(t *testing.T) {
 			req: &pb.ActionRequest{
 				ServiceName: "foo",
 				Action:      pb.Action_ACTION_DISABLE,
+			},
+			want: &pb.ActionReply{
+				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
+				ServiceName: "foo",
+			},
+			errFunc: testutil.FatalOnErr,
+		},
+		{
+			name: "reload success",
+			conn: actionConn{operationResultDone, nil, nil},
+			req: &pb.ActionRequest{
+				ServiceName: "foo",
+				Action:      pb.Action_ACTION_RELOAD,
 			},
 			want: &pb.ActionReply{
 				SystemType:  pb.SystemType_SYSTEM_TYPE_SYSTEMD,
