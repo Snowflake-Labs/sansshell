@@ -516,3 +516,53 @@ func SymlinkRemote(ctx context.Context, conn *proxy.Conn, target, linkname strin
 	}
 	return nil
 }
+
+type SumRemoteFileResponse struct {
+	Target string
+	Index  int
+	Sum    string
+}
+
+// SumRemoteFile is a helper function for computing the checksum of a file on one or more remote hosts using a proxy.Conn.
+// Although Sum is a bidi RPC, this function sends a single request, and expects one response, per target.
+func SumRemoteFile(ctx context.Context, conn *proxy.Conn, path string, sumType pb.SumType) ([]SumRemoteFileResponse, error) {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.SumRequest{
+		Filename: path,
+		SumType:  sumType,
+	}
+	stream, err := c.SumOneMany(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("can't setup Sum client stream: %v", err)
+	}
+
+	err = stream.Send(req)
+	if err != nil {
+		return nil, fmt.Errorf("can't send Sum request to stream: %v", err)
+	}
+
+	ret := make([]SumRemoteFileResponse, len(conn.Targets))
+	for {
+		responses, err := stream.Recv()
+		// Stream is done.
+		if err == io.EOF {
+			break
+		}
+		// Some other error.
+		if err != nil {
+			return nil, fmt.Errorf("can't sum file %s - %v", path, err)
+		}
+		for _, r := range responses {
+			if r.Error != nil {
+				return nil, fmt.Errorf("target %s (index %d) returned error - %v", r.Target, r.Index, r.Error)
+			}
+
+			ret[r.Index] = SumRemoteFileResponse{
+				Target: r.Target,
+				Index:  r.Index,
+				Sum:    r.Resp.Sum,
+			}
+		}
+	}
+	return ret, nil
+}
