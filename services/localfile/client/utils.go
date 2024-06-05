@@ -516,3 +516,64 @@ func SymlinkRemote(ctx context.Context, conn *proxy.Conn, target, linkname strin
 	}
 	return nil
 }
+
+type ListRemoteResponse struct {
+	Target   string
+	Index    int
+	Contents []*pb.StatReply
+}
+
+type ListRequest struct {
+	Path       string
+	MaxResults int
+}
+
+// ListRemote is a helper function for listing the contents of a directory on one or more remote hosts using a proxy.Conn.
+// This is similar to `ls <path>`
+func ListRemote(ctx context.Context, conn *proxy.Conn, listRequest ListRequest) ([]ListRemoteResponse, error) {
+	c := pb.NewLocalFileClientProxy(conn)
+	req := &pb.ListRequest{
+		Entry: listRequest.Path,
+	}
+
+	stream, err := c.ListOneMany(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("can't setup List client stream: %v", err)
+	}
+
+	ret := make([]ListRemoteResponse, len(conn.Targets))
+	targetsDone := make(map[int]bool)
+	for {
+		responses, err := stream.Recv()
+		// Stream is done.
+		if err == io.EOF {
+			break
+		}
+		// Some other error.
+		if err != nil {
+			return nil, fmt.Errorf("can't list path %s - %v", listRequest.Path, err)
+		}
+		for _, r := range responses {
+			if r.Error != nil && r.Error != io.EOF {
+				return nil, fmt.Errorf("target %s (index %d) returned error - %v", r.Target, r.Index, r.Error)
+			}
+
+			// At EOF this target is done.
+			if r.Error == io.EOF {
+				targetsDone[r.Index] = true
+				continue
+			}
+
+			if !targetsDone[r.Index] {
+				ret[r.Index].Target = r.Target
+				ret[r.Index].Index = r.Index
+				ret[r.Index].Contents = append(ret[r.Index].Contents, r.Resp.Entry)
+
+				if len(ret[r.Index].Contents) >= listRequest.MaxResults {
+					targetsDone[r.Index] = true
+				}
+			}
+		}
+	}
+	return ret, nil
+}
