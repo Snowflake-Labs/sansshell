@@ -54,6 +54,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/tcpoverrpc/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/tlsinfo/client"
 )
 
