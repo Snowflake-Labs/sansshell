@@ -26,6 +26,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-logr/logr"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
@@ -65,6 +67,8 @@ type runState struct {
 	statsHandler       stats.Handler
 	authzHooks         []rpcauth.RPCAuthzHook
 	services           []func(*grpc.Server)
+
+	refreshCredsOnSIGHUP bool
 }
 
 type Option interface {
@@ -271,6 +275,17 @@ func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	})
 }
 
+// WithRefreshCredsOnSIGHUP will make sansshell-server refresh its credentials via
+// its credential loader when it receives a SIGHUP signal. This is useful if you
+// want to make sansshell immediately refresh its identity and trust configuration
+// via `systemctl reload`.
+func WithRefreshCredsOnSIGHUP() Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.refreshCredsOnSIGHUP = true
+		return nil
+	})
+}
+
 // Run takes the given context and RunState and starts up a sansshell server.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
 func Run(ctx context.Context, opts ...Option) {
@@ -342,9 +357,22 @@ func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) 
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined")
 	}
 	if rs.credSource != "" {
-		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
+		var refreshCreds func() error
+		creds, refreshCreds, err = mtls.LoadServerCredentialsWithForceRefresh(ctx, rs.credSource)
 		if err != nil {
 			return nil, err
+		}
+		if rs.refreshCredsOnSIGHUP {
+			go func() {
+				c := make(chan os.Signal, 1)
+				signal.Notify(c, syscall.SIGHUP)
+				for range c {
+					rs.logger.Info("got SIGHUP, refreshing credentials")
+					if err := refreshCreds(); err != nil {
+						rs.logger.Error(err, "unable to refresh credentials")
+					}
+				}
+			}()
 		}
 	} else {
 		creds = credentials.NewTLS(rs.tlsConfig)
