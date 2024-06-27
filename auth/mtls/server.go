@@ -33,15 +33,22 @@ import (
 // as the TransportCredentials returned are a WrappedTransportCredentials which
 // will check at call time if new certificates are available.
 func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
+	wrapped, _, err := LoadServerCredentialsWithForceRefresh(ctx, loaderName)
+	return wrapped, err
+}
+
+// LoadServerCredentialsWithForceRefresh returns transport credentials along with
+// a function that allows immediately refreshing the credentials
+func LoadServerCredentialsWithForceRefresh(ctx context.Context, loaderName string) (credentials.TransportCredentials, func() error, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	mtlsLoader, err := Loader(loaderName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	creds, err := internalLoadServerCredentials(ctx, loaderName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	wrapped := &WrappedTransportCredentials{
 		creds:      creds,
@@ -51,7 +58,7 @@ func LoadServerCredentials(ctx context.Context, loaderName string) (credentials.
 		logger:     logger,
 		recorder:   recorder,
 	}
-	return wrapped, nil
+	return wrapped, wrapped.refreshNow, err
 }
 
 func internalLoadServerCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
