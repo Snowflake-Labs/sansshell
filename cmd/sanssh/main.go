@@ -51,6 +51,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/packages/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/power/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/process/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/raw/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/service/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/sysinfo/client"
