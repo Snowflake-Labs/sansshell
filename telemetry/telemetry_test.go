@@ -76,7 +76,7 @@ func TestUnaryClient(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
+	logger := funcr.New(fn, funcr.Options{Verbosity: 1})
 
 	intercept := UnaryClientLogInterceptor(logger)
 
@@ -131,7 +131,7 @@ func TestStreamClient(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
+	logger := funcr.New(fn, funcr.Options{Verbosity: 1})
 
 	intercept := StreamClientLogInterceptor(logger)
 
@@ -221,7 +221,7 @@ func TestUnaryServer(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
+	logger := funcr.New(fn, funcr.Options{Verbosity: 1})
 
 	intercept := UnaryServerLogInterceptor(logger)
 
@@ -266,7 +266,7 @@ func TestStreamServer(t *testing.T) {
 	fn := func(p, a string) {
 		args = a
 	}
-	logger := funcr.New(fn, funcr.Options{})
+	logger := funcr.New(fn, funcr.Options{Verbosity: 1})
 
 	intercept := StreamServerLogInterceptor(logger)
 
