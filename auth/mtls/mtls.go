@@ -99,21 +99,26 @@ type WrappedTransportCredentials struct {
 func (w *WrappedTransportCredentials) checkRefresh() error {
 	if w.mtlsLoader.CertsRefreshed() {
 		w.logger.Info("certs need reloading")
-		// At least provide the logger we saved before we call into the loader
-		// or we lose all debugability.
-		ctx := context.Background()
-		ctx = logr.NewContext(ctx, w.logger)
-		newCreds, err := w.loader(ctx, w.loaderName)
-		w.logger.V(1).Info("newCreds", "creds", newCreds, "error", err)
-		if err != nil {
-			return err
-		}
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		w.creds = newCreds
-		if w.serverName != "" {
-			return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
-		}
+		return w.refreshNow()
+	}
+	return nil
+}
+
+func (w *WrappedTransportCredentials) refreshNow() error {
+	// At least provide the logger we saved before we call into the loader
+	// or we lose all debugability.
+	ctx := context.Background()
+	ctx = logr.NewContext(ctx, w.logger)
+	newCreds, err := w.loader(ctx, w.loaderName)
+	w.logger.V(1).Info("newCreds", "creds", newCreds, "error", err)
+	if err != nil {
+		return err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.creds = newCreds
+	if w.serverName != "" {
+		return w.creds.OverrideServerName(w.serverName) //nolint:staticcheck
 	}
 	return nil
 }

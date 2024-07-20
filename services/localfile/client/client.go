@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/google/subcommands"
+	"github.com/schollz/progressbar/v3"
 
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -1154,6 +1155,18 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitFailure
 	}
 
+	// Use file size for progress bar if we have it, but unknown is fine too
+	fileSize := int64(-1)
+	if stat, err := f1.Stat(); err == nil {
+		fileSize = stat.Size()
+		if stat.IsDir() {
+			fmt.Fprintln(os.Stderr, "Copying directories is unsupported")
+			return subcommands.ExitUsageError
+		}
+	}
+	progress := progressbar.DefaultBytes(fileSize)
+	defer progress.Close()
+
 	buf := make([]byte, util.StreamingChunkSize)
 	for {
 		n, err := f1.Read(buf)
@@ -1174,6 +1187,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			}
 			return subcommands.ExitFailure
 		}
+		_ = progress.Add(n)
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil && err != io.EOF {

@@ -178,5 +178,6 @@ func main() {
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
 		server.WithMetricsRecorder(recorder),
+		server.WithRefreshCredsOnSIGHUP(),
 	)
 }
