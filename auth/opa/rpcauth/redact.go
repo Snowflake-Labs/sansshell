@@ -17,6 +17,7 @@
 package rpcauth
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 
@@ -106,15 +107,32 @@ func redactNestedField(message protoreflect.Message, descriptor protoreflect.Fie
 func redactSingleField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor) {
 	if descriptor.Kind() == protoreflect.StringKind {
 		if descriptor.Cardinality() != protoreflect.Repeated {
-			message.Set(descriptor, protoreflect.ValueOfString("--REDACTED--"))
+			if val := message.Get(descriptor).String(); val != "" {
+				message.Set(descriptor, protoreflect.ValueOfString(fmt.Sprintf("REDACTED-%x", sha256.Sum256([]byte(val)))))
+			}
 		} else {
 			list := message.Mutable(descriptor).List()
 			for i := 0; i < list.Len(); i++ {
-				list.Set(i, protoreflect.ValueOfString("--REDACTED--"))
+				if val := list.Get(i).String(); val != "" {
+					list.Set(i, protoreflect.ValueOfString(fmt.Sprintf("REDACTED-%x", sha256.Sum256([]byte(val)))))
+				}
+			}
+		}
+	} else if descriptor.Kind() == protoreflect.BytesKind {
+		if descriptor.Cardinality() != protoreflect.Repeated {
+			if val := message.Get(descriptor).Bytes(); val != nil {
+				message.Set(descriptor, protoreflect.ValueOfBytes([]byte(fmt.Sprintf("REDACTED-%x", sha256.Sum256(val)))))
+			}
+		} else {
+			list := message.Mutable(descriptor).List()
+			for i := 0; i < list.Len(); i++ {
+				if val := list.Get(i).Bytes(); val != nil {
+					list.Set(i, protoreflect.ValueOfBytes([]byte(fmt.Sprintf("REDACTED-%x", sha256.Sum256(val)))))
+				}
 			}
 		}
 	} else {
-		// other than string, clear it
+		// other than string or bytes, clear it
 		message.Clear(descriptor)
 	}
 }

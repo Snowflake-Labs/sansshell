@@ -23,6 +23,7 @@ option go_package = "github.com/Snowflake-Labs/sansshell/proxy/testdata";
 message MyNested {
   string fine = 1;
   string sensitive = 2 [debug_redact = true];
+  bytes sensitive_bytes = 3 [debug_redact = true];
 }
 
 message TestRequest {

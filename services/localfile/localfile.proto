@@ -205,7 +205,7 @@ message FileWrite {
 message WriteRequest {
   oneof request {
     FileWrite description = 1;
-    bytes contents = 2;
+    bytes contents = 2 [debug_redact = true];
   }
 }
 
@@ -220,7 +220,7 @@ message CopyRequest {
   string key = 3;
   // Any additional data the URL destination may need in order
   // to succeed (such as an auth token for a blob service).
-  bytes blob_data = 4;
+  bytes blob_data = 4 [debug_redact = true];
 }
 
 // ListRequest will do an expansion on the entry given to list all things
