@@ -55,7 +55,7 @@ message HTTPRequest {
   string method = 1;
   string request_uri = 2;
   repeated Header headers = 3;
-  bytes body = 4;
+  bytes body = 4 [debug_redact = true];
 }
 
 
