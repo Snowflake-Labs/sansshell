@@ -105,6 +105,9 @@ func redactNestedField(message protoreflect.Message, descriptor protoreflect.Fie
 }
 
 func redactSingleField(message protoreflect.Message, descriptor protoreflect.FieldDescriptor) {
+	// We redact the field by hashing the value and replacing it with the hash whenever
+	// possible. If we don't know how to do so, we clear the field.
+	// Add more cases as needed.
 	if descriptor.Kind() == protoreflect.StringKind {
 		if descriptor.Cardinality() != protoreflect.Repeated {
 			if val := message.Get(descriptor).String(); val != "" {
