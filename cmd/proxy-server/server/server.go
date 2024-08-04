@@ -28,6 +28,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-logr/logr"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus"
@@ -460,6 +462,18 @@ func Run(ctx context.Context, opts ...Option) {
 	for _, s := range rs.services {
 		s(g)
 	}
+
+	// React to interrupt signals by shutting down gracefully.
+	// This tends to improve the proxy behavior when running on platforms like Kubernetes.
+	// The proxy will continue to serve streaming RPCs during graceful shutdown.
+	sigCh := make(chan os.Signal, 2)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		s := <-sigCh
+		signal.Stop(sigCh)
+		rs.logger.Info("beginning graceful shutdown", "signal", s)
+		g.GracefulStop()
+	}()
 
 	rs.logger.Info("initialized proxy service", "credsource", rs.credSource)
 	rs.logger.Info("serving..")
