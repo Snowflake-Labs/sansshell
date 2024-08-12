@@ -21,16 +21,16 @@ import (
 )
 
 func IsValidPort(val int) error {
-	if val < 0 || val > 65535 {
-		return errors.New("port must be between 0 and 65535")
+	if val < 1 || val > 65535 {
+		return errors.New("port must be between 1 and 65535")
 	}
 
 	return nil
 }
 
 func IsValidPortUint32(val uint32) error {
-	if val < 0 || val > 65535 {
-		return errors.New("port must be between 0 and 65535")
+	if val < 1 || val > 65535 {
+		return errors.New("port must be between 1 and 65535")
 	}
 
 	return nil

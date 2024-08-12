@@ -6,6 +6,7 @@ import (
 	app "github.com/Snowflake-Labs/sansshell/services/network/server/application"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -27,7 +28,11 @@ func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			failReason = "Connection timed out"
 		} else if opErr, ok := err.(*net.OpError); ok && opErr.Op == "dial" {
-			failReason = "Connection refused"
+			if strings.HasSuffix(opErr.Err.Error(), "no such host") {
+				failReason = "No such host"
+			} else if strings.HasSuffix(opErr.Err.Error(), "connection refused") {
+				failReason = "Connection refused"
+			}
 		}
 
 		if failReason == "" {
