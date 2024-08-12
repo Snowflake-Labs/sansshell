@@ -39,5 +39,5 @@ message TCPCheckRequest {
 // TCPCheckReply describes the result of a rpc
 message TCPCheckReply {
   bool ok = 1;
-  optional string failReason = 2;
+  optional string fail_reason = 2;
 }

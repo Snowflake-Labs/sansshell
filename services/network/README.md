@@ -1,5 +1,6 @@
 # Network
-This directory contains the network services. There is should be defined network related commands like `ping`, `traceroute`, `netstat`, etc.
+This directory contains the network services. This defines network related commands like `ping`, `traceroute`, `netstat`, etc.
+
 What is not part of network service? Commands related to protocols build on top of network layer like `http`, `ftp`, `ssh`, etc.
 
 ## Commands
