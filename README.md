@@ -127,6 +127,16 @@ do this for you, as well as re-generating the service proto files.
 $ go generate tools.go
 ```
 
+### Dev Environment setup
+#### Required tools
+- [pre-commit 3.8.0+](https://pre-commit.com/index.html)
+
+Set up:
+- Set up pre-commit hooks
+```bash
+pre-commit install
+```
+
 ### Creating your own certificates
 
 As an alternative to copying auth/mtls/testdata, you can create your own example mTLS certs. See the
