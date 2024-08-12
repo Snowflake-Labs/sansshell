@@ -49,7 +49,7 @@ func (s *server) TCPCheck(ctx context.Context, req *pb.TCPCheckRequest) (*pb.TCP
 	if err := validator.IsValidPortUint32(rawPort); err != nil {
 		logger.Error(err, "Invalid port value")
 		recorder.CounterOrLog(ctx, s.tcpCheckFailureCounter, 1)
-		return nil, status.Errorf(codes.Internal, "Invalid port value: %s")
+		return nil, status.Errorf(codes.Internal, "Invalid port value: %d", rawPort)
 	}
 	port := uint8(rawPort)
 

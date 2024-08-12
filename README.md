@@ -130,9 +130,10 @@ $ go generate tools.go
 ### Dev Environment setup
 #### Required tools
 - [pre-commit 3.8.0+](https://pre-commit.com/index.html)
+- [golangci-lint 1.59.1+](https://golangci-lint.run/welcome/install/#local-installation)
 
-Set up:
-- Set up pre-commit hooks
+Configuration:
+- Set up git pre-commit hooks
 ```bash
 pre-commit install
 ```

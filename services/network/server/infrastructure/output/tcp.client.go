@@ -2,7 +2,7 @@ package output
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	app "github.com/Snowflake-Labs/sansshell/services/network/server/application"
 	"net"
 	"strconv"
@@ -17,12 +17,10 @@ type TCPClient struct {
 // CheckConnectivity is used to check tcp connectivity from remote machine to specified server
 func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port uint8, timeoutSeconds uint32) (*app.TCPConnectivityCheckResult, error) {
 	hostToCheck := net.JoinHostPort(hostname, strconv.Itoa(int(port)))
-
 	timeout := time.Duration(timeoutSeconds) * time.Second
-
 	dialer := net.Dialer{Timeout: timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", hostToCheck)
 
+	conn, err := dialer.DialContext(ctx, "tcp", hostToCheck)
 	if err != nil {
 		var failReason string
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -36,7 +34,7 @@ func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port
 		}
 
 		if failReason == "" {
-			return nil, errors.New("Unexpected error: " + err.Error())
+			return nil, fmt.Errorf("unexpected error: %s", err.Error())
 		}
 
 		return &app.TCPConnectivityCheckResult{

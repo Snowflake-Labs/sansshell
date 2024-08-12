@@ -24,8 +24,3 @@ func ColoredSprint(color string, a ...any) string {
 	line := fmt.Sprint(a...)
 	return fmt.Sprint(color, line, restoreFormatingCode)
 }
-
-type ColorizedText struct {
-	colorCode string
-	text      string
-}

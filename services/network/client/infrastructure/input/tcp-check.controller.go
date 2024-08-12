@@ -83,7 +83,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		var status string
 		if result.Err != nil {
 			status = cliUtils.ColoredSprintf(cliUtils.RED_TEXT_COLOR, "Unexpected error - %s", result.Err.Error())
-		} else if result.Ok == true {
+		} else if result.Ok {
 			status = cliUtils.ColoredSprint(cliUtils.GREEN_TEXT_COLOT, "Succeed")
 		} else {
 			status = cliUtils.ColoredSprintf(cliUtils.RED_TEXT_COLOR, "Failed - %s", *result.FailReason)
