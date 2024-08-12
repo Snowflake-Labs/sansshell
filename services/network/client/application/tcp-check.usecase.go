@@ -18,7 +18,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
 )
@@ -52,7 +51,7 @@ func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, 
 
 	var resp, err = p.networkClient.TCPCheckOneMany(ctx, req)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Unexpected error: %s\n", err.Error()))
+		return nil, fmt.Errorf("Unexpected error: %s\n", err.Error())
 	}
 
 	results := make(chan *TCPCheckResult)
