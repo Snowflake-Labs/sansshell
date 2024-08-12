@@ -180,6 +180,8 @@ time.
 1. Package operations: Install, Upgrade, List, Repolist
 1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
 1. MPA operations: Multi party authorization for commands
+1. [Network](./services/network):
+   1. [TCP-Check](./services/network/README.md#sanssh-network-tcp-check) - Check if a TCP port is open on a remote host
 1. Service operations: List, Status, Start/stop/restart
 
 TODO: Document service/.../client expectations.
