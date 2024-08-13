@@ -18,6 +18,8 @@ package validator
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 )
 
 func ParsePortFromInt(val int) (uint8, error) {
@@ -34,4 +36,31 @@ func ParsePortFromUint32(val uint32) (uint8, error) {
 	}
 
 	return uint8(val), nil
+}
+
+func ParseHostAndPort(hostAndPort string) (string, uint8, error) {
+	artifacts := strings.Split(hostAndPort, ":")
+	if len(artifacts) != 2 {
+		return "", 0, errors.New("invalid host:port format")
+	}
+
+	rawHost := strings.TrimSpace(artifacts[0])
+	rawPort := artifacts[1]
+
+	if rawHost == "" {
+		return "", 0, errors.New("host cannot be empty")
+	}
+	host := rawHost
+
+	intPort, err := strconv.Atoi(rawPort)
+	if err != nil {
+		return "", 0, errors.New("port must be a number")
+	}
+
+	port, err := ParsePortFromInt(intPort)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return host, port, nil
 }

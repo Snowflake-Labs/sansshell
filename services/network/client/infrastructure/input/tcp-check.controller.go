@@ -30,8 +30,6 @@ import (
 
 // TCPCheckCmd cli adapter for execution infrastructure implementation of [subcommands.Command] interface
 type TCPCheckCmd struct {
-	host      string
-	port      int
 	timeout   uint
 	cliLogger cliUtils.StyledCliLogger
 }
@@ -41,14 +39,12 @@ func (*TCPCheckCmd) Synopsis() string {
 	return "Check tcp connectivity from remote machine to specified server"
 }
 func (*TCPCheckCmd) Usage() string {
-	return `tcp-check --host <host> --port <port>:
+	return `tcp-check <host>:<port>
     Makes tcp connectivity check from the remote machine to specified server.
 `
 }
 
 func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&p.host, "host", "", "Host to check connectivity from remote machine")
-	f.IntVar(&p.port, "port", 8080, "Port to check connectivity from remote machine")
 	f.UintVar(&p.timeout, "timeout", 3, "Timeout in seconds to wait for response from --host on remote machine")
 }
 
@@ -56,14 +52,14 @@ func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
 func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 
-	if p.host == "" {
-		p.cliLogger.Errorc(cliUtils.RedText, "--host flag is required.\n")
+	if len(f.Args()) != 1 {
+		p.cliLogger.Errorc(cliUtils.RedText, "host and port is required.\n")
 		return subcommands.ExitUsageError
 	}
 
-	port, err := validator.ParsePortFromInt(p.port)
+	host, port, err := validator.ParseHostAndPort(f.Arg(0))
 	if err != nil {
-		p.cliLogger.Errorfc(cliUtils.RedText, "Invalid port number: %s\n", err.Error())
+		p.cliLogger.Errorfc(cliUtils.RedText, "Invalid host or port: %s\n", err.Error())
 		return subcommands.ExitUsageError
 	}
 
@@ -72,7 +68,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	usecase := app.NewTCPCheckUseCase(client)
 
 	preloader.Start()
-	results, err := usecase.Run(ctx, p.host, port, p.timeout)
+	results, err := usecase.Run(ctx, host, port, p.timeout)
 	if err != nil {
 		preloader.Stop()
 		p.cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
@@ -94,7 +90,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 		targetLogger.Infof(
 			"Test %s, status: %s\n",
-			cliUtils.Colorizef(cliUtils.YellowText, "%s:%d", p.host, p.port),
+			cliUtils.Colorizef(cliUtils.YellowText, "%s:%d", host, port),
 			status,
 		)
 
