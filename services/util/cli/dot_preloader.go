@@ -19,6 +19,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -38,28 +39,39 @@ func (p *dotPreloaderCtrl) Start() {
 	p.isActive = true
 	p.isActiveMu.Unlock()
 
-	delay := 500 * time.Millisecond
-	go func() {
-		currentAnimationFrame := 0
+	if IsStreamToTerminal(os.Stdout) {
+		delay := 500 * time.Millisecond
+		go func() {
+			currentAnimationFrame := 0
 
-		p.isActiveMu.Lock()
-		for p.isActive {
-			currentPreloaderSymbol := dotPreLoaderSymbols[currentAnimationFrame%len(dotPreLoaderSymbols)]
-			fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode, p.message, currentPreloaderSymbol)
-			currentAnimationFrame++
-
-			p.isActiveMu.Unlock()
-			time.Sleep(delay)
 			p.isActiveMu.Lock()
-		}
-		p.isActiveMu.Unlock()
-	}()
+			for p.isActive {
+				currentPreloaderSymbol := dotPreLoaderSymbols[currentAnimationFrame%len(dotPreLoaderSymbols)]
+
+				fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode, p.message, currentPreloaderSymbol)
+				currentAnimationFrame++
+
+				p.isActiveMu.Unlock()
+				time.Sleep(delay)
+				p.isActiveMu.Lock()
+			}
+			p.isActiveMu.Unlock()
+		}()
+	} else {
+		fmt.Print(p.message, dotPreLoaderSymbols[len(dotPreLoaderSymbols)-1])
+		fmt.Println()
+	}
 }
 
 func (p *dotPreloaderCtrl) StopWith(finishMessage string) {
 	p.isActiveMu.Lock()
 	p.isActive = false
-	fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode, finishMessage)
+	isPrintingToTerminal := IsStreamToTerminal(os.Stdout)
+	if isPrintingToTerminal {
+		fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode)
+	}
+	fmt.Print(finishMessage)
+
 	p.isActiveMu.Unlock()
 }
 

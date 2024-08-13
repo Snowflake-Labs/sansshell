@@ -19,14 +19,12 @@ package input
 import (
 	"context"
 	"flag"
-	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
 	app "github.com/Snowflake-Labs/sansshell/services/network/client/application"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	cliUtils "github.com/Snowflake-Labs/sansshell/services/util/cli"
 	"github.com/Snowflake-Labs/sansshell/services/util/validator"
 	"github.com/google/subcommands"
-	"os"
 )
 
 // TCPCheckCmd cli adapter for execution infrastructure implementation of [subcommands.Command] interface
@@ -54,14 +52,15 @@ func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
 
 // Execute is a method handle command execution. It adapter between cli and business logic
 func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	cliLogger := cliUtils.NewStyledCliLogger()
 	state := args[0].(*util.ExecuteState)
 	if p.host == "" {
-		cliUtils.ColoredFprintf(os.Stderr, cliUtils.RED_TEXT_COLOR, "--host flag is required.\n")
+		cliLogger.Errorc(cliUtils.RedText, "--host flag is required.\n")
 		return subcommands.ExitUsageError
 	}
 
 	if err := validator.IsValidPort(p.port); err != nil {
-		cliUtils.ColoredFprintf(os.Stderr, cliUtils.RED_TEXT_COLOR, "Invalid port number: %s\n", err.Error())
+		cliLogger.Errorfc(cliUtils.RedText, "Invalid port number: %s\n", err.Error())
 		return subcommands.ExitUsageError
 	}
 
@@ -73,26 +72,26 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	results, err := usecase.Run(ctx, p.host, uint8(p.port), p.timeout)
 	if err != nil {
 		preloader.Stop()
-		cliUtils.ColoredFprintf(os.Stderr, cliUtils.RED_TEXT_COLOR, "Unexpected error: %s\n", err.Error())
+		cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
 		return subcommands.ExitFailure
 	}
 
 	for result := range results {
 		preloader.Stop()
 
-		var status string
+		var status cliUtils.StyledText
 		if result.Err != nil {
-			status = cliUtils.ColoredSprintf(cliUtils.RED_TEXT_COLOR, "Unexpected error - %s", result.Err.Error())
+			status = cliUtils.Colorizef(cliUtils.RedText, "Unexpected error - %s", result.Err.Error())
 		} else if result.Ok {
-			status = cliUtils.ColoredSprint(cliUtils.GREEN_TEXT_COLOT, "Succeed")
+			status = cliUtils.Colorize(cliUtils.GreenText, "Succeed")
 		} else {
-			status = cliUtils.ColoredSprintf(cliUtils.RED_TEXT_COLOR, "Failed - %s", *result.FailReason)
+			status = cliUtils.Colorizef(cliUtils.RedText, "Failed - %s", *result.FailReason)
 		}
 
-		fmt.Printf(
+		cliLogger.Infof(
 			"- From target %s to %s, status: %s\n",
-			cliUtils.ColoredSprintf(cliUtils.YELLOW_TEXT_COLOR, result.Target),
-			cliUtils.ColoredSprintf(cliUtils.YELLOW_TEXT_COLOR, "%s:%d", p.host, p.port),
+			cliUtils.Colorize(cliUtils.YellowText, result.Target),
+			cliUtils.Colorizef(cliUtils.YellowText, "%s:%d", p.host, p.port),
 			status,
 		)
 
