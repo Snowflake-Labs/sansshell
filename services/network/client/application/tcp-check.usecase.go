@@ -22,17 +22,6 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
 )
 
-type TCPCheckResult struct {
-	// target is host of remote machine from which was checked tcp connectivity
-	Target string
-	// ok result of tcp connectivity check
-	Ok bool
-	// failReason is reason why tcp check failed on remote machine, should be NOT nil if Ok is false and Err is nil
-	FailReason *string
-	// err is error that occurred during processing of tcp check
-	Err error
-}
-
 type tcpCheckUseCase struct {
 	networkClient pb.NetworkClientProxy
 }
@@ -42,7 +31,7 @@ type tcpCheckUseCase struct {
 // - hostname is host of remote machine from which was checked tcp connectivity
 // - port is port of remote machine from which was checked tcp connectivity
 // - timeout is  seconds to wait for a response on remote machine from hostname
-func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *TCPCheckResult, error) {
+func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error) {
 	req := &pb.TCPCheckRequest{
 		Hostname: hostname,
 		Port:     uint32(port),
@@ -54,28 +43,11 @@ func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, 
 		return nil, fmt.Errorf("Unexpected error: %s\n", err.Error())
 	}
 
-	results := make(chan *TCPCheckResult)
-
-	go func() {
-		for r := range resp {
-
-			var singleHostResult = TCPCheckResult{
-				Target:     r.Target,
-				Ok:         r.Resp.Ok,
-				FailReason: r.Resp.FailReason,
-				Err:        r.Error,
-			}
-			results <- &singleHostResult
-		}
-
-		close(results)
-	}()
-
-	return results, nil
+	return resp, nil
 }
 
 type TCPCheckUseCase interface {
-	Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *TCPCheckResult, error)
+	Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error)
 }
 
 func NewTCPCheckUseCase(networkClient pb.NetworkClientProxy) TCPCheckUseCase {

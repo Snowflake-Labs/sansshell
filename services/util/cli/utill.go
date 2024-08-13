@@ -17,6 +17,7 @@
 package cli
 
 import (
+	writerUtils "github.com/Snowflake-Labs/sansshell/services/util/writer"
 	"golang.org/x/term"
 	"io"
 	"os"
@@ -26,6 +27,8 @@ func IsStreamToTerminal(stream io.Writer) bool {
 	switch v := stream.(type) {
 	case *os.File:
 		return term.IsTerminal(int(v.Fd()))
+	case writerUtils.WrappedWriter:
+		return IsStreamToTerminal(v.GetOriginal())
 	default:
 		return false
 	}

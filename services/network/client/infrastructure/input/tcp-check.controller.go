@@ -25,13 +25,15 @@ import (
 	cliUtils "github.com/Snowflake-Labs/sansshell/services/util/cli"
 	"github.com/Snowflake-Labs/sansshell/services/util/validator"
 	"github.com/google/subcommands"
+	"os"
 )
 
 // TCPCheckCmd cli adapter for execution infrastructure implementation of [subcommands.Command] interface
 type TCPCheckCmd struct {
-	host    string
-	port    int
-	timeout uint
+	host      string
+	port      int
+	timeout   uint
+	cliLogger cliUtils.StyledCliLogger
 }
 
 func (*TCPCheckCmd) Name() string { return "tcp-check" }
@@ -52,15 +54,15 @@ func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
 
 // Execute is a method handle command execution. It adapter between cli and business logic
 func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	cliLogger := cliUtils.NewStyledCliLogger()
 	state := args[0].(*util.ExecuteState)
+
 	if p.host == "" {
-		cliLogger.Errorc(cliUtils.RedText, "--host flag is required.\n")
+		p.cliLogger.Errorc(cliUtils.RedText, "--host flag is required.\n")
 		return subcommands.ExitUsageError
 	}
 
 	if err := validator.IsValidPort(p.port); err != nil {
-		cliLogger.Errorfc(cliUtils.RedText, "Invalid port number: %s\n", err.Error())
+		p.cliLogger.Errorfc(cliUtils.RedText, "Invalid port number: %s\n", err.Error())
 		return subcommands.ExitUsageError
 	}
 
@@ -72,25 +74,25 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	results, err := usecase.Run(ctx, p.host, uint8(p.port), p.timeout)
 	if err != nil {
 		preloader.Stop()
-		cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
+		p.cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
 		return subcommands.ExitFailure
 	}
 
 	for result := range results {
 		preloader.Stop()
+		targetLogger := cliUtils.NewStyledCliLogger(state.Out[result.Index], state.Err[result.Index])
 
 		var status cliUtils.StyledText
-		if result.Err != nil {
-			status = cliUtils.Colorizef(cliUtils.RedText, "Unexpected error - %s", result.Err.Error())
-		} else if result.Ok {
+		if result.Error != nil {
+			status = cliUtils.Colorizef(cliUtils.RedText, "Unexpected error - %s", result.Error.Error())
+		} else if result.Resp.Ok {
 			status = cliUtils.Colorize(cliUtils.GreenText, "Succeed")
 		} else {
-			status = cliUtils.Colorizef(cliUtils.RedText, "Failed - %s", *result.FailReason)
+			status = cliUtils.Colorizef(cliUtils.RedText, "Failed - %s", *result.Resp.FailReason)
 		}
 
-		cliLogger.Infof(
-			"- From target %s to %s, status: %s\n",
-			cliUtils.Colorize(cliUtils.YellowText, result.Target),
+		targetLogger.Infof(
+			"Test %s, status: %s\n",
 			cliUtils.Colorizef(cliUtils.YellowText, "%s:%d", p.host, p.port),
 			status,
 		)
@@ -103,5 +105,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 }
 
 func NewTCPCheckCmd() *TCPCheckCmd {
-	return &TCPCheckCmd{}
+	return &TCPCheckCmd{
+		cliLogger: cliUtils.NewStyledCliLogger(os.Stdout, os.Stderr),
+	}
 }

@@ -43,7 +43,9 @@ type ExecuteState struct {
 	Conn *proxy.Conn
 	// Dir is a directory where additional files per target can be written.
 	Dir string
+	// Output stream to write log lines related to particular target host.
 	Out []io.Writer
+	// Error stream to write log lines related to particular target host.
 	Err []io.Writer
 }
 

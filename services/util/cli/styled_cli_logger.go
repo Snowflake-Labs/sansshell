@@ -20,7 +20,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 type ColorCode = string
@@ -31,6 +30,10 @@ var GreenText ColorCode = "\033[32m"
 var YellowText ColorCode = "\033[33m"
 
 type styledCliLogger struct {
+	out             io.Writer
+	isOutToTerminal bool
+	err             io.Writer
+	isErrToTerminal bool
 }
 
 func (l *styledCliLogger) coloredSprint(color string, a ...any) string {
@@ -65,50 +68,45 @@ func (l *styledCliLogger) fprint(stream io.Writer, a ...any) (n int, err error) 
 }
 
 func (l *styledCliLogger) Infof(format string, a ...any) {
-	l.fprintf(os.Stdout, format, a...)
+	l.fprintf(l.out, format, a...)
 }
 
 func (l *styledCliLogger) Info(a ...any) {
-	l.fprint(os.Stdout, a...)
+	l.fprint(l.out, a...)
 }
 
 func (l *styledCliLogger) Error(a ...any) {
-	l.fprint(os.Stderr, a...)
+	l.fprint(l.err, a...)
 }
 
 func (l *styledCliLogger) Errorf(format string, a ...any) {
-	l.fprintf(os.Stderr, format, a...)
+	l.fprintf(l.err, format, a...)
 }
 
-// Cerrorf prints error message with color, styling inside format is not supported
+// Errorfc prints error message with color, styling inside format is not supported
 func (l *styledCliLogger) Errorfc(color ColorCode, format string, a ...any) {
-	isPrintToTerminal := IsStreamToTerminal(os.Stderr)
-
-	if isPrintToTerminal {
-		fmt.Fprint(os.Stderr, color)
+	if l.isErrToTerminal {
+		l.Error(color)
 	}
 
-	fmt.Fprintf(os.Stderr, format, a...)
+	l.Errorf(format, a...)
 
-	if isPrintToTerminal {
-		fmt.Fprint(os.Stderr, restoreFormatingCode)
+	if l.isErrToTerminal {
+		l.Error(restoreFormatingCode)
 	}
 }
 
-// Cerror prints error message with color, styling inside format is not supported
+// Errorc prints error message with color, styling inside format is not supported
 func (l *styledCliLogger) Errorc(color ColorCode, a ...any) {
-	isPrintToTerminal := IsStreamToTerminal(os.Stderr)
-
-	if isPrintToTerminal {
-		fmt.Fprint(os.Stderr, color)
+	if l.isErrToTerminal {
+		l.Error(color)
 	}
 
-	fmt.Fprint(os.Stderr, a...)
+	l.Error(a...)
 
-	if isPrintToTerminal {
-		fmt.Fprint(os.Stderr, restoreFormatingCode)
+	if l.isErrToTerminal {
+		l.Error(restoreFormatingCode)
 	}
-
 }
 
 type StyledCliLogger interface {
@@ -120,8 +118,13 @@ type StyledCliLogger interface {
 	Errorfc(color ColorCode, format string, a ...any)
 }
 
-func NewStyledCliLogger() StyledCliLogger {
-	return &styledCliLogger{}
+func NewStyledCliLogger(out io.Writer, err io.Writer) StyledCliLogger {
+	return &styledCliLogger{
+		out:             out,
+		isOutToTerminal: IsStreamToTerminal(out),
+		err:             err,
+		isErrToTerminal: IsStreamToTerminal(out),
+	}
 }
 
 type styledText struct {
