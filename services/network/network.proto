@@ -22,8 +22,16 @@ message TCPCheckRequest {
   google.protobuf.Duration timeout = 3;
 }
 
+// Enum for TCP check failure reasons
+enum TCPCheckFailureReason {
+  UNKNOWN = 0;
+  TIMEOUT = 1;
+  CONNECTION_REFUSED = 2;
+  NO_SUCH_HOST = 3;
+}
+
 // TCPCheckReply describes the result of a rpc
 message TCPCheckReply {
   bool ok = 1;
-  optional string fail_reason = 2;
+  optional TCPCheckFailureReason fail_reason = 2;
 }

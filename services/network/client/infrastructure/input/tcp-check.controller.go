@@ -88,7 +88,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		} else if result.Resp.Ok {
 			status = cliUtils.Colorize(cliUtils.GreenText, "Succeed")
 		} else {
-			status = cliUtils.Colorizef(cliUtils.RedText, "Failed - %s", *result.Resp.FailReason)
+			status = cliUtils.Colorizef(cliUtils.RedText, "Failed - %s", pbFailReasonToText(*result.Resp.FailReason))
 		}
 
 		targetLogger.Infof(
@@ -107,5 +107,18 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 func NewTCPCheckCmd() *TCPCheckCmd {
 	return &TCPCheckCmd{
 		cliLogger: cliUtils.NewStyledCliLogger(os.Stdout, os.Stderr),
+	}
+}
+
+func pbFailReasonToText(failReason pb.TCPCheckFailureReason) string {
+	switch failReason {
+	case pb.TCPCheckFailureReason_NO_SUCH_HOST:
+		return "No such host"
+	case pb.TCPCheckFailureReason_CONNECTION_REFUSED:
+		return "Connection refused"
+	case pb.TCPCheckFailureReason_TIMEOUT:
+		return "Timeout"
+	default:
+		return "Unknown"
 	}
 }

@@ -18,12 +18,13 @@ package application
 
 import (
 	"context"
+	pb "github.com/Snowflake-Labs/sansshell/services/network"
 	"time"
 )
 
 type TCPConnectivityCheckResult struct {
 	IsOk       bool
-	FailReason *string
+	FailReason *pb.TCPCheckFailureReason
 }
 
 type TCPClientPort interface {

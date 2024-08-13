@@ -20,6 +20,7 @@ package output
 import (
 	"context"
 	"fmt"
+	pb "github.com/Snowflake-Labs/sansshell/services/network"
 	app "github.com/Snowflake-Labs/sansshell/services/network/server/application"
 	"net"
 	"strconv"
@@ -38,18 +39,18 @@ func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port
 	dialer := net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", hostToCheck)
 	if err != nil {
-		var failReason string
+		var failReason = pb.TCPCheckFailureReason_UNKNOWN
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-			failReason = "Connection timed out"
+			failReason = pb.TCPCheckFailureReason_TIMEOUT
 		} else if opErr, ok := err.(*net.OpError); ok && opErr.Op == "dial" {
 			if strings.HasSuffix(opErr.Err.Error(), "no such host") {
-				failReason = "No such host"
+				failReason = pb.TCPCheckFailureReason_NO_SUCH_HOST
 			} else if strings.HasSuffix(opErr.Err.Error(), "connection refused") {
-				failReason = "Connection refused"
+				failReason = pb.TCPCheckFailureReason_CONNECTION_REFUSED
 			}
 		}
 
-		if failReason == "" {
+		if failReason == pb.TCPCheckFailureReason_UNKNOWN {
 			return nil, fmt.Errorf("unexpected error: %s", err.Error())
 		}
 
