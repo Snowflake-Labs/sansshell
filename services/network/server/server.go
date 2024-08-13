@@ -22,10 +22,9 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services/util/validator"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"github.com/go-logr/logr"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
@@ -44,7 +43,7 @@ func (s *server) TCPCheck(ctx context.Context, req *pb.TCPCheckRequest) (*pb.TCP
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	hostname := req.GetHostname()
 	rawPort := req.GetPort()
-	timeout := req.GetTimeout()
+	timeout := req.GetTimeout().AsDuration()
 
 	if err := validator.IsValidPortUint32(rawPort); err != nil {
 		logger.Error(err, "Invalid port value")

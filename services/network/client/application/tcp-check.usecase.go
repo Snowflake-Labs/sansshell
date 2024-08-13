@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	"time"
 )
 
 type tcpCheckUseCase struct {
@@ -35,7 +37,7 @@ func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, 
 	req := &pb.TCPCheckRequest{
 		Hostname: hostname,
 		Port:     uint32(port),
-		Timeout:  uint32(timeoutSeconds),
+		Timeout:  durationpb.New(time.Duration(timeoutSeconds) * time.Second),
 	}
 
 	var resp, err = p.networkClient.TCPCheckOneMany(ctx, req)
