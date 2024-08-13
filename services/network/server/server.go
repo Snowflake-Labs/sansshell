@@ -45,12 +45,12 @@ func (s *server) TCPCheck(ctx context.Context, req *pb.TCPCheckRequest) (*pb.TCP
 	rawPort := req.GetPort()
 	timeout := req.GetTimeout().AsDuration()
 
-	if err := validator.IsValidPortUint32(rawPort); err != nil {
+	port, err := validator.ParsePortFromUint32(rawPort)
+	if err != nil {
 		logger.Error(err, "Invalid port value")
 		recorder.CounterOrLog(ctx, s.tcpCheckFailureCounter, 1)
 		return nil, status.Errorf(codes.Internal, "Invalid port value: %d", rawPort)
 	}
-	port := uint8(rawPort)
 
 	usecase := app.NewTCPCheckUsecase(&infraOutput.TCPClient{})
 

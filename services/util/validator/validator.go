@@ -20,18 +20,18 @@ import (
 	"errors"
 )
 
-func IsValidPort(val int) error {
+func ParsePortFromInt(val int) (uint8, error) {
 	if val < 1 || val > 65535 {
-		return errors.New("port must be between 1 and 65535")
+		return 0, errors.New("port must be between 1 and 65535")
 	}
 
-	return nil
+	return uint8(val), nil
 }
 
-func IsValidPortUint32(val uint32) error {
+func ParsePortFromUint32(val uint32) (uint8, error) {
 	if val < 1 || val > 65535 {
-		return errors.New("port must be between 1 and 65535")
+		return 0, errors.New("port must be between 1 and 65535")
 	}
 
-	return nil
+	return uint8(val), nil
 }

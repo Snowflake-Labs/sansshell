@@ -61,7 +61,8 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitUsageError
 	}
 
-	if err := validator.IsValidPort(p.port); err != nil {
+	port, err := validator.ParsePortFromInt(p.port)
+	if err != nil {
 		p.cliLogger.Errorfc(cliUtils.RedText, "Invalid port number: %s\n", err.Error())
 		return subcommands.ExitUsageError
 	}
@@ -71,7 +72,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 	usecase := app.NewTCPCheckUseCase(client)
 
 	preloader.Start()
-	results, err := usecase.Run(ctx, p.host, uint8(p.port), p.timeout)
+	results, err := usecase.Run(ctx, p.host, port, p.timeout)
 	if err != nil {
 		preloader.Stop()
 		p.cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
