@@ -67,8 +67,11 @@ func (p *httpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 }
 
 type proxyCmd struct {
-	listenAddr   string
-	allowAnyHost bool
+	listenAddr         string
+	allowAnyHost       bool
+	protocol           string
+	hostname           string
+	insecureSkipVerify bool
 }
 
 func (*proxyCmd) Name() string { return "proxy" }
@@ -84,6 +87,10 @@ func (*proxyCmd) Usage() string {
 func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.listenAddr, "addr", "localhost:0", "Address to listen on, defaults to a random localhost port")
 	f.BoolVar(&p.allowAnyHost, "allow-any-host", false, "Serve data regardless of the Host in HTTP requests instead of only allowing localhost and IPs. False by default to prevent DNS rebinding attacks.")
+	f.StringVar(&p.protocol, "protocol", "http", "protocol to communicate with specified hostname")
+	f.StringVar(&p.hostname, "hostname", "localhost", "ip address or domain name to specify host")
+	f.BoolVar(&p.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
+
 }
 
 // This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
@@ -164,9 +171,10 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 				Headers:    reqHeaders,
 				Body:       body,
 			},
-			Port:     int32(port),
-			Protocol: "http",
-			Hostname: "localhost",
+			Port:      int32(port),
+			Protocol:  p.protocol,
+			Hostname:  p.hostname,
+			Tlsconfig: &pb.TLSConfig{InsecureSkipVerify: p.insecureSkipVerify},
 		}
 		resp, err := proxy.Host(ctx, req)
 		if err != nil {
