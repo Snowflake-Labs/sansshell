@@ -6,4 +6,3 @@ cmd/sansshell-server/sansshell-server
 certs/
 *.swp
 bin/
-tmp/
