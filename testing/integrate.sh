@@ -264,7 +264,7 @@ echo "package sansshell.authz" >${LOGS}/policy
 echo "default allow = true" >>${LOGS}/policy
 
 # Check licensing
-../scripts/check-license.sh
+./scripts/check-license.sh
 check_status $? /dev/null Files missing license
 
 echo
