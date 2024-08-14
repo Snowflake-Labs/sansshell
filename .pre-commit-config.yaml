@@ -22,9 +22,8 @@ repos:
         stages: [commit]
 - repo: local
   hooks:
-    - id: check-license
-      name: check-license
+    - id: custom-script-sh
+      name: custom-script-sh
       entry: scripts/check-license.sh
       language: script
-      types: [bash]
       pass_filenames: false
