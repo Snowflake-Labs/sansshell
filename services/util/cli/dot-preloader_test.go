@@ -18,11 +18,54 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+type PhaseBuffer struct {
+	buffs      []bytes.Buffer
+	phase      uint
+	phaseMutex sync.Mutex
+}
+
+func (b *PhaseBuffer) Write(p []byte) (n int, err error) {
+	b.phaseMutex.Lock()
+	defer b.phaseMutex.Unlock()
+
+	if b.phase >= uint(len(b.buffs)) {
+		b.buffs = append(b.buffs, bytes.Buffer{})
+	}
+	return b.buffs[b.phase].Write(p)
+}
+
+func (b *PhaseBuffer) Read(p []byte) (n int, err error) {
+	return 0, errors.New("not implemented")
+}
+
+func (b *PhaseBuffer) NextPhase() {
+	b.phaseMutex.Lock()
+	defer b.phaseMutex.Unlock()
+
+	b.phase++
+}
+
+func (b *PhaseBuffer) String() string {
+	var result strings.Builder
+	for _, buff := range b.buffs {
+		result.WriteString(buff.String())
+	}
+	return result.String()
+}
+
+func (b *PhaseBuffer) StringCurrentPhase() string {
+	b.phaseMutex.Lock()
+	defer b.phaseMutex.Unlock()
+
+	return b.buffs[b.phase].String()
+}
 
 func TestDotPreloaderCtrl_Start(t *testing.T) {
 	tests := []struct {
@@ -48,23 +91,28 @@ func TestDotPreloaderCtrl_Start(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			var buf bytes.Buffer
+			buf := &PhaseBuffer{
+				buffs: []bytes.Buffer{},
+				phase: 0,
+			}
 			ctrl := &dotPreloaderCtrl{
 				message:            test.message,
 				interactiveMode:    test.isInteractive,
 				animationFrameRate: 1 * time.Second,
 				isActive:           false,
 				isActiveMu:         sync.Mutex{},
-				outputWriter:       &buf,
+				outputWriter:       buf,
 			}
 
-			// ACT
 			defer ctrl.Stop() // it is required to stop the preloader and kill gorutine in interactive mode
+
+			// ACT
 			ctrl.Start()
 			time.Sleep(2200 * time.Millisecond)
-			result := buf.String()
+			buf.NextPhase()
 
 			// ASSERT
+			result := buf.buffs[0].String()
 			if result != test.expectedOutput {
 				escapedResult := strings.ReplaceAll(strings.ReplaceAll(result, "\r", "\\r"), "\u001B[K", "\\u001B[K")
 				escepedExpectedOutput := strings.ReplaceAll(strings.ReplaceAll(test.expectedOutput, "\r", "\\r"), "\u001B[K", "\\u001B[K")
@@ -87,10 +135,11 @@ func TestDotPreloaderCtrl_Stop(t *testing.T) {
 			outputWriter:       &buf,
 		}
 
-		// ACT
 		ctrl.Start()
 		isActiveBeforeStop := ctrl.isActive
 		time.Sleep(1000 * time.Millisecond)
+
+		// ACT
 		ctrl.Stop()
 		isActiveAfterStop := ctrl.isActive
 
@@ -105,7 +154,7 @@ func TestDotPreloaderCtrl_Stop(t *testing.T) {
 	})
 }
 
-func TestDotPreloaderCtrl_StartWith(t *testing.T) {
+func TestDotPreloaderCtrl_StopWith(t *testing.T) {
 	tests := []struct {
 		name           string
 		message        string
@@ -130,29 +179,33 @@ func TestDotPreloaderCtrl_StartWith(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		buf := &PhaseBuffer{
+			buffs: []bytes.Buffer{},
+			phase: 0,
+		}
+
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			var buf bytes.Buffer
 			ctrl := &dotPreloaderCtrl{
 				message:            test.message,
 				interactiveMode:    test.isInteractive,
 				animationFrameRate: 1 * time.Second,
 				isActive:           false,
 				isActiveMu:         sync.Mutex{},
-				outputWriter:       &buf,
+				outputWriter:       buf,
 			}
 
-			// ACT
 			ctrl.Start()
 			time.Sleep(2200 * time.Millisecond)
-			inprogressOutput := buf.String()
+			buf.NextPhase()
+
+			// ACT
 			ctrl.StopWith(test.stopMessage)
-			finalOutput := buf.String()
+			endLog := buf.StringCurrentPhase()
 
 			// ASSERT
-			actualEndMessage, _ := strings.CutPrefix(finalOutput, inprogressOutput)
-			if actualEndMessage != test.expectedEndLog {
-				escapedResult := strings.ReplaceAll(strings.ReplaceAll(actualEndMessage, "\r", "\\r"), "\u001B[K", "\\u001B[K")
+			if endLog != test.expectedEndLog {
+				escapedResult := strings.ReplaceAll(strings.ReplaceAll(endLog, "\r", "\\r"), "\u001B[K", "\\u001B[K")
 				escepedExpectedOutput := strings.ReplaceAll(strings.ReplaceAll(test.expectedEndLog, "\r", "\\r"), "\u001B[K", "\\u001B[K")
 				t.Errorf("Got \"%s\", expected \"%s\"", escapedResult, escepedExpectedOutput)
 			}
