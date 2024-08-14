@@ -1,7 +1,3 @@
-// File: tcp.client_integration_test.go
-//go:build integration
-// +build integration
-
 /*
 Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
@@ -24,12 +20,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"testing"
 	"time"
 )
 
 const localhost = "localhost"
-const notExistedHost = "snowflakecom"
+const notExistedHost = "127.50.50.50"
 
 func startTCPServer() (net.Listener, int, error) {
 	port := 8081
@@ -63,6 +60,10 @@ func startTCPServer() (net.Listener, int, error) {
 }
 
 func TestIntegrationTCPClient_CheckConnectivity(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") == "" {
+		t.Skip("skipping integration test")
+	}
+
 	listener, port, err := startTCPServer()
 
 	if err != nil {

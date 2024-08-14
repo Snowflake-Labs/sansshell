@@ -167,8 +167,22 @@ go test ./...
 
 To run integration tests, run the following command:
 ```bash
-go test -tags=integration ./...
+# Run go integration tests
+INTEGRATION_TEST=yes go test -run "^TestIntegration.*$" ./...
+
+# Run bash integration tests
 ./test/integration.sh
+```
+
+#### Integration testing
+To implement integration tests, you need to:
+- Create a new test file name satisfy pattern `<file-name>_integration_test.go`
+- Name test functions satisfy pattern `TestIntegration<FunctionName>`
+- Add check to skip tests when unit test is running:
+```go
+if os.Getenv("INTEGRATION_TEST") == "" {
+    t.Skip("skipping integration test")
+}
 ```
 
 ## A tour of the codebase
