@@ -263,10 +263,6 @@ cd "${dir}/.." || {
 echo "package sansshell.authz" >${LOGS}/policy
 echo "default allow = true" >>${LOGS}/policy
 
-# Check licensing
-./scripts/check-license.sh
-check_status $? /dev/null Files missing license
-
 echo
 echo "Checking with go vet"
 echo
