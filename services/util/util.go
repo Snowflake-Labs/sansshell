@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	writerUtils "github.com/Snowflake-Labs/sansshell/services/util/writer"
+	"golang.org/x/term"
 	"io"
 	"os"
 	"os/exec"
@@ -440,4 +442,17 @@ func (i *IntSliceFlags) Set(val string) error {
 		*i = append(*i, x)
 	}
 	return nil
+}
+
+// IsStreamToTerminal checks if the stream is connected to a terminal
+// Could not be covered with test, requires manual testing on changes
+func IsStreamToTerminal(stream io.Writer) bool {
+	switch v := stream.(type) {
+	case *os.File:
+		return term.IsTerminal(int(v.Fd()))
+	case writerUtils.WrappedWriter:
+		return IsStreamToTerminal(v.GetOriginal())
+	default:
+		return false
+	}
 }

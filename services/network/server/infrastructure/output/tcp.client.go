@@ -33,7 +33,7 @@ type TCPClient struct {
 }
 
 // CheckConnectivity is used to check tcp connectivity from remote machine to specified server
-func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port uint8, timeout time.Duration) (*app.TCPConnectivityCheckResult, error) {
+func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*app.TCPConnectivityCheckResult, error) {
 	hostToCheck := net.JoinHostPort(hostname, strconv.Itoa(int(port)))
 
 	dialer := net.Dialer{Timeout: timeout}

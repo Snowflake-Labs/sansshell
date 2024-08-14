@@ -22,26 +22,26 @@ import (
 	"time"
 )
 
+type tcpCheckUsecase struct {
+	tcpClientPort TCPClientPort
+}
+
+func (t *tcpCheckUsecase) Run(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error) {
+	result, err := t.tcpClientPort.CheckConnectivity(ctx, hostname, port, timeout)
+	return result, err
+}
+
 type TCPConnectivityCheckResult struct {
 	IsOk       bool
 	FailReason *pb.TCPCheckFailureReason
 }
 
 type TCPClientPort interface {
-	CheckConnectivity(ctx context.Context, hostname string, port uint8, timeout time.Duration) (*TCPConnectivityCheckResult, error)
-}
-
-type tcpCheckUsecase struct {
-	tcpClientPort TCPClientPort
+	CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error)
 }
 
 type TCPCheckUsecase interface {
-	Run(ctx context.Context, hostname string, port uint8, timeout time.Duration) (*TCPConnectivityCheckResult, error)
-}
-
-func (t *tcpCheckUsecase) Run(ctx context.Context, hostname string, port uint8, timeout time.Duration) (*TCPConnectivityCheckResult, error) {
-	result, err := t.tcpClientPort.CheckConnectivity(ctx, hostname, port, timeout)
-	return result, err
+	Run(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error)
 }
 
 func NewTCPCheckUsecase(client TCPClientPort) TCPCheckUsecase {

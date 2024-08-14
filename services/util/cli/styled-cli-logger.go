@@ -30,10 +30,10 @@ var GreenText ColorCode = "\033[32m"
 var YellowText ColorCode = "\033[33m"
 
 type styledCliLogger struct {
-	out             io.Writer
-	isOutToTerminal bool
-	err             io.Writer
-	isErrToTerminal bool
+	out               io.Writer
+	outStylingEnabled bool
+	err               io.Writer
+	errStylingEnabled bool
 }
 
 func (l *styledCliLogger) coloredSprint(color string, a ...any) string {
@@ -41,70 +41,70 @@ func (l *styledCliLogger) coloredSprint(color string, a ...any) string {
 	return fmt.Sprint(color, line, restoreFormatingCode)
 }
 
-func (l *styledCliLogger) applyStyleByStream(stream io.Writer, a ...any) []any {
-	if IsStreamToTerminal(stream) {
-		newA := make([]any, len(a))
-		for i, v := range a {
-			if styledText, ok := v.(*styledText); ok {
+func (l *styledCliLogger) toPrimitives(applyStyling bool, a ...any) []any {
+	newA := make([]any, len(a))
+	for i, v := range a {
+		if styledText, ok := v.(*styledText); ok {
+			if applyStyling {
 				v = l.coloredSprint(styledText.colorCode, styledText.text)
+			} else {
+				v = styledText.text
 			}
-
-			newA[i] = v
 		}
-		a = newA
-	}
 
-	return a
+		newA[i] = v
+	}
+	return newA
 }
 
-func (l *styledCliLogger) fprintf(stream io.Writer, format string, a ...any) (n int, err error) {
-	a = l.applyStyleByStream(stream, a...)
+func (l *styledCliLogger) fprintf(stream io.Writer, applyStyling bool, format string, a ...any) (n int, err error) {
+	a = l.toPrimitives(applyStyling, a...)
 	return fmt.Fprintf(stream, format, a...)
 }
 
-func (l *styledCliLogger) fprint(stream io.Writer, a ...any) (n int, err error) {
-	a = l.applyStyleByStream(stream, a...)
+func (l *styledCliLogger) fprint(stream io.Writer, applyStyling bool, a ...any) (n int, err error) {
+	a = l.toPrimitives(applyStyling, a...)
 	return fmt.Fprint(stream, a...)
 }
 
 func (l *styledCliLogger) Infof(format string, a ...any) {
-	l.fprintf(l.out, format, a...)
+	l.fprintf(l.out, l.outStylingEnabled, format, a...)
 }
 
 func (l *styledCliLogger) Info(a ...any) {
-	l.fprint(l.out, a...)
+	l.fprint(l.out, l.outStylingEnabled, a...)
 }
 
 func (l *styledCliLogger) Error(a ...any) {
-	l.fprint(l.err, a...)
+	l.fprint(l.err, l.outStylingEnabled, a...)
 }
 
 func (l *styledCliLogger) Errorf(format string, a ...any) {
-	l.fprintf(l.err, format, a...)
+	l.fprintf(l.err, l.errStylingEnabled, format, a...)
 }
 
 // Errorfc prints error message with color, styling inside format is not supported
 func (l *styledCliLogger) Errorfc(color ColorCode, format string, a ...any) {
-	if l.isErrToTerminal {
+	if l.errStylingEnabled {
 		l.Error(color)
 	}
 
 	l.Errorf(format, a...)
 
-	if l.isErrToTerminal {
+	if l.errStylingEnabled {
 		l.Error(restoreFormatingCode)
 	}
 }
 
 // Errorc prints error message with color, styling inside format is not supported
 func (l *styledCliLogger) Errorc(color ColorCode, a ...any) {
-	if l.isErrToTerminal {
+	if l.errStylingEnabled {
 		l.Error(color)
 	}
 
 	l.Error(a...)
 
-	if l.isErrToTerminal {
+	if l.errStylingEnabled {
 		l.Error(restoreFormatingCode)
 	}
 }
@@ -118,12 +118,17 @@ type StyledCliLogger interface {
 	Errorfc(color ColorCode, format string, a ...any)
 }
 
-func NewStyledCliLogger(out io.Writer, err io.Writer) StyledCliLogger {
+type CliLoggerOptions struct {
+	ApplyStylingForOut bool
+	ApplyStylingForErr bool
+}
+
+func NewStyledCliLogger(out io.Writer, err io.Writer, options *CliLoggerOptions) StyledCliLogger {
 	return &styledCliLogger{
-		out:             out,
-		isOutToTerminal: IsStreamToTerminal(out),
-		err:             err,
-		isErrToTerminal: IsStreamToTerminal(out),
+		out:               out,
+		outStylingEnabled: options.ApplyStylingForOut,
+		err:               err,
+		errStylingEnabled: options.ApplyStylingForErr,
 	}
 }
 

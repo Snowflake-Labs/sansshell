@@ -159,6 +159,18 @@ $ GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=$HOME/.sansshell/root.pem grpc_cli \
 
 NOTE: This connects to the proxy. Change to 50042 if you want to connect to the sansshell-server.
 
+### Testing
+To run unit tests, run the following command:
+```bash
+go test ./...
+```
+
+To run integration tests, run the following command:
+```bash
+go test -tags=integration ./...
+./test/integration.sh
+```
+
 ## A tour of the codebase
 
 SansShell is composed of 5 primary concepts:

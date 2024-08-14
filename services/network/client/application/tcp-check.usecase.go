@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"time"
 )
 
@@ -33,10 +33,10 @@ type tcpCheckUseCase struct {
 // - hostname is host of remote machine from which was checked tcp connectivity
 // - port is port of remote machine from which was checked tcp connectivity
 // - timeout is  seconds to wait for a response on remote machine from hostname
-func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error) {
+func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error) {
 	req := &pb.TCPCheckRequest{
 		Hostname: hostname,
-		Port:     uint32(port),
+		Port:     port,
 		Timeout:  durationpb.New(time.Duration(timeoutSeconds) * time.Second),
 	}
 
@@ -49,7 +49,7 @@ func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint8, 
 }
 
 type TCPCheckUseCase interface {
-	Run(ctx context.Context, hostname string, port uint8, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error)
+	Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error)
 }
 
 func NewTCPCheckUseCase(networkClient pb.NetworkClientProxy) TCPCheckUseCase {

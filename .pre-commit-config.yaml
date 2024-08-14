@@ -20,3 +20,11 @@ repos:
       - id: golangci-lint
         args: ['--fast']
         stages: [commit]
+- repo: local
+  hooks:
+    - id: check-license
+      name: check-license
+      entry: scripts/check-license.sh
+      language: script
+      types: [bash]
+      pass_filenames: false

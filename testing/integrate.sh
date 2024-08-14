@@ -264,24 +264,7 @@ echo "package sansshell.authz" >${LOGS}/policy
 echo "default allow = true" >>${LOGS}/policy
 
 # Check licensing
-# For Go we can ignore generate protobuf files.
-find . -type f -name \*.go ! -name \*.pb.go >${LOGS}/license-go
-find . -type f -name \*.sh >${LOGS}/license-sh
-find . -type f -name \*.proto >${LOGS}/license-proto
-
-cat "${LOGS}/license-go" "${LOGS}/license-proto" | (
-  broke=""
-  while read -r i; do
-    if ! grep -q "Licensed under the Apache License" ${i}; then
-      echo "${i} is missing required license."
-      broke=true
-    fi
-  done
-
-  if [ "${broke}" == "true" ]; then
-    exit 1
-  fi
-)
+../scripts/check-license.sh
 check_status $? /dev/null Files missing license
 
 echo

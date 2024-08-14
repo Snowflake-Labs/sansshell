@@ -63,7 +63,7 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitUsageError
 	}
 
-	preloader := cliUtils.NewDotPreloader("Waiting for results from remote machines")
+	preloader := cliUtils.NewDotPreloader("Waiting for results from remote machines", util.IsStreamToTerminal(os.Stdout))
 	client := pb.NewNetworkClientProxy(state.Conn)
 	usecase := app.NewTCPCheckUseCase(client)
 
@@ -77,7 +77,10 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 	for result := range results {
 		preloader.Stop()
-		targetLogger := cliUtils.NewStyledCliLogger(state.Out[result.Index], state.Err[result.Index])
+		targetLogger := cliUtils.NewStyledCliLogger(state.Out[result.Index], state.Err[result.Index], &cliUtils.CliLoggerOptions{
+			ApplyStylingForErr: util.IsStreamToTerminal(state.Err[result.Index]),
+			ApplyStylingForOut: util.IsStreamToTerminal(state.Out[result.Index]),
+		})
 
 		var status cliUtils.StyledText
 		if result.Error != nil {
@@ -103,7 +106,10 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 func NewTCPCheckCmd() *TCPCheckCmd {
 	return &TCPCheckCmd{
-		cliLogger: cliUtils.NewStyledCliLogger(os.Stdout, os.Stderr),
+		cliLogger: cliUtils.NewStyledCliLogger(os.Stdout, os.Stderr, &cliUtils.CliLoggerOptions{
+			ApplyStylingForErr: util.IsStreamToTerminal(os.Stderr),
+			ApplyStylingForOut: util.IsStreamToTerminal(os.Stdout),
+		}),
 	}
 }
 

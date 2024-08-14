@@ -19,6 +19,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -29,9 +30,14 @@ var moveToLineStartCode = "\r"
 var dotPreLoaderSymbols = []string{".", "..", "..."}
 
 type dotPreloaderCtrl struct {
-	message    string
-	isActive   bool
-	isActiveMu sync.Mutex
+	// message to show before preloader
+	message string
+	// interactiveMode: if true, preloader will be animated, otherwise it will be static
+	interactiveMode    bool
+	animationFrameRate time.Duration
+	isActive           bool
+	isActiveMu         sync.Mutex
+	outputWriter       io.Writer
 }
 
 func (p *dotPreloaderCtrl) Start() {
@@ -39,8 +45,8 @@ func (p *dotPreloaderCtrl) Start() {
 	p.isActive = true
 	p.isActiveMu.Unlock()
 
-	if IsStreamToTerminal(os.Stdout) {
-		delay := 500 * time.Millisecond
+	if p.interactiveMode {
+		delay := p.animationFrameRate
 		go func() {
 			currentAnimationFrame := 0
 
@@ -48,7 +54,7 @@ func (p *dotPreloaderCtrl) Start() {
 			for p.isActive {
 				currentPreloaderSymbol := dotPreLoaderSymbols[currentAnimationFrame%len(dotPreLoaderSymbols)]
 
-				fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode, p.message, currentPreloaderSymbol)
+				fmt.Fprint(p.outputWriter, cleanUpLineAnsiCode, moveToLineStartCode, p.message, currentPreloaderSymbol)
 				currentAnimationFrame++
 
 				p.isActiveMu.Unlock()
@@ -58,19 +64,18 @@ func (p *dotPreloaderCtrl) Start() {
 			p.isActiveMu.Unlock()
 		}()
 	} else {
-		fmt.Print(p.message, dotPreLoaderSymbols[len(dotPreLoaderSymbols)-1])
-		fmt.Println()
+		fmt.Fprint(p.outputWriter, p.message, dotPreLoaderSymbols[len(dotPreLoaderSymbols)-1])
+		fmt.Fprintln(p.outputWriter)
 	}
 }
 
 func (p *dotPreloaderCtrl) StopWith(finishMessage string) {
 	p.isActiveMu.Lock()
 	p.isActive = false
-	isPrintingToTerminal := IsStreamToTerminal(os.Stdout)
-	if isPrintingToTerminal {
-		fmt.Print(cleanUpLineAnsiCode, moveToLineStartCode)
+	if p.interactiveMode {
+		fmt.Fprint(p.outputWriter, cleanUpLineAnsiCode, moveToLineStartCode)
 	}
-	fmt.Print(finishMessage)
+	fmt.Fprint(p.outputWriter, finishMessage)
 
 	p.isActiveMu.Unlock()
 }
@@ -85,8 +90,14 @@ type DotPreloader interface {
 	StopWith(finishMessage string)
 }
 
-func NewDotPreloader(message string) DotPreloader {
+// NewDotPreloader factory to create new DotPreloader
+// - message: message to show before preloader
+// - interactiveMode: if true, preloader will be animated, otherwise it will be static
+func NewDotPreloader(message string, interactiveMode bool) DotPreloader {
 	return &dotPreloaderCtrl{
-		message: message,
+		message:            message,
+		interactiveMode:    interactiveMode,
+		animationFrameRate: 500 * time.Millisecond,
+		outputWriter:       os.Stdout,
 	}
 }
