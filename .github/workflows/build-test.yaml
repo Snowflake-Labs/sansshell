@@ -20,7 +20,15 @@ jobs:
         go-version-file: 'go.mod'
     - uses: actions/setup-python@v3
     - uses: pre-commit/action@v3.0.0
-  unit_test:
+  chack_license:
+    name: Check license
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check license in project files
+        run: ./scripts/check-license.sh
+        shell: bash
+  test:
     name: Unit tests
     runs-on: ubuntu-20.04
     steps:
@@ -36,9 +44,6 @@ jobs:
           sudo apt-get install python3
       - name: integration bash tests
         run: ./testing/integrate.sh
-        shell: bash
-      - name: integration tests
-        run: go test -tags=integration ./...
         shell: bash
   integration_test:
     name: Unit tests
