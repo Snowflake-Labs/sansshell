@@ -21,6 +21,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/services/packages/client/domain"
 	"os"
 	"sort"
 	"strings"
@@ -359,11 +360,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 		}
 		if l.nevra {
 			for _, pkg := range r.Resp.Packages {
-				ne := pkg.Name
-				if pkg.Epoch != 0 {
-					ne = fmt.Sprintf("%s-%d", pkg.Name, pkg.Epoch)
-				}
-				nevra := fmt.Sprintf("%v:%v-%v.%v", ne, pkg.Version, pkg.Release, pkg.Architecture)
+				nevra := domain.ToNevraStr(pkg)
 				fmt.Fprintln(state.Out[r.Index], nevra)
 			}
 		} else {
@@ -384,6 +381,7 @@ func (l *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 				fmt.Fprintf(state.Out[r.Index], "%40s %16s %32s\n", na, evr, pkg.Repo)
 			}
 		}
+		fmt.Fprintln(os.Stdout)
 	}
 	return retCode
 }
@@ -463,7 +461,8 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
 			} else {
 				for _, packageInfo := range packages {
-					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+					nevra := domain.ToNevraStr(packageInfo)
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", nevra)
 				}
 			}
 
@@ -474,7 +473,8 @@ func (l *searchCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interf
 				fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", "No package found!")
 			} else {
 				for _, packageInfo := range packages {
-					fmt.Fprintf(state.Out[r.Index], "%-10s%s-%d:%s-%s.%s\n", " ", packageInfo.Name, packageInfo.Epoch, packageInfo.Version, packageInfo.Release, packageInfo.Architecture)
+					nevra := domain.ToNevraStr(packageInfo)
+					fmt.Fprintf(state.Out[r.Index], "%-10s%s\n", " ", nevra)
 				}
 			}
 		}
