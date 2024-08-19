@@ -1363,7 +1363,7 @@ func (*fdbCLIExcludeCmd) Synopsis() string {
 func (p *fdbCLIExcludeCmd) Usage() string {
 	return `exclude [wait] [failed] [<ADDRESS...>] [locality_dcid:<excludedcid>] [locality_zoneid:<excludezoneid>] [locality_machineid:<excludemachineid>] [locality_processid:<excludeprocessid>] or any locality
 
-Note: By default no_wait will be applied for process exclusion which is asynchronous. 
+Note: By default no_wait will be applied for process exclusion which is asynchronous.
 If want to wait for entire data to be moved off machine before returning result, please add wait option.
 `
 }

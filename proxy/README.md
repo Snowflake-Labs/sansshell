@@ -75,7 +75,7 @@ to the stream ID. Fan-out is provided by the ability to specify multiple
 stream IDs in each StreamData request, which causes the request to be delivered
 to each of the specified streams.
 
-Clients read from the proxy stream to obtain any responses (whether data 
+Clients read from the proxy stream to obtain any responses (whether data
 or errors), each of which is identified by a previously returned stream ID.
 
 Finished streams will cause the delivery of an inband "ServerClose" response

@@ -1353,9 +1353,9 @@ func (*mkdirCmd) Synopsis() string { return "Create a directory" }
 func (*mkdirCmd) Usage() string {
 	return `mkdir --uid=X|username=Y --gid=X|group=Y --mode=X <path>:
   Create a directory at the specified path.
-  Note: 
-  1. Please set flags before path. 
-  2. The action doesn't support creating intermedaite directories, e.g for this path /AAA/BBB/test, 
+  Note:
+  1. Please set flags before path.
+  2. The action doesn't support creating intermedaite directories, e.g for this path /AAA/BBB/test,
      the parent directories BBB or /AAA/BBB doesn't exist, the action won't work.
 `
 }

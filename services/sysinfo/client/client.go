@@ -205,7 +205,7 @@ func (*journalCmd) Name() string     { return "journalctl" }
 func (*journalCmd) Synopsis() string { return "Get the log entries stored in journald" }
 func (*journalCmd) Usage() string {
 	return `journalctl [--since|--S=X] [--until|-U=X] [-tail=X] [-u|-unit=X]:
-	Get the log entries stored in journald by systemd-journald.service 
+	Get the log entries stored in journald by systemd-journald.service
 `
 }
 
