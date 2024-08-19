@@ -406,7 +406,7 @@ This will also accept URL options of the form:
 	s3://bucket (AWS)
 	azblob://bucket (Azure)
 	gs://bucket (GCP)
-	
+
 	See https://gocloud.dev/howto/blob/ for details on options.`)
 }
 

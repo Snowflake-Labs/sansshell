@@ -196,7 +196,7 @@ type statusCmd struct {
 func (*statusCmd) Name() string     { return "status" }
 func (*statusCmd) Synopsis() string { return "retrieve service status" }
 func (*statusCmd) Usage() string {
-	return `status [--system-type <type>] [-t] <service> 
+	return `status [--system-type <type>] [-t] <service>
     return the status of the specified service
   `
 }

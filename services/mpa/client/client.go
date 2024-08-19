@@ -114,7 +114,7 @@ func (*approveCmd) Usage() string {
 	return `approve <id> [--skip-confirmation]:
     Approves an MPA request with the specified ID.
 
-	The --skip-confirmation flag can be used to bypass 
+	The --skip-confirmation flag can be used to bypass
 	the confirmation prompt, proceeding with the request approval.
 `
 }
