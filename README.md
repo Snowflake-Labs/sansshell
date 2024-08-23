@@ -207,7 +207,7 @@ implementations of the SansShell Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
 
-[Here](/docs/services-architecture.md) you could read more about services architecture. 
+[Here](/docs/services-architecture.md) you could read more about services architecture.
 
 #### List of available Services
 
