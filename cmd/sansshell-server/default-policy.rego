@@ -85,6 +85,10 @@ allow {
 	input.method = "/SysInfo.SysInfo/Dmesg"
 }
 
+allow {
+	input.method = "/TLSInfo.TLSInfo/GetTLSCertificate"
+}
+
 # Allow anything from a proxy
 allow {
 	input.peer.principal.id = "proxy"

@@ -19,6 +19,7 @@ package client
 
 import (
 	"context"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"os"
@@ -62,6 +63,7 @@ func (c *tlsInfoCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 type getCertsCmd struct {
 	serverName         string
 	insecureSkipVerify bool
+	printPEM           bool
 }
 
 func (*getCertsCmd) Name() string { return "get-certs" }
@@ -79,6 +81,7 @@ func (c *getCertsCmd) Usage() string {
 }
 func (c *getCertsCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&c.insecureSkipVerify, "insecure-skip-verify", false, "If true, will skip verification of server's certificate chain and host name")
+	f.BoolVar(&c.printPEM, "pem", false, "Print certificates in PEM format")
 	f.StringVar(&c.serverName, "server-name", "", "server-name is used to specify the Server Name Indication (SNI) during the TLS handshake. It allows client to indicate which hostname it's trying to connect to.")
 }
 
@@ -103,20 +106,29 @@ func (c *getCertsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 	foundErr := false
 	for r := range respChan {
-		fmt.Fprintf(state.Out[r.Index], "Target %s result:\n", r.Target)
 		if r.Error != nil {
 			fmt.Fprintf(state.Err[r.Index], "Get TLS certificates failure: %v\n", r.Error)
 			foundErr = true
 			continue
 		}
 		for i, cert := range r.Resp.Certificates {
-			fmt.Fprintf(state.Out[r.Index], "---Server Certificate--- %d\n", i)
-			fmt.Fprintf(state.Out[r.Index], "Issuer: %v\n", cert.Issuer)
-			fmt.Fprintf(state.Out[r.Index], "Subject: %v\n", cert.Subject)
-			fmt.Fprintf(state.Out[r.Index], "NotBefore: %s\n", time.Unix(cert.NotBefore, 0))
-			fmt.Fprintf(state.Out[r.Index], "NotAfter: %s\n", time.Unix(cert.NotAfter, 0))
-			fmt.Fprintf(state.Out[r.Index], "DNS Names: %v\n", cert.DnsNames)
-			fmt.Fprintf(state.Out[r.Index], "IP Addresses: %v\n\n", cert.IpAddresses)
+			if c.printPEM {
+				err := pem.Encode(state.Out[r.Index], &pem.Block{
+					Type:  "CERTIFICATE",
+					Bytes: cert.Raw,
+				})
+				if err != nil {
+					fmt.Fprintf(state.Err[r.Index], "unable to encode cert as pem: %v\n", cert.Raw)
+				}
+			} else {
+				fmt.Fprintf(state.Out[r.Index], "---Server Certificate--- %d\n", i)
+				fmt.Fprintf(state.Out[r.Index], "Issuer: %v\n", cert.Issuer)
+				fmt.Fprintf(state.Out[r.Index], "Subject: %v\n", cert.Subject)
+				fmt.Fprintf(state.Out[r.Index], "NotBefore: %s\n", time.Unix(cert.NotBefore, 0))
+				fmt.Fprintf(state.Out[r.Index], "NotAfter: %s\n", time.Unix(cert.NotAfter, 0))
+				fmt.Fprintf(state.Out[r.Index], "DNS Names: %v\n", cert.DnsNames)
+				fmt.Fprintf(state.Out[r.Index], "IP Addresses: %v\n\n", cert.IpAddresses)
+			}
 		}
 	}
 
