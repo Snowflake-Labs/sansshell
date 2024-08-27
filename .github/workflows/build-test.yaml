@@ -46,7 +46,7 @@ jobs:
         run: ./testing/integrate.sh
         shell: bash
   integration_test:
-    name: Unit tests
+    name: Integration tests
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
