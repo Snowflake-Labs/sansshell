@@ -14,7 +14,7 @@
    under the License.
 */
 
-package client
+package writer
 
 import (
 	"bytes"
@@ -78,4 +78,22 @@ func TestPrefixWriter(t *testing.T) {
 
 		})
 	}
+
+	t.Run("GetOriginal should return original writer", func(t *testing.T) {
+		// ARRANGE
+		var buf bytes.Buffer
+		writer := &prefixWriter{
+			start:  true,
+			dest:   &buf,
+			prefix: []byte("prefix: "),
+		}
+
+		// ACT
+		originalWriter := writer.GetOriginal()
+
+		// ASSERT
+		if originalWriter != &buf {
+			t.Errorf("got %q, want %q", originalWriter, &buf)
+		}
+	})
 }

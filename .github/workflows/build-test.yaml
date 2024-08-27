@@ -20,7 +20,7 @@ jobs:
         go-version-file: 'go.mod'
     - uses: actions/setup-python@v3
     - uses: pre-commit/action@v3.0.0
-  test:
+  unit_test:
     name: Unit tests
     runs-on: ubuntu-20.04
     steps:
@@ -34,6 +34,20 @@ jobs:
           sudo apt-get install ansible
           sudo apt-get install gdb
           sudo apt-get install python3
-      - name: integration tests
+      - name: integration bash tests
         run: ./testing/integrate.sh
+        shell: bash
+      - name: integration tests
+        run: go test -tags=integration ./...
+        shell: bash
+  integration_test:
+    name: Unit tests
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - name: integration tests
+        run: INTEGRATION_TEST=yes go test -run "^TestIntegration.*$" ./...
         shell: bash

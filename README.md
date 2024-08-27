@@ -127,6 +127,17 @@ do this for you, as well as re-generating the service proto files.
 $ go generate tools.go
 ```
 
+### Dev Environment setup
+#### Required tools
+- [pre-commit 3.8.0+](https://pre-commit.com/index.html)
+- [golangci-lint 1.59.1+](https://golangci-lint.run/welcome/install/#local-installation)
+
+Configuration:
+- Set up git pre-commit hooks
+```bash
+pre-commit install
+```
+
 ### Creating your own certificates
 
 As an alternative to copying auth/mtls/testdata, you can create your own example mTLS certs. See the
@@ -147,6 +158,32 @@ $ GRPC_DEFAULT_SSL_ROOTS_FILE_PATH=$HOME/.sansshell/root.pem grpc_cli \
 ```
 
 NOTE: This connects to the proxy. Change to 50042 if you want to connect to the sansshell-server.
+
+### Testing
+To run unit tests, run the following command:
+```bash
+go test ./...
+```
+
+To run integration tests, run the following command:
+```bash
+# Run go integration tests
+INTEGRATION_TEST=yes go test -run "^TestIntegration.*$" ./...
+
+# Run bash integration tests
+./test/integration.sh
+```
+
+#### Integration testing
+To implement integration tests, you need to:
+- Create a new test file name satisfy pattern `<file-name>_integration_test.go`
+- Name test functions satisfy pattern `TestIntegration<FunctionName>`
+- Add check to skip tests when unit test is running:
+```go
+if os.Getenv("INTEGRATION_TEST") == "" {
+    t.Skip("skipping integration test")
+}
+```
 
 ## A tour of the codebase
 
@@ -170,6 +207,8 @@ implementations of the SansShell Server to easily import services they wish to
 use, and have zero overhead or risk from services they do not import at compile
 time.
 
+[Here](/docs/services-architecture.md) you could read more about services architecture.
+
 #### List of available Services
 
 1. Ansible: Run a local ansible playbook and return output
@@ -180,6 +219,8 @@ time.
 1. Package operations: Install, Upgrade, List, Repolist
 1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
 1. MPA operations: Multi party authorization for commands
+1. [Network](./services/network):
+   1. [TCP-Check](./services/network/README.md#sanssh-network-tcp-check) - Check if a TCP port is open on a remote host
 1. Service operations: List, Status, Start/stop/restart
 
 TODO: Document service/.../client expectations.

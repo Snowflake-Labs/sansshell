@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	writerUtils "github.com/Snowflake-Labs/sansshell/services/util/writer"
+	"golang.org/x/term"
 	"io"
 	"os"
 	"os/exec"
@@ -43,7 +45,9 @@ type ExecuteState struct {
 	Conn *proxy.Conn
 	// Dir is a directory where additional files per target can be written.
 	Dir string
+	// Output stream to write log lines related to particular target host.
 	Out []io.Writer
+	// Error stream to write log lines related to particular target host.
 	Err []io.Writer
 }
 
@@ -438,4 +442,17 @@ func (i *IntSliceFlags) Set(val string) error {
 		*i = append(*i, x)
 	}
 	return nil
+}
+
+// IsStreamToTerminal checks if the stream is connected to a terminal
+// Could not be covered with test, requires manual testing on changes
+func IsStreamToTerminal(stream io.Writer) bool {
+	switch v := stream.(type) {
+	case *os.File:
+		return term.IsTerminal(int(v.Fd()))
+	case writerUtils.WrappedWriter:
+		return IsStreamToTerminal(v.GetOriginal())
+	default:
+		return false
+	}
 }

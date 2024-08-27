@@ -62,6 +62,13 @@ allow {
 	startswith(input.method, "/Mpa.Mpa/")
 }
 
+#######################################################
+# Network service related policies
+#
+allow {
+    input.method = "/Network.Network/TCPCheck"
+}
+
 # More complex example: allow stat of any file in /etc/ for
 # hosts in the 10.0.0.0/8 subnet, for callers in the 'admin'
 # group.
