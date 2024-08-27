@@ -20,6 +20,14 @@ jobs:
         go-version-file: 'go.mod'
     - uses: actions/setup-python@v3
     - uses: pre-commit/action@v3.0.0
+  chack_license:
+    name: Check license
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check license in project files
+        run: ./scripts/check-license.sh
+        shell: bash
   test:
     name: Unit tests
     runs-on: ubuntu-20.04
@@ -34,6 +42,17 @@ jobs:
           sudo apt-get install ansible
           sudo apt-get install gdb
           sudo apt-get install python3
-      - name: integration tests
+      - name: integration bash tests
         run: ./testing/integrate.sh
+        shell: bash
+  integration_test:
+    name: Integration tests
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - name: integration tests
+        run: INTEGRATION_TEST=yes go test -run "^TestIntegration.*$" ./...
         shell: bash

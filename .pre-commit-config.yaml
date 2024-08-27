@@ -14,3 +14,16 @@ repos:
     - id: go-fmt
     - id: go-build
     - id: go-mod-tidy
+- repo: local
+  hooks:
+    - id: check-license
+      name: check-license
+      entry: scripts/check-license.sh
+      language: script
+      pass_filenames: false
+- repo: https://github.com/golangci/golangci-lint
+  rev: v1.59.1
+  hooks:
+      - id: golangci-lint
+        args: ['--fast']
+        stages: [commit]

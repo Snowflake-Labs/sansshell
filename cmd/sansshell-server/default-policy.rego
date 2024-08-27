@@ -110,3 +110,7 @@ allow {
 	not input.metadata["proxied-sansshell-identity"]
 	input.method = ["/Mpa.Mpa/Store", "/Mpa.Mpa/Approve"][_]
 }
+
+allow {
+    input.method = "/Network.Network/TCPCheck"
+}

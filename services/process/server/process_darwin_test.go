@@ -33,12 +33,16 @@ var (
 
 	// Technically Darwin has no support but for precanned things we can use the linux test data.
 	// Tests using the native pstack will still be skipped.
-	testdataPstackNoThreads              = "./testdata/linux_pstack_no_threads.txt"
-	testdataPstackNoThreadsTextProto     = "./testdata/linux_pstack_no_threads.textproto"
-	testdataPstackThreads                = "./testdata/linux_pstack_threads.txt"
-	testdataPstackThreadsTextProto       = "./testdata/linux_pstack_threads.textproto"
-	testdataPstackThreadsBadThread       = "./testdata/linux_pstack_threads_bad_thread.txt"
-	testdataPstackThreadsBadThreadNumber = "./testdata/linux_pstack_threads_bad_thread_number.txt"
-	testdataPstackThreadsBadThreadID     = "./testdata/linux_pstack_threads_bad_thread_id.txt"
-	testdataPstackThreadsBadLwp          = "./testdata/linux_pstack_threads_bad_lwp.txt"
+	testdataPstackNoThreads                    = "./testdata/linux_pstack_no_threads.txt"
+	testdataPstackNoThreadsTextProto           = "./testdata/linux_pstack_no_threads.textproto"
+	testdataPstackThreads                      = "./testdata/linux_pstack_threads.txt"
+	testdataPstackThreadsTextProto             = "./testdata/linux_pstack_threads.textproto"
+	testdataPstackSingleThread                 = "./testdata/linux_pstack_single_thread.txt"
+	testdataPstackSingleThreadTextProto        = "./testdata/linux_pstack_single_thread.textproto"
+	testdataPstackSingleThreadWithLWP          = "./testdata/linux_pstack_single_thread_with_lwp.txt"
+	testdataPstackSingleThreadWithLWPTextProto = "./testdata/linux_pstack_single_thread_with_lwp.textproto"
+	testdataPstackThreadsBadThread             = "./testdata/linux_pstack_threads_bad_thread.txt"
+	testdataPstackThreadsBadThreadNumber       = "./testdata/linux_pstack_threads_bad_thread_number.txt"
+	testdataPstackThreadsBadThreadID           = "./testdata/linux_pstack_threads_bad_thread_id.txt"
+	testdataPstackThreadsBadLwp                = "./testdata/linux_pstack_threads_bad_lwp.txt"
 )

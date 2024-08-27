@@ -51,6 +51,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/mpa"
+	_ "github.com/Snowflake-Labs/sansshell/services/network"
 	_ "github.com/Snowflake-Labs/sansshell/services/packages"
 	_ "github.com/Snowflake-Labs/sansshell/services/process"
 	_ "github.com/Snowflake-Labs/sansshell/services/sansshell"
