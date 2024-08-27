@@ -11,7 +11,7 @@ require (
 	github.com/google/subcommands v1.2.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.0.0
-	github.com/open-policy-agent/opa v0.67.0
+	github.com/open-policy-agent/opa v0.67.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.2
 	github.com/schollz/progressbar/v3 v3.14.4
