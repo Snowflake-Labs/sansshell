@@ -145,9 +145,9 @@ type StyledText interface {
 	String() string
 }
 
-func Colorize(color ColorCode, text string) StyledText {
+func Colorize(color ColorCode, a any) StyledText {
 	return &styledText{
-		text:      text,
+		text:      fmt.Sprint(a),
 		colorCode: color,
 	}
 }

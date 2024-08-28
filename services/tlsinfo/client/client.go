@@ -28,6 +28,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/tlsinfo"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	cliUtils "github.com/Snowflake-Labs/sansshell/services/util/cli"
 	"github.com/google/subcommands"
 )
 
@@ -106,28 +107,37 @@ func (c *getCertsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 
 	foundErr := false
 	for r := range respChan {
+		targetLogger := cliUtils.NewStyledCliLogger(state.Out[r.Index], state.Err[r.Index], &cliUtils.CliLoggerOptions{
+			ApplyStylingForErr: util.IsStreamToTerminal(state.Err[r.Index]),
+			ApplyStylingForOut: util.IsStreamToTerminal(state.Out[r.Index]),
+		})
+
 		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "Get TLS certificates failure: %v\n", r.Error)
+			targetLogger.Errorf("Get TLS certificates failure: %v\n", r.Error)
 			foundErr = true
 			continue
 		}
 		for i, cert := range r.Resp.Certificates {
 			if c.printPEM {
-				err := pem.Encode(state.Out[r.Index], &pem.Block{
-					Type:  "CERTIFICATE",
-					Bytes: cert.Raw,
-				})
-				if err != nil {
-					fmt.Fprintf(state.Err[r.Index], "unable to encode cert as pem: %v\n", cert.Raw)
+				if len(cert.Raw) == 0 {
+					targetLogger.Errorf("no raw cert available for %v, sansshell-server may be too old to return cert info\n", cert.Subject)
+				} else {
+					err := pem.Encode(state.Out[r.Index], &pem.Block{
+						Type:  "CERTIFICATE",
+						Bytes: cert.Raw,
+					})
+					if err != nil {
+						targetLogger.Errorf("unable to encode cert as pem: %v\n", cert.Raw)
+					}
 				}
 			} else {
-				fmt.Fprintf(state.Out[r.Index], "---Server Certificate--- %d\n", i)
-				fmt.Fprintf(state.Out[r.Index], "Issuer: %v\n", cert.Issuer)
-				fmt.Fprintf(state.Out[r.Index], "Subject: %v\n", cert.Subject)
-				fmt.Fprintf(state.Out[r.Index], "NotBefore: %s\n", time.Unix(cert.NotBefore, 0))
-				fmt.Fprintf(state.Out[r.Index], "NotAfter: %s\n", time.Unix(cert.NotAfter, 0))
-				fmt.Fprintf(state.Out[r.Index], "DNS Names: %v\n", cert.DnsNames)
-				fmt.Fprintf(state.Out[r.Index], "IP Addresses: %v\n\n", cert.IpAddresses)
+				targetLogger.Infof("---Server Certificate--- %d\n", i)
+				targetLogger.Infof("Issuer: %v\n", cliUtils.Colorize(cliUtils.GreenText, cert.Issuer))
+				targetLogger.Infof("Subject: %v\n", cliUtils.Colorize(cliUtils.GreenText, cert.Subject))
+				targetLogger.Infof("NotBefore: %s\n", cliUtils.Colorize(cliUtils.GreenText, time.Unix(cert.NotBefore, 0)))
+				targetLogger.Infof("NotAfter: %s\n", cliUtils.Colorize(cliUtils.GreenText, time.Unix(cert.NotAfter, 0)))
+				targetLogger.Infof("DNS Names: %v\n", cliUtils.Colorize(cliUtils.GreenText, cert.DnsNames))
+				targetLogger.Infof("IP Addresses: %v\n\n", cliUtils.Colorize(cliUtils.GreenText, cert.IpAddresses))
 			}
 		}
 	}
