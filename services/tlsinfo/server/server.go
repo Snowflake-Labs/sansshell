@@ -73,6 +73,7 @@ func (s *server) GetTLSCertificate(ctx context.Context, req *pb.TLSCertificateRe
 			NotBefore: cert.NotBefore.Unix(),
 			NotAfter:  cert.NotAfter.Unix(),
 			DnsNames:  cert.DNSNames,
+			Raw:       cert.Raw,
 		}
 		for _, ipAddr := range cert.IPAddresses {
 			protoCert.IpAddresses = append(protoCert.IpAddresses, ipAddr.String())
