@@ -68,6 +68,12 @@ service LocalFile {
 
   // Mkdir create a new directory.
   rpc Mkdir(MkdirRequest) returns (google.protobuf.Empty) {}
+
+  // Get property from a file of specified type by provided key
+  rpc DataGet(DataGetRequest) returns (DataGetReply) {}
+
+  // Set property from a file of specified type by provided key
+  rpc DataSet(DataSetRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -274,4 +280,39 @@ message SymlinkRequest {
 // MkdirRequest describes the directory
 message MkdirRequest {
   FileAttributes dir_attrs = 1;
+}
+
+// FileFormat enum what represents file formats
+enum FileFormat {
+  UNKNOWN = 0;
+  YML = 1;
+  DOTENV = 2;
+}
+
+// DataGetRequest is request to read data from a specific file in specific format
+message DataGetRequest {
+  string filename = 1;
+  FileFormat file_format = 2;
+  string data_key = 3;
+}
+
+// DataGetReply contains the value of read from file
+message DataGetReply { string value = 1; }
+
+// DataSetValueType enum what represents how represent value in a file
+enum DataSetValueType {
+  UNKNOWN_VAL = 0;
+  STRING_VAL = 1;
+  INT_VAL = 2;
+  FLOAT_VAL = 3;
+  BOOL_VAL = 4;
+}
+
+// DataSetRequest is request to set property in a specific file in specific format
+message DataSetRequest {
+  string filename = 1;
+  FileFormat file_format = 2;
+  string data_key = 3;
+  string value = 4;
+  DataSetValueType value_type = 5;
 }

@@ -33,6 +33,7 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/Snowflake-Labs/sansshell/services/localfile/client/infrastructure/input"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
@@ -44,6 +45,9 @@ func init() {
 
 func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
+
+	dataGetCmd := input.NewDataGetCmd()
+	dataSetCmd := input.NewDataSetCmd()
 	c.Register(&chgrpCmd{}, "")
 	c.Register(&chmodCmd{}, "")
 	c.Register(&chownCmd{}, "")
@@ -51,6 +55,8 @@ func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&immutableCmd{}, "")
 	c.Register(&lsCmd{}, "")
 	c.Register(&readCmd{}, "")
+	c.Register(dataGetCmd, "")
+	c.Register(dataSetCmd, "")
 	c.Register(&readlinkCmd{}, "")
 	c.Register(&renameCmd{}, "")
 	c.Register(&rmCmd{}, "")

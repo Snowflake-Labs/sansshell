@@ -24,6 +24,8 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
+	app "github.com/Snowflake-Labs/sansshell/services/localfile/server/application"
+	"github.com/Snowflake-Labs/sansshell/services/localfile/server/infrastructure/output/file-data"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -93,6 +95,10 @@ var (
 		Description: "number of failures when performing localfile.SetFileAttribute"}
 	localfileMkdirFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_mkdir_failure",
 		Description: "number of failures when performing localfile.Mkdir"}
+	localfileDataGetFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_dataget_failure",
+		Description: "number of failures when performing localfile.DataGet"}
+	localfileDataSetFailureCounter = metrics.MetricDefinition{Name: "actions_localfile_dataset_failure",
+		Description: "number of failures when performing localfile.DataSet"}
 )
 
 // This encompasses the permission plus the setuid/gid/sticky bits one
@@ -825,6 +831,65 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 
 	if immutable.immutable && immutable.setImmutable {
 		return nil, status.Errorf(codes.Internal, "error on setting immutable when creating a directory")
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *server) DataGet(ctx context.Context, req *pb.DataGetRequest) (*pb.DataGetReply, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	logger.Info("Data Get request", "filename:", req.Filename, "fileformat:", req.FileFormat, "datakey:", req.DataKey)
+
+	fileFactory := file_data.NewFileDataRepositoryFactory()
+	usecase := app.NewDataGetUsecase(fileFactory)
+
+	val, err := usecase.Run(ctx, req.Filename, req.DataKey, req.FileFormat)
+	if err != nil {
+		switch err.Code() {
+		case app.DataGetErrorCodes_FilePathInvalid:
+			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "invalid_path"))
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		case app.DataGetErrorCodes_FileFormatNotSupported:
+			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unsupported_file_format"))
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		case app.DataGetErrorCodes_CouldNotGetData:
+			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "could_not_get_data"))
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+
+		recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unknown_err"))
+		return nil, status.Errorf(codes.Unknown, err.Error())
+	}
+
+	logger.Info("Data Get response", "value:", val)
+	return &pb.DataGetReply{Value: val}, nil
+}
+
+func (s *server) DataSet(ctx context.Context, req *pb.DataSetRequest) (*emptypb.Empty, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	logger.Info("Data Set request", "filename:", req.Filename, "FileFormat:", req.FileFormat, "DataKey:", req.DataKey, "ValueType:", req.ValueType, "Value:", req.Value)
+
+	fileFactory := file_data.NewFileDataRepositoryFactory()
+	usecase := app.NewDataSetUsecase(fileFactory)
+
+	err := usecase.Run(ctx, req.Filename, req.DataKey, req.FileFormat, req.Value, req.ValueType)
+	if err != nil {
+		switch err.Code() {
+		case app.DataSetErrorCodes_FilePathInvalid:
+			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "invalid_path"))
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		case app.DataSetErrorCodes_FileFormatNotSupported:
+			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "unsupported_file_format"))
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		case app.DataSetErrorCodes_CouldNotSetData:
+			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "could_not_set_data"))
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
+
+		recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unknown_err"))
+		return nil, status.Errorf(codes.Unknown, err.Error())
 	}
 
 	return &emptypb.Empty{}, nil
