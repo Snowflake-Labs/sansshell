@@ -158,7 +158,7 @@ func toYamlVal(val string, t pb.DataSetValueType) (string, yaml.Style, error) {
 	case pb.DataSetValueType_INT_VAL, pb.DataSetValueType_FLOAT_VAL:
 		return val, yaml.FlowStyle, nil
 	case pb.DataSetValueType_STRING_VAL:
-		if stringUtils.IsAlphanumeric(val) == false {
+		if !stringUtils.IsAlphanumeric(val) {
 			return val, yaml.DoubleQuotedStyle, nil
 		}
 

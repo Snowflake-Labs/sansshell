@@ -55,5 +55,5 @@ func (e *errorWithCode[T]) Code() T {
 
 // String implements the [fmt.Stringer] interface for ErrorWithCode.
 func (e *errorWithCode[T]) String() string {
-	return fmt.Sprintf("[%s] %s", e.code, e.Message)
+	return fmt.Sprintf("[%v] %s", e.code, e.Message)
 }
