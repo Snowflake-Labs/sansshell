@@ -40,8 +40,7 @@ var (
 // DataGetUsecase usecase interface for getting data from file of specific format by provided data key
 type DataGetUsecase interface {
 	// Run gets data from file by provided data key
-	//   Returns data value or error if data key not found
-	//   Returns error with code [error_utils.ErrorWithCode[DataGetErrorCodes]]
+	//   Returns data value or [error_utils.ErrorWithCode[DataGetErrorCodes]] if error occurred
 	Run(ctx context.Context, filePath string, dataKey string, fileFormat pb.FileFormat) (string, error_utils.ErrorWithCode[DataGetErrorCodes])
 }
 

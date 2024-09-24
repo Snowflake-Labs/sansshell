@@ -39,6 +39,8 @@ var (
 
 // DataSetUsecase usecase interface for set data to file of specific format by provided data key
 type DataSetUsecase interface {
+	// Run sets data to file by provided data key
+	//   Returns [error_utils.ErrorWithCode[DataSetErrorCodes]] if error occurred
 	Run(ctx context.Context, filePath string, dataKey string, fileFormat pb.FileFormat, value string, valueType pb.DataSetValueType) error_utils.ErrorWithCode[DataSetErrorCodes]
 }
 
