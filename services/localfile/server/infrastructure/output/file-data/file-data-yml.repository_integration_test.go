@@ -120,7 +120,9 @@ root:
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 				return
 			}
-			defer release()
+			defer (func() {
+				_ = release()
+			})()
 
 			// ACT
 			result, err := repo.GetDataByKey(filePath, test.key)
@@ -172,7 +174,9 @@ root:
 			t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 			return
 		}
-		defer release()
+		defer (func() {
+			_ = release()
+		})()
 		expectedError := "failed to parse file: yaml: found character that cannot start any token"
 
 		// ACT
@@ -325,7 +329,9 @@ func Test_FileDataYmlRepository_SetDataByKey(t *testing.T) {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 				return
 			}
-			defer release()
+			defer (func() {
+				_ = release()
+			})()
 
 			// ACT
 			err = repo.SetDataByKey(filePath, test.yamlPath, test.newValue, test.valueType)
@@ -365,7 +371,9 @@ func Test_FileDataYmlRepository_SetDataByKey(t *testing.T) {
 			t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 			return
 		}
-		defer release()
+		defer (func() {
+			_ = release()
+		})()
 		expectedError := "failed to parse yaml: yaml: found character that cannot start any token"
 
 		// ACT

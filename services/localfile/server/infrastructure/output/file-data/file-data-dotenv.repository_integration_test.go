@@ -60,7 +60,9 @@ SOME_OTHER=VAR_VAL
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 				return
 			}
-			defer release()
+			defer (func() {
+				_ = release()
+			})()
 
 			// ACT
 			result, err := repo.GetDataByKey(filePath, test.key)
@@ -112,7 +114,9 @@ SOME_OTHER=VAR_VAL
 			t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 			return
 		}
-		defer release()
+		defer (func() {
+			_ = release()
+		})()
 		expectedError := "failed to read file"
 
 		// ACT
@@ -265,7 +269,9 @@ func Test_FileDataDonEnvRepository_SetDataByKey(t *testing.T) {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 				return
 			}
-			defer release()
+			defer (func() {
+				_ = release()
+			})()
 
 			// ACT
 			err = repo.SetDataByKey(filePath, test.yamlPath, test.newValue, test.valueType)
@@ -305,7 +311,9 @@ func Test_FileDataDonEnvRepository_SetDataByKey(t *testing.T) {
 			t.Errorf("Unexpected tmp file creation error: %s", err.Error())
 			return
 		}
-		defer release()
+		defer (func() {
+			_ = release()
+		})()
 		expectedError := "failed to parse yaml: yaml: found character that cannot start any token"
 
 		// ACT

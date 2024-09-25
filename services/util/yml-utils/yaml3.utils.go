@@ -382,15 +382,15 @@ func getPathToNode(path Yaml3PathNode) string {
 	current := root
 	builder := strings.Builder{}
 	for current != nil {
-		switch current.(type) {
+		switch v := current.(type) {
 		case *yaml3PathGetFromRoot:
 			builder.WriteString("$")
 		case *yaml3PathGetByKey:
 			builder.WriteString(".")
-			builder.WriteString((current.(*yaml3PathGetByKey)).key)
+			builder.WriteString(v.key)
 		case *yaml3PathGetByIndex:
 			builder.WriteString("[")
-			builder.WriteString(strconv.Itoa((current.(*yaml3PathGetByIndex)).index))
+			builder.WriteString(strconv.Itoa(v.index))
 			builder.WriteString("]")
 		default:
 			panic(fmt.Sprintf("unknown path node type: %v", current))
