@@ -33,17 +33,17 @@ func Test__dataSetUsecase__Run(t *testing.T) {
 		{
 			name:            "It should fail if open file path provided",
 			invalidFilePath: "/not-clear/file/path/",
-			expectedError:   "invalid file path: rpc error: code = InvalidArgument desc = /not-clear/file/path/ must be a clean path",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = /not-clear/file/path/ must be a clean path",
 		},
 		{
 			name:            "It should fail if relative file path provided",
 			invalidFilePath: "./relative/path",
-			expectedError:   "invalid file path: rpc error: code = InvalidArgument desc = ./relative/path must be an absolute path",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = ./relative/path must be an absolute path",
 		},
 		{
 			name:            "It should fail if parent directory relative file path provided",
 			invalidFilePath: "../parent-dir/relative/path",
-			expectedError:   "invalid file path: rpc error: code = InvalidArgument desc = ../parent-dir/relative/path must be an absolute path",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = ../parent-dir/relative/path must be an absolute path",
 		},
 	}
 
@@ -108,7 +108,7 @@ func Test__dataSetUsecase__Run(t *testing.T) {
 		// ARRANGE
 		// create error on set specific key
 		expectedDataError := "some error"
-		expectedError := "could not get data by \"dataKey\" key: some error"
+		expectedError := "[3]: could not set data by \"dataKey\" key: some error"
 		filePath := "/some/file/path"
 		dataKey := "dataKey"
 		errorOnSetKey := make(map[string]map[string]string)
@@ -117,7 +117,7 @@ func Test__dataSetUsecase__Run(t *testing.T) {
 
 		// create repo and factory mocks
 		dataMap := make(map[string]map[string]string)
-		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey)
+		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey, nil)
 		instanceMap := make(map[pb.FileFormat]file_data.FileDataRepository)
 		instanceMap[pb.FileFormat_YML] = repoMock
 		repoFactoryMock := NewFileDataRepositoryFactoryMock(instanceMap)
@@ -152,7 +152,7 @@ func Test__dataSetUsecase__Run(t *testing.T) {
 		dataMap[filePath] = make(map[string]string)
 		dataMap[filePath][dataKey] = expectedData
 		errorOnSetKey := make(map[string]map[string]string)
-		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey)
+		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey, nil)
 
 		instanceMap := make(map[pb.FileFormat]file_data.FileDataRepository)
 		instanceMap[pb.FileFormat_YML] = repoMock

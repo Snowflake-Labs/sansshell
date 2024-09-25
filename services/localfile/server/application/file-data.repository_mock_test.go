@@ -48,19 +48,25 @@ func (f *fileDataRepositoryFactoryMock) GetRepository(ctx context.Context, fileF
 // -----------------------------------------------------------------------------
 // FileDataRepositoryMock implementation
 // -----------------------------------------------------------------------------
-func NewFileDataRepositoryMock(dataByFileByKey map[string]map[string]string, errorOnSetKey map[string]map[string]string) file_data.FileDataRepository {
+func NewFileDataRepositoryMock(dataByFileByKey map[string]map[string]string, errorOnSetKey map[string]map[string]string, errorOnGetKey map[string]map[string]string) file_data.FileDataRepository {
 	return &fileDataRepositoryMock{
 		dataByKey:     dataByFileByKey,
 		errorOnSetKey: errorOnSetKey,
+		errorOnGetKey: errorOnGetKey,
 	}
 }
 
 type fileDataRepositoryMock struct {
 	dataByKey     map[string]map[string]string
 	errorOnSetKey map[string]map[string]string
+	errorOnGetKey map[string]map[string]string
 }
 
 func (f *fileDataRepositoryMock) GetDataByKey(filePath string, key string) (string, error) {
+	if val, ok := f.errorOnGetKey[filePath][key]; ok {
+		return "", errors.New(val)
+	}
+
 	if value, ok := f.dataByKey[filePath][key]; ok {
 		return value, nil
 	}

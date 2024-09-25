@@ -32,7 +32,7 @@ func TestIntegration_OpenForOverwrite(t *testing.T) {
 	t.Run("It should open file and being able read it", func(t *testing.T) {
 		// ARRANGE
 		filePath := "./__testdata__/TestIntegrationOpenForOverwrite.test"
-		expectedFileContent := "hello world"
+		expectedFileContent := "Hello world"
 
 		// ACT
 		f, err := OpenForOverwrite(filePath)
@@ -53,7 +53,7 @@ func TestIntegration_OpenForOverwrite(t *testing.T) {
 
 		text := string(result)
 		if text != expectedFileContent {
-			t.Errorf("Expected %s, but got %s", expectedFileContent, text)
+			t.Errorf("Expected \"%s\", but got \"%s\"", expectedFileContent, text)
 			return
 		}
 	})

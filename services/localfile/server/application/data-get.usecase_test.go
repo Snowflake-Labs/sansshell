@@ -33,17 +33,17 @@ func Test__dataGetUsecase__Run(t *testing.T) {
 		{
 			name:            "It should fail if open file path provided",
 			invalidFilePath: "/not-clear/file/path/",
-			expectedError:   "",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = /not-clear/file/path/ must be a clean path",
 		},
 		{
 			name:            "It should fail if relative file path provided",
 			invalidFilePath: "./relative/path",
-			expectedError:   "",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = ./relative/path must be an absolute path",
 		},
 		{
 			name:            "It should fail if parent directory relative file path provided",
 			invalidFilePath: "../parent-dir/relative/path",
-			expectedError:   "",
+			expectedError:   "[1]: invalid file path: rpc error: code = InvalidArgument desc = ../parent-dir/relative/path must be an absolute path",
 		},
 	}
 
@@ -107,11 +107,14 @@ func Test__dataGetUsecase__Run(t *testing.T) {
 	t.Run("It should fail if file repo return error", func(t *testing.T) {
 		// ARRANGE
 		dataMap := make(map[string]map[string]string)
-		expectedError := "some error"
-		errorOnSetKey := make(map[string]map[string]string)
-		errorOnSetKey["/some/file/path"] = make(map[string]string)
-		errorOnSetKey["/some/file/path"]["dataKey"] = expectedError
-		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey)
+		keyError := "some error"
+		expectedError := "[3]: could not get data by \"dataKey\" key: some error"
+		filePath := "/some/file/path"
+		dataKey := "dataKey"
+		errorOnGetKey := make(map[string]map[string]string)
+		errorOnGetKey[filePath] = make(map[string]string)
+		errorOnGetKey[filePath][dataKey] = keyError
+		repoMock := NewFileDataRepositoryMock(dataMap, nil, errorOnGetKey)
 
 		instanceMap := make(map[pb.FileFormat]file_data.FileDataRepository)
 		instanceMap[pb.FileFormat_YML] = repoMock
@@ -122,7 +125,7 @@ func Test__dataGetUsecase__Run(t *testing.T) {
 		ctx := context.Background()
 
 		// ACT
-		_, err := usecase.Run(ctx, "/some/file/path", "dataKey", pb.FileFormat_YML)
+		_, err := usecase.Run(ctx, filePath, dataKey, pb.FileFormat_YML)
 
 		// ASSERT
 		if err == nil {
@@ -131,7 +134,7 @@ func Test__dataGetUsecase__Run(t *testing.T) {
 		}
 
 		if err.Error() != expectedError {
-			t.Errorf("Expected error %s, got %s", expectedError, err.Error())
+			t.Errorf("Expected error \"%s\", got \"%s\"", expectedError, err.Error())
 			return
 		}
 	})
@@ -144,8 +147,7 @@ func Test__dataGetUsecase__Run(t *testing.T) {
 		dataMap := make(map[string]map[string]string)
 		dataMap[filePath] = make(map[string]string)
 		dataMap[filePath][dataKey] = expectedData
-		errorOnSetKey := make(map[string]map[string]string)
-		repoMock := NewFileDataRepositoryMock(dataMap, errorOnSetKey)
+		repoMock := NewFileDataRepositoryMock(dataMap, nil, nil)
 
 		instanceMap := make(map[pb.FileFormat]file_data.FileDataRepository)
 		instanceMap[pb.FileFormat_YML] = repoMock
