@@ -18,6 +18,7 @@ Copyright (c) 2019 Snowflake Inc. All rights reserved.
 package application
 
 import (
+	"context"
 	"errors"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/localfile/server/infrastructure/output/file-data"
@@ -36,7 +37,7 @@ type fileDataRepositoryFactoryMock struct {
 	instanceMap map[pb.FileFormat]file_data.FileDataRepository
 }
 
-func (f *fileDataRepositoryFactoryMock) GetRepository(fileFormat pb.FileFormat) (file_data.FileDataRepository, error) {
+func (f *fileDataRepositoryFactoryMock) GetRepository(ctx context.Context, fileFormat pb.FileFormat) (file_data.FileDataRepository, error) {
 	if instanceMap, ok := f.instanceMap[fileFormat]; ok {
 		return instanceMap, nil
 	}
