@@ -114,7 +114,7 @@ root:
 	for _, test := range validYmlTests {
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			repo := &FileDataYmlRepository{}
+			repo := &fileDataYmlRepository{}
 			release, filePath, err := writeStringToTmpFile(t, "test.yml", validYml)
 			if err != nil {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
@@ -145,7 +145,7 @@ root:
 
 	t.Run("It should fail if file no exists", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataYmlRepository{}
+		repo := &fileDataYmlRepository{}
 		expectedError := "failed to read file content: open not_existed_file.yml: no such file or directory"
 
 		// ACT
@@ -165,7 +165,7 @@ root:
 
 	t.Run("It should fail if file contains not valid yml", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataYmlRepository{}
+		repo := &fileDataYmlRepository{}
 		yml := "@some: not valid yml"
 		release, filePath, err := writeStringToTmpFile(t, "test.yml", yml)
 		if err != nil {
@@ -319,7 +319,7 @@ func Test_FileDataYmlRepository_SetDataByKey(t *testing.T) {
 	for _, test := range validYmlTests {
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			repo := &FileDataYmlRepository{}
+			repo := &fileDataYmlRepository{}
 			release, filePath, err := writeStringToTmpFile(t, "test.yml", validSourceYaml)
 			if err != nil {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
@@ -358,7 +358,7 @@ func Test_FileDataYmlRepository_SetDataByKey(t *testing.T) {
 
 	t.Run("It should fail if file contains not valid yml", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataYmlRepository{}
+		repo := &fileDataYmlRepository{}
 		yml := "@some: not valid yml"
 		release, filePath, err := writeStringToTmpFile(t, "test.yml", yml)
 		if err != nil {

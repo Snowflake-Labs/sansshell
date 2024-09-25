@@ -65,7 +65,7 @@ func (u *dataGetUsecase) Run(ctx context.Context, filePath string, dataKey strin
 		return "", error_utils.NewErrorWithCodef(DataGetErrorCodes_FilePathInvalid, "invalid file path: %s", err.Error())
 	}
 
-	fileDataRepo, err := u.fileDataRepoFactory.GetRepository(fileFormat)
+	fileDataRepo, err := u.fileDataRepoFactory.GetRepository(ctx, fileFormat)
 	if err != nil {
 		logger.Error(err, "unsupported file format", "format name", fileFormat.String(), "file path", filePath)
 		return "", error_utils.NewErrorWithCodef(DataGetErrorCodes_FileFormatNotSupported, "file fromat is not supported \"%s\" format", fileFormat.String())

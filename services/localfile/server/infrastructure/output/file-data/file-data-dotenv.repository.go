@@ -18,25 +18,30 @@ Copyright (c) 2019 Snowflake Inc. All rights reserved.
 package file_data
 
 import (
+	"context"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	arrayUtils "github.com/Snowflake-Labs/sansshell/services/util/array-utils"
 	fileUtils "github.com/Snowflake-Labs/sansshell/services/util/file-utils"
+	"github.com/go-logr/logr"
 	"github.com/joho/godotenv"
 	"io"
 	"strings"
 )
 
-func newDotEnvFileDataRepository() FileDataRepository {
-	return &FileDataDotEnvRepository{}
+func newDotEnvFileDataRepository(context context.Context) FileDataRepository {
+	return &fileDataDotEnvRepository{
+		context: context,
+	}
 }
 
-// FileDataDotEnvRepository implementation of [application.FileDataRepository] interface
-type FileDataDotEnvRepository struct {
+// fileDataDotEnvRepository implementation of [application.FileDataRepository] interface
+type fileDataDotEnvRepository struct {
+	context context.Context
 }
 
 // GetDataByKey implementation of [application.FileDataRepository.GetDataByKey] interface
-func (y *FileDataDotEnvRepository) GetDataByKey(filePath string, key string) (string, error) {
+func (y *fileDataDotEnvRepository) GetDataByKey(filePath string, key string) (string, error) {
 	envMap, err := godotenv.Read(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file")
@@ -50,7 +55,7 @@ func (y *FileDataDotEnvRepository) GetDataByKey(filePath string, key string) (st
 }
 
 // SetDataByKey implementation of [application.FileDataRepository.SetDataByKey] interface
-func (y *FileDataDotEnvRepository) SetDataByKey(filePath string, key string, value string, valType pb.DataSetValueType) error {
+func (y *fileDataDotEnvRepository) SetDataByKey(filePath string, key string, value string, valType pb.DataSetValueType) error {
 	if valType != pb.DataSetValueType_STRING_VAL {
 		return fmt.Errorf("unsupported value type: %s", valType)
 	}
@@ -66,7 +71,11 @@ func (y *FileDataDotEnvRepository) SetDataByKey(filePath string, key string, val
 	if err != nil {
 		return fmt.Errorf("failed to lock file: %s", err)
 	}
-	defer unlock() // Unlock the file when done
+	defer (func() {
+		logger := logr.FromContextOrDiscard(y.context)
+		err := unlock() // unlock the file when done
+		logger.Error(err, "failed to unlock file")
+	})()
 
 	r := io.Reader(f)
 	rawContent, err := io.ReadAll(r)
@@ -81,11 +90,13 @@ func (y *FileDataDotEnvRepository) SetDataByKey(filePath string, key string, val
 	varLineIndex := arrayUtils.FindIndexBy(lines, func(line string) bool {
 		return strings.HasPrefix(line, varLinePrefix)
 	})
+
 	if varLineIndex == -1 {
-		return fmt.Errorf("key \"%s\" not found", key)
+		lines = append(lines, escapeDotEnvVarValue(key)+"="+escapeDotEnvVarValue(value))
+	} else {
+		lines[varLineIndex] = key + "=" + escapeDotEnvVarValue(value)
 	}
 
-	lines[varLineIndex] = key + "=" + escapeDotEnvVarValue(value)
 	updatedContent := strings.Join(lines, "\n")
 
 	if _, err := f.Seek(0, 0); err != nil {

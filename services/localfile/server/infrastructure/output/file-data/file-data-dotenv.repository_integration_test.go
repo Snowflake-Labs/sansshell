@@ -54,7 +54,7 @@ SOME_OTHER=VAR_VAL
 	for _, test := range validYmlTests {
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			repo := &FileDataDotEnvRepository{}
+			repo := &fileDataDotEnvRepository{}
 			release, filePath, err := writeStringToTmpFile(t, "test.yml", validDotEnv)
 			if err != nil {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
@@ -85,7 +85,7 @@ SOME_OTHER=VAR_VAL
 
 	t.Run("It should fail if file no exists", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataDotEnvRepository{}
+		repo := &fileDataDotEnvRepository{}
 		expectedError := "failed to read file"
 
 		// ACT
@@ -105,7 +105,7 @@ SOME_OTHER=VAR_VAL
 
 	t.Run("It should fail if file contains not valid dotenv", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataDotEnvRepository{}
+		repo := &fileDataDotEnvRepository{}
 		yml := "^INVALID VAR=VALUE"
 		release, filePath, err := writeStringToTmpFile(t, "test.env", yml)
 		if err != nil {
@@ -259,7 +259,7 @@ func Test_FileDataDonEnvRepository_SetDataByKey(t *testing.T) {
 	for _, test := range validYmlTests {
 		t.Run(test.name, func(t *testing.T) {
 			// ARRANGE
-			repo := &FileDataYmlRepository{}
+			repo := &fileDataYmlRepository{}
 			release, filePath, err := writeStringToTmpFile(t, "test.yml", validSourceYaml)
 			if err != nil {
 				t.Errorf("Unexpected tmp file creation error: %s", err.Error())
@@ -298,7 +298,7 @@ func Test_FileDataDonEnvRepository_SetDataByKey(t *testing.T) {
 
 	t.Run("It should fail if file contains not valid yml", func(t *testing.T) {
 		// ARRANGE
-		repo := &FileDataYmlRepository{}
+		repo := &fileDataYmlRepository{}
 		yml := "@some: not valid yml"
 		release, filePath, err := writeStringToTmpFile(t, "test.yml", yml)
 		if err != nil {

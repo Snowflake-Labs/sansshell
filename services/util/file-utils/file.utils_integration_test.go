@@ -106,6 +106,10 @@ func TestIntegration_OpenForOverwrite(t *testing.T) {
 		})()
 		// set for file expected file mode
 		err = os.Chmod(tmpPath, expectedFileMode)
+		if err != nil {
+			t.Errorf("Unexpected chmod error: %s", err.Error())
+			return
+		}
 
 		// ACT
 		f, err := OpenForOverwrite(tmpPath)
@@ -194,7 +198,7 @@ func TestIntegration_ExclusiveLockFile(t *testing.T) {
 			time.Sleep(5 * time.Second) // Simulate work
 
 			firstUnlockTime = time.Now()
-			releaseFn()
+			_ = releaseFn()
 			wg.Done()
 		})()
 		go (func() {
@@ -204,7 +208,7 @@ func TestIntegration_ExclusiveLockFile(t *testing.T) {
 				t.Errorf("Unexpected lock error: %s", err.Error())
 				return
 			}
-			releaseFn()
+			_ = releaseFn()
 			wg.Done()
 		})()
 		wg.Wait()

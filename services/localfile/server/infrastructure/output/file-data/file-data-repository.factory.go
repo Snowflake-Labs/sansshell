@@ -18,6 +18,7 @@ Copyright (c) 2019 Snowflake Inc. All rights reserved.
 package file_data
 
 import (
+	"context"
 	"errors"
 )
 import pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -33,7 +34,7 @@ type FileDataRepository interface {
 // FileDataRepositoryFactory is an interface to get a new [FileDataRepository] by file format
 type FileDataRepositoryFactory interface {
 	// GetRepository Get [FileDataRepository] by file format
-	GetRepository(fileFormat pb.FileFormat) (FileDataRepository, error)
+	GetRepository(context context.Context, fileFormat pb.FileFormat) (FileDataRepository, error)
 }
 
 // NewFileDataRepositoryFactory creates a new instance of [application.FileDataRepositoryFactory]
@@ -46,12 +47,12 @@ type fileDataReaderFactory struct {
 }
 
 // GetRepository implementation of [application.FileDataRepositoryFactory.GetRepository] interface
-func (f *fileDataReaderFactory) GetRepository(fileFormat pb.FileFormat) (FileDataRepository, error) {
+func (f *fileDataReaderFactory) GetRepository(context context.Context, fileFormat pb.FileFormat) (FileDataRepository, error) {
 	switch fileFormat {
 	case pb.FileFormat_YML:
-		return newFileDataYmlRepository(), nil
+		return newFileDataYmlRepository(context), nil
 	case pb.FileFormat_DOTENV:
-		return newDotEnvFileDataRepository(), nil
+		return newDotEnvFileDataRepository(context), nil
 	default:
 
 		return nil, errors.New("Unsupported file type")

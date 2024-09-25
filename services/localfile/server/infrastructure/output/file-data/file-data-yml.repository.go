@@ -18,11 +18,13 @@ Copyright (c) 2019 Snowflake Inc. All rights reserved.
 package file_data
 
 import (
+	"context"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	fileUtils "github.com/Snowflake-Labs/sansshell/services/util/file-utils"
 	stringUtils "github.com/Snowflake-Labs/sansshell/services/util/string-utils"
 	yaml3Utils "github.com/Snowflake-Labs/sansshell/services/util/yml-utils"
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 	"io"
@@ -31,16 +33,19 @@ import (
 )
 
 // NewFileDataYmlRepository creates a new instance of [application.FileDataRepository]
-func newFileDataYmlRepository() FileDataRepository {
-	return &FileDataYmlRepository{}
+func newFileDataYmlRepository(context context.Context) FileDataRepository {
+	return &fileDataYmlRepository{
+		context: context,
+	}
 }
 
-// FileDataYmlRepository implementation of [application.FileDataRepository] interface
-type FileDataYmlRepository struct {
+// fileDataYmlRepository implementation of [application.FileDataRepository] interface
+type fileDataYmlRepository struct {
+	context context.Context
 }
 
 // GetDataByKey implementation of [application.FileDataRepository.GetDataByKey] interface
-func (y *FileDataYmlRepository) GetDataByKey(filePath string, key string) (string, error) {
+func (y *fileDataYmlRepository) GetDataByKey(filePath string, key string) (string, error) {
 	path, err := yaml3Utils.ParseYmlPath(key)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to parse key")
@@ -67,7 +72,7 @@ func (y *FileDataYmlRepository) GetDataByKey(filePath string, key string) (strin
 }
 
 // SetDataByKey implementation of [application.FileDataRepository.SetDataByKey] interface
-func (y *FileDataYmlRepository) SetDataByKey(filePath string, key string, value string, valType pb.DataSetValueType) error {
+func (y *fileDataYmlRepository) SetDataByKey(filePath string, key string, value string, valType pb.DataSetValueType) error {
 	path, err := yaml3Utils.ParseYmlPath(key)
 	if err != nil {
 		return fmt.Errorf("failed to parse path: %s", err)
@@ -85,7 +90,11 @@ func (y *FileDataYmlRepository) SetDataByKey(filePath string, key string, value 
 		return fmt.Errorf("failed to lock file: %s", err)
 	}
 
-	defer unlock() // unlock the file when done
+	defer (func() {
+		logger := logr.FromContextOrDiscard(y.context)
+		err := unlock() // unlock the file when done
+		logger.Error(err, "failed to unlock file")
+	})()
 
 	reader := io.Reader(f)
 	yamlFile, err := io.ReadAll(reader)

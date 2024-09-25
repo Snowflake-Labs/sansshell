@@ -849,17 +849,17 @@ func (s *server) DataGet(ctx context.Context, req *pb.DataGetRequest) (*pb.DataG
 		switch err.Code() {
 		case app.DataGetErrorCodes_FilePathInvalid:
 			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "invalid_path"))
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		case app.DataGetErrorCodes_FileFormatNotSupported:
 			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unsupported_file_format"))
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		case app.DataGetErrorCodes_CouldNotGetData:
 			recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "could_not_get_data"))
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unknown_err"))
-		return nil, status.Errorf(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
 	logger.Info("Data Get response", "value:", val)
@@ -879,17 +879,17 @@ func (s *server) DataSet(ctx context.Context, req *pb.DataSetRequest) (*emptypb.
 		switch err.Code() {
 		case app.DataSetErrorCodes_FilePathInvalid:
 			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "invalid_path"))
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		case app.DataSetErrorCodes_FileFormatNotSupported:
 			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "unsupported_file_format"))
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		case app.DataSetErrorCodes_CouldNotSetData:
 			recorder.CounterOrLog(ctx, localfileDataSetFailureCounter, 1, attribute.String("reason", "could_not_set_data"))
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 
 		recorder.CounterOrLog(ctx, localfileDataGetFailureCounter, 1, attribute.String("reason", "unknown_err"))
-		return nil, status.Errorf(codes.Unknown, err.Error())
+		return nil, status.Error(codes.Unknown, err.Error())
 	}
 
 	return &emptypb.Empty{}, nil
