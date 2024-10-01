@@ -16,16 +16,6 @@
 
 package array_utils
 
-// IsInArray checks if value is in array
-func IsInArray[T comparable](arr []T, value T) bool {
-	for _, v := range arr {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
-
 // FindIndexBy finds the index of value in array
 func FindIndexBy[T comparable](arr []T, predicate func(val T) bool) int {
 	for i, v := range arr {

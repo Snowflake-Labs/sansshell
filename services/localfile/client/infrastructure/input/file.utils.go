@@ -27,9 +27,7 @@ func getFileTypeFromPath(filePath string) (pb.FileFormat, error) {
 	fileExt := filepath.Ext(filePath)
 
 	switch fileExt {
-	case ".yml":
-		return pb.FileFormat_YML, nil
-	case ".yaml":
+	case ".yml", ".yaml":
 		return pb.FileFormat_YML, nil
 	case ".env":
 		return pb.FileFormat_DOTENV, nil

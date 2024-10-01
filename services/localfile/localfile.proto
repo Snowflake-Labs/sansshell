@@ -69,10 +69,10 @@ service LocalFile {
   // Mkdir create a new directory.
   rpc Mkdir(MkdirRequest) returns (google.protobuf.Empty) {}
 
-  // Get property from a file of specified type by provided key
+  // Get data from a file of specified type by provided key
   rpc DataGet(DataGetRequest) returns (DataGetReply) {}
 
-  // Set property from a file of specified type by provided key
+  // Set data value to a file of specified type by provided key
   rpc DataSet(DataSetRequest) returns (google.protobuf.Empty) {}
 }
 

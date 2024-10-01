@@ -21,40 +21,6 @@ import (
 	"testing"
 )
 
-func Test_IsInArray(t *testing.T) {
-	tests := []struct {
-		name           string
-		arr            []int
-		value          int
-		expectedResult bool
-	}{
-		{
-			name:           "It should return true if value is in array",
-			arr:            []int{1, 2, 3, 4, 5},
-			value:          3,
-			expectedResult: true,
-		},
-		{
-			name:           "It should return false if value is not in array",
-			arr:            []int{1, 2, 3, 4, 5},
-			value:          6,
-			expectedResult: false,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			// ACT
-			result := IsInArray(test.arr, test.value)
-
-			// ASSERT
-			if result != test.expectedResult {
-				t.Errorf("Expected %t, but got %t", test.expectedResult, result)
-			}
-		})
-	}
-}
-
 func Test_FindIndexBy(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -88,7 +88,7 @@ type LocalFileClient interface {
 	Symlink(ctx context.Context, in *SymlinkRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Mkdir create a new directory.
 	Mkdir(ctx context.Context, in *MkdirRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Get property from a file of specified type by provided key
+	// Get data from a file of specified type by provided key
 	DataGet(ctx context.Context, in *DataGetRequest, opts ...grpc.CallOption) (*DataGetReply, error)
 	// Set property from a file of specified type by provided key
 	DataSet(ctx context.Context, in *DataSetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -317,7 +317,7 @@ type LocalFileServer interface {
 	Mkdir(context.Context, *MkdirRequest) (*emptypb.Empty, error)
 	// Get property from a file of specified type by provided key
 	DataGet(context.Context, *DataGetRequest) (*DataGetReply, error)
-	// Set property from a file of specified type by provided key
+	// Set data value to a file of specified type by provided key
 	DataSet(context.Context, *DataSetRequest) (*emptypb.Empty, error)
 }
 
