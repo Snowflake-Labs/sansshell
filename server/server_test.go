@@ -75,7 +75,7 @@ func stopSoon(s *grpc.Server) {
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
 	s, err := BuildServer(
-		WithCredentials((insecure.NewCredentials())),
+		WithInsecure(),
 		WithPolicy(policy),
 		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
 	)
@@ -127,6 +127,51 @@ func TestServe(t *testing.T) {
 		WithOnStartListener(stopSoon),
 	)
 	testutil.FatalOnErr("Serve 127.0.0.1:0 with extra interceptors", err, t)
+}
+
+func TestServeUnix(t *testing.T) {
+	socketPath := t.TempDir() + "/test.sock"
+	err := ServeUnix(socketPath, nil)
+	testutil.FatalOnNoErr("empty policy", err, t)
+
+	// If an existing directory path is given as the socket path, we
+	// should fail to start server.
+	err = ServeUnix(t.TempDir(), nil, WithPolicy(policy))
+	testutil.FatalOnNoErr("ServeUnix with directory path", err, t)
+
+	// If the socket already exists, it's OK - it will be removed.
+	_, err = net.Listen("unix", socketPath)
+	testutil.FatalOnErr("creating socket file in test", err, t)
+	fileInfo, err := os.Stat(socketPath)
+	testutil.FatalOnErr("getting file info of socket file", err, t)
+	if fileInfo.Mode()&os.ModeSocket == 0 {
+		t.Fatalf("created socket file is not a socket")
+	}
+	err = ServeUnix(socketPath,
+		nil,
+		WithPolicy(policy),
+		WithOnStartListener(stopSoon))
+	testutil.FatalOnErr("ServeUnix with existing socket", err, t)
+
+	// Test the WithSocketConfigHook feature.
+	// We set the socket to be world-writable, and check that
+	// the hook gets called.
+	err = ServeUnix(socketPath,
+		func(sp string) error {
+			return os.Chmod(sp, os.FileMode(0667))
+		},
+		WithPolicy(policy),
+		WithOnStartListener(
+			func(srv *grpc.Server) {
+				time.Sleep(50 * time.Millisecond)
+				stat, err := os.Stat(socketPath)
+				testutil.FatalOnErr("getting socket file info", err, t)
+				if stat.Mode()&os.ModePerm != 0667 {
+					t.Errorf("socket file mode is not 0667 but %o", stat.Mode())
+				}
+				srv.Stop()
+			}))
+	testutil.FatalOnErr("ServeUnix with socket config hook", err, t)
 }
 
 func TestRead(t *testing.T) {
