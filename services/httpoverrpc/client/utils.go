@@ -41,10 +41,12 @@ var (
 type HTTPTransporter struct {
 	conn               *proxy.Conn
 	insecureSkipVerify bool
+	hostsOverwrite     map[string]string
 }
 
 type httpTransporterOptions struct {
 	insecureSkipVerify bool
+	hostsOverwrite     map[string]string
 }
 
 type Option interface {
@@ -63,6 +65,18 @@ func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
 	})
 }
 
+// WithHostsOverwrite modify requests if host matches srcHost and replace it with overwrite
+// if srcHost is "*", all hosts will be replaced
+func WithHostsOverwrite(srcHost, overwrite string) Option {
+	return optionFunc(func(o *httpTransporterOptions) {
+		if o.hostsOverwrite == nil {
+			o.hostsOverwrite = map[string]string{}
+		}
+
+		o.hostsOverwrite[srcHost] = overwrite
+	})
+}
+
 func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) *HTTPTransporter {
 	options := &httpTransporterOptions{
 		insecureSkipVerify: false,
@@ -74,6 +88,7 @@ func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) *HTTPTransporter {
 	return &HTTPTransporter{
 		conn:               conn,
 		insecureSkipVerify: options.insecureSkipVerify,
+		hostsOverwrite:     options.hostsOverwrite,
 	}
 }
 
@@ -166,6 +181,10 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 		},
 	}
 
+	if c.hostsOverwrite != nil {
+		reqPb = c.overwriteHost(reqPb)
+	}
+
 	port, errPort := getPort(req, reqPb.Protocol)
 	if errPort != nil {
 		return nil, fmt.Errorf("error getting port: %v", errPort)
@@ -182,4 +201,20 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	result := pbReplytoHTTPResponse(resp.Resp)
 	return result, nil
+}
+
+func (c *HTTPTransporter) overwriteHost(reqPb *pb.HostHTTPRequest) *pb.HostHTTPRequest {
+	newHost := reqPb.Hostname
+	if c.hostsOverwrite != nil {
+		if overwrite, ok := c.hostsOverwrite["*"]; ok {
+			// case, host overwrite has a wildcard entry. All hostnames will be overwritten
+			newHost = overwrite
+		} else if overwrite, ok := c.hostsOverwrite[reqPb.Hostname]; ok {
+			// case, host overwrite has a specific entry for this hostname
+			newHost = overwrite
+		}
+	}
+
+	reqPb.Hostname = newHost
+	return reqPb
 }
