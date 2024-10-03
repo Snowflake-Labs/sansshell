@@ -59,6 +59,10 @@ func (o optionFunc) apply(opts *httpTransporterOptions) {
 	o(opts)
 }
 
+func WithEmptyModifier() Option {
+	return optionFunc(func(o *httpTransporterOptions) {})
+}
+
 func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
 	return optionFunc(func(o *httpTransporterOptions) {
 		o.insecureSkipVerify = insecureSkipVerify
