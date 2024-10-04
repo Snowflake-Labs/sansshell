@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -32,12 +31,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
-)
-
-var (
-	// Provide as a var so tests can cancel the server.
-	srv *grpc.Server
-	mu  sync.Mutex
 )
 
 // serveSetup describes everything needed to setup the RPC server.
@@ -51,6 +44,7 @@ type serveSetup struct {
 	streamInterceptors []grpc.StreamServerInterceptor
 	statsHandler       stats.Handler
 	services           []func(*grpc.Server)
+	onStartListeners   []func(*grpc.Server)
 }
 
 type Option interface {
@@ -141,6 +135,17 @@ func WithStatsHandler(h stats.Handler) Option {
 	})
 }
 
+// WithOnStartListener adds a function to be called, in a goroutine, after the server
+// has been created.
+//
+// This is useful for testing.
+func WithOnStartListener(h func(*grpc.Server)) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
+		s.onStartListeners = append(s.onStartListeners, h)
+		return nil
+	})
+}
+
 // Serve wraps up BuildServer in a succinct API for callers passing along various parameters. It will automatically add
 // an authz hook for HostNet based on the listener address. Additional hooks are passed along after this one.
 func Serve(hostport string, opts ...Option) error {
@@ -149,23 +154,14 @@ func Serve(hostport string, opts ...Option) error {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 
-	mu.Lock()
 	h := rpcauth.HostNetHook(lis.Addr())
 	opts = append(opts, WithAuthzHook(h))
-	srv, err = BuildServer(opts...)
-	mu.Unlock()
+	srv, err := BuildServer(opts...)
 	if err != nil {
 		return err
 	}
 
 	return srv.Serve(lis)
-}
-
-// Test helper to get at srv
-func getSrv() *grpc.Server {
-	mu.Lock()
-	defer mu.Unlock()
-	return srv
 }
 
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
@@ -223,6 +219,11 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 	// Now loop over any other registered and call them.
 	for _, srv := range ss.services {
 		srv(s)
+	}
+
+	// Call any on-start listeners that were registered.
+	for _, listener := range ss.onStartListeners {
+		go listener(s)
 	}
 
 	return s, nil

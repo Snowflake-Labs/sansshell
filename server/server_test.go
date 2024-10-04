@@ -67,6 +67,11 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 	return lis.Dial()
 }
 
+func stopSoon(s *grpc.Server) {
+	time.Sleep(50 * time.Millisecond)
+	s.Stop()
+}
+
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
 	s, err := BuildServer(
@@ -109,14 +114,6 @@ func TestBuildServerWithBadPolicy(t *testing.T) {
 }
 
 func TestServe(t *testing.T) {
-	// This test should be instant so just wait 5s and blow up
-	// any running server (which should be the last one).
-	go func() {
-		time.Sleep(5 * time.Second)
-		if getSrv() != nil {
-			getSrv().Stop()
-		}
-	}()
 	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
@@ -127,6 +124,7 @@ func TestServe(t *testing.T) {
 		WithPolicy(policy),
 		WithUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logr.Discard())),
 		WithStreamInterceptor(telemetry.StreamServerLogInterceptor(logr.Discard())),
+		WithOnStartListener(stopSoon),
 	)
 	testutil.FatalOnErr("Serve 127.0.0.1:0 with extra interceptors", err, t)
 }
