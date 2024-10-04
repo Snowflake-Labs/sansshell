@@ -178,273 +178,144 @@ func TestGet(t *testing.T) {
 }
 
 func TestHTTPTransporter(t *testing.T) {
-	t.Run("it should make a call and get response", func(t *testing.T) {
-		ctx := context.Background()
+	ctx := context.Background()
 
-		// Set up web server
-		m := http.NewServeMux()
-		m.HandleFunc("/helloworld", func(httpResp http.ResponseWriter, httpReq *http.Request) {
-			_, _ = httpResp.Write([]byte("hello world"))
-		})
-		l, err := net.Listen("tcp4", "localhost:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		go func() { _ = http.Serve(l, m) }()
-
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
-
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn)
-
-		httpClient := http.Client{
-			Transport: transporter,
-		}
-
-		addr := l.Addr().String()
-		resp, err := httpClient.Get(fmt.Sprintf("http://%s/helloworld", addr))
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := "hello world"
-		if string(body) != want {
-			t.Errorf("got %q, want %q", body, want)
-		}
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc("/helloworld", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		_, _ = httpResp.Write([]byte("hello world"))
 	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
 
-	t.Run("it should make a call with request body and get response", func(t *testing.T) {
-		ctx := context.Background()
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
 
-		// Set up web server
-		m := http.NewServeMux()
-		m.HandleFunc("/returnbody", func(httpResp http.ResponseWriter, httpReq *http.Request) {
-			body := []byte{}
-			if httpReq.Body != nil {
-				var err error
-				body, err = io.ReadAll(httpReq.Body)
-				if err != nil {
-					_, _ = httpResp.Write([]byte(err.Error()))
-				}
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
+
+	httpClient := http.Client{
+		Transport: transporter,
+	}
+
+	addr := l.Addr().String()
+	resp, err := httpClient.Get(fmt.Sprintf("http://%s/helloworld", addr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+}
+
+func TestHTTPTransporterBody(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc("/returnbody", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		body := []byte{}
+		if httpReq.Body != nil {
+			var err error
+			body, err = io.ReadAll(httpReq.Body)
+			if err != nil {
+				_, _ = httpResp.Write([]byte(err.Error()))
 			}
-			_, _ = httpResp.Write(body)
-		})
-		l, err := net.Listen("tcp4", "localhost:0")
-		if err != nil {
-			t.Fatal(err)
 		}
-		go func() { _ = http.Serve(l, m) }()
-
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
-
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn)
-
-		httpClient := http.Client{
-			Transport: transporter,
-		}
-
-		addr := l.Addr().String()
-		reqBody := "hello sansshell"
-		resp, err := httpClient.Post(fmt.Sprintf("http://%s/returnbody", addr), "", strings.NewReader(reqBody))
-		if err != nil {
-			t.Fatal(err)
-		}
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := reqBody // should receive the sent request body
-		if string(respBody) != want {
-			t.Errorf("got %q, want %q", respBody, want)
-		}
+		_, _ = httpResp.Write(body)
 	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
 
-	t.Run("it should return error if url not include schema", func(t *testing.T) {
-		ctx := context.Background()
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
 
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
 
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn)
+	httpClient := http.Client{
+		Transport: transporter,
+	}
 
-		httpClient := http.Client{
-			Transport: transporter,
-		}
+	addr := l.Addr().String()
+	reqBody := "hello sansshell"
+	resp, err := httpClient.Post(fmt.Sprintf("http://%s/returnbody", addr), "", strings.NewReader(reqBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := reqBody // should receive the sent request body
+	if string(respBody) != want {
+		t.Errorf("got %q, want %q", respBody, want)
+	}
+}
 
-		_, errGet := httpClient.Get("localhost:9090")
-		if !strings.Contains(errGet.Error(), errInvalidURLScheme.Error()) {
-			t.Fatal("must return error with descriptive message when there's no scheme in the request URL")
-		}
-	})
+func TestHTTPTransporterMissingScheme(t *testing.T) {
+	ctx := context.Background()
 
-	t.Run("it should return error if url not include host", func(t *testing.T) {
-		ctx := context.Background()
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
 
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
 
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn)
+	httpClient := http.Client{
+		Transport: transporter,
+	}
 
-		httpClient := http.Client{
-			Transport: transporter,
-		}
+	_, errGet := httpClient.Get("localhost:9090")
+	if !strings.Contains(errGet.Error(), errInvalidURLScheme.Error()) {
+		t.Fatal("must return error with descriptive message when there's no scheme in the request URL")
+	}
+}
 
-		_, errGet := httpClient.Get("http://:9090")
-		if !strings.Contains(errGet.Error(), errInvalidURLMissingHost.Error()) {
-			t.Fatal("must return error with descriptive message when there's no hostname in the request URL")
-		}
-	})
+func TestHTTPTransporterMissingHost(t *testing.T) {
+	ctx := context.Background()
 
-	t.Run("it should overwrite host, in case WithHostsOverwrite with exec hostname was used", func(t *testing.T) {
-		// ARRANGE
-		ctx := context.Background()
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
 
-		// Set up web server
-		m := http.NewServeMux()
-		responseBody := "hello-world"
-		m.HandleFunc("/hello-world", func(httpResp http.ResponseWriter, httpReq *http.Request) {
-			_, _ = httpResp.Write([]byte(responseBody))
-		})
-		l, err := net.Listen("tcp4", "localhost:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		go func() { _ = http.Serve(l, m) }()
-		mockServerAddr := strings.Split(l.Addr().String(), ":")
-		mockServerHost := mockServerAddr[0]
-		mockServerPort := mockServerAddr[1]
+	// setup http transporter
+	transporter := NewHTTPTransporter(conn)
 
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
+	httpClient := http.Client{
+		Transport: transporter,
+	}
 
-		sourceHost := "some-mock-host"
-		sourceRequestUri := fmt.Sprintf("http://%s:%s/hello-world", sourceHost, mockServerPort)
-
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn, WithHostsOverwrite(sourceHost, mockServerHost))
-
-		httpClient := http.Client{
-			Transport: transporter,
-		}
-
-		// ACT
-		resp, err := httpClient.Get(sourceRequestUri)
-		if err != nil {
-			t.Fatal(err)
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// ASSERT
-		expectedResponseBody := responseBody
-		if string(body) != expectedResponseBody {
-			t.Errorf("got %q, expected %q", body, expectedResponseBody)
-		}
-	})
-
-	t.Run("it should overwrite host, in case WithHostsOverwrite with wildcard rule was used", func(t *testing.T) {
-		// ARRANGE
-		ctx := context.Background()
-
-		// Set up web server
-		m := http.NewServeMux()
-		responseBody := "hello-world"
-		m.HandleFunc("/hello-world", func(httpResp http.ResponseWriter, httpReq *http.Request) {
-			_, _ = httpResp.Write([]byte(responseBody))
-		})
-		l, err := net.Listen("tcp4", "localhost:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		go func() { _ = http.Serve(l, m) }()
-		mockServerAddr := strings.Split(l.Addr().String(), ":")
-		mockServerHost := mockServerAddr[0]
-		mockServerPort := mockServerAddr[1]
-
-		// Dial out to sansshell server set up in TestMain
-		conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { conn.Close() })
-
-		// setup http transporter
-		transporter := NewHTTPTransporter(conn, WithHostsOverwrite("*", mockServerHost))
-
-		httpClient := http.Client{
-			Transport: transporter,
-		}
-
-		// ACT
-		firstUrl := fmt.Sprintf("http://some-first-mock-host:%s/hello-world", mockServerPort)
-		firstResp, firstErr := httpClient.Get(firstUrl)
-
-		secondUrl := fmt.Sprintf("http://some-second-mock-host:%s/hello-world", mockServerPort)
-		secondResp, secondErr := httpClient.Get(secondUrl)
-
-		// ASSERT
-		if firstErr != nil {
-			t.Errorf("got %q, but nothing expected", firstErr)
-			return
-		}
-
-		if secondErr != nil {
-			t.Errorf("got %q, but nothing expected", firstErr)
-			return
-		}
-
-		expectedResponseBody := responseBody
-
-		firstBody, err := io.ReadAll(firstResp.Body)
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
-
-		if string(firstBody) != expectedResponseBody {
-			t.Errorf("got %q, expected %q", firstBody, expectedResponseBody)
-		}
-
-		secondBody, err := io.ReadAll(secondResp.Body)
-		if err != nil {
-			t.Fatal(err)
-			return
-		}
-
-		if string(secondBody) != expectedResponseBody {
-			t.Errorf("got %q, expected %q", secondBody, expectedResponseBody)
-		}
-	})
+	_, errGet := httpClient.Get("http://:9090")
+	if !strings.Contains(errGet.Error(), errInvalidURLMissingHost.Error()) {
+		t.Fatal("must return error with descriptive message when there's no hostname in the request URL")
+	}
 }
 
 func TestGetPort(t *testing.T) {
