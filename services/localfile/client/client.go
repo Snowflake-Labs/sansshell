@@ -21,6 +21,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	cli_controllers "github.com/Snowflake-Labs/sansshell/services/localfile/client/cli-controllers"
 	"io"
 	"io/fs"
 	"os"
@@ -33,7 +34,6 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
-	"github.com/Snowflake-Labs/sansshell/services/localfile/client/infrastructure/input"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
 
@@ -46,8 +46,8 @@ func init() {
 func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
 
-	dataGetCmd := input.NewDataGetCmd()
-	dataSetCmd := input.NewDataSetCmd()
+	dataGetCmd := cli_controllers.NewDataGetCmd()
+	dataSetCmd := cli_controllers.NewDataSetCmd()
 	c.Register(&chgrpCmd{}, "")
 	c.Register(&chmodCmd{}, "")
 	c.Register(&chownCmd{}, "")

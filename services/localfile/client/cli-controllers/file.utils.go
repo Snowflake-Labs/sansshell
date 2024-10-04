@@ -15,7 +15,7 @@ Copyright (c) 2024 Snowflake Inc. All rights reserved.
 	under the License.
 */
 
-package input
+package cli_controllers
 
 import (
 	"errors"

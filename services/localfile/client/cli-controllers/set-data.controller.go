@@ -14,48 +14,72 @@
    under the License.
 */
 
-package input
+package cli_controllers
 
 import (
 	"context"
 	"errors"
 	"flag"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
-	app "github.com/Snowflake-Labs/sansshell/services/localfile/client/application"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	cliUtils "github.com/Snowflake-Labs/sansshell/services/util/cli"
 	"github.com/google/subcommands"
-	"google.golang.org/grpc/status"
 	"os"
 	"strings"
 )
 
 // setDataCmd cli adapter for execution infrastructure implementation of [subcommands.Command] interface
-type getDataCmd struct {
+type setDataCmd struct {
 	fileFormat pb.FileFormat
+	valueType  pb.DataSetValueType
 	cliLogger  cliUtils.StyledCliLogger
 }
 
-func (*getDataCmd) Name() string { return "get-data" }
-func (*getDataCmd) Synopsis() string {
+func (*setDataCmd) Name() string { return "set-data" }
+func (*setDataCmd) Synopsis() string {
 	return "Get data from file of specific format. Currently supported: yml, dotenv"
 }
-func (*getDataCmd) Usage() string {
-	return `get-data [--format=yml|dotenv] <file-path> <data-key>:
-  Get value by 'data-key' from file of file by 'file-path' of specific format.
-  Arguments:
-    - file-path - path to file with data
-    - data-key - key to read data from file. For different file format it should be:
-        - yml - YmlPath string
-        - dotenv - variable key
-
-    Format could be detected from file extension or explicitly specified by --format flag.
+func (*setDataCmd) Usage() string {
+	return `sanssh <sanssh-args> file set-data [--format <file-format>] [--value-type <value-type>] <file-path> <data-key> <value>
+  Where:
+    - <sanssh-args> common sanssh arguments
+    - <file-path> is the path to the file on remote machine. If --format is not provided, format would be detected from file extension.
+    - <data-key> is the key to set value in the file. For different file formats it would require keys in different format
+      - for "yml", key should be valid YAMLPath string
+      - for "dotenv", key should be a name of variable
+    - <value> is the value to set in the file
 
   Flags:
 `
 }
 
-func (p *getDataCmd) SetFlags(f *flag.FlagSet) {
+func (p *setDataCmd) SetFlags(f *flag.FlagSet) {
+	f.Func(
+		"value-type",
+		`type of value to set in the file. Supported types are:
+  - string (default)
+  - int
+  - float
+  - bool
+`,
+		func(s string) error {
+			lowerCased := strings.ToLower(s)
+			switch lowerCased {
+			case "string":
+				p.valueType = pb.DataSetValueType_STRING_VAL
+			case "int":
+				p.valueType = pb.DataSetValueType_INT_VAL
+			case "float":
+				p.valueType = pb.DataSetValueType_FLOAT_VAL
+			case "bool":
+				p.valueType = pb.DataSetValueType_BOOL_VAL
+			default:
+				return errors.New("invalid value type")
+			}
+
+			return nil
+		})
+
 	f.Func("format", "File format (Optional). Could be one of: yml, dotenv", func(s string) error {
 		lowerCased := strings.ToLower(s)
 
@@ -65,7 +89,7 @@ func (p *getDataCmd) SetFlags(f *flag.FlagSet) {
 		case "dotenv":
 			p.fileFormat = pb.FileFormat_DOTENV
 		default:
-			return errors.New("could be only yml or dotenv")
+			return errors.New("invalid file format")
 		}
 
 		return nil
@@ -73,7 +97,7 @@ func (p *getDataCmd) SetFlags(f *flag.FlagSet) {
 }
 
 // Execute is a method handle command execution. It adapter between cli and business logic
-func (p *getDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+func (p *setDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 
 	if len(f.Args()) < 1 {
@@ -82,18 +106,25 @@ func (p *getDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	}
 
 	if len(f.Args()) < 2 {
-		p.cliLogger.Errorc(cliUtils.RedText, "Property path is missing.\n")
+		p.cliLogger.Errorc(cliUtils.RedText, "Data path is missing.\n")
+		return subcommands.ExitUsageError
+	}
+
+	if len(f.Args()) < 3 {
+		p.cliLogger.Errorc(cliUtils.RedText, "Data value is missing.\n")
 		return subcommands.ExitUsageError
 	}
 
 	remoteFilePath := f.Arg(0)
 	dataKey := f.Arg(1)
+	dataValue := f.Arg(2)
+	dataValueType := p.valueType
 
 	fileFormat := p.fileFormat
 	if fileFormat == pb.FileFormat_UNKNOWN {
 		fileFormatFromExt, err := getFileTypeFromPath(remoteFilePath)
 		if err != nil {
-			p.cliLogger.Errorfc(cliUtils.RedText, "Could not get file type from filepath: %s\n", err.Error())
+			p.cliLogger.Errorfc(cliUtils.RedText, "Could not set data in filepath: %s\n", err.Error())
 			return subcommands.ExitUsageError
 		}
 
@@ -102,10 +133,17 @@ func (p *getDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 
 	preloader := cliUtils.NewDotPreloader("Waiting for results from remote machines", util.IsStreamToTerminal(os.Stdout))
 	client := pb.NewLocalFileClientProxy(state.Conn)
-	usecase := app.NewDataGetUsecase(client)
 
+	p.cliLogger.Infof("Setting data in file %s\n", dataValueType)
 	preloader.Start()
-	responses, err := usecase.Run(ctx, remoteFilePath, dataKey, fileFormat)
+
+	responses, err := client.DataSetOneMany(ctx, &pb.DataSetRequest{
+		Filename:   remoteFilePath,
+		DataKey:    dataKey,
+		FileFormat: fileFormat,
+		Value:      dataValue,
+		ValueType:  dataValueType,
+	})
 
 	if err != nil {
 		preloader.Stop()
@@ -121,16 +159,12 @@ func (p *getDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 			ApplyStylingForOut: util.IsStreamToTerminal(state.Out[resp.Index]),
 		})
 
+		status := cliUtils.CGreen("Ok")
 		if resp.Error != nil {
-			st, _ := status.FromError(resp.Error)
-			targetLogger.Errorfc(cliUtils.RedText,
-				"Failed to get value: %s\n",
-				st.Message(),
-			)
-			continue
+			status = cliUtils.Colorizef(cliUtils.RedText, "Failed due to error - %s", resp.Error.Error())
 		}
-		targetLogger.Infof("Value: %s\n", resp.Resp.Value)
 
+		targetLogger.Infof("Value set status: %s\n", status)
 		preloader.Start()
 	}
 	preloader.StopWith("Completed.\n")
@@ -138,9 +172,10 @@ func (p *getDataCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	return subcommands.ExitSuccess
 }
 
-func NewDataGetCmd() subcommands.Command {
-	return &getDataCmd{
+func NewDataSetCmd() subcommands.Command {
+	return &setDataCmd{
 		fileFormat: pb.FileFormat_UNKNOWN,
+		valueType:  pb.DataSetValueType_STRING_VAL,
 		cliLogger: cliUtils.NewStyledCliLogger(os.Stdout, os.Stderr, &cliUtils.CliLoggerOptions{
 			ApplyStylingForErr: util.IsStreamToTerminal(os.Stderr),
 			ApplyStylingForOut: util.IsStreamToTerminal(os.Stdout),
