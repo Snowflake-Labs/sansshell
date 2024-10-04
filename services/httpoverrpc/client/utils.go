@@ -45,7 +45,6 @@ type HTTPTransporter struct {
 
 type httpTransporterOptions struct {
 	insecureSkipVerify bool
-	hostsOverwrite     map[string]string
 }
 
 type Option interface {
@@ -56,10 +55,6 @@ type optionFunc func(*httpTransporterOptions)
 
 func (o optionFunc) apply(opts *httpTransporterOptions) {
 	o(opts)
-}
-
-func WithEmptyModifier() Option {
-	return optionFunc(func(o *httpTransporterOptions) {})
 }
 
 func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
