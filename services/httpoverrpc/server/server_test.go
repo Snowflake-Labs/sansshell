@@ -245,6 +245,7 @@ func TestServer(t *testing.T) {
 		m := http.NewServeMux()
 		getHostHeaderURI := "/get-host-header"
 		m.HandleFunc(getHostHeaderURI, func(httpResp http.ResponseWriter, httpReq *http.Request) {
+			// reply always with provided host
 			_, _ = httpResp.Write([]byte(httpReq.Host))
 		})
 		l, err := net.Listen("tcp4", "localhost:0")
