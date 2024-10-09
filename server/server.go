@@ -20,24 +20,20 @@ package server
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net"
-	"sync"
+	"os"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
-)
-
-var (
-	// Provide as a var so tests can cancel the server.
-	srv *grpc.Server
-	mu  sync.Mutex
 )
 
 // serveSetup describes everything needed to setup the RPC server.
@@ -51,6 +47,7 @@ type serveSetup struct {
 	streamInterceptors []grpc.StreamServerInterceptor
 	statsHandler       stats.Handler
 	services           []func(*grpc.Server)
+	onStartListeners   []func(*grpc.Server)
 }
 
 type Option interface {
@@ -69,6 +66,11 @@ func WithCredentials(c credentials.TransportCredentials) Option {
 		s.creds = c
 		return nil
 	})
+}
+
+// WithInsecure specifies that transport security should be disabled.
+func WithInsecure() Option {
+	return WithCredentials(insecure.NewCredentials())
 }
 
 // WithPolicy applies an OPA policy used against incoming RPC requests.
@@ -141,31 +143,68 @@ func WithStatsHandler(h stats.Handler) Option {
 	})
 }
 
-// Serve wraps up BuildServer in a succinct API for callers passing along various parameters. It will automatically add
-// an authz hook for HostNet based on the listener address. Additional hooks are passed along after this one.
+// WithOnStartListener adds a function to be called, in a goroutine, after the server
+// has been created.
+//
+// This is useful for testing.
+func WithOnStartListener(h func(*grpc.Server)) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
+		s.onStartListeners = append(s.onStartListeners, h)
+		return nil
+	})
+}
+
+// Serve starts and runs a server on the given hostport.
 func Serve(hostport string, opts ...Option) error {
 	lis, err := net.Listen("tcp", hostport)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
+	return serveListener(lis, opts...)
+}
 
-	mu.Lock()
-	h := rpcauth.HostNetHook(lis.Addr())
+// ServeUnix runs a server on a Unix socket. If the socket path exists, it will be removed beforehand.
+func ServeUnix(socketPath string, socketConfigHook func(string) error, opts ...Option) error {
+	// If the socket path exists, remove it, but error out if it is not a socket.
+	if stat, err := os.Stat(socketPath); err == nil {
+		if stat.Mode().Type() != fs.ModeSocket {
+			return fmt.Errorf("Unix socket path exists and is not a socket: %s", socketPath)
+		}
+		if err := os.Remove(socketPath); err != nil {
+			return fmt.Errorf("failed to remove existing Unix socket: %v", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat Unix socket: %v", err)
+	}
+
+	unixListener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return fmt.Errorf("failed to listen on Unix socket: %v", err)
+	}
+	defer os.Remove(socketPath)
+
+	if socketConfigHook != nil {
+		if err := socketConfigHook(socketPath); err != nil {
+			return fmt.Errorf("failed to configure Unix socket: %v", err)
+		}
+	}
+
+	return serveListener(unixListener, opts...)
+}
+
+// serveListener wraps up BuildServer and runs a server for the given Listener object. It will automatically add
+// an authz hook for HostNet based on the listener address. Additional hooks are passed along after this one.
+//
+// listener will be closed when this function returns.
+func serveListener(listener net.Listener, opts ...Option) error {
+	h := rpcauth.HostNetHook(listener.Addr())
 	opts = append(opts, WithAuthzHook(h))
-	srv, err = BuildServer(opts...)
-	mu.Unlock()
+	srv, err := BuildServer(opts...)
 	if err != nil {
 		return err
 	}
 
-	return srv.Serve(lis)
-}
-
-// Test helper to get at srv
-func getSrv() *grpc.Server {
-	mu.Lock()
-	defer mu.Unlock()
-	return srv
+	return srv.Serve(listener)
 }
 
 // BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
@@ -223,6 +262,11 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 	// Now loop over any other registered and call them.
 	for _, srv := range ss.services {
 		srv(s)
+	}
+
+	// Call any on-start listeners that were registered.
+	for _, listener := range ss.onStartListeners {
+		go listener(s)
 	}
 
 	return s, nil

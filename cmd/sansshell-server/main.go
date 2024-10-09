@@ -87,6 +87,7 @@ var (
 	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
 	debugport     = flag.String("debugport", "localhost:50044", "A separate port for http debug pages. Set to an empty string to disable.")
 	metricsport   = flag.String("metricsport", "localhost:50047", "A separate port for http debug pages. Set to an empty string to disable.")
+	unixSocket    = flag.String("unix-socket", "", "Path to a Unix socket to listen on in addition to hostport. The socket supports plaintext (non-TLS) communication. Set to an empty string to disable.")
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
@@ -170,6 +171,7 @@ func main() {
 		server.WithLogger(logger),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
+		server.WithUnixSocket(*unixSocket),
 		server.WithParsedPolicy(parsed),
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
