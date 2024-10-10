@@ -100,7 +100,7 @@ function print_logs {
   shift
   PREFACE=$*
 
-  printf "\n%s:\n\n" "${PREFACE}"
+  printf "\nLogs for %s:\n\n" "${PREFACE}"
   cat "${LOG}"
 }
 
@@ -122,7 +122,7 @@ function run_a_test {
   SUBCMD=$1
   shift
 
-  echo "${CMD} ${SUBCMD} checks"
+  echo "\nTEST: ${CMD} ${SUBCMD}"
 
   CHECK="${CMD} ${SUBCMD} proxy to 2 hosts"
   echo "${CHECK}"
@@ -171,7 +171,7 @@ function run_a_test {
   check_logs "${LINE_MIN}" "${CMD}-${SUBCMD}" "${CHECK}"
   copy_logs "${CMD}-${SUBCMD}" no-proxy
 
-  echo "${CMD} ${SUBCMD} passed"
+  echo "${CMD} ${SUBCMD} PASSED\n"
 }
 
 # Takes 1 arg:

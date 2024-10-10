@@ -84,6 +84,54 @@ func TestColorizef(t *testing.T) {
 	})
 }
 
+func TestCRed(t *testing.T) {
+	t.Run("It should convert string to red styled text", func(t *testing.T) {
+		// ARRANGE
+		text := "Some text"
+
+		// ACT
+		colorized := CRed(text)
+
+		// ASSERT
+		styled, ok := colorized.(*styledText)
+		if ok == false {
+			t.Errorf("Expected to get styledText, but got %T", colorized)
+		}
+
+		if styled.text != text {
+			t.Errorf("Got %s, but expected %s", styled.text, text)
+		}
+
+		if styled.colorCode != RedText {
+			t.Errorf("Got %s, but expected %s", styled.colorCode, RedText)
+		}
+	})
+}
+
+func TestCGreen(t *testing.T) {
+	t.Run("It should convert string to green styled text", func(t *testing.T) {
+		// ARRANGE
+		text := "Some text"
+
+		// ACT
+		colorized := CGreen(text)
+
+		// ASSERT
+		styled, ok := colorized.(*styledText)
+		if ok == false {
+			t.Errorf("Expected to get styledText, but got %T", colorized)
+		}
+
+		if styled.text != text {
+			t.Errorf("Got %s, but expected %s", styled.text, text)
+		}
+
+		if styled.colorCode != GreenText {
+			t.Errorf("Got %s, but expected %s", styled.colorCode, GreenText)
+		}
+	})
+}
+
 func Test_styledCliLogger_Infof(t *testing.T) {
 	tests := []struct {
 		name           string
