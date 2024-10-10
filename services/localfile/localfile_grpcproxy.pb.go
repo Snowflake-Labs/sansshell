@@ -33,6 +33,8 @@ type LocalFileClientProxy interface {
 	ReadlinkOneMany(ctx context.Context, in *ReadlinkRequest, opts ...grpc.CallOption) (<-chan *ReadlinkManyResponse, error)
 	SymlinkOneMany(ctx context.Context, in *SymlinkRequest, opts ...grpc.CallOption) (<-chan *SymlinkManyResponse, error)
 	MkdirOneMany(ctx context.Context, in *MkdirRequest, opts ...grpc.CallOption) (<-chan *MkdirManyResponse, error)
+	DataGetOneMany(ctx context.Context, in *DataGetRequest, opts ...grpc.CallOption) (<-chan *DataGetManyResponse, error)
+	DataSetOneMany(ctx context.Context, in *DataSetRequest, opts ...grpc.CallOption) (<-chan *DataSetManyResponse, error)
 }
 
 // Embed the original client inside of this so we get the other generated methods automatically.
@@ -1016,6 +1018,140 @@ func (c *localFileClientProxy) MkdirOneMany(ctx context.Context, in *MkdirReques
 	go func() {
 		for {
 			typedResp := &MkdirManyResponse{
+				Resp: &emptypb.Empty{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// DataGetManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type DataGetManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *DataGetReply
+	Error error
+}
+
+// DataGetOneMany provides the same API as DataGet but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *localFileClientProxy) DataGetOneMany(ctx context.Context, in *DataGetRequest, opts ...grpc.CallOption) (<-chan *DataGetManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *DataGetManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &DataGetManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &DataGetReply{},
+			}
+			err := conn.Invoke(ctx, "/LocalFile.LocalFile/DataGet", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/LocalFile.LocalFile/DataGet", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &DataGetManyResponse{
+				Resp: &DataGetReply{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// DataSetManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type DataSetManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *emptypb.Empty
+	Error error
+}
+
+// DataSetOneMany provides the same API as DataSet but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *localFileClientProxy) DataSetOneMany(ctx context.Context, in *DataSetRequest, opts ...grpc.CallOption) (<-chan *DataSetManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *DataSetManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &DataSetManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &emptypb.Empty{},
+			}
+			err := conn.Invoke(ctx, "/LocalFile.LocalFile/DataSet", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/LocalFile.LocalFile/DataSet", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &DataSetManyResponse{
 				Resp: &emptypb.Empty{},
 			}
 

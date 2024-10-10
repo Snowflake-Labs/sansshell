@@ -24,10 +24,10 @@ import (
 
 type ColorCode = string
 
-var restoreFormatingCode ColorCode = "\033[0m"
-var RedText ColorCode = "\033[31m"
-var GreenText ColorCode = "\033[32m"
-var YellowText ColorCode = "\033[33m"
+var restoreFormatingCode = "\033[0m"
+var RedText = "\033[31m"
+var GreenText = "\033[32m"
+var YellowText = "\033[33m"
 
 type styledCliLogger struct {
 	out               io.Writer
@@ -157,4 +157,12 @@ func Colorizef(color ColorCode, format string, a ...any) StyledText {
 		text:      fmt.Sprintf(format, a...),
 		colorCode: color,
 	}
+}
+
+func CRed(a any) StyledText {
+	return Colorize(RedText, a)
+}
+
+func CGreen(a any) StyledText {
+	return Colorize(GreenText, a)
 }

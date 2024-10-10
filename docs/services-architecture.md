@@ -9,11 +9,13 @@ It is divided into 2 parts:
 - `client`, part of cli app running on local
 - `server`, part of server app running on remote machine
 
-Each part follows hexagonal architecture. It divides into following layers:
+`server` should follows hexagonal architecture. It divides into following layers:
 - `application`, contains the application logic
 - `infrastructure`, contains the implementation of the ports and adapters
     - `input`, contains user interface/api adapters implementation, such as GRPC controllers, CLI command handlers and etc
     - `output`, contains adapters to external systems implementation, such as HTTP/GRPC client, repositories and etc
+
+`client` should be simple wrapper over GRPC client, which is generated from protobuf definition.
 
 Other:
 - `./<service-name>.go` contains the service related commands
