@@ -27,6 +27,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/go-logr/logr"
@@ -50,23 +51,25 @@ import (
 // to run a proxy server. Documentation provided below in each
 // WithXXX function.
 type runState struct {
-	logger             logr.Logger
-	credSource         string
-	tlsConfig          *tls.Config
-	hostport           string
-	debugport          string
-	debughandler       *http.ServeMux
-	metricsport        string
-	metricshandler     *http.ServeMux
-	metricsRecorder    metrics.MetricsRecorder
-	policy             *opa.AuthzPolicy
-	justification      bool
-	justificationFunc  func(string) error
-	unaryInterceptors  []grpc.UnaryServerInterceptor
-	streamInterceptors []grpc.StreamServerInterceptor
-	statsHandler       stats.Handler
-	authzHooks         []rpcauth.RPCAuthzHook
-	services           []func(*grpc.Server)
+	logger               logr.Logger
+	credSource           string
+	tlsConfig            *tls.Config
+	hostport             string
+	debugport            string
+	debughandler         *http.ServeMux
+	metricsport          string
+	metricshandler       *http.ServeMux
+	metricsRecorder      metrics.MetricsRecorder
+	unixSocket           string
+	unixSocketConfigHook func(string) error
+	policy               *opa.AuthzPolicy
+	justification        bool
+	justificationFunc    func(string) error
+	unaryInterceptors    []grpc.UnaryServerInterceptor
+	streamInterceptors   []grpc.StreamServerInterceptor
+	statsHandler         stats.Handler
+	authzHooks           []rpcauth.RPCAuthzHook
+	services             []func(*grpc.Server)
 
 	refreshCredsOnSIGHUP bool
 }
@@ -263,6 +266,25 @@ func WithMetricsPort(addr string) Option {
 	})
 }
 
+// WithUnixSocket specifies the path of a Unix socket which should be opened for the server
+// to listen on, in addition to the TCP socket specified in WithHostPort.
+func WithUnixSocket(socket string) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.unixSocket = socket
+		return nil
+	})
+}
+
+// WithUnixSocketConfigHook allows for a hook to be called with the Unix socket path
+// after it is created but before the server starts. This allows callers to set proper
+// permissions and ownership on the socket.
+func WithUnixSocketConfigHook(h func(string) error) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.unixSocketConfigHook = h
+		return nil
+	})
+}
+
 // WithOtelTracing adds the OpenTelemetry gRPC interceptors to both stream and unary servers
 // The interceptors collect and export tracing data for gRPC requests and responses
 func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
@@ -313,40 +335,26 @@ func Run(ctx context.Context, opts ...Option) {
 		}()
 	}
 
-	creds, err := extractTransportCredentialsFromRunState(ctx, rs)
-	if err != nil {
-		rs.logger.Error(err, "unable to extract transport credentials from runstate", "credsource", rs.credSource)
-		os.Exit(1)
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+	go func() {
+		if err := runTCPServer(ctx, rs); err != nil {
+			rs.logger.Error(err, "runTCPServer", "hostport", rs.hostport)
+			os.Exit(1)
+		}
+		waitGroup.Done()
+	}()
+	if rs.unixSocket != "" {
+		waitGroup.Add(1)
+		go func() {
+			if err := runInsecureUnixSocketServer(ctx, rs); err != nil {
+				rs.logger.Error(err, "runInsecureUnixSocketServer", "unixSocket", rs.unixSocket)
+				os.Exit(1)
+			}
+			waitGroup.Done()
+		}()
 	}
-
-	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
-		return rs.justification
-	})
-
-	var serverOpts []server.Option
-	serverOpts = append(serverOpts, server.WithCredentials(creds))
-	serverOpts = append(serverOpts, server.WithParsedPolicy(rs.policy))
-	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
-	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
-	for _, a := range rs.authzHooks {
-		serverOpts = append(serverOpts, server.WithAuthzHook(a))
-	}
-	for _, u := range rs.unaryInterceptors {
-		serverOpts = append(serverOpts, server.WithUnaryInterceptor(u))
-	}
-	for _, s := range rs.streamInterceptors {
-		serverOpts = append(serverOpts, server.WithStreamInterceptor(s))
-	}
-	for _, s := range rs.services {
-		serverOpts = append(serverOpts, server.WithRawServerOption(s))
-	}
-	if rs.statsHandler != nil {
-		serverOpts = append(serverOpts, server.WithStatsHandler(rs.statsHandler))
-	}
-	if err := server.Serve(rs.hostport, serverOpts...); err != nil {
-		rs.logger.Error(err, "server.Serve", "hostport", rs.hostport)
-		os.Exit(1)
-	}
+	waitGroup.Wait()
 }
 
 // extractTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
@@ -378,4 +386,50 @@ func extractTransportCredentialsFromRunState(ctx context.Context, rs *runState) 
 		creds = credentials.NewTLS(rs.tlsConfig)
 	}
 	return creds, nil
+}
+
+func runTCPServer(ctx context.Context, rs *runState) error {
+	serverOpts := extractCommonOptionsFromRunState(rs)
+	creds, err := extractTransportCredentialsFromRunState(ctx, rs)
+	if err != nil {
+		rs.logger.Error(err, "unable to extract transport credentials from runstate", "credsource", rs.credSource)
+		return err
+	}
+	serverOpts = append(serverOpts, server.WithCredentials(creds))
+	return server.Serve(rs.hostport, serverOpts...)
+}
+
+func runInsecureUnixSocketServer(_ context.Context, rs *runState) error {
+	serverOpts := extractCommonOptionsFromRunState(rs)
+	serverOpts = append(serverOpts, server.WithInsecure())
+	return server.ServeUnix(rs.unixSocket, rs.unixSocketConfigHook, serverOpts...)
+}
+
+// extractCommonOptionsFromRunState extracts infers server options from runState
+// which can be used for both the TCP and Unix socket servers.
+func extractCommonOptionsFromRunState(rs *runState) []server.Option {
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+		return rs.justification
+	})
+
+	var serverOpts []server.Option
+	serverOpts = append(serverOpts, server.WithParsedPolicy(rs.policy))
+	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
+	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
+	for _, a := range rs.authzHooks {
+		serverOpts = append(serverOpts, server.WithAuthzHook(a))
+	}
+	for _, u := range rs.unaryInterceptors {
+		serverOpts = append(serverOpts, server.WithUnaryInterceptor(u))
+	}
+	for _, s := range rs.streamInterceptors {
+		serverOpts = append(serverOpts, server.WithStreamInterceptor(s))
+	}
+	for _, s := range rs.services {
+		serverOpts = append(serverOpts, server.WithRawServerOption(s))
+	}
+	if rs.statsHandler != nil {
+		serverOpts = append(serverOpts, server.WithStatsHandler(rs.statsHandler))
+	}
+	return serverOpts
 }
