@@ -22,9 +22,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io"
-	"net/http"
-
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	sansshellserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
@@ -32,6 +29,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"io"
+	"net/http"
+	"strings"
 )
 
 // Metrics
@@ -62,9 +62,16 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 	}
 	// Set a default user agent that can be overridden in the request.
 	httpReq.Header["User-Agent"] = []string{"sansshell/" + sansshellserver.Version}
+
 	for _, header := range req.Request.Headers {
+		if strings.ToLower(header.Key) == "host" {
+			// override the host with value from header
+			httpReq.Host = header.Values[0]
+			continue
+		}
 		httpReq.Header[header.Key] = header.Values
 	}
+
 	client := &http.Client{}
 	if req.Tlsconfig != nil {
 		client.Transport = &http.Transport{
