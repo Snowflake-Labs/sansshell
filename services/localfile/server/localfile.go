@@ -573,7 +573,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	}
 
 	// We always send back the entry first.
-	logger.Info("ls", "sourceFilename", req.Entry)
+	logger.Info("ls", "filename", req.Entry)
 	resp, err := osStat(req.Entry, false)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
@@ -594,7 +594,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 		// Only do one level so iterate these and we're done.
 		for _, e := range entries {
 			name := filepath.Join(req.Entry, e.Name())
-			logger.Info("ls", "sourceFilename", name)
+			logger.Info("ls", "filename", name)
 			// Use lstat so that we don't return misleading directory contents from
 			// following symlinks.
 			resp, err := osStat(name, true)
@@ -706,7 +706,7 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 	p := req.Attrs.Filename
 	if p == "" {
 		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "missing_filename"))
-		return nil, status.Error(codes.InvalidArgument, "sourceFilename must be filled in")
+		return nil, status.Error(codes.InvalidArgument, "filename must be filled in")
 	}
 	if err := util.ValidPath(p); err != nil {
 		recorder.CounterOrLog(ctx, localfileSetFileAttributesFailureCounter, 1, attribute.String("reason", "invalid_path"))
@@ -724,7 +724,7 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("rm request", "sourceFilename", req.Filename)
+	logger.Info("rm request", "filename", req.Filename)
 	if err := util.ValidPath(req.Filename); err != nil {
 		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return nil, err
@@ -776,7 +776,7 @@ func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Em
 func (s *server) Readlink(ctx context.Context, req *pb.ReadlinkRequest) (*pb.ReadlinkReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("readlink", "sourceFilename", req.Filename)
+	logger.Info("readlink", "filename", req.Filename)
 	if err := util.ValidPath(req.Filename); err != nil {
 		recorder.CounterOrLog(ctx, localfileReadlinkFailureCounter, 1, attribute.String("reason", "invalid_original_path"))
 		return nil, err
@@ -848,7 +848,7 @@ func (s *server) Mkdir(ctx context.Context, req *pb.MkdirRequest) (_ *emptypb.Em
 func (s *server) DataGet(ctx context.Context, req *pb.DataGetRequest) (*pb.DataGetReply, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("Data Get request", "sourceFilename:", req.Filename, "fileformat:", req.FileFormat, "datakey:", req.DataKey)
+	logger.Info("Data Get request", "filename:", req.Filename, "fileformat:", req.FileFormat, "datakey:", req.DataKey)
 
 	fileFactory := file_data.NewFileDataRepositoryFactory()
 	usecase := app.NewDataGetUsecase(fileFactory)
@@ -878,7 +878,7 @@ func (s *server) DataGet(ctx context.Context, req *pb.DataGetRequest) (*pb.DataG
 func (s *server) DataSet(ctx context.Context, req *pb.DataSetRequest) (*emptypb.Empty, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("Data Set request", "sourceFilename:", req.Filename, "FileFormat:", req.FileFormat, "DataKey:", req.DataKey, "ValueType:", req.ValueType, "Value:", req.Value)
+	logger.Info("Data Set request", "filename:", req.Filename, "FileFormat:", req.FileFormat, "DataKey:", req.DataKey, "ValueType:", req.ValueType, "Value:", req.Value)
 
 	fileFactory := file_data.NewFileDataRepositoryFactory()
 	usecase := app.NewDataSetUsecase(fileFactory)
