@@ -1519,53 +1519,37 @@ func TestCopy(t *testing.T) {
 	t.Cleanup(func() { conn.Close() })
 
 	// Setup source bucket/file and contents
-	contents := "contents"
-	temp := t.TempDir()
 	uid, gid := os.Getuid(), os.Getgid()
-	f1, err := os.CreateTemp(temp, "file")
-	testutil.FatalOnErr("CreateTemp", err, t)
-	if n, err := f1.WriteString(contents); n != len(contents) || err != nil {
-		t.Fatalf("WriteString failed. Wrote %d, expected %d err - %v", n, len(contents), err)
-	}
-	err = f1.Close()
-	testutil.FatalOnErr("Close", err, t)
 
+	// validation test cases
 	for _, tc := range []struct {
-		name      string
-		req       *pb.CopyRequest
-		wantErr   bool
-		filename  string
-		validate  string
-		touchFile bool
+		name string
+		req  *pb.CopyRequest
 	}{
 		{
-			name:    "Blank request",
-			req:     &pb.CopyRequest{},
-			wantErr: true,
+			name: "Blank request",
+			req:  &pb.CopyRequest{},
 		},
 		{
 			name: "No bucket",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{},
 			},
-			wantErr: true,
 		},
 		{
 			name: "No key",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{},
-				Bucket:      fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
+				Bucket:      fmt.Sprintf("file:///some-folder"),
 			},
-			wantErr: true,
 		},
 		{
 			name: "No attrs",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{},
-				Bucket:      fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
-				Key:         filepath.Base(f1.Name()),
+				Bucket:      fmt.Sprintf("file:///some-folder"),
+				Key:         "some-source-file",
 			},
-			wantErr: true,
 		},
 		{
 			// Don't need to test all attributes combinations as TestWrite did this.
@@ -1576,134 +1560,236 @@ func TestCopy(t *testing.T) {
 						Filename: "/tmp/foo/../../etc/passwd",
 					},
 				},
-				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
-				Key:    filepath.Base(f1.Name()),
+				Bucket: fmt.Sprintf("file:///some-folder"),
+				Key:    "some-source-file",
 			},
-			wantErr: true,
 		},
 		{
 			name: "Bad bucket",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{
 					Attrs: &pb.FileAttributes{
-						Filename: filepath.Join(temp, "/file"),
+						Filename: fmt.Sprintf("file:///some-folder"),
 					},
 				},
 				Bucket: "fil://not-a-path",
-				Key:    filepath.Base(f1.Name()),
+				Key:    "some-source-file",
 			},
-			wantErr: true,
 		},
 		{
 			name: "Bad key",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{
 					Attrs: &pb.FileAttributes{
-						Filename: filepath.Join(temp, "/file"),
+						Filename: fmt.Sprintf("file:///some-folder"),
 					},
 				},
 				Bucket: "file://not-a-path",
-				Key:    filepath.Base(f1.Name()),
+				Key:    "some-source-file",
 			},
-			wantErr: true,
-		},
-		{
-			// Same here. We don't need to test all finalization permutations as TestWrite did that.
-			name: "Fail due to overwrite = false",
-			req: &pb.CopyRequest{
-				Destination: &pb.FileWrite{
-					Attrs: &pb.FileAttributes{
-						Filename: filepath.Join(temp, "/file"),
-						Attributes: []*pb.FileAttribute{
-							{
-								Value: &pb.FileAttribute_Uid{
-									Uid: uint32(uid),
-								},
-							},
-							{
-								Value: &pb.FileAttribute_Gid{
-									Gid: uint32(gid),
-								},
-							},
-							{
-								Value: &pb.FileAttribute_Mode{
-									Mode: 0777,
-								},
-							},
-						},
-					},
-				},
-				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
-				Key:    filepath.Base(f1.Name()),
-			},
-			filename:  filepath.Join(temp, "/file"),
-			wantErr:   true,
-			touchFile: true,
-		},
-
-		{
-			name: "Copy a file",
-			req: &pb.CopyRequest{
-				Destination: &pb.FileWrite{
-					Attrs: &pb.FileAttributes{
-						Filename: filepath.Join(temp, "/file"),
-						Attributes: []*pb.FileAttribute{
-							{
-								Value: &pb.FileAttribute_Uid{
-									Uid: uint32(uid),
-								},
-							},
-							{
-								Value: &pb.FileAttribute_Gid{
-									Gid: uint32(gid),
-								},
-							},
-							{
-								Value: &pb.FileAttribute_Mode{
-									Mode: 0777,
-								},
-							},
-						},
-					},
-				},
-				Bucket: fmt.Sprintf("file://%s", filepath.Dir(f1.Name())),
-				Key:    filepath.Base(f1.Name()),
-			},
-			validate: contents,
-			filename: filepath.Join(temp, "file"),
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			defer func() {
-				if tc.filename != "" {
-					os.Remove(tc.filename)
-				}
-			}()
-
-			if tc.touchFile {
-				f, err := os.Create(tc.filename)
-				testutil.FatalOnErr("Create()", err, t)
-				err = f.Close()
-				testutil.FatalOnErr("Close()", err, t)
-			}
-
+			// ARRANGE
 			client := pb.NewLocalFileClient(conn)
+
+			// ACT
 			_, err := client.Copy(context.Background(), tc.req)
+
+			// ASSERT
 			t.Log(err)
-			testutil.WantErr(tc.name, err, tc.wantErr, t)
-			if tc.wantErr {
-				return
-			}
-
-			c, err := os.ReadFile(tc.filename)
-			testutil.FatalOnErr("ReadFile()", err, t)
-
-			if got, want := c, []byte(tc.validate); !bytes.Equal(got, want) {
-				t.Fatalf("%s: contents not equal.\nGot : %s\nWant: %s", tc.name, got, want)
-			}
+			testutil.WantErr(tc.name, err, true, t)
 		})
 	}
+
+	t.Run("Copy a file", func(t *testing.T) {
+		// ARRANGE
+		temp := t.TempDir()
+		sourceFilename := filepath.Join(temp, "source-file")
+		sourceFileContent := "some unique content"
+		destinationFilename := filepath.Join(temp, "destination-file")
+		expectedDstFileContent := sourceFileContent
+
+		// create source file
+		sourceFile, err := os.Create(sourceFilename)
+		testutil.FatalOnErr("Create()", err, t)
+
+		// write content to source file
+		_, err = sourceFile.WriteString(sourceFileContent)
+		testutil.FatalOnErr("WriteString()", err, t)
+
+		err = sourceFile.Close()
+		testutil.FatalOnErr("Close()", err, t)
+
+		client := pb.NewLocalFileClient(conn)
+		req := &pb.CopyRequest{
+			Destination: &pb.FileWrite{
+				Attrs: &pb.FileAttributes{
+					Filename: destinationFilename,
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 0777,
+							},
+						},
+					},
+				},
+			},
+			Bucket: fmt.Sprintf("file://%s", filepath.Dir(sourceFile.Name())),
+			Key:    filepath.Base(sourceFile.Name()),
+		}
+
+		// ACT
+		_, err = client.Copy(context.Background(), req)
+
+		// ASSERT
+		t.Log(err)
+		testutil.WantErr(t.Name(), err, false, t)
+
+		// validate destination file content
+		destinationContent, err := os.ReadFile(destinationFilename)
+		testutil.FatalOnErr("ReadFile()", err, t)
+
+		if got, want := destinationContent, []byte(expectedDstFileContent); !bytes.Equal(got, want) {
+			t.Fatalf("contents not equal.\nGot : %s\nWant: %s", got, want)
+			return
+		}
+	})
+
+	t.Run("Copy a file to not existed directory with ensure destination folder path", func(t *testing.T) {
+		// ARRANGE
+		temp := t.TempDir()
+		sourceFilename := filepath.Join(temp, "source-file")
+		sourceFileContent := "some unique content"
+		destinationFilename := filepath.Join(temp, "/deeply/nested/destination-file")
+		expectedDstFileContent := sourceFileContent
+
+		// create source file
+		sourceFile, err := os.Create(sourceFilename)
+		testutil.FatalOnErr("Create()", err, t)
+
+		// write content to source file
+		_, err = sourceFile.WriteString(sourceFileContent)
+		testutil.FatalOnErr("WriteString()", err, t)
+
+		err = sourceFile.Close()
+		testutil.FatalOnErr("Close()", err, t)
+
+		client := pb.NewLocalFileClient(conn)
+		req := &pb.CopyRequest{
+			Destination: &pb.FileWrite{
+				EnsureOutputDirectory: true,
+				Attrs: &pb.FileAttributes{
+					Filename: destinationFilename,
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 0777,
+							},
+						},
+					},
+				},
+			},
+			Bucket: fmt.Sprintf("file://%s", filepath.Dir(sourceFile.Name())),
+			Key:    filepath.Base(sourceFile.Name()),
+		}
+
+		// ACT
+		_, err = client.Copy(context.Background(), req)
+
+		// ASSERT
+		t.Log(err)
+
+		// validate destination file content
+		destinationContent, err := os.ReadFile(destinationFilename)
+		testutil.FatalOnErr("ReadFile()", err, t)
+
+		if got, want := destinationContent, []byte(expectedDstFileContent); !bytes.Equal(got, want) {
+			t.Fatalf("contents not equal.\nGot : %s\nWant: %s", got, want)
+			return
+		}
+	})
+
+	// Same here. We don't need to test all finalization permutations as TestWrite did that.
+	t.Run("Fail due to overwrite = false", func(t *testing.T) {
+		// ARRANGE
+		temp := t.TempDir()
+		sourceFilename := filepath.Join(temp, "source-file")
+		existedDestinationFilename := filepath.Join(temp, "destination-file")
+
+		// create source file
+		sourceFile, err := os.Create(sourceFilename)
+		testutil.FatalOnErr("Create()", err, t)
+
+		err = sourceFile.Close()
+		testutil.FatalOnErr("Close()", err, t)
+
+		// create destination file, to fail due to overwrite = false
+		existedDestinationFile, err := os.Create(existedDestinationFilename)
+		testutil.FatalOnErr("Create()", err, t)
+
+		err = existedDestinationFile.Close()
+		testutil.FatalOnErr("Close()", err, t)
+
+		client := pb.NewLocalFileClient(conn)
+		req := &pb.CopyRequest{
+			Destination: &pb.FileWrite{
+				Overwrite: false, // disallow overwrite files
+				Attrs: &pb.FileAttributes{
+					// set existed destination file as key to get error due to overwrite = false
+					Filename: existedDestinationFilename,
+					Attributes: []*pb.FileAttribute{
+						{
+							Value: &pb.FileAttribute_Uid{
+								Uid: uint32(uid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Gid{
+								Gid: uint32(gid),
+							},
+						},
+						{
+							Value: &pb.FileAttribute_Mode{
+								Mode: 0777,
+							},
+						},
+					},
+				},
+			},
+			Bucket: fmt.Sprintf("file://%s", filepath.Dir(sourceFile.Name())),
+			Key:    filepath.Base(sourceFile.Name()),
+		}
+
+		// ACT
+		_, err = client.Copy(context.Background(), req)
+
+		// ASSERT
+		t.Log(err)
+		testutil.WantErr(t.Name(), err, true, t)
+	})
+
 }
 
 func TestRm(t *testing.T) {

@@ -201,6 +201,8 @@ message FileWrite {
   // data is written to a tempfile before moved to the final destination so
   // multiple system calls will take place.
   bool overwrite = 2;
+  // If true will ensure the directory exists before writing the file.
+  bool ensureOutputDirectory = 3;
 }
 
 // WriteRequest streams the data for the filename to be written.
