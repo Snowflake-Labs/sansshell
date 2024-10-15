@@ -56,7 +56,7 @@ import (
 
 var (
 	// AbsolutePathError is a typed error for path errors on file/directory names.
-	AbsolutePathError = status.Error(codes.InvalidArgument, "sourceFilename path must be absolute and clean")
+	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 
 	// For testing since otherwise tests have to run as root for these.
 	chown             = unix.Chown
@@ -132,7 +132,7 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 		return status.Error(codes.InvalidArgument, "must supply a ReadRequest or a TailRequest")
 	}
 
-	logger.Info("read request", "sourceFilename", file)
+	logger.Info("read request", "filename", file)
 	if err := util.ValidPath(file); err != nil {
 		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return err
@@ -231,7 +231,7 @@ func (s *server) Stat(stream pb.LocalFile_StatServer) error {
 			return status.Errorf(codes.Internal, "stat: recv error %v", err)
 		}
 
-		logger.Info("stat", "sourceFilename", req.Filename)
+		logger.Info("stat", "filename", req.Filename)
 		if err := util.ValidPath(req.Filename); err != nil {
 			recorder.CounterOrLog(ctx, localfileStatFailureCounter, 1, attribute.String("reason", "invalid_path"))
 			return AbsolutePathError
@@ -565,7 +565,7 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if req.Entry == "" {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
-		return status.Errorf(codes.InvalidArgument, "sourceFilename must be filled in")
+		return status.Errorf(codes.InvalidArgument, "filename must be filled in")
 	}
 	if err := util.ValidPath(req.Entry); err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "invalid_path"))
