@@ -1689,7 +1689,7 @@ func TestCopy(t *testing.T) {
 		client := pb.NewLocalFileClient(conn)
 		req := &pb.CopyRequest{
 			Destination: &pb.FileWrite{
-				EnsureOutputDirectory: true,
+				CreateDestinationDir: true,
 				Attrs: &pb.FileAttributes{
 					Filename: destinationFilename,
 					Attributes: []*pb.FileAttribute{

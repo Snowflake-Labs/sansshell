@@ -494,7 +494,7 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	filename := a.Filename
 	logger.Info("copy file", filename)
 
-	if d.EnsureOutputDirectory {
+	if d.CreateDestinationDir {
 		outputDir := filepath.Dir(filename)
 		if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
 			recorder.CounterOrLog(ctx, localfileCopyFailureCounter, 1, attribute.String("reason", "mkdir_err"))

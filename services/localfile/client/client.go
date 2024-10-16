@@ -978,15 +978,15 @@ func (p *lsCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 }
 
 type cpCmd struct {
-	bucket          string
-	overwrite       bool
-	ensureOutputDir bool
-	uid             int
-	username        string
-	gid             int
-	group           string
-	mode            int
-	immutable       bool
+	bucket               string
+	overwrite            bool
+	createDestinationDir bool
+	uid                  int
+	username             string
+	gid                  int
+	group                string
+	mode                 int
+	immutable            bool
 }
 
 func (*cpCmd) Name() string     { return "cp" }
@@ -1004,7 +1004,7 @@ sure to use a fully formed directory. i.e. copying /etc/hosts would be --bucket=
 func (p *cpCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.bucket, "bucket", "", "If set to a valid prefix will copy from this bucket with the key being the source provided")
 	f.BoolVar(&p.overwrite, "overwrite", false, "If true will overwrite the remote file. Otherwise the file pre-existing is an error.")
-	f.BoolVar(&p.ensureOutputDir, "ensure-output-dir", false, "If true will ensure output dir exists before copy. Otherwise the if folder not exists copy would fail.")
+	f.BoolVar(&p.createDestinationDir, "create-destination-dir", false, "If true will create destination dir, if it doesn't exist.")
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
 	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
@@ -1076,8 +1076,8 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 				},
 			},
 		},
-		Overwrite:             p.overwrite,
-		EnsureOutputDirectory: p.ensureOutputDir,
+		Overwrite:            p.overwrite,
+		CreateDestinationDir: p.createDestinationDir,
 	}
 	if p.uid >= 0 {
 		descr.Attrs.Attributes = append(descr.Attrs.Attributes, &pb.FileAttribute{
