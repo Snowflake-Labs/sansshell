@@ -1540,14 +1540,14 @@ func TestCopy(t *testing.T) {
 			name: "No key",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{},
-				Bucket:      fmt.Sprintf("file:///some-folder"),
+				Bucket:      "file:///some-folder",
 			},
 		},
 		{
 			name: "No attrs",
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{},
-				Bucket:      fmt.Sprintf("file:///some-folder"),
+				Bucket:      "file:///some-folder",
 				Key:         "some-source-file",
 			},
 		},
@@ -1560,7 +1560,7 @@ func TestCopy(t *testing.T) {
 						Filename: "/tmp/foo/../../etc/passwd",
 					},
 				},
-				Bucket: fmt.Sprintf("file:///some-folder"),
+				Bucket: "file:///some-folder",
 				Key:    "some-source-file",
 			},
 		},
@@ -1569,7 +1569,7 @@ func TestCopy(t *testing.T) {
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{
 					Attrs: &pb.FileAttributes{
-						Filename: fmt.Sprintf("file:///some-folder"),
+						Filename: "file:///some-folder",
 					},
 				},
 				Bucket: "fil://not-a-path",
@@ -1581,7 +1581,7 @@ func TestCopy(t *testing.T) {
 			req: &pb.CopyRequest{
 				Destination: &pb.FileWrite{
 					Attrs: &pb.FileAttributes{
-						Filename: fmt.Sprintf("file:///some-folder"),
+						Filename: "file:///some-folder",
 					},
 				},
 				Bucket: "file://not-a-path",
