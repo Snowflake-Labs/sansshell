@@ -84,6 +84,9 @@ type PeerAuthInput struct {
 	// Network information about the peer
 	Net *NetAuthInput `json:"net"`
 
+	// Unix peer credentials if peer connects via Unix socket, nil otherwise
+	Unix *UnixAuthInput `json:"unix"`
+
 	// Information about the certificate presented by the peer, if any
 	Cert *CertAuthInput `json:"cert"`
 
@@ -101,6 +104,21 @@ type NetAuthInput struct {
 
 	// The port, as parsed from net.Addr.String(), if present
 	Port string `json:"port"`
+}
+
+// UnixAuthInput contains information about a Unix socket peer.
+type UnixAuthInput struct {
+	// The user ID of the peer.
+	Uid int `json:"uid"`
+
+	// The username of the peer, or the stringified UID if user is not known.
+	UserName string `json:"username"`
+
+	// The group IDs (primary and supplementary) of the peer.
+	Gids []int `json:"gids"`
+
+	// The group names of the peer. If not available, the stringified IDs is used.
+	GroupNames []string `json:"groupnames"`
 }
 
 // HostAuthInput contains policy-relevant information about the system receiving
@@ -189,6 +207,7 @@ func PeerInputFromContext(ctx context.Context) *PeerAuthInput {
 	}
 
 	out.Net = NetInputFromAddr(p.Addr)
+	out.Unix = UnixInputFrom(p.AuthInfo)
 	out.Cert = CertInputFrom(p.AuthInfo)
 
 	// If this runs after rpcauth hooks, we can return richer data that includes
@@ -220,6 +239,19 @@ func NetInputFromAddr(addr net.Addr) *NetAuthInput {
 		out.Port = port
 	}
 	return out
+}
+
+// UnixInputFrom returns UnixAuthInput from the supplied credentials, if available.
+func UnixInputFrom(authInfo credentials.AuthInfo) *UnixAuthInput {
+	if unixInfo, ok := authInfo.(UnixPeerAuthInfo); ok {
+		return &UnixAuthInput{
+			Uid:        unixInfo.Credentials.Uid,
+			UserName:   unixInfo.Credentials.UserName,
+			Gids:       unixInfo.Credentials.Gids,
+			GroupNames: unixInfo.Credentials.GroupNames,
+		}
+	}
+	return nil
 }
 
 // CertInputFrom populates certificate information from the supplied
