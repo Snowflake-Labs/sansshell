@@ -19,10 +19,13 @@ package server
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -31,8 +34,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/server"
@@ -172,6 +177,121 @@ func TestServeUnix(t *testing.T) {
 				srv.Stop()
 			}))
 	testutil.FatalOnErr("ServeUnix with socket config hook", err, t)
+}
+
+func TestServerWithUnixCredentials(t *testing.T) {
+	socketPath := t.TempDir() + "/test.sock"
+	policyTemplateWithUnixCreds := `
+package sansshell.authz
+
+default allow = false
+
+allow {
+    %s
+	input.method = "/HealthCheck.HealthCheck/Ok"
+}
+`
+
+	// This function produces an on-server-start listener which connects to the
+	// server over the Unix socket and calls a gRPC method.
+	runHealthCheck := func(t *testing.T, expectedSuccess bool) func(*grpc.Server) {
+		return func(s *grpc.Server) {
+			defer s.Stop()
+
+			conn, err := grpc.NewClient("passthrough:///unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			testutil.FatalOnErr("Failed to dial bufnet", err, t)
+			defer conn.Close()
+
+			client := hcpb.NewHealthCheckClient(conn)
+			_, err = client.Ok(context.Background(), &emptypb.Empty{})
+			if expectedSuccess {
+				testutil.FatalOnErr("Failed to call Ok", err, t)
+			} else {
+				testutil.FatalOnNoErr("Ok should have failed", err, t)
+			}
+		}
+	}
+
+	// In the test environment, the process connecting over the Unix socket
+	// will be the same process as the one running the server. We can rely on
+	// that to get the expected values for the "peer's" Unix credentials.
+	currentUser, err := user.Current()
+	testutil.FatalOnErr("Failed to get current user", err, t)
+	currentUid, err := strconv.Atoi(currentUser.Uid)
+	testutil.FatalOnErr("Failed to convert current user UID to int", err, t)
+
+	// We will check that both the primary and supplementary groups can be
+	// used in OPA policies.
+	groupIdStrings, err := currentUser.GroupIds()
+	testutil.FatalOnErr("Failed to get group IDs of current user", err, t)
+	groupNameStrings := []string{}
+	for _, groupIdString := range groupIdStrings {
+		groupInfo, err := user.LookupGroupId(groupIdString)
+		testutil.FatalOnErr("Failed to get group info", err, t)
+		groupNameStrings = append(groupNameStrings, groupInfo.Name)
+	}
+
+	for _, tc := range []struct {
+		name            string
+		policyFragment  string
+		expectedSuccess bool
+	}{
+		{
+			name:            "UID match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.uid ==  %d", currentUid),
+			expectedSuccess: true,
+		},
+		{
+			name:            "UID mismatch",
+			policyFragment:  fmt.Sprintf("input.peer.unix.uid ==  %d", currentUid+1),
+			expectedSuccess: false,
+		},
+		{
+			name:            "username match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.username ==  \"%s\"", currentUser.Username),
+			expectedSuccess: true,
+		},
+		{
+			name:            "username mismatch",
+			policyFragment:  fmt.Sprintf("input.peer.unix.username ==  \"%s\"", currentUser.Username+"x"),
+			expectedSuccess: false,
+		},
+		{
+			name:            "primary GID match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.gids[_] == %s", groupIdStrings[0]),
+			expectedSuccess: true,
+		},
+		{
+			name:            "supplementary GID match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.gids[_] == %s", groupIdStrings[len(groupIdStrings)-1]),
+			expectedSuccess: true,
+		},
+		{
+			name:            "primary group name match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.groupnames[_] == \"%s\"", groupNameStrings[0]),
+			expectedSuccess: true,
+		},
+		{
+			name:            "supplementary group name match",
+			policyFragment:  fmt.Sprintf("input.peer.unix.groupnames[_] == \"%s\"", groupNameStrings[len(groupNameStrings)-1]),
+			expectedSuccess: true,
+		},
+		{
+			name:            "group name mismatch",
+			policyFragment:  fmt.Sprintf("input.peer.unix.groupnames[_] == \"%s\"", groupNameStrings[0]+"x"),
+			expectedSuccess: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := fmt.Sprintf(policyTemplateWithUnixCreds, tc.policyFragment)
+			err := ServeUnix(socketPath,
+				nil,
+				WithPolicy(policy),
+				WithCredentials(NewUnixPeerTransportCredentials()),
+				WithOnStartListener(runHealthCheck(t, tc.expectedSuccess)))
+			testutil.FatalOnErr("ServeUnix with Unix creds policy", err, t)
+		})
+	}
 }
 
 func TestRead(t *testing.T) {

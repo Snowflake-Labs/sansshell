@@ -401,7 +401,7 @@ func runTCPServer(ctx context.Context, rs *runState) error {
 
 func runInsecureUnixSocketServer(_ context.Context, rs *runState) error {
 	serverOpts := extractCommonOptionsFromRunState(rs)
-	serverOpts = append(serverOpts, server.WithInsecure())
+	serverOpts = append(serverOpts, server.WithCredentials(server.NewUnixPeerTransportCredentials()))
 	return server.ServeUnix(rs.unixSocket, rs.unixSocketConfigHook, serverOpts...)
 }
 

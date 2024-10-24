@@ -552,6 +552,41 @@ func TestRpcAuthInput(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "method and a peer context with unix creds",
+			ctx: peer.NewContext(ctx, &peer.Peer{
+				Addr: &net.UnixAddr{Net: "unix", Name: "@"},
+				AuthInfo: UnixPeerAuthInfo{
+					CommonAuthInfo: credentials.CommonAuthInfo{
+						SecurityLevel: credentials.NoSecurity,
+					},
+					Credentials: UnixPeerCredentials{
+						Uid:        1,
+						UserName:   "george",
+						Gids:       []int{1001, 2},
+						GroupNames: []string{"george", "the_gang"},
+					},
+				},
+			}),
+			method: "/AMethod",
+			compare: &RPCAuthInput{
+				Method: "/AMethod",
+				Peer: &PeerAuthInput{
+					Net: &NetAuthInput{
+						Network: "unix",
+						Address: "@",
+						Port:    "",
+					},
+					Unix: &UnixAuthInput{
+						Uid:        1,
+						UserName:   "george",
+						Gids:       []int{1001, 2},
+						GroupNames: []string{"george", "the_gang"},
+					},
+					Cert: &CertAuthInput{},
+				},
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
