@@ -75,7 +75,7 @@ type runCmd struct {
 func (*runCmd) Name() string     { return "run" }
 func (*runCmd) Synopsis() string { return "Run provided command and return a response." }
 func (*runCmd) Usage() string {
-	return `run <command> [--stream] [<args>...]:
+	return `run [--stream] <command> [<args>...]:
   Run a command remotely and return the response
 
 	Note: This is not optimized for large output or long running commands.  If
