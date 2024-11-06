@@ -41,6 +41,7 @@ var (
 
 type mockResolver struct {
 	shouldFail bool
+	dns        map[string][]net.IP
 }
 
 func (m mockResolver) LookupIP(ctx context.Context, network, hostname string) ([]net.IP, error) {
@@ -48,9 +49,7 @@ func (m mockResolver) LookupIP(ctx context.Context, network, hostname string) ([
 	if m.shouldFail {
 		return res, errors.New("invalid")
 	}
-
-	res = append(res, net.IPv4(1, 3, 3, 7))
-	return res, nil
+	return m.dns[hostname], nil
 }
 
 func bufDialer(context.Context, string) (net.Conn, error) {
@@ -82,22 +81,23 @@ func TestDnsLookup(t *testing.T) {
 	client := pb.NewLookupClient(conn)
 
 	tests := map[string]struct {
-		testee  string
-		want    []string
-		wantErr bool
+		testee    string
+		want      []string
+		addresses []net.IP
+		wantErr   bool
 	}{
-		"dns lookup succeeds": {testee: "gotest.com", want: []string{"1.3.3.7"}, wantErr: false},
-		"invalid hostname":    {testee: "gotest", wantErr: true},
+		"dns lookup succeeds":           {testee: "example.com", addresses: []net.IP{net.IPv4(1, 3, 3, 7)}, want: []string{"1.3.3.7"}, wantErr: false},
+		"dns lookup multiple addresses": {testee: "example.com", addresses: []net.IP{net.IPv4(1, 3, 3, 7), net.IPv4(8, 8, 8, 8)}, want: []string{"1.3.3.7", "8.8.8.8"}, wantErr: false},
+		"invalid hostname":              {testee: "gotest", wantErr: true},
 	}
 
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			origResolver := resolver
 			t.Cleanup(func() {
 				resolver = origResolver
 			})
-			resolver = mockResolver{shouldFail: tc.wantErr}.LookupIP
+			resolver = mockResolver{shouldFail: tc.wantErr, dns: map[string][]net.IP{tc.testee: tc.addresses}}.LookupIP
 
 			got, err := client.Lookup(ctx, &pb.LookupRequest{
 				Hostname: tc.testee,
@@ -112,5 +112,4 @@ func TestDnsLookup(t *testing.T) {
 			}
 		})
 	}
-
 }
