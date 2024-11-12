@@ -46,6 +46,7 @@ import (
 
 	// Import services here to make them proxy-able
 	_ "github.com/Snowflake-Labs/sansshell/services/ansible"
+	_ "github.com/Snowflake-Labs/sansshell/services/dns"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
