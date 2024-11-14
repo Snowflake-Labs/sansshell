@@ -20,10 +20,12 @@ package server
 import (
 	"context"
 	"io"
+	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"syscall"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -50,18 +52,9 @@ func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResp
 
 	var opts []util.Option
 	if req.User != "" {
-		u, err := user.Lookup(req.User)
+		uid, gid, err := resolveUser(req.User)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "user '%s' not found:\n%v", req.User, err)
-		}
-		// This will work only on POSIX (Windows has non-decimal uids) yet these are our targets.
-		uid, err := strconv.Atoi(u.Uid)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "'%s' user's uid %s failed to convert to numeric value:\n%v", req.User, u.Uid, err)
-		}
-		gid, err := strconv.Atoi(u.Gid)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "'%s' user's gid %s failed to convert to numeric value:\n%v", req.User, u.Gid, err)
+			return nil, err
 		}
 		opts = append(opts, util.CommandUser(uint32(uid)))
 		opts = append(opts, util.CommandGroup(uint32(gid)))
@@ -94,6 +87,24 @@ func (s *server) StreamingRun(req *pb.ExecRequest, stream pb.Exec_StreamingRunSe
 	}
 
 	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
+	if req.User != "" {
+		gid, uid, err := resolveUser(req.User)
+		if err != nil {
+			return err
+		}
+
+		// Set uid/gid if needed for the sub-process to run under.
+		// Only do this if it's different than our current ones since
+		// attempting to setuid/gid() to even your current values is EPERM.
+		if uid != uint32(os.Geteuid()) || gid != uint32(os.Getgid()) {
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				Credential: &syscall.Credential{
+					Uid: uid,
+					Gid: gid,
+				},
+			}
+		}
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -143,6 +154,24 @@ func (s *server) StreamingRun(req *pb.ExecRequest, stream pb.Exec_StreamingRunSe
 		return stream.Send(&pb.ExecResponse{RetCode: int32(exitErr.ExitCode())})
 	}
 	return err
+}
+
+// resolveUser
+func resolveUser(username string) (uint32, uint32, error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return 0, 0, status.Errorf(codes.InvalidArgument, "user '%s' not found:\n%v", username, err)
+	}
+	// This will work only on POSIX (Windows has non-decimal uids) yet these are our targets.
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, 0, status.Errorf(codes.Internal, "'%s' user's uid %s failed to convert to numeric value:\n%v", username, u.Uid, err)
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0, 0, status.Errorf(codes.Internal, "'%s' user's gid %s failed to convert to numeric value:\n%v", username, u.Gid, err)
+	}
+	return uint32(uid), uint32(gid), nil
 }
 
 // Register is called to expose this handler to the gRPC server
