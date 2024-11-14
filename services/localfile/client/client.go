@@ -740,7 +740,7 @@ func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 }
 
 type chmodCmd struct {
-	mode uint64
+	mode string
 }
 
 func (*chmodCmd) Name() string     { return "chmod" }
@@ -752,7 +752,7 @@ func (*chmodCmd) Usage() string {
 }
 
 func (c *chmodCmd) SetFlags(f *flag.FlagSet) {
-	f.Uint64Var(&c.mode, "mode", 0, "Sets the file/directory to this mode")
+	f.StringVar(&c.mode, "mode", "", "Sets the file/directory to this mode")
 }
 
 func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -761,9 +761,17 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "please specify a filename to chmod")
 		return subcommands.ExitUsageError
 	}
-	if c.mode == 0 {
+	if c.mode == "" {
 		fmt.Fprintln(os.Stderr, "--mode must be set to a non-zero value")
 		return subcommands.ExitFailure
+	}
+
+	mode, err := ParseFileMode(c.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode %s", c.mode)
+
+		return subcommands.ExitUsageError
 	}
 
 	req := &pb.SetFileAttributesRequest{
@@ -772,7 +780,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			Attributes: []*pb.FileAttribute{
 				{
 					Value: &pb.FileAttribute_Mode{
-						Mode: uint32(c.mode),
+						Mode: uint32(mode),
 					},
 				},
 			},
