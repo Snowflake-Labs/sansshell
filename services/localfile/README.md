@@ -113,3 +113,20 @@ Examples:
 # Creates a new `hello` directory in `/opt`
 sanssh --target $TARGET file mkdir --username=joe --group=staff --mode=644 /opt/hello
 ```
+
+### sanssh file chmod
+Change the modes on a file/directory.
+
+```bash
+sanssh <sanssh-args> file chmod --mode=X <path>
+```
+Where:
+- `<sanssh-args>` common sanssh arguments
+- `<path>` path of the new directory
+- `--mode` The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).
+
+Examples:
+```bash
+# Set file mode of `/opt/hello` to 644
+sanssh --target $TARGET file chmod --mode=644 /opt/hello
+```
