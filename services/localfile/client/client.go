@@ -984,7 +984,7 @@ type cpCmd struct {
 	username  string
 	gid       int
 	group     string
-	mode      int
+	mode      string
 	immutable bool
 }
 
@@ -1005,7 +1005,7 @@ func (p *cpCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.overwrite, "overwrite", false, "If true will overwrite the remote file. Otherwise the file pre-existing is an error.")
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod.")
 	f.BoolVar(&p.immutable, "immutable", false, "If true sets the remote file to immutable after being written.")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
@@ -1024,7 +1024,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		fmt.Fprintln(os.Stderr, "Please specify a source to copy and destination filename to write the contents into.")
 		return subcommands.ExitUsageError
 	}
-	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == "" {
 		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
 		return subcommands.ExitUsageError
 	}
@@ -1058,13 +1058,21 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 
+	mode, err := ParseFileMode(p.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode %s", p.mode)
+
+		return subcommands.ExitUsageError
+	}
+
 	descr := &pb.FileWrite{
 		Attrs: &pb.FileAttributes{
 			Filename: dest,
 			Attributes: []*pb.FileAttribute{
 				{
 					Value: &pb.FileAttribute_Mode{
-						Mode: uint32(p.mode),
+						Mode: uint32(mode),
 					},
 				},
 				{

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -576,4 +577,12 @@ func ListRemote(ctx context.Context, conn *proxy.Conn, listRequest ListRequest) 
 		}
 	}
 	return ret, nil
+}
+
+const fileModeSizeInBits = 12
+
+func ParseFileMode(modeStr string) (uint16, error) {
+	mode, err := strconv.ParseUint(modeStr, 8, fileModeSizeInBits)
+
+	return uint16(mode), err
 }
