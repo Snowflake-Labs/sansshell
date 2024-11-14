@@ -88,7 +88,7 @@ func (s *server) StreamingRun(req *pb.ExecRequest, stream pb.Exec_StreamingRunSe
 
 	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
 	if req.User != "" {
-		gid, uid, err := resolveUser(req.User)
+		uid, gid, err := resolveUser(req.User)
 		if err != nil {
 			return err
 		}
@@ -156,7 +156,7 @@ func (s *server) StreamingRun(req *pb.ExecRequest, stream pb.Exec_StreamingRunSe
 	return err
 }
 
-// resolveUser
+// resolveUser retruns uid and gid of provided username.
 func resolveUser(username string) (uint32, uint32, error) {
 	u, err := user.Lookup(username)
 	if err != nil {
