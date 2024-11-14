@@ -1367,7 +1367,7 @@ type mkdirCmd struct {
 	username string
 	gid      int
 	group    string
-	mode     int
+	mode     string
 }
 
 func (*mkdirCmd) Name() string     { return "mkdir" }
@@ -1385,7 +1385,7 @@ func (*mkdirCmd) Usage() string {
 func (p *mkdirCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod.")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
 }
@@ -1396,7 +1396,7 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "Please specify a directory path to create.")
 		return subcommands.ExitUsageError
 	}
-	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == "" {
 		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
 		return subcommands.ExitUsageError
 	}
@@ -1412,12 +1412,20 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	c := pb.NewLocalFileClientProxy(state.Conn)
 	directoryName := f.Args()[0]
 
+	mode, err := ParseFileMode(p.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode %s", p.mode)
+
+		return subcommands.ExitUsageError
+	}
+
 	dirAttrs := &pb.FileAttributes{
 		Filename: directoryName,
 		Attributes: []*pb.FileAttribute{
 			{
 				Value: &pb.FileAttribute_Mode{
-					Mode: uint32(p.mode),
+					Mode: uint32(mode),
 				},
 			},
 		},
