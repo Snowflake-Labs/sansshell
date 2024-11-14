@@ -86,6 +86,7 @@ func TestExec(t *testing.T) {
 		name              string
 		bin               string
 		args              []string
+		user              string
 		wantErr           bool
 		returnCodeNonZero bool
 		stdout            string
@@ -111,6 +112,13 @@ func TestExec(t *testing.T) {
 			bin:     "foo",
 			wantErr: true,
 		},
+		{
+			name:    "user specified -- fails as it can't setuid",
+			bin:     testutil.ResolvePath(t, "echo"),
+			args:    []string{"hello world"},
+			user:    "nobody",
+			wantErr: true,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -118,6 +126,7 @@ func TestExec(t *testing.T) {
 			resp, err := client.Run(ctx, &pb.ExecRequest{
 				Command: tc.bin,
 				Args:    tc.args,
+				User:    tc.user,
 			})
 			t.Logf("%s: resp: %+v", tc.name, resp)
 			t.Logf("%s: err: %v", tc.name, err)

@@ -21,7 +21,9 @@ import (
 	"context"
 	"io"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strconv"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,7 +47,26 @@ type server struct{}
 // Run executes command and returns result
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	run, err := util.RunCommand(ctx, req.Command, req.Args)
+
+	var opts []util.Option
+	if req.User != "" {
+		u, err := user.Lookup(req.User)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "user '%s' not found:\n%v", req.User, err)
+		}
+		// This will work only on POSIX (Windows has non-decimal uids) yet these are our targets.
+		uid, err := strconv.Atoi(u.Uid)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "'%s' user's uid %s failed to convert to numeric value:\n%v", req.User, u.Uid, err)
+		}
+		gid, err := strconv.Atoi(u.Gid)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "'%s' user's gid %s failed to convert to numeric value:\n%v", req.User, u.Gid, err)
+		}
+		opts = append(opts, util.CommandUser(uint32(uid)))
+		opts = append(opts, util.CommandGroup(uint32(gid)))
+	}
+	run, err := util.RunCommand(ctx, req.Command, req.Args, opts...)
 	if err != nil {
 		recorder.CounterOrLog(ctx, execRunFailureCounter, 1)
 		return nil, err

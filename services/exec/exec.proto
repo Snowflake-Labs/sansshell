@@ -35,6 +35,8 @@ service Exec {
 message ExecRequest {
   string command = 1;
   repeated string args = 2;
+  // User to execute command as, equivalent of `sudo -u <user> <command>`.
+  string user = 3;
 }
 
 // ExecResponse describes output of execution
