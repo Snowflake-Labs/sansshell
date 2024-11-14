@@ -752,7 +752,7 @@ func (*chmodCmd) Usage() string {
 }
 
 func (c *chmodCmd) SetFlags(f *flag.FlagSet) {
-	f.StringVar(&c.mode, "mode", "", "Sets the file/directory to this mode")
+	f.StringVar(&c.mode, "mode", "", "Sets the file/directory to this mode. Must be an octal number (e.g. 644, 755, 0777).")
 }
 
 func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -1013,7 +1013,7 @@ func (p *cpCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.overwrite, "overwrite", false, "If true will overwrite the remote file. Otherwise the file pre-existing is an error.")
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).")
 	f.BoolVar(&p.immutable, "immutable", false, "If true sets the remote file to immutable after being written.")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
@@ -1385,7 +1385,7 @@ func (*mkdirCmd) Usage() string {
 func (p *mkdirCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
 }
