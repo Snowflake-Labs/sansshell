@@ -89,3 +89,27 @@ sanssh --target $TARGET file cp --username=joe --group=staff --mode=644 local.tx
 # Copies a file from an S3 bucket and stores it on the remote machine as `/tmp/remote.txt`
 sanssh --target $TARGET file cp --username=joe --group=staff --mode=644 --bucket=s3://my-bucket local.txt /tmp/remote.txt
 ```
+
+### sanssh file mkdir
+Create a directory at the specified path.
+
+Note: Creating intermediate directories is not supported. In order to create `/AAA/BBB/test`,
+   both `AAA` and `BBB` must exist.
+
+```bash
+sanssh <sanssh-args> file mkdir --uid=X|username=Y --gid=X|group=Y --mode=X <path>
+```
+Where:
+- `<sanssh-args>` common sanssh arguments
+- `<path>` path of the new directory
+- `--uid` The uid the remote file will be set via chown.
+- `--username` The remote file will be set to this username via chown.
+- `--gid` The gid the remote file will be set via chown.
+- `--group` The remote file will be set to this group via chown.
+- `--mode` The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).
+
+Examples:
+```bash
+# Creates a new `hello` directory in `/opt`
+sanssh --target $TARGET file mkdir --username=joe --group=staff --mode=644 /opt/hello
+```
