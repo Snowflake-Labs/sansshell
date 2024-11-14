@@ -762,7 +762,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		return subcommands.ExitUsageError
 	}
 	if c.mode == "" {
-		fmt.Fprintln(os.Stderr, "--mode must be set to a non-zero value")
+		fmt.Fprintln(os.Stderr, "--mode must be set to a non-empty value")
 		return subcommands.ExitFailure
 	}
 
