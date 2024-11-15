@@ -74,6 +74,9 @@ service LocalFile {
 
   // Set data value to a file of specified type by provided key
   rpc DataSet(DataSetRequest) returns (google.protobuf.Empty) {}
+
+  // Perform Shred on a single file
+  rpc Shred(ShredRequest) returns (google.protobuf.Empty) {}
 }
 
 // ReadActionRequest indicates the type of read we're performing.
@@ -315,4 +318,15 @@ message DataSetRequest {
   string data_key = 3;
   string value = 4;
   DataSetValueType value_type = 5;
+}
+
+// ShredRequest is a request to perform Shred operation on a specific file
+message ShredRequest {
+  string filename = 1;
+  // force permissions change if necessary
+  bool force = 2;
+  // add final zero-ing pass to mask presence of shredding
+  bool zero = 3;
+  // remove file after shredding
+  bool remove = 4;
 }
