@@ -770,7 +770,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	mode, err := parseFileMode(c.mode)
 
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", c.mode)
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", c.mode)
 
 		return subcommands.ExitUsageError
 	}
