@@ -769,7 +769,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	mode, err := ParseFileMode(c.mode)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid --mode %s", c.mode)
+		fmt.Fprintln(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", c.mode)
 
 		return subcommands.ExitUsageError
 	}
@@ -1069,7 +1069,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	mode, err := ParseFileMode(p.mode)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid --mode %s", p.mode)
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
 
 		return subcommands.ExitUsageError
 	}
@@ -1415,7 +1415,7 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	mode, err := ParseFileMode(p.mode)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid --mode %s", p.mode)
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
 
 		return subcommands.ExitUsageError
 	}
