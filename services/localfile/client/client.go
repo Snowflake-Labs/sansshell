@@ -26,6 +26,7 @@ import (
 	"io/fs"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -766,7 +767,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		return subcommands.ExitFailure
 	}
 
-	mode, err := ParseFileMode(c.mode)
+	mode, err := parseFileMode(c.mode)
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", c.mode)
@@ -1066,7 +1067,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 
-	mode, err := ParseFileMode(p.mode)
+	mode, err := parseFileMode(p.mode)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
@@ -1412,7 +1413,7 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	c := pb.NewLocalFileClientProxy(state.Conn)
 	directoryName := f.Args()[0]
 
-	mode, err := ParseFileMode(p.mode)
+	mode, err := parseFileMode(p.mode)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
@@ -1481,4 +1482,12 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	}
 	return retCode
 
+}
+
+const fileModeSizeInBits = 12
+
+func parseFileMode(modeStr string) (uint16, error) {
+	mode, err := strconv.ParseUint(modeStr, 8, fileModeSizeInBits)
+
+	return uint16(mode), err
 }
