@@ -21,8 +21,9 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -34,7 +35,6 @@ var (
 )
 
 func (s *server) Shred(ctx context.Context, req *pb.ShredRequest) (*emptypb.Empty, error) {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
 	if err := util.ValidPath(req.Filename); err != nil {
@@ -42,13 +42,38 @@ func (s *server) Shred(ctx context.Context, req *pb.ShredRequest) (*emptypb.Empt
 		return nil, err
 	}
 
-	// TODO: check if hardlink
-	// TODO: check if not a /dev or other reserved dirs based file
+	shredPath, err := util.Which("shred")
+	if err != nil {
+		recorder.CounterOrLog(ctx, localfileShredFailureCounter, 1, attribute.String("reason", "shred_not_found"))
+		return nil, err
+	}
+	args := make([]string, 0, 4)
 
-	logger.Info("shred local file",
-		"filename", req.Filename,
-		"force", req.Force, "zero", req.Zero,
-		"remove", req.Remove)
+	if req.Force {
+		args = append(args, "-f")
+	}
+
+	if req.Zero {
+		args = append(args, "-z")
+	}
+
+	if req.Remove {
+		args = append(args, "-u")
+	}
+
+	args = append(args, req.Filename)
+
+	// we want to fail as soon as possible, if the file is unreadable, opened by someone else or something else happens
+	// to it while we're trying to shred it, we might as well just fail during command execution
+	r, err := util.RunCommand(ctx, shredPath, args)
+	if err != nil {
+		recorder.CounterOrLog(ctx, localfileShredFailureCounter, 1, attribute.String("reason", "shred_execution_failed"))
+		return nil, status.Errorf(codes.Internal, "shred command run failed: %v", err)
+	}
+	if r.ExitCode != 0 {
+		recorder.CounterOrLog(ctx, localfileShredFailureCounter, 1, attribute.String("reason", "shred_execution_failed"))
+		return nil, status.Errorf(codes.Internal, "error shredding file %s: %s", req.Filename, util.TrimString(r.Stderr.String()))
+	}
 
 	return &emptypb.Empty{}, nil
 }
