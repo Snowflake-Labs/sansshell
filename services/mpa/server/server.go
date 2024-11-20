@@ -240,10 +240,10 @@ func (s *server) WaitForApproval(ctx context.Context, in *mpa.WaitForApprovalReq
 	for {
 		s.mu.Lock()
 		act, ok := s.actions[in.Id]
+		s.mu.Unlock()
 		if !ok {
 			return nil, status.Error(codes.NotFound, "MPA request not found")
 		}
-		s.mu.Unlock()
 		select {
 		case <-act.approved:
 			return &mpa.WaitForApprovalResponse{}, nil
