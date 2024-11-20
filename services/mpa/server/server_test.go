@@ -171,6 +171,30 @@ func TestWaitForApproval(t *testing.T) {
 	}
 }
 
+func TestWaitForApprovalNotFound(t *testing.T) {
+	ctx := context.Background()
+
+	_, err := serverSingleton.WaitForApproval(ctx, &mpa.WaitForApprovalRequest{
+		Id: "3e31b2b4-f8724bae-not-found",
+	})
+	if err == nil {
+		t.Fatal("expected non nil err")
+	} else if status.Convert(err).Code() != codes.NotFound {
+		t.Fatal("expected not found code")
+	}
+
+	// Call store only later to check if we don't have a case of a "deadlock" (or close).
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+	if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
+		Method:  "foobar",
+		Message: mustAny(anypb.New(&emptypb.Empty{})),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestActionIdIsDeterministic(t *testing.T) {
 	for _, tc := range []struct {
 		desc   string
