@@ -635,8 +635,12 @@ run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 
 check_perms_mode ${LOGS}/test-file
 
+# Need to make this non-immutable again or we can't change the mode.
+run_a_test false 0 file immutable --state=false ${LOGS}/test-file
+
 # Should treat mode with and without leading zero the same
 run_a_test false 0 file chmod --mode="${EXPECTED_NEW_MODE_NO_LEAD_ZERO}" ${LOGS}/test-file
+run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 check_perms_mode ${LOGS}/test-file
 
 # Now do it with username/group args
