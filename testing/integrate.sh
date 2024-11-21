@@ -626,12 +626,21 @@ EXPECTED_NEW_IMMUTABLE="i"
 CUR=$(printf "%d\n" "${ORIG_MODE}")
 NEW=$((CUR + 1))
 EXPECTED_NEW_MODE=$(printf "0%o" "${NEW}")
+EXPECTED_NEW_MODE_NO_LEAD_ZERO=$(printf "%o" "${NEW}")
 
 run_a_test false 0 file chown --uid=${EXPECTED_NEW_UID} ${LOGS}/test-file
 run_a_test false 0 file chgrp --gid=${EXPECTED_NEW_GID} ${LOGS}/test-file
 run_a_test false 0 file chmod --mode="${EXPECTED_NEW_MODE}" ${LOGS}/test-file
 run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 
+check_perms_mode ${LOGS}/test-file
+
+# Need to make this non-immutable again or we can't change the mode.
+run_a_test false 0 file immutable --state=false ${LOGS}/test-file
+
+# Should treat mode with and without leading zero the same
+run_a_test false 0 file chmod --mode="${EXPECTED_NEW_MODE_NO_LEAD_ZERO}" ${LOGS}/test-file
+run_a_test false 0 file immutable --state=true ${LOGS}/test-file
 check_perms_mode ${LOGS}/test-file
 
 # Now do it with username/group args
@@ -663,6 +672,10 @@ echo "uid, etc checks passed"
 EXPECTED_NEW_UID=$((ORIG_UID + 1))
 EXPECTED_NEW_GID=$((ORIG_GID + 1))
 run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode="${EXPECTED_NEW_MODE}" ${LOGS}/hosts ${LOGS}/cp-hosts
+check_perms_mode ${LOGS}/cp-hosts
+
+# Should treat mode with and without leading zero the same
+run_a_test false 0 file cp --overwrite --uid=${EXPECTED_NEW_UID} --gid=${EXPECTED_NEW_GID} --mode="${EXPECTED_NEW_MODE_NO_LEAD_ZERO}" ${LOGS}/hosts ${LOGS}/cp-hosts
 check_perms_mode ${LOGS}/cp-hosts
 
 # Now do it with username/group

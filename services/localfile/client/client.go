@@ -26,6 +26,7 @@ import (
 	"io/fs"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -740,7 +741,7 @@ func (c *chgrpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 }
 
 type chmodCmd struct {
-	mode uint64
+	mode string
 }
 
 func (*chmodCmd) Name() string     { return "chmod" }
@@ -752,7 +753,7 @@ func (*chmodCmd) Usage() string {
 }
 
 func (c *chmodCmd) SetFlags(f *flag.FlagSet) {
-	f.Uint64Var(&c.mode, "mode", 0, "Sets the file/directory to this mode")
+	f.StringVar(&c.mode, "mode", "", "Sets the file/directory to this mode. Must be an octal number (e.g. 644, 755, 0777).")
 }
 
 func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -761,9 +762,17 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "please specify a filename to chmod")
 		return subcommands.ExitUsageError
 	}
-	if c.mode == 0 {
-		fmt.Fprintln(os.Stderr, "--mode must be set to a non-zero value")
+	if c.mode == "" {
+		fmt.Fprintln(os.Stderr, "--mode must be set to a non-empty value")
 		return subcommands.ExitFailure
+	}
+
+	mode, err := parseFileMode(c.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", c.mode)
+
+		return subcommands.ExitUsageError
 	}
 
 	req := &pb.SetFileAttributesRequest{
@@ -772,7 +781,7 @@ func (c *chmodCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			Attributes: []*pb.FileAttribute{
 				{
 					Value: &pb.FileAttribute_Mode{
-						Mode: uint32(c.mode),
+						Mode: uint32(mode),
 					},
 				},
 			},
@@ -984,7 +993,7 @@ type cpCmd struct {
 	username  string
 	gid       int
 	group     string
-	mode      int
+	mode      string
 	immutable bool
 }
 
@@ -1005,7 +1014,7 @@ func (p *cpCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.overwrite, "overwrite", false, "If true will overwrite the remote file. Otherwise the file pre-existing is an error.")
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).")
 	f.BoolVar(&p.immutable, "immutable", false, "If true sets the remote file to immutable after being written.")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
@@ -1024,7 +1033,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		fmt.Fprintln(os.Stderr, "Please specify a source to copy and destination filename to write the contents into.")
 		return subcommands.ExitUsageError
 	}
-	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == "" {
 		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
 		return subcommands.ExitUsageError
 	}
@@ -1058,13 +1067,21 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 
+	mode, err := parseFileMode(p.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
+
+		return subcommands.ExitUsageError
+	}
+
 	descr := &pb.FileWrite{
 		Attrs: &pb.FileAttributes{
 			Filename: dest,
 			Attributes: []*pb.FileAttribute{
 				{
 					Value: &pb.FileAttribute_Mode{
-						Mode: uint32(p.mode),
+						Mode: uint32(mode),
 					},
 				},
 				{
@@ -1351,7 +1368,7 @@ type mkdirCmd struct {
 	username string
 	gid      int
 	group    string
-	mode     int
+	mode     string
 }
 
 func (*mkdirCmd) Name() string     { return "mkdir" }
@@ -1361,7 +1378,7 @@ func (*mkdirCmd) Usage() string {
   Create a directory at the specified path.
   Note:
   1. Please set flags before path.
-  2. The action doesn't support creating intermedaite directories, e.g for this path /AAA/BBB/test,
+  2. The action doesn't support creating intermediate directories, e.g for this path /AAA/BBB/test,
      the parent directories BBB or /AAA/BBB doesn't exist, the action won't work.
 `
 }
@@ -1369,7 +1386,7 @@ func (*mkdirCmd) Usage() string {
 func (p *mkdirCmd) SetFlags(f *flag.FlagSet) {
 	f.IntVar(&p.uid, "uid", -1, "The uid the remote file will be set via chown.")
 	f.IntVar(&p.gid, "gid", -1, "The gid the remote file will be set via chown.")
-	f.IntVar(&p.mode, "mode", -1, "The mode the remote file will be set via chmod.")
+	f.StringVar(&p.mode, "mode", "", "The mode the remote file will be set via chmod. Must be an octal number (e.g. 644, 755, 0777).")
 	f.StringVar(&p.username, "username", "", "The remote file will be set to this username via chown.")
 	f.StringVar(&p.group, "group", "", "The remote file will be set to this group via chown.")
 }
@@ -1380,7 +1397,7 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		fmt.Fprintln(os.Stderr, "Please specify a directory path to create.")
 		return subcommands.ExitUsageError
 	}
-	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == -1 {
+	if (p.uid == -1 && p.username == "") || (p.gid == -1 && p.group == "") || p.mode == "" {
 		fmt.Fprintln(os.Stderr, "Must set --uid|username, --gid|group and --mode")
 		return subcommands.ExitUsageError
 	}
@@ -1396,12 +1413,20 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	c := pb.NewLocalFileClientProxy(state.Conn)
 	directoryName := f.Args()[0]
 
+	mode, err := parseFileMode(p.mode)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --mode '%s'. An octal number expected (e.g. 644, 755, 0777).\n", p.mode)
+
+		return subcommands.ExitUsageError
+	}
+
 	dirAttrs := &pb.FileAttributes{
 		Filename: directoryName,
 		Attributes: []*pb.FileAttribute{
 			{
 				Value: &pb.FileAttribute_Mode{
-					Mode: uint32(p.mode),
+					Mode: uint32(mode),
 				},
 			},
 		},
@@ -1457,4 +1482,12 @@ func (p *mkdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	}
 	return retCode
 
+}
+
+const fileModeSizeInBits = 12
+
+func parseFileMode(modeStr string) (uint16, error) {
+	mode, err := strconv.ParseUint(modeStr, 8, fileModeSizeInBits)
+
+	return uint16(mode), err
 }
