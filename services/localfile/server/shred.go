@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"runtime"
 )
 
 var (
@@ -42,11 +43,8 @@ func (s *server) Shred(ctx context.Context, req *pb.ShredRequest) (*emptypb.Empt
 		return nil, err
 	}
 
-	shredPath, err := util.Which("shred")
-	if err != nil {
-		recorder.CounterOrLog(ctx, localfileShredFailureCounter, 1, attribute.String("reason", "shred_not_found"))
-		return nil, err
-	}
+	shredPath := getShredPath()
+
 	args := make([]string, 0, 4)
 
 	if req.Force {
@@ -63,8 +61,6 @@ func (s *server) Shred(ctx context.Context, req *pb.ShredRequest) (*emptypb.Empt
 
 	args = append(args, req.Filename)
 
-	// we want to fail as soon as possible, if the file is unreadable, opened by someone else or something else happens
-	// to it while we're trying to shred it, we might as well just fail during command execution
 	r, err := util.RunCommand(ctx, shredPath, args)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileShredFailureCounter, 1, attribute.String("reason", "shred_execution_failed"))
@@ -76,4 +72,15 @@ func (s *server) Shred(ctx context.Context, req *pb.ShredRequest) (*emptypb.Empt
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+func getShredPath() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "/usr/bin/shred"
+	case "darwin":
+		return "/opt/homebrew/bin/shred"
+	default:
+		return ""
+	}
 }

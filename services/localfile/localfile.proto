@@ -322,6 +322,7 @@ message DataSetRequest {
 
 // ShredRequest is a request to perform Shred operation on a specific file
 message ShredRequest {
+  // absolute path to the file to be shredded
   string filename = 1;
   // force permissions change if necessary
   bool force = 2;

@@ -456,36 +456,3 @@ func IsStreamToTerminal(stream io.Writer) bool {
 		return false
 	}
 }
-
-// Which attempts to find an executable in PATH and returns its absolute path if successful
-// note that it tries to find the executable anywhere it can, in case of failure to read a directory
-// listed in one of the PATH's components, it will continue its operation and only return an error in case
-// no paths were readable and/or executable couldn't be found in either of them.
-// Note that it does not check whether a file is actually executable by current user.
-func Which(exeName string) (string, error) {
-	pathStr := os.Getenv("PATH")
-	if pathStr == "" {
-		return "", fmt.Errorf("PATH is empty")
-	}
-
-	paths := strings.Split(pathStr, string(os.PathListSeparator))
-	for _, path := range paths {
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			if entry.Name() != exeName {
-				continue
-			}
-			// in case base path ends with an PathSeparator
-			return filepath.Clean(path + string(os.PathSeparator) + entry.Name()), nil
-		}
-	}
-
-	return "", fmt.Errorf("failed to find executable path for %s", exeName)
-}

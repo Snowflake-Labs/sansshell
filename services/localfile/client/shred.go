@@ -65,7 +65,7 @@ func (p *shredCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - shred client error: %v\n", err)
+			fmt.Fprintf(e, "All targets - shred error: %v\n", err)
 		}
 		return subcommands.ExitFailure
 	}
@@ -73,7 +73,7 @@ func (p *shredCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 	retCode := subcommands.ExitSuccess
 	for r := range respChan {
 		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "shred client error: %v\n", r.Error)
+			fmt.Fprintf(state.Err[r.Index], "shred error: %v\n", r.Error)
 			retCode = subcommands.ExitFailure
 		}
 	}

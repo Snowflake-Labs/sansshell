@@ -422,11 +422,3 @@ func TestOptionsEqual(t *testing.T) {
 		}
 	}
 }
-
-func TestWhich(t *testing.T) {
-	// echo should be available on all OSes, but its path might be OS specific
-	_, err := Which("echo")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
