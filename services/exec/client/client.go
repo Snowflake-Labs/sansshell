@@ -67,6 +67,7 @@ func (p *execCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 
 type runCmd struct {
 	streaming bool
+	user      string
 
 	// returnCode internally keeps track of the final status to return
 	returnCode subcommands.ExitStatus
@@ -75,7 +76,7 @@ type runCmd struct {
 func (*runCmd) Name() string     { return "run" }
 func (*runCmd) Synopsis() string { return "Run provided command and return a response." }
 func (*runCmd) Usage() string {
-	return `run [--stream] <command> [<args>...]:
+	return `run [--stream] [--user=user] <command> [<args>...]:
   Run a command remotely and return the response
 
 	Note: This is not optimized for large output or long running commands.  If
@@ -84,11 +85,15 @@ func (*runCmd) Usage() string {
 
 	The --stream flag can be used to stream back command output as the command
 	runs. It doesn't affect the timeout.
+
+	--user flag allows to specify a user for running command, equivalent of
+	sudo -u <user> <command> ...
 `
 }
 
 func (p *runCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.streaming, "stream", DefaultStreaming, "If true, stream back stdout and stdin during the command instead of sending it all at the end.")
+	f.StringVar(&p.user, "user", "", "If specified, allows to run a command as a specified user. Equivalent of sudo -u <user> <command> ... .")
 }
 
 func (p *runCmd) printCommandOutput(state *util.ExecuteState, idx int, resp *pb.ExecResponse, err error) {
@@ -121,7 +126,7 @@ func (p *runCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	c := pb.NewExecClientProxy(state.Conn)
-	req := &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:]}
+	req := &pb.ExecRequest{Command: f.Args()[0], Args: f.Args()[1:], User: p.user}
 
 	if p.streaming {
 		resp, err := c.StreamingRunOneMany(ctx, req)
