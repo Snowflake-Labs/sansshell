@@ -42,13 +42,15 @@ var (
 type HTTPTransporter struct {
 	conn               *proxy.Conn
 	insecureSkipVerify bool
-	dialConfigFactory  func(req http.Request) *pb.DialConfig
+	dialConfigFactory  DialConfigFactory
 }
 
 type httpTransporterOptions struct {
 	insecureSkipVerify bool
-	dialConfigFactory  func(req http.Request) *pb.DialConfig
+	dialConfigFactory  DialConfigFactory
 }
+
+type DialConfigFactory func(req *http.Request) *pb.DialConfig
 
 type Option interface {
 	apply(*httpTransporterOptions)
@@ -66,7 +68,7 @@ func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
 	})
 }
 
-func WithCustomDialConfig(dialConfigFactory func(req http.Request) *pb.DialConfig) Option {
+func WithCustomDialConfig(dialConfigFactory DialConfigFactory) Option {
 	return optionFunc(func(o *httpTransporterOptions) {
 		o.dialConfigFactory = dialConfigFactory
 	})
@@ -165,7 +167,7 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	var dialConfig *pb.DialConfig = nil
 	if c.dialConfigFactory != nil {
-		dialConfig = c.dialConfigFactory(*req)
+		dialConfig = c.dialConfigFactory(req)
 	}
 	reqPb := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{

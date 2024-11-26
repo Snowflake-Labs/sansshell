@@ -8,7 +8,7 @@ This directory contains the http over rpc services. It is a simple service that 
 Make a HTTP(-S) request to a specified port on the remote host.
 
 ```bash
-sanssh <sanssh-args> get [-method <method>] [-header <header>] [-dialAddress <dial-address>] [-insecure-skip-tls-verify] [-show-response-headers] [-body <body>] [-protocol <protocol>] [-hostname <hostname>] <remoteport> <request_uri>:
+sanssh <sanssh-args> get [-method <method>] [-header <header>] [-dial-address <dial-address>] [-insecure-skip-tls-verify] [-show-response-headers] [-body <body>] [-protocol <protocol>] [-hostname <hostname>] <remoteport> <request_uri>:
 ```
 
 Where:

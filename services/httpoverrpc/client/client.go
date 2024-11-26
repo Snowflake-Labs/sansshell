@@ -233,7 +233,7 @@ type getCmd struct {
 func (*getCmd) Name() string     { return "get" }
 func (*getCmd) Synopsis() string { return "Makes a HTTP(-S) call to a port on a remote host" }
 func (*getCmd) Usage() string {
-	return `get [-method METHOD] [-header Header...] [-dialAddress dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
+	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
   Make a HTTP request to a specified port on the remote host.
 
   Examples:
