@@ -130,3 +130,28 @@ Examples:
 # Set file mode of `/opt/hello` to 644
 sanssh --target $TARGET file chmod --mode=644 /opt/hello
 ```
+
+### sanssh file shred
+Shred file using `/usr/bin/shred` (`/opt/homebrew/bin/shred` on Mac OS) utility.
+Notice: this function is reliant on the presence of `shred` utility on the target system.
+Note that this utility is only effective on Hard Drives, it will not provide same level of security on Solid State Drives.
+
+
+```bash
+sanssh <sanssh-args> file shred [-z] [-f] [-u] [--remove] <file-path>
+```
+Where:
+- `<sanssh-args>` common sanssh arguments
+- `<file-path>` is the absolute path to the file on remote machine.
+- `-z` - add a final zero-ing pass to shred
+- `-f` - force permissions change on the target file if required
+- `-u` - remove the file after shredding
+- `--remove` - alias for `-u`
+
+Examples:
+```bash
+# Perform basic shredding of the file
+sanssh --targets $TARGET file shred /tmp/hello.txt
+# Shred, add zero-ing pass and remove file after, with file permissions change if required
+sanssh --targets $TARGET file shred -f -u -z /tmp/hello.txt
+```
