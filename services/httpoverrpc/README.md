@@ -24,3 +24,17 @@ Where:
 Flags:
 - `-show-response-headers` If provided, print response code and headers
 - `-insecure-skip-tls-verify` If provided, skip TLS verification
+
+
+Note:
+1. The prefix / in request_uri is always needed, even there is nothing to put
+2. If we use `--hostname` to send requests to a specified host instead of the default localhost, and want to use sansshell proxy action
+   to proxy requests, don't forget to add `--allow-any-host` for proxy action
+
+Examples:
+```bash
+# send get request to https://localhost:9090/hello
+httpoverrpc get --hostname 10.1.23.4 --protocol https 9090 /hello
+# send get request with url http://example.com:9090/hello, but deal to localhost:9090
+httpoverrpc get --hostname example.com --dialAddress localhost:9090 9090 /hello
+```
