@@ -88,7 +88,7 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 			}
 		}
 
-		if req.Dialconfig != nil {
+		if req.GetDialconfig() != nil {
 			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 				dailAddress := addr
 				if req.Dialconfig.GetDialAddress() != "" {

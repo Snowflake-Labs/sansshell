@@ -39,7 +39,7 @@ message HostHTTPRequest {
   // TLS Config for the request
   TLSConfig tlsconfig = 5;
   // Dial Config for request, if not provided uses default dialer configuration
-  DialConfig dialconfig = 6;
+  optional DialConfig dialconfig = 6;
 }
 
 message TLSConfig {
@@ -49,7 +49,7 @@ message TLSConfig {
 
 message DialConfig {
   // address to dial to, if not provided uses original one
-  string dialAddress = 1;
+  optional string dialAddress = 1;
 }
 
 message Header {

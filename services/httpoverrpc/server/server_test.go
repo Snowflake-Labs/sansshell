@@ -325,7 +325,7 @@ func TestServer(t *testing.T) {
 			Hostname: targetHost,
 			Protocol: "http",
 			Dialconfig: &httpoverrpc.DialConfig{
-				DialAddress: addressToDial,
+				DialAddress: &addressToDial,
 			},
 		})
 		if err != nil {
