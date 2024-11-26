@@ -46,8 +46,6 @@ var (
 // Server is used to implement the gRPC Server
 type server struct{}
 
-type netDialerContextFn func(ctx context.Context, network, addr string) (net.Conn, error)
-
 func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
