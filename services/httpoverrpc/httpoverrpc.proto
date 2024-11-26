@@ -38,11 +38,18 @@ message HostHTTPRequest {
   string protocol = 4;
   // TLS Config for the request
   TLSConfig tlsconfig = 5;
+  // Dial Config for request, if not provided uses default dialer configuration
+  DialConfig dialconfig = 6;
 }
 
 message TLSConfig {
   // insecureSkipVerify disables TLS verification if set to true.
   bool insecureSkipVerify = 1;
+}
+
+message DialConfig {
+  // address to dial to, if not provided uses original one
+  string dialAddress = 1;
 }
 
 message Header {
