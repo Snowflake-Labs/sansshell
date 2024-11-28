@@ -22,16 +22,19 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	sansshellserver "github.com/Snowflake-Labs/sansshell/services/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"io"
-	"net/http"
-	"strings"
 )
 
 // Metrics
@@ -73,13 +76,30 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 	}
 
 	client := &http.Client{}
-	if req.Tlsconfig != nil {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
+
+	if req.Tlsconfig != nil || req.Dialconfig != nil {
+		transport := &http.Transport{}
+
+		if req.Tlsconfig != nil {
+			transport.TLSClientConfig = &tls.Config{
 				InsecureSkipVerify: req.Tlsconfig.InsecureSkipVerify,
-			},
+			}
 		}
+
+		if req.GetDialconfig() != nil {
+			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dailAddress := addr
+				if req.Dialconfig.GetDialAddress() != "" {
+					dailAddress = req.Dialconfig.GetDialAddress()
+				}
+
+				return net.Dial(network, dailAddress)
+			}
+		}
+
+		client.Transport = transport
 	}
+
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	httpResp, err := client.Do(httpReq)

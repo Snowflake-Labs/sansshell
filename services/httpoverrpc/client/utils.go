@@ -38,14 +38,19 @@ var (
 	errInvalidURLMissingHost = fmt.Errorf("no host in the request URL")
 )
 
+// HTTPTransporter implementation of [http.RoundTripper], which proxy HTTP requests over RPC to target host to send request from it
 type HTTPTransporter struct {
 	conn               *proxy.Conn
 	insecureSkipVerify bool
+	dialConfigFactory  DialConfigFactory
 }
 
 type httpTransporterOptions struct {
 	insecureSkipVerify bool
+	dialConfigFactory  DialConfigFactory
 }
+
+type DialConfigFactory func(req *http.Request) *pb.DialConfig
 
 type Option interface {
 	apply(*httpTransporterOptions)
@@ -63,7 +68,13 @@ func WithInsecureSkipVerify(insecureSkipVerify bool) Option {
 	})
 }
 
-func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) *HTTPTransporter {
+func WithCustomDialConfig(dialConfigFactory DialConfigFactory) Option {
+	return optionFunc(func(o *httpTransporterOptions) {
+		o.dialConfigFactory = dialConfigFactory
+	})
+}
+
+func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) http.RoundTripper {
 	options := &httpTransporterOptions{
 		insecureSkipVerify: false,
 	}
@@ -74,6 +85,7 @@ func NewHTTPTransporter(conn *proxy.Conn, opts ...Option) *HTTPTransporter {
 	return &HTTPTransporter{
 		conn:               conn,
 		insecureSkipVerify: options.insecureSkipVerify,
+		dialConfigFactory:  options.dialConfigFactory,
 	}
 }
 
@@ -152,6 +164,11 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 	}
+
+	var dialConfig *pb.DialConfig = nil
+	if c.dialConfigFactory != nil {
+		dialConfig = c.dialConfigFactory(req)
+	}
 	reqPb := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
 			RequestUri: req.URL.RequestURI(),
@@ -164,6 +181,7 @@ func (c *HTTPTransporter) RoundTrip(req *http.Request) (*http.Response, error) {
 		Tlsconfig: &pb.TLSConfig{
 			InsecureSkipVerify: c.insecureSkipVerify,
 		},
+		Dialconfig: dialConfig,
 	}
 
 	port, errPort := getPort(req, reqPb.Protocol)

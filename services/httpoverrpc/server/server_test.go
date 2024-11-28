@@ -29,14 +29,15 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
-	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/testing/protocmp"
+
+	"github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
+	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
 var (
@@ -284,6 +285,56 @@ func TestServer(t *testing.T) {
 		// ASSERT
 		if string(resp.Body) != customHostHeader {
 			t.Fatalf("Expected response body to be %q, got %q", customHostHeader, resp.Body)
+		}
+	})
+
+	t.Run("It should dail host provided in dialconfig and ignore host from url", func(t *testing.T) {
+		// ARRANGE
+		var err error
+		ctx := context.Background()
+		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		testutil.FatalOnErr("Failed to dial bufnet", err, t)
+		t.Cleanup(func() { conn.Close() })
+
+		client := httpoverrpc.NewHTTPOverRPCClient(conn)
+
+		// Set up web server
+		m := http.NewServeMux()
+		uri := "/endpoint"
+		expectedResponse := "Ok"
+		m.HandleFunc(uri, func(httpResp http.ResponseWriter, httpReq *http.Request) {
+			_, _ = httpResp.Write([]byte(expectedResponse))
+		})
+		l, err := net.Listen("tcp4", "localhost:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() { _ = http.Serve(l, m) }()
+
+		addressToDial := l.Addr().String()
+		targetHost := "example.com"
+		targetPort := 8080
+
+		// ACT
+		resp, err := client.Host(ctx, &httpoverrpc.HostHTTPRequest{
+			Request: &httpoverrpc.HTTPRequest{
+				Method:     "GET",
+				RequestUri: uri,
+			},
+			Port:     int32(targetPort),
+			Hostname: targetHost,
+			Protocol: "http",
+			Dialconfig: &httpoverrpc.DialConfig{
+				DialAddress: &addressToDial,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// ASSERT
+		if string(resp.Body) != expectedResponse {
+			t.Fatalf("Expected response body to be %q, got %q", expectedResponse, resp.Body)
 		}
 	})
 }

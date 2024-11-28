@@ -35,6 +35,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/client"
 	pb "github.com/Snowflake-Labs/sansshell/services/httpoverrpc"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/Snowflake-Labs/sansshell/services/util/validator"
 )
 
 const subPackage = "httpoverrpc"
@@ -226,16 +227,20 @@ type getCmd struct {
 	protocol            string
 	hostname            string
 	insecureSkipVerify  bool
+	dialAddress         string
 }
 
 func (*getCmd) Name() string     { return "get" }
-func (*getCmd) Synopsis() string { return "Makes a HTTP call to a port on a remote host" }
+func (*getCmd) Synopsis() string { return "Makes a HTTP(-S) call to a port on a remote host" }
 func (*getCmd) Usage() string {
-	return `get [-method METHOD] [-header Header...] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
+	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
   Make a HTTP request to a specified port on the remote host.
 
-  Example:
+  Examples:
+  # send get request to https://10.1.23.4:9090/hello
   httpoverrpc get --hostname 10.1.23.4 --protocol https 9090 /hello
+  # send get request with url http://example.com:9090/hello, but dial to localhost:9090
+  httpoverrpc get --hostname example.com --dialAddress localhost:9090 9090 /hello
 
   Note:
   1. The prefix / in request_uri is always needed, even there is nothing to put
@@ -252,6 +257,7 @@ func (g *getCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&g.body, "body", "", "Body to send in request")
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")
 	f.BoolVar(&g.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
+	f.StringVar(&g.dialAddress, "dial-address", "", "host:port to dial to. If not provided would dial to original host and port")
 }
 
 func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -270,6 +276,14 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		return subcommands.ExitUsageError
 	}
 
+	if g.dialAddress != "" {
+		_, _, err := validator.ParseHostAndPort(g.dialAddress)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to parse dial address \"%q\": %v\n", g.dialAddress, err)
+			return subcommands.ExitUsageError
+		}
+	}
+
 	var reqHeaders []*pb.Header
 	for _, v := range g.headers {
 		split := strings.SplitN(v, ":", 2)
@@ -280,7 +294,12 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		reqHeaders = append(reqHeaders, &pb.Header{Key: split[0], Values: []string{strings.TrimSpace(split[1])}})
 	}
 
-	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
+	var dialConfig *pb.DialConfig = nil
+	if g.dialAddress != "" {
+		dialConfig = &pb.DialConfig{
+			DialAddress: &g.dialAddress,
+		}
+	}
 
 	req := &pb.HostHTTPRequest{
 		Request: &pb.HTTPRequest{
@@ -295,8 +314,10 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		Tlsconfig: &pb.TLSConfig{
 			InsecureSkipVerify: g.insecureSkipVerify,
 		},
+		Dialconfig: dialConfig,
 	}
 
+	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
 	resp, err := proxy.HostOneMany(ctx, req)
 	retCode := subcommands.ExitSuccess
 	if err != nil {
