@@ -33,7 +33,7 @@ Note:
 
 Examples:
 ```bash
-# send get request to https://localhost:9090/hello
+# send get request to https://10.1.23.4:9090/hello
 httpoverrpc get --hostname 10.1.23.4 --protocol https 9090 /hello
 # send get request with url http://example.com:9090/hello, but deal to localhost:9090
 httpoverrpc get --hostname example.com --dialAddress localhost:9090 9090 /hello
