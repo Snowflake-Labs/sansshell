@@ -25,8 +25,24 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/exec"
 )
 
+// ExecRemoteCommand is an options to exec a command on a remote host
+type execRemoteOptions struct {
+	// execAsUser, Optional. User is the user to run the command as, if nil the command will be run as the default user
+	execAsUser *string
+}
+
+type ExecRemoteOption func(*execRemoteOptions)
+
+func ExecAsUser(user string) ExecRemoteOption {
+	return func(o *execRemoteOptions) {
+		o.execAsUser = &user
+	}
+}
+
 // ExecRemoteCommand is a helper function for execing a command on a remote host
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
+//
+// Deprecated: Use ExecRemoteCommandWithOpts instead.
 func ExecRemoteCommand(ctx context.Context, conn *proxy.Conn, binary string, args ...string) (*pb.ExecResponse, error) {
 	if len(conn.Targets) != 1 {
 		return nil, errors.New("ExecRemoteCommand only supports single targets")
@@ -45,14 +61,14 @@ func ExecRemoteCommand(ctx context.Context, conn *proxy.Conn, binary string, arg
 	return result[0].Resp, nil
 }
 
-// ExecRemoteCommandAs is a helper function for execing a command on a remote host as specified user
+// ExecRemoteCommandWithOpts is a helper function for execing a command on a remote host with provided opts
 // using a proxy.Conn. If the conn is defined for >1 targets this will return an error.
-func ExecRemoteCommandAs(ctx context.Context, conn *proxy.Conn, user string, binary string, args ...string) (*pb.ExecResponse, error) {
+func ExecRemoteCommandWithOpts(ctx context.Context, conn *proxy.Conn, binary string, args []string, opts ...ExecRemoteOption) (*pb.ExecResponse, error) {
 	if len(conn.Targets) != 1 {
 		return nil, errors.New("ExecRemoteCommand only supports single targets")
 	}
 
-	result, err := ExecRemoteCommandManyAs(ctx, conn, user, binary, args...)
+	result, err := ExecRemoteCommandManyWithOpts(ctx, conn, binary, args)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +84,8 @@ func ExecRemoteCommandAs(ctx context.Context, conn *proxy.Conn, user string, bin
 // ExecRemoteCommandMany is a helper function for execing a command on one or remote hosts
 // using a proxy.Conn.
 // `binary` refers to the absolute path of the binary file on the remote host.
+//
+// // Deprecated: Use ExecRemoteCommandManyWithOpts instead.
 func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string, args ...string) ([]*pb.RunManyResponse, error) {
 	c := pb.NewExecClientProxy(conn)
 	req := &pb.ExecRequest{
@@ -86,16 +104,25 @@ func ExecRemoteCommandMany(ctx context.Context, conn *proxy.Conn, binary string,
 	return result, nil
 }
 
-// ExecRemoteCommandManyAs is a helper function for execing a command on one or remote hosts as specified user
+// ExecRemoteCommandManyWithOpts is a helper function for execing a command on one or remote hosts with provided opts
 // using a proxy.Conn.
 // `binary` refers to the absolute path of the binary file on the remote host.
-func ExecRemoteCommandManyAs(ctx context.Context, conn *proxy.Conn, user string, binary string, args ...string) ([]*pb.RunManyResponse, error) {
+func ExecRemoteCommandManyWithOpts(ctx context.Context, conn *proxy.Conn, binary string, args []string, opts ...ExecRemoteOption) ([]*pb.RunManyResponse, error) {
+	execOptions := execRemoteOptions{}
+	for _, opt := range opts {
+		opt(&execOptions)
+	}
+
 	c := pb.NewExecClientProxy(conn)
 	req := &pb.ExecRequest{
-		User:    user,
 		Command: binary,
 		Args:    args,
 	}
+
+	if execOptions.execAsUser != nil {
+		req.User = *execOptions.execAsUser
+	}
+
 	respChan, err := c.RunOneMany(ctx, req)
 	if err != nil {
 		return nil, err
