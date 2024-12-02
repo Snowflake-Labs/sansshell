@@ -23,6 +23,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"google.golang.org/grpc/credentials"
 	"io"
 	"os"
 	"path/filepath"
@@ -77,6 +78,8 @@ type RunState struct {
 	BatchSize int
 	// If true, add an interceptor that performs the multi-party auth flow
 	EnableMPA bool
+
+	credentials.PerRPCCredentials
 }
 
 const (
@@ -270,6 +273,11 @@ func Run(ctx context.Context, rs RunState) {
 		// Use 16MB instead of the default 4MB to allow larger responses
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
 	}
+
+	if rs.PerRPCCredentials != nil {
+		ops = append(ops, grpc.WithPerRPCCredentials(rs.PerRPCCredentials))
+	}
+
 	streamInterceptors := []grpc.StreamClientInterceptor{}
 	unaryInterceptors := []grpc.UnaryClientInterceptor{}
 	if clientAuthz != nil {
