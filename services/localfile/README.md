@@ -132,7 +132,7 @@ sanssh --target $TARGET file chmod --mode=644 /opt/hello
 ```
 
 ### sanssh file shred
-Shred file using `/usr/bin/shred` (`/opt/homebrew/bin/shred` on Mac OS) utility.
+Shred a file using `/usr/bin/shred` (`/opt/homebrew/bin/shred` on Mac OS) utility.
 Notice: this function is reliant on the presence of `shred` utility on the target system.
 Note that this utility is only effective on Hard Drives, it will not provide same level of security on Solid State Drives.
 

@@ -39,19 +39,21 @@ func Test_Shred(t *testing.T) {
 	t.Cleanup(func() { conn.Close() })
 	client := pb.NewLocalFileClient(conn)
 
-	data := "data"
+	data := "myData"
 	fileName := createTempFile(data, t)
 
 	_, err = client.Shred(ctx, &pb.ShredRequest{
 		Filename: fileName,
 		Force:    false,
-		Zero:     false,
+		Zero:     true,
 		Remove:   false,
 	})
 	testutil.FatalOnErr("shred", err, t)
 
-	if getFileContent(t, fileName) == data {
-		t.Fatal("shred did not work")
+	for _, b := range getFileContent(t, fileName) {
+		if b != 0 {
+			t.Fatal("shred did not work")
+		}
 	}
 }
 
@@ -79,13 +81,12 @@ func createTempFile(data string, t *testing.T) string {
 	return tempFile.Name()
 }
 
-func getFileContent(t *testing.T, path string) string {
+func getFileContent(t *testing.T, path string) []byte {
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("can't read file %q: %v", path, err)
 	}
-
-	return string(bytes)
+	return bytes
 }
 
 func shredIsUnavailable() bool {
