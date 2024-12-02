@@ -67,6 +67,7 @@ func (*fileCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&sumCmd{}, "")
 	c.Register(&tailCmd{}, "")
 	c.Register(&mkdirCmd{}, "")
+	c.Register(&shredCmd{}, "")
 	return c
 }
 
