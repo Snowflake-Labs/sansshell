@@ -27,6 +27,10 @@ import (
 	pb "github.com/Snowflake-Labs/sansshell/services/sansshell"
 )
 
+// GetSansshellVersion gets the version of the sansshell server for a particular target.
+// Returns error if:
+// - was provided not exactly one target
+// - could not get the version from target
 func GetSansshellVersion(ctx context.Context, conn *proxy.Conn) (string, error) {
 	if len(conn.Targets) != 1 {
 		return "", errors.New("GetSansshellVersion support only single target")
