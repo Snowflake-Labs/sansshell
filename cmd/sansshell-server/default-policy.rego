@@ -114,3 +114,11 @@ allow {
 allow {
     input.method = "/Network.Network/TCPCheck"
 }
+
+allow {
+    input.type = "LocalFile.ShredRequest"
+    input.message.filename = "/tmp/hello.txt"
+    input.message.force = true
+    input.message.zero = true
+    input.message.remove = true
+}
