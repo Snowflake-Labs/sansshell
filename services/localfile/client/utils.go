@@ -205,7 +205,7 @@ func WriteRemoteFile(ctx context.Context, conn *proxy.Conn, config *FileConfig, 
 func RemoveRemoteFile(ctx context.Context, conn *proxy.Conn, path string) error {
 	c := pb.NewLocalFileClientProxy(conn)
 	resp, err := c.RmOneMany(ctx, &pb.RmRequest{
-		Filename: path,
+		Filenames: []string{path},
 	})
 	if err != nil {
 		return fmt.Errorf("remove error - %v", err)

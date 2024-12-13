@@ -1249,13 +1249,13 @@ func (i *rmCmd) SetFlags(f *flag.FlagSet) {}
 
 func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "please specify a filename to rm")
+	if f.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "please specify at least one filename to rm")
 		return subcommands.ExitUsageError
 	}
 
 	req := &pb.RmRequest{
-		Filename: f.Arg(0),
+		Filenames: f.Args(),
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmOneMany(ctx, req)
@@ -1278,27 +1278,31 @@ func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 }
 
 type rmdirCmd struct {
+	recursive bool
 }
 
 func (*rmdirCmd) Name() string     { return "rmdir" }
 func (*rmdirCmd) Synopsis() string { return "Remove a directory." }
 func (*rmdirCmd) Usage() string {
-	return `rm <directory>:
+	return `rmdir [-r] <directory>:
   Remove the given directory.
   `
 }
 
-func (i *rmdirCmd) SetFlags(f *flag.FlagSet) {}
+func (i *rmdirCmd) SetFlags(f *flag.FlagSet) {
+	f.BoolVar(&i.recursive, "r", false, "recursively also remove all sub-directories and files")
+}
 
 func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "please specify a directory to rm")
+	if f.NArg() < 1 {
+		fmt.Fprintln(os.Stderr, "please specify at least one directory to rm")
 		return subcommands.ExitUsageError
 	}
 
 	req := &pb.RmdirRequest{
-		Directory: f.Arg(0),
+		Directories: f.Args(),
+		Recursive:   i.recursive,
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmdirOneMany(ctx, req)
