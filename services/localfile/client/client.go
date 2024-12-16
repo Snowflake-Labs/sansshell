@@ -1254,8 +1254,15 @@ func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		return subcommands.ExitUsageError
 	}
 
+	file := f.Arg(0)
+	var files []string
+	if f.NArg() > 1 {
+		files = f.Args()[1:]
+	}
+
 	req := &pb.RmRequest{
-		Filenames: f.Args(),
+		Filename:  file,
+		Filenames: files,
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)
 	respChan, err := client.RmOneMany(ctx, req)
@@ -1300,8 +1307,15 @@ func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		return subcommands.ExitUsageError
 	}
 
+	dir := f.Arg(0)
+	var dirs []string
+	if f.NArg() > 1 {
+		dirs = f.Args()[1:]
+	}
+
 	req := &pb.RmdirRequest{
-		Directories: f.Args(),
+		Directory:   dir,
+		Directories: dirs,
 		Recursive:   i.recursive,
 	}
 	client := pb.NewLocalFileClientProxy(state.Conn)

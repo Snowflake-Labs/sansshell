@@ -1728,6 +1728,10 @@ func TestRm(t *testing.T) {
 	testutil.FatalOnErr("os.CreateTemp", err, t)
 	f5, err := os.CreateTemp(temp, "testfile.*")
 	testutil.FatalOnErr("os.CreateTemp", err, t)
+	oldClientNewServerF1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	oldClientNewServerF2, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
@@ -1737,6 +1741,7 @@ func TestRm(t *testing.T) {
 
 	for _, tc := range []struct {
 		name      string
+		filename  string
 		filenames []string
 		wantErr   bool
 	}{
@@ -1763,11 +1768,16 @@ func TestRm(t *testing.T) {
 			filenames: []string{f5.Name(), filepath.Join(temp, "/file-that-definitely-does-not-exist-hopefully-maybe")},
 			wantErr:   true,
 		},
+		{
+			name:      "old client new server",
+			filename:  oldClientNewServerF1.Name(),
+			filenames: []string{oldClientNewServerF2.Name()},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
-			_, err := client.Rm(ctx, &pb.RmRequest{Filenames: tc.filenames})
+			_, err := client.Rm(ctx, &pb.RmRequest{Filename: tc.filename, Filenames: tc.filenames})
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
@@ -1803,6 +1813,13 @@ func TestRmdir(t *testing.T) {
 	err = os.Mkdir(dirThatExists, fs.ModePerm)
 	testutil.FatalOnErr("os.Mkdir", err, t)
 	dirThatDoesNotExist := filepath.Join(temp, "/dir-that-does-not-exist")
+	// old client new server
+	oldClientDir1 := filepath.Join(temp, "/old-client-dir1")
+	err = os.Mkdir(oldClientDir1, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	oldClientDir2 := filepath.Join(temp, "/old-client-dir2")
+	err = os.Mkdir(oldClientDir2, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
@@ -1812,6 +1829,7 @@ func TestRmdir(t *testing.T) {
 
 	for _, tc := range []struct {
 		name        string
+		directory   string
 		directories []string
 		recursive   bool
 		wantErr     bool
@@ -1855,11 +1873,17 @@ func TestRmdir(t *testing.T) {
 			directories: []string{dirThatExists, dirThatDoesNotExist},
 			wantErr:     true,
 		},
+		{
+			name:        "old client new server",
+			directory:   oldClientDir1,
+			directories: []string{oldClientDir2},
+			wantErr:     false,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
-			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directories: tc.directories, Recursive: tc.recursive})
+			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directory: tc.directory, Directories: tc.directories, Recursive: tc.recursive})
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}

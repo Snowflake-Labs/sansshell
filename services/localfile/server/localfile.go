@@ -718,14 +718,20 @@ func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, err
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("rm request", "filenames", req.Filenames)
 
-	for _, filename := range req.Filenames {
+	files := make([]string, 0, len(req.Filenames)+1)
+	if len(req.Filename) > 0 {
+		files = append(files, req.Filename)
+	}
+	files = append(files, req.Filenames...)
+
+	for _, filename := range files {
 		if err := util.ValidPath(filename); err != nil {
 			recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
 			return nil, err
 		}
 	}
-	rmErrors := make([]error, 0, len(req.Filenames))
-	for _, filename := range req.Filenames {
+	rmErrors := make([]error, 0, len(files))
+	for _, filename := range files {
 		err := unix.Unlink(filename)
 		if err != nil {
 			rmErrors = append(rmErrors, err)
@@ -745,15 +751,21 @@ func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empt
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	logger.Info("rmdir request", "directories", req.Directories)
 
-	for _, dir := range req.Directories {
+	dirs := make([]string, 0, len(req.Directories)+1)
+	if len(req.Directory) > 0 {
+		dirs = append(dirs, req.Directory)
+	}
+	dirs = append(dirs, req.Directories...)
+
+	for _, dir := range dirs {
 		if err := util.ValidPath(dir); err != nil {
 			recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
 			// fail fast on any invalid path
 			return nil, err
 		}
 	}
-	rmdirErrors := make([]error, 0, len(req.Directories))
-	for _, dir := range req.Directories {
+	rmdirErrors := make([]error, 0, len(dirs))
+	for _, dir := range dirs {
 		var err error
 		if req.Recursive {
 			err = RmdirRecursive(dir)
