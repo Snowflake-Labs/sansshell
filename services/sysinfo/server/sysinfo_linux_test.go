@@ -252,8 +252,8 @@ func TestDmesg(t *testing.T) {
 		})
 	}
 
-	getKernelMessages = func() ([]*pb.DmsgRecord, error) {
-		_, err := savedGetKernelMessages()
+	getKernelMessages = func(int32) ([]*pb.DmsgRecord, error) {
+		_, err := savedGetKernelMessages(0)
 		if err != nil {
 			return nil, err
 		}

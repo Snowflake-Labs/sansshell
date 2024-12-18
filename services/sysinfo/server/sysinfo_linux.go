@@ -86,7 +86,8 @@ var getUptime = func() (time.Duration, error) {
 // we set 2 seconds timeout to explicitly close the channel
 // If the package releases new feature to support non-blocking read, we can
 // make corresponding changes below to get rid of hard code timeout setting
-var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+var getKernelMessages = func(providedTimeout int64) ([]*pb.DmsgRecord, error) {
+	timeout := getTimeout(providedTimeout)
 	parser, err := getKmsgParser()
 	if err != nil {
 		return nil, err
@@ -106,7 +107,7 @@ var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 				Message: msg.Message,
 				Time:    timestamppb.New(msg.Timestamp),
 			})
-		case <-time.After(2 * time.Second):
+		case <-time.After(timeout):
 			parser.Close()
 			done = true
 		}
@@ -194,4 +195,17 @@ var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest,
 		}
 	}
 	return nil
+}
+
+func getTimeout(provided int64) time.Duration {
+	const maxTimeout = 30 * time.Second
+	const minTimeout = 2 * time.Second
+	timeout := time.Duration(provided) * time.Second
+	if timeout > maxTimeout {
+		timeout = maxTimeout
+	}
+	if timeout < minTimeout {
+		timeout = minTimeout
+	}
+	return timeout
 }

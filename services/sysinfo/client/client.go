@@ -116,12 +116,13 @@ type dmesgCmd struct {
 	grep        string
 	ignoreCase  bool
 	invertMatch bool
+	timeout     int64
 }
 
 func (*dmesgCmd) Name() string     { return "dmesg" }
 func (*dmesgCmd) Synopsis() string { return "View the messages in kernel ring buffer" }
 func (*dmesgCmd) Usage() string {
-	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v]:
+	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v] [--timeout=N]:
 	 Print the messages from kernel ring buffer.
 `
 }
@@ -131,6 +132,7 @@ func (p *dmesgCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.tail, "tail", -1, "tail the latest n lines")
 	f.BoolVar(&p.ignoreCase, "i", false, "ignore case")
 	f.BoolVar(&p.invertMatch, "v", false, "invert match")
+	f.Int64Var(&p.timeout, "timeout", 2, "timeout collection of messages after N seconds, default is 2 seconds")
 }
 
 func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -142,6 +144,7 @@ func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		Grep:        p.grep,
 		IgnoreCase:  p.ignoreCase,
 		InvertMatch: p.invertMatch,
+		Timeout:     p.timeout,
 	}
 	stream, err := c.DmesgOneMany(ctx, req)
 	if err != nil {

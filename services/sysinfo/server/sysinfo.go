@@ -71,7 +71,7 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
 	}
 
-	records, err := getKernelMessages()
+	records, err := getKernelMessages(req.Timeout)
 	if err != nil {
 		recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "get kernel message error"))
 		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)

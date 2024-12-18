@@ -46,6 +46,9 @@ message DmesgRequest {
  string grep = 2;
  bool ignore_case = 3;
  bool invert_match = 4;
+ // time in seconds after which dmesg output will be stopped and the result returned
+ // default is 2 seconds, minimum is 2s and maximum is 30s
+ int64 timeout = 5;
 }
 
 // DmesgReply contains the messages from kernel 
