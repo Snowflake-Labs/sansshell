@@ -22,7 +22,7 @@ sanssh --targets=localhost sysinfo uptime
 Print the messages from kernel ring buffer.
 
 ```bash
-sanssh <sanssh-args> sysinfo dmesg [--tail==<tail-n-lines>] [--grep=<grep-pattern>] [-i] [-v] [--timeout=<timeout-in-seconds>]
+sanssh <sanssh-args> sysinfo dmesg [--tail==<tail-n-lines>] [--grep=<grep-pattern>] [-i] [-v] [--dmesg-read-timeout=<timeout>]
 ```
 
 Where:
@@ -31,7 +31,7 @@ Where:
 - `<grep-pattern>` grep regex pattern to filter out messages with
 - `-i` - ignore grep case
 - `-v` - inverted match grep
-- `<timeout-in-seconds>` timeout collection of kernel messages in this number of seconds, default is 2 seconds
+- `<dmesg-read-timeout>` timeout collection of kernel messages after this duration, default is 2 seconds, must be specified in time.ParseDuration compatible format
 
 Examples:
 ```bash
@@ -42,7 +42,7 @@ sanssh --targets localhost sysinfo dmesg --grep "nvme1n1.*ssd.*"
 ### Get messages not related to BTRFS (ignoring case)
 sanssh --targets localhost sysinfo dmesg -grep "btrfs" -i -v
 ### Collect messages for 10 seconds
-sanssh --targets localhost sysinfo dmesg -grep "btrfs" -i -v --timeout=10
+sanssh --targets localhost sysinfo dmesg -grep "btrfs" -i -v --dmesg-read-timeout=10s
 ```
 
 ### sanssh sysinfo journalctl
