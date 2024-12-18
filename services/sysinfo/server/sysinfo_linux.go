@@ -104,12 +104,14 @@ var getKernelMessages = func(timeout time.Duration, cancelCh <-chan struct{}) ([
 		case <-cancelCh:
 			parser.Close()
 			done = true
+			continue
 		default:
 		}
 		select {
 		case <-timeoutCh:
 			parser.Close()
 			done = true
+			continue
 		default:
 		}
 
