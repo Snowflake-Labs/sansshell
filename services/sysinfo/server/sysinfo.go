@@ -69,7 +69,17 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 	if req.Grep == "" && (req.IgnoreCase || req.InvertMatch) {
 		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
 	}
-	records, err := getKernelMessages(normalizeTimeout(req.Timeout), ctx.Done())
+
+	timeout := pb.DefaultDmesgTimeout
+	if req.Timeout != nil {
+		timeout = req.Timeout.AsDuration()
+	}
+
+	if err := validateTimeout(timeout); err != nil {
+		return err
+	}
+
+	records, err := getKernelMessages(timeout, ctx.Done())
 	if err != nil {
 		recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "get kernel message error"))
 		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)
@@ -113,19 +123,16 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 	return nil
 }
 
-func normalizeTimeout(pbTimeout *durationpb.Duration) time.Duration {
-	if pbTimeout == nil {
-		return pb.MinDmesgTimeout
+func validateTimeout(timeout time.Duration) error {
+	if timeout > pb.MaxDmesgTimeout {
+		return status.Errorf(codes.InvalidArgument, "dmesg-read-timeout value %s is higher than maximum value %s", timeout, pb.MaxDmesgTimeout)
 	}
 
-	timeout := pbTimeout.AsDuration()
-	if timeout > pb.MaxDmesgTimeout {
-		timeout = pb.MaxDmesgTimeout
-	}
 	if timeout < pb.MinDmesgTimeout {
-		timeout = pb.MinDmesgTimeout
+		return status.Errorf(codes.InvalidArgument, "dmesg-read-timeout value %s is lower than minimum value %s", timeout, pb.MinDmesgTimeout)
 	}
-	return timeout
+
+	return nil
 }
 
 func (s *server) Journal(req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {

@@ -34,3 +34,6 @@ const MaxDmesgTimeout = 30 * time.Second
 
 // Minimum Dmesg message capture timeout
 const MinDmesgTimeout = 2 * time.Second
+
+// Default Dmesg message capture timeout
+const DefaultDmesgTimeout = MinDmesgTimeout

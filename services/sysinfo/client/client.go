@@ -123,7 +123,7 @@ type dmesgCmd struct {
 func (*dmesgCmd) Name() string     { return "dmesg" }
 func (*dmesgCmd) Synopsis() string { return "View the messages in kernel ring buffer" }
 func (*dmesgCmd) Usage() string {
-	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v] [--timeout=N]:
+	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v] [--dmesg-read-timeout=N]:
 	 Print the messages from kernel ring buffer.
 `
 }
