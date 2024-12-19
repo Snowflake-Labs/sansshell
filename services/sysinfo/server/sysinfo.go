@@ -19,15 +19,14 @@ package server
 
 import (
 	"context"
-	"regexp"
-
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	"go.opentelemetry.io/otel/attribute"
+	"regexp"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/services"
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
@@ -71,7 +70,16 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
 	}
 
-	records, err := getKernelMessages()
+	timeout := pb.DefaultDmesgTimeout
+	if req.Timeout != nil {
+		timeout = req.Timeout.AsDuration()
+	}
+
+	if err := validateTimeout(timeout); err != nil {
+		return err
+	}
+
+	records, err := getKernelMessages(timeout, ctx.Done())
 	if err != nil {
 		recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "get kernel message error"))
 		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)
@@ -112,6 +120,18 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 			return status.Errorf(codes.Internal, "dmesg: send error %v", err)
 		}
 	}
+	return nil
+}
+
+func validateTimeout(timeout time.Duration) error {
+	if timeout > pb.MaxDmesgTimeout {
+		return status.Errorf(codes.InvalidArgument, "dmesg-read-timeout value %s is higher than maximum value %s", timeout, pb.MaxDmesgTimeout)
+	}
+
+	if timeout < pb.MinDmesgTimeout {
+		return status.Errorf(codes.InvalidArgument, "dmesg-read-timeout value %s is lower than minimum value %s", timeout, pb.MinDmesgTimeout)
+	}
+
 	return nil
 }
 

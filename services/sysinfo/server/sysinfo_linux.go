@@ -86,7 +86,7 @@ var getUptime = func() (time.Duration, error) {
 // we set 2 seconds timeout to explicitly close the channel
 // If the package releases new feature to support non-blocking read, we can
 // make corresponding changes below to get rid of hard code timeout setting
-var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+var getKernelMessages = func(timeout time.Duration, cancelCh <-chan struct{}) ([]*pb.DmsgRecord, error) {
 	parser, err := getKmsgParser()
 	if err != nil {
 		return nil, err
@@ -95,7 +95,26 @@ var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 	var records []*pb.DmsgRecord
 	messages := parser.Parse()
 	done := false
+	timeoutCh := time.After(timeout)
 	for !done {
+		// Select doesn't care about the order of statements, a chatty enough kernel will continue pushing messages
+		// into kmsg and therefore our cancellation and timeout logic will not be reached ever,
+		// so we do this check first to ensure we don't miss our "deadlines" or client-side cancellation
+		select {
+		case <-cancelCh:
+			parser.Close()
+			done = true
+			continue
+		default:
+		}
+		select {
+		case <-timeoutCh:
+			parser.Close()
+			done = true
+			continue
+		default:
+		}
+
 		select {
 		case msg, ok := <-messages:
 			if !ok {
@@ -106,7 +125,14 @@ var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
 				Message: msg.Message,
 				Time:    timestamppb.New(msg.Timestamp),
 			})
-		case <-time.After(2 * time.Second):
+
+			// messages channel can have excessive idle time, we want to utilize that to avoid excessive CPU usage
+			// hence we do a blocking read of the messages channel (no default statement) but at the same time
+			// do blocking read from other channels in case this idle window exceeds timeout or if client cancels command
+		case <-timeoutCh:
+			parser.Close()
+			done = true
+		case <-cancelCh:
 			parser.Close()
 			done = true
 		}

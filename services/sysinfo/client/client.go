@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"io"
 	"os"
 	"time"
@@ -116,12 +117,13 @@ type dmesgCmd struct {
 	grep        string
 	ignoreCase  bool
 	invertMatch bool
+	timeout     time.Duration
 }
 
 func (*dmesgCmd) Name() string     { return "dmesg" }
 func (*dmesgCmd) Synopsis() string { return "View the messages in kernel ring buffer" }
 func (*dmesgCmd) Usage() string {
-	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v]:
+	return `dmesg [--tail=N] [--grep=PATTERN] [-i] [-v] [--dmesg-read-timeout=N]:
 	 Print the messages from kernel ring buffer.
 `
 }
@@ -131,18 +133,30 @@ func (p *dmesgCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.tail, "tail", -1, "tail the latest n lines")
 	f.BoolVar(&p.ignoreCase, "i", false, "ignore case")
 	f.BoolVar(&p.invertMatch, "v", false, "invert match")
+	f.DurationVar(&p.timeout, "dmesg-read-timeout", 2*time.Second, "timeout collection of messages after specified duration, default is 2s, max 30s")
 }
 
 func (p *dmesgCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	c := pb.NewSysInfoClientProxy(state.Conn)
 
+	if p.timeout > pb.MaxDmesgTimeout {
+		fmt.Printf("Invalid dmesg-read-timeout, value %s is higher than maximum dmesg-read-timeout of %s\n", p.timeout.String(), pb.MaxDmesgTimeout.String())
+		return subcommands.ExitUsageError
+	}
+	if p.timeout < pb.MinDmesgTimeout {
+		fmt.Printf("Invalid dmesg-read-timeout, value %s is lower than minimum value of %s\n", p.timeout.String(), pb.MinDmesgTimeout.String())
+		return subcommands.ExitUsageError
+	}
+
 	req := &pb.DmesgRequest{
 		TailLines:   int32(p.tail),
 		Grep:        p.grep,
 		IgnoreCase:  p.ignoreCase,
 		InvertMatch: p.invertMatch,
+		Timeout:     durationpb.New(p.timeout),
 	}
+
 	stream, err := c.DmesgOneMany(ctx, req)
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.

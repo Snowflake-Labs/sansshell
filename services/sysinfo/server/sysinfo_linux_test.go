@@ -217,7 +217,7 @@ func TestDmesg(t *testing.T) {
 	savedGetKernelMessages := getKernelMessages
 
 	// dmesg is not supported in other OS, so an error should be raised
-	getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+	getKernelMessages = func(time.Duration, <-chan struct{}) ([]*pb.DmsgRecord, error) {
 		return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
 	}
 	t.Cleanup(func() { getKernelMessages = savedGetKernelMessages })
@@ -252,8 +252,8 @@ func TestDmesg(t *testing.T) {
 		})
 	}
 
-	getKernelMessages = func() ([]*pb.DmsgRecord, error) {
-		_, err := savedGetKernelMessages()
+	getKernelMessages = func(time.Duration, <-chan struct{}) ([]*pb.DmsgRecord, error) {
+		_, err := savedGetKernelMessages(time.Duration(0), nil)
 		if err != nil {
 			return nil, err
 		}
