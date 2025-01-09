@@ -1712,7 +1712,7 @@ func (r *fdbCLIGetrangekeysCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 	}
 	r.req.BeginKey = f.Arg(0)
 	switch f.NArg() {
-	case 1:
+	case 2:
 		// This could be an end key or a limit. If it parses as a integer it's a limit and there
 		// can't be anything else. Otherwise it's and end key and the next one must parse as a limit.
 		v, err := strconv.ParseInt(f.Arg(1), 10, 32)
@@ -1726,7 +1726,7 @@ func (r *fdbCLIGetrangekeysCmd) Execute(ctx context.Context, f *flag.FlagSet, ar
 		r.req.Limit = &wrapperspb.UInt32Value{
 			Value: uint32(v),
 		}
-	case 2:
+	case 3:
 		// 2nd one is a limit so has to be a number.
 		v, err := strconv.ParseInt(f.Arg(2), 10, 32)
 		if err != nil {
