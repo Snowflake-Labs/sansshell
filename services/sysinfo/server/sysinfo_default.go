@@ -32,7 +32,7 @@ var getUptime = func() (time.Duration, error) {
 	return 0, status.Errorf(codes.Unimplemented, "uptime is not supported")
 }
 
-var getKernelMessages = func() ([]*pb.DmsgRecord, error) {
+var getKernelMessages = func(timeout time.Duration, cancelCh <-chan struct{}) ([]*pb.DmsgRecord, error) {
 	return nil, status.Errorf(codes.Unimplemented, "dmesg is not supported")
 }
 
