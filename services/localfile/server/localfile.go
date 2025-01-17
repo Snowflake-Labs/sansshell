@@ -26,6 +26,7 @@ import (
 	"fmt"
 	app "github.com/Snowflake-Labs/sansshell/services/localfile/server/application"
 	"github.com/Snowflake-Labs/sansshell/services/localfile/server/infrastructure/output/file-data"
+	"github.com/pkg/errors"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -715,33 +716,82 @@ func (s *server) SetFileAttributes(ctx context.Context, req *pb.SetFileAttribute
 func (s *server) Rm(ctx context.Context, req *pb.RmRequest) (*emptypb.Empty, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("rm request", "filename", req.Filename)
-	if err := util.ValidPath(req.Filename); err != nil {
-		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		return nil, err
+	logger.Info("rm request", "filenames", req.Filenames)
+
+	files := make([]string, 0, len(req.Filenames)+1)
+	if len(req.Filename) > 0 {
+		files = append(files, req.Filename)
 	}
-	err := unix.Unlink(req.Filename)
-	if err != nil {
-		recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "unlink_err"))
-		return nil, status.Errorf(codes.Internal, "unlink error: %v", err)
+	files = append(files, req.Filenames...)
+
+	for _, filename := range files {
+		if err := util.ValidPath(filename); err != nil {
+			recorder.CounterOrLog(ctx, localfileRmFailureCounter, 1, attribute.String("reason", "invalid_path"))
+			return nil, err
+		}
 	}
+	rmErrors := make([]error, 0, len(files))
+	for _, filename := range files {
+		err := unix.Unlink(filename)
+		if err != nil {
+			rmErrors = append(rmErrors, err)
+		}
+	}
+
+	if len(rmErrors) > 0 {
+		recorder.CounterOrLog(ctx, localfileRmFailureCounter, int64(len(rmErrors)), attribute.String("reason", "unlink_err"))
+		return nil, status.Errorf(codes.Internal, "unlink error: %v", rmErrors)
+	}
+
 	return &emptypb.Empty{}, nil
 }
 
 func (s *server) Rmdir(ctx context.Context, req *pb.RmdirRequest) (*emptypb.Empty, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	logger.Info("rmdir request", "directory", req.Directory)
-	if err := util.ValidPath(req.Directory); err != nil {
-		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		return nil, err
+	logger.Info("rmdir request", "directories", req.Directories)
+
+	dirs := make([]string, 0, len(req.Directories)+1)
+	if len(req.Directory) > 0 {
+		dirs = append(dirs, req.Directory)
 	}
-	err := unix.Rmdir(req.Directory)
-	if err != nil {
-		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "rmdir_err"))
-		return nil, status.Errorf(codes.Internal, "rmdir error: %v", err)
+	dirs = append(dirs, req.Directories...)
+
+	for _, dir := range dirs {
+		if err := util.ValidPath(dir); err != nil {
+			recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, 1, attribute.String("reason", "invalid_path"))
+			// fail fast on any invalid path
+			return nil, err
+		}
 	}
+	rmdirErrors := make([]error, 0, len(dirs))
+	for _, dir := range dirs {
+		var err error
+		if req.Recursive {
+			err = RmdirRecursive(dir)
+		} else {
+			err = unix.Rmdir(dir)
+		}
+		if err != nil {
+			rmdirErrors = append(rmdirErrors, errors.Errorf("path: %s error: %s", dir, err))
+		}
+	}
+
+	if len(rmdirErrors) > 0 {
+		recorder.CounterOrLog(ctx, localfileRmDirFailureCounter, int64(len(rmdirErrors)), attribute.String("reason", "rmdir_err"))
+		return nil, status.Errorf(codes.Internal, "rmdir errors: %v", rmdirErrors)
+	}
+
 	return &emptypb.Empty{}, nil
+}
+
+// RmdirRecursive is an os.RemoveAll wrapper that also checks for file existence since RemoveAll is silent
+func RmdirRecursive(path string) error {
+	_, err := os.Stat(path)
+	if err != nil {
+		return unix.ENOENT
+	}
+	return os.RemoveAll(path)
 }
 
 func (s *server) Rename(ctx context.Context, req *pb.RenameRequest) (*emptypb.Empty, error) {
