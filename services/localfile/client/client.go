@@ -1277,49 +1277,6 @@ func (i *rmCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	return retCode
 }
 
-type rmdirCmd struct {
-}
-
-func (*rmdirCmd) Name() string     { return "rmdir" }
-func (*rmdirCmd) Synopsis() string { return "Remove a directory." }
-func (*rmdirCmd) Usage() string {
-	return `rm <directory>:
-  Remove the given directory.
-  `
-}
-
-func (i *rmdirCmd) SetFlags(f *flag.FlagSet) {}
-
-func (i *rmdirCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := args[0].(*util.ExecuteState)
-	if f.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "please specify a directory to rm")
-		return subcommands.ExitUsageError
-	}
-
-	req := &pb.RmdirRequest{
-		Directory: f.Arg(0),
-	}
-	client := pb.NewLocalFileClientProxy(state.Conn)
-	respChan, err := client.RmdirOneMany(ctx, req)
-	if err != nil {
-		// Emit this to every error file as it's not specific to a given target.
-		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - rmdir client error: %v\n", err)
-		}
-		return subcommands.ExitFailure
-	}
-
-	retCode := subcommands.ExitSuccess
-	for r := range respChan {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "rm client error: %v\n", r.Error)
-			retCode = subcommands.ExitFailure
-		}
-	}
-	return retCode
-}
-
 type renameCmd struct {
 }
 
