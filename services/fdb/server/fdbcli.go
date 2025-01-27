@@ -689,6 +689,7 @@ func parseFDBCLIConfigure(req *pb.FDBCLIConfigure) ([]string, []captureLogs, err
 	args = stringKVFlag(args, req.PerpetualStorageWiggleLocality, "perpetual_storage_wiggle_locality")
 	args = stringKVFlag(args, req.StorageMigrationType, "storage_migration_type")
 	args = stringKVFlag(args, req.TenantMode, "tenant_mode")
+	args = uint32KVFlag(args, req.BlobGranulesEnabled, "blob_granules_enabled")
 	return args, nil, nil
 }
 
