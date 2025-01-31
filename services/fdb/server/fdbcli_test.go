@@ -1111,6 +1111,9 @@ func TestFDBCLI(t *testing.T) {
 								TenantMode: &wrapperspb.StringValue{
 									Value: "disabled",
 								},
+								BlobGranulesEnabled: &wrapperspb.UInt32Value{
+									Value: 1,
+								},
 							},
 						},
 					},
@@ -1121,7 +1124,7 @@ func TestFDBCLI(t *testing.T) {
 			command: []string{
 				FDBCLI,
 				"--exec",
-				"configure new triple ssd grv_proxies=3 commit_proxies=4 resolvers=5 logs=6 count=7 perpetual_storage_wiggle=1 perpetual_storage_wiggle_locality=locality storage_migration_type=aggressive tenant_mode=disabled",
+				"configure new triple ssd grv_proxies=3 commit_proxies=4 resolvers=5 logs=6 count=7 perpetual_storage_wiggle=1 perpetual_storage_wiggle_locality=locality storage_migration_type=aggressive tenant_mode=disabled blob_granules_enabled=1",
 			},
 		},
 		{

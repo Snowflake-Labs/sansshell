@@ -909,7 +909,7 @@ func (*fdbCLIConfigureCmd) Synopsis() string {
 	return "Change the database configuration"
 }
 func (p *fdbCLIConfigureCmd) Usage() string {
-	return "configure [new|tss] [single|double|triple|three_data_hall|three_datacenter] [ssd|memory] [commit_proxies=<COMMIT_PROXIES>] [grv_proxies=<GRV_PROXIES>] [logs=<LOGS>] [resolvers=<RESOLVERS>] [count=<TSS_COUNT>] [perpetual_storage_wiggle=<WIGGLE_SPEED>] [perpetual_storage_wiggle_locality=<<LOCALITY_KEY>:<LOCALITY_VALUE>|0>] [storage_migration_type={disabled|gradual|aggressive}] [tenant_mode={disabled|optional_experimental|required_experimental]"
+	return "configure [new|tss] [single|double|triple|three_data_hall|three_datacenter] [ssd|memory] [commit_proxies=<COMMIT_PROXIES>] [grv_proxies=<GRV_PROXIES>] [logs=<LOGS>] [resolvers=<RESOLVERS>] [count=<TSS_COUNT>] [perpetual_storage_wiggle=<WIGGLE_SPEED>] [perpetual_storage_wiggle_locality=<<LOCALITY_KEY>:<LOCALITY_VALUE>|0>] [storage_migration_type={disabled|gradual|aggressive}] [tenant_mode={disabled|optional_experimental|required_experimental] [blob_granules_enabled={0|1}]"
 }
 
 func (r *fdbCLIConfigureCmd) SetFlags(f *flag.FlagSet) {
@@ -1031,6 +1031,10 @@ func (r *fdbCLIConfigureCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 				usage = false
 				r.req.TenantMode = &wrapperspb.StringValue{
 					Value: kv[1],
+				}
+			case "blob_granules_enabled":
+				if setUintVal(opt, kv[1], &r.req.BlobGranulesEnabled) == subcommands.ExitSuccess {
+					usage = false
 				}
 			default:
 				fmt.Fprintf(os.Stderr, "can't parse configure option %q\n", opt)
