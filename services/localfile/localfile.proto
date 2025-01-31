@@ -87,6 +87,10 @@ message ReadActionRequest {
     ReadRequest file = 1;
     TailRequest tail = 2;
   }
+
+  string grep = 3;
+  bool ignore_case = 4;
+  bool invert_match = 5;
 }
 
 // ReadRequest describes the filename to be read
