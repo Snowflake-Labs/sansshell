@@ -76,7 +76,7 @@ func NewClientCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentia
 	return credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 		RootCAs:      CAPool,
-		MinVersion:   tls.VersionTLS13,
+		MinVersion:   tls.VersionTLS12,
 	})
 }
 
