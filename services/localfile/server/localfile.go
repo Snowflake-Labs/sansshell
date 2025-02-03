@@ -18,7 +18,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/md5"
@@ -158,9 +157,12 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	if path, found := strings.CutSuffix(file, "/*"); found {
 		errs.Go(func() error {
 			if err := s.listFor(path, ctx, func(item *pb.StatReply) error {
-				fileChan <- item.Filename
+				if !fs.FileMode(item.Mode).IsDir() && item.Filename != path {
+					fileChan <- item.Filename
+				}
 				return nil
 			}); err != nil {
+				close(fileChan)
 				return err
 			}
 			close(fileChan)
@@ -171,8 +173,9 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 		close(fileChan)
 	}
 
-	// TODO: Make it configurable.
-	parallelism := 3
+	// TODO: Make it configurable in the future. We don't want to burn too much CPU on the parallel file reads though as it
+	// may easily get expensive.
+	parallelism := 2
 	for i := 0; i < parallelism; i++ {
 		errs.Go(func() error {
 
@@ -229,6 +232,7 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 					return err
 				}
 				defer closer()
+				trailingLine := ""
 
 				for {
 					n, err := reader.Read(buf)
@@ -251,31 +255,33 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 					}
 					if req.Grep != "" {
 						isInvert := req.InvertMatch
-						// TODO: Expensive copy of data -- yuck.
-						buf2 := make([]byte, util.StreamingChunkSize)
-						copy(buf2, buf)
-						scanner := bufio.NewScanner(bytes.NewBuffer(buf2))
+
 						var outBuf bytes.Buffer
-						for scanner.Scan() {
-							line := scanner.Text()
-							// TODO: This obviously doesn't work well for lines that cross buffer boundary.
-							// we proabably need a bit of custom logic here instead of using a scanner..
-							if match := pattern.MatchString(line); match != isInvert {
-								outBuf.WriteString(line)
+
+						start := 0
+						for curr := 0; curr < n; curr++ {
+							if buf[curr] == '\n' {
+								line := trailingLine + string(buf[start:curr+1])
+								if match := pattern.MatchString(line); match != isInvert {
+									if _, err := outBuf.WriteString(line); err != nil {
+										return err
+									}
+								}
+
+								trailingLine = ""
+								start = curr + 1
 							}
+						}
+						if start < n {
+							trailingLine = trailingLine + string(buf[start:n])
 						}
 
 						// Only send over the number of bytes we actually read or
 						// else we'll send over garbage in the last packet potentially.
-						if err := stream.Send(&pb.ReadReply{Contents: outBuf.Bytes()}); err != nil {
-							recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-							return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
-						}
-
-						// If we got back less than a full chunk we're done for non-tail cases.
-						if outBuf.Len() < util.StreamingChunkSize {
-							if r != nil {
-								break
+						if outBuf.Len() > 0 {
+							if err := stream.Send(&pb.ReadReply{Contents: outBuf.Bytes()}); err != nil {
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+								return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 							}
 						}
 					} else {

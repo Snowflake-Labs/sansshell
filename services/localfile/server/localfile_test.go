@@ -17,6 +17,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -198,6 +199,168 @@ func TestRead(t *testing.T) {
 			}
 			if got, want := buf.Bytes(), contents; !bytes.Equal(got, want) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestReadWithGeneratedFiles(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	// Prepare data in /tmp/sansshell_localfile_test
+	testDataDir := "/tmp/sansshell_localfile_test"
+
+	// Cleanup old data
+	clean := func() {
+		err = os.RemoveAll(testDataDir)
+		testutil.FatalOnErr(fmt.Sprintf("os.RemoveAll(%v)", testDataDir), err, t)
+	}
+	clean()
+	//t.Cleanup(clean)
+
+	err = os.Mkdir(testDataDir, 0777)
+	testutil.FatalOnErr(fmt.Sprintf("os.Mkdir(%v)", testDataDir), err, t)
+
+	for i := 0; i < 10; i++ {
+		filename := fmt.Sprintf("%v/file-%v.txt", testDataDir, i)
+		f, err := os.Create(filename)
+		testutil.FatalOnErr(fmt.Sprintf("os.Create(%v)", filename), err, t)
+
+		for j := 0; j < 100; j++ {
+			_, err := f.WriteString("lorem Ipsum\n")
+			testutil.FatalOnErr(fmt.Sprintf("f.WriteString() on file %v", filename), err, t)
+		}
+		err = f.Close()
+		testutil.FatalOnErr(fmt.Sprintf("f.Close() on file %v", filename), err, t)
+	}
+	subdir := testDataDir + "/breaking"
+	err = os.Mkdir(subdir, 0666)
+	testutil.FatalOnErr(fmt.Sprintf("os.Mkdir(%v)", testDataDir), err, t)
+
+	for _, tc := range []struct {
+		name          string
+		filename      string
+		wantErr       bool
+		chunksize     int
+		offset        int64
+		length        int64
+		grep          string
+		invertMatch   bool
+		ignoreCase    bool
+		expectedLines int
+	}{
+		{
+			name:          "check chunksize 10",
+			filename:      testDataDir + "/*",
+			chunksize:     10,
+			expectedLines: 1000,
+		},
+		{
+			name:          "check chunksize 3",
+			filename:      testDataDir + "/*",
+			chunksize:     3,
+			expectedLines: 1000,
+		},
+		{
+			name:          "use offset",
+			filename:      testDataDir + "/*",
+			offset:        int64((len("lorem ipsum")+1)*10 - 3),
+			chunksize:     7,
+			expectedLines: 910,
+		},
+		{
+			name:          "use part line offset with grep",
+			filename:      testDataDir + "/*",
+			offset:        int64((len("lorem Ipsum")+1)*10 - 3),
+			grep:          "lorem Ipsum",
+			chunksize:     7,
+			expectedLines: 900,
+		},
+		{
+			name:          "use part line offset with grep (large chunk)",
+			filename:      testDataDir + "/*",
+			offset:        int64((len("lorem Ipsum")+1)*10 - 3),
+			grep:          "lorem Ipsum",
+			chunksize:     15,
+			expectedLines: 900,
+		},
+		{
+			name:          "use part line offset with grep invert",
+			filename:      testDataDir + "/*",
+			offset:        int64((len("lorem Ipsum")+1)*10 - 3),
+			grep:          "lorem Ipsum",
+			invertMatch:   true,
+			chunksize:     15,
+			expectedLines: 10,
+		},
+		{
+			name:          "use part line offset with grep ignore case",
+			filename:      testDataDir + "/*",
+			offset:        int64((len("lorem Ipsum")+1)*10 - 3),
+			grep:          "lorem ipsum",
+			ignoreCase:    true,
+			chunksize:     15,
+			expectedLines: 900,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			oldChunk := util.StreamingChunkSize
+			t.Cleanup(func() {
+				util.StreamingChunkSize = oldChunk
+			})
+
+			util.StreamingChunkSize = tc.chunksize
+
+			client := pb.NewLocalFileClient(conn)
+
+			stream, err := client.Read(ctx, &pb.ReadActionRequest{
+				Request: &pb.ReadActionRequest_File{
+					File: &pb.ReadRequest{
+						Filename: tc.filename,
+						Offset:   tc.offset,
+						Length:   tc.length,
+					},
+				},
+				Grep:        tc.grep,
+				InvertMatch: tc.invertMatch,
+				IgnoreCase:  tc.ignoreCase,
+			})
+			// In general this can only fail here for connection issues which
+			// we're not expecting. Actual fails happen in Recv below.
+			testutil.FatalOnErr("Read failed", err, t)
+
+			buf := &bytes.Buffer{}
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				testutil.WantErr(tc.name, err, tc.wantErr, t)
+				if tc.wantErr {
+					// If this was an expected error we're done.
+					return
+				}
+
+				t.Logf("Response: %+v", resp)
+				contents := resp.Contents
+				n, err := buf.Write(contents)
+				if got, want := n, len(contents); got != want {
+					t.Fatalf("Can't write into buffer at correct length. Got %d want %d", got, want)
+				}
+				testutil.FatalOnErr("can't write into buffer", err, t)
+			}
+			scanner := bufio.NewScanner(buf)
+			lines := 0
+			for scanner.Scan() {
+				lines++
+			}
+			if got, want := lines, tc.expectedLines; got != want {
+
+				t.Fatalf("Wrong number of lines. Got %d want %d", got, want)
 			}
 		})
 	}

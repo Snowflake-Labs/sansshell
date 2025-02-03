@@ -21,7 +21,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	cli_controllers "github.com/Snowflake-Labs/sansshell/services/localfile/client/cli-controllers"
 	"io"
 	"io/fs"
 	"os"
@@ -29,6 +28,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	cli_controllers "github.com/Snowflake-Labs/sansshell/services/localfile/client/cli-controllers"
 
 	"github.com/google/subcommands"
 	"github.com/schollz/progressbar/v3"
@@ -88,8 +89,9 @@ func (p *fileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 }
 
 type readCmd struct {
-	offset int64
-	length int64
+	offset  int64
+	length  int64
+	pattern string
 }
 
 func (*readCmd) Name() string     { return "read" }
@@ -103,6 +105,7 @@ func (*readCmd) Usage() string {
 func (p *readCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.offset, "offset", 0, "If positive bytes to skip before reading. If negative apply from the end of the file")
 	f.Int64Var(&p.length, "length", 0, "If positive the maximum number of bytes to read")
+	f.StringVar(&p.pattern, "grep", "", "TODO")
 }
 
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -121,6 +124,7 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 				Length:   p.length,
 			},
 		},
+		Grep: p.pattern,
 	}
 
 	return readFile(ctx, state, req)
