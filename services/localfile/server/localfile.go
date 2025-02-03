@@ -36,6 +36,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	app "github.com/Snowflake-Labs/sansshell/services/localfile/server/application"
@@ -111,7 +112,9 @@ var (
 const modeMask = uint32(fs.ModePerm | fs.ModeSticky | fs.ModeSetuid | fs.ModeSetgid)
 
 // server is used to implement the gRPC server
-type server struct{}
+type server struct {
+	mu sync.Mutex
+}
 
 // Read returns the contents of the named file
 func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer) error {
@@ -279,18 +282,24 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 						// Only send over the number of bytes we actually read or
 						// else we'll send over garbage in the last packet potentially.
 						if outBuf.Len() > 0 {
+							s.mu.Lock()
 							if err := stream.Send(&pb.ReadReply{Contents: outBuf.Bytes()}); err != nil {
+								s.mu.Unlock()
 								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 								return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 							}
+							s.mu.Unlock()
 						}
 					} else {
 						// Only send over the number of bytes we actually read or
 						// else we'll send over garbage in the last packet potentially.
+						s.mu.Lock()
 						if err := stream.Send(&pb.ReadReply{Contents: buf[:n]}); err != nil {
+							s.mu.Unlock()
 							recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
 							return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
 						}
+						s.mu.Unlock()
 
 						// If we got back less than a full chunk we're done for non-tail cases.
 						if n < util.StreamingChunkSize {
