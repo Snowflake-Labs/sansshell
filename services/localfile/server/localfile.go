@@ -235,7 +235,9 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 					return err
 				}
 				defer closer()
-				trailingLine := ""
+				// Used only with grep / text procesing. A piece of text from a buffer below after last '\n'.
+				// it can accumulate up to 3 * util.StreamingChunkSize bytes.
+				var trailingLine bytes.Buffer
 
 				for {
 					n, err := reader.Read(buf)
@@ -264,19 +266,32 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 						start := 0
 						for curr := 0; curr < n; curr++ {
 							if buf[curr] == '\n' {
-								line := trailingLine + string(buf[start:curr+1])
+								if _, err = trailingLine.Write(buf[start : curr+1]); err != nil {
+									recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_write_read_err"))
+									return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+								}
+								line := trailingLine.String()
 								if match := pattern.MatchString(line); match != isInvert {
 									if _, err := outBuf.WriteString(line); err != nil {
-										return err
+										recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_out_buf_read_err"))
+										return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
 									}
 								}
 
-								trailingLine = ""
+								trailingLine.Reset()
 								start = curr + 1
 							}
 						}
 						if start < n {
-							trailingLine = trailingLine + string(buf[start:n])
+							if trailingLine.Len() > util.StreamingChunkSize*2 {
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_length_read_err"))
+								return status.Errorf(codes.Internal, "line too long, use read without grep -- can't read file %s: %v", file, err)
+							}
+							if _, err = trailingLine.Write(buf[start:n]); err != nil {
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_extend_read_err"))
+								return status.Errorf(codes.Internal, "failed to append to line, use read without grep -- can't read file %s: %v", file, err)
+							}
+
 						}
 
 						// Only send over the number of bytes we actually read or

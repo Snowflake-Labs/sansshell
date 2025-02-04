@@ -219,7 +219,7 @@ func TestReadWithGeneratedFiles(t *testing.T) {
 		testutil.FatalOnErr(fmt.Sprintf("os.RemoveAll(%v)", testDataDir), err, t)
 	}
 	clean()
-	//	t.Cleanup(clean)
+	t.Cleanup(clean)
 
 	err = os.Mkdir(testDataDir, 0777)
 	testutil.FatalOnErr(fmt.Sprintf("os.Mkdir(%v)", testDataDir), err, t)
@@ -261,8 +261,16 @@ func TestReadWithGeneratedFiles(t *testing.T) {
 		{
 			name:          "check chunksize 3",
 			filename:      testDataDir + "/*",
-			chunksize:     3,
+			chunksize:     1,
 			expectedLines: 1000,
+		},
+		{
+			name:          "check chunksize 1 with grep",
+			filename:      testDataDir + "/*",
+			chunksize:     1,
+			expectedLines: 1000,
+			grep:          "lorem Ipsum",
+			wantErr:       true,
 		},
 		{
 			name:          "use offset",
