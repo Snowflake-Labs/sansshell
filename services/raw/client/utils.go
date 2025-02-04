@@ -31,18 +31,26 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
+type ErrFailedToDecodeInput struct {
+	Err error
+}
+
+func (e *ErrFailedToDecodeInput) Error() string {
+	return fmt.Sprintf("failed to decode input: %v", e.Err)
+}
+
 // decodeExactlyOne decodes a single json message from the decoder and
 // fails if more messages are present.
 func decodeExactlyOne(decoder *json.Decoder, msg proto.Message) error {
 	var raw json.RawMessage
 	if err := decoder.Decode(&raw); err != nil {
-		return fmt.Errorf("unable to read input message: %v", err)
+		return &ErrFailedToDecodeInput{Err: fmt.Errorf("unable to read input message: %v", err)}
 	}
 	if err := protojson.Unmarshal([]byte(raw), msg); err != nil {
-		return fmt.Errorf("unable to parse input json: %v", err)
+		return &ErrFailedToDecodeInput{Err: fmt.Errorf("unable to parse input json: %v", err)}
 	}
 	if decoder.More() {
-		return fmt.Errorf("more than one input object provided for non-streaming call")
+		return &ErrFailedToDecodeInput{Err: fmt.Errorf("more than one input object provided for non-streaming call")}
 	}
 	return nil
 }

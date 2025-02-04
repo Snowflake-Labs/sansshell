@@ -143,7 +143,8 @@ func (p *callCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		var unknownMethodErr *ErrUnknownMethod
-		if errors.As(err, &unknownMethodErr) {
+		var failedToDecodeErr *ErrFailedToDecodeInput
+		if errors.As(err, &unknownMethodErr) || errors.As(err, &failedToDecodeErr) {
 			return subcommands.ExitUsageError
 		}
 		return subcommands.ExitFailure
