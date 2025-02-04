@@ -126,7 +126,6 @@ func (p *callCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 	methodName := f.Arg(0)
 
-	fmt.Printf("Sending Request to %v\n", methodName)
 	err := SendRequest(ctx, methodName, input, state.Conn, func(resp *ProxyResponse) error {
 		if resp.Error == io.EOF {
 			// Streaming commands may return EOF
