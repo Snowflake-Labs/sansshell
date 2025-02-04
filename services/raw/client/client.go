@@ -20,6 +20,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -126,7 +127,7 @@ func (p *callCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	}
 	methodName := f.Arg(0)
 
-	err := SendRequest(ctx, methodName, input, state.Conn, func(resp *ProxyResponse) error {
+	err := InvokeMethod(ctx, methodName, input, state.Conn, func(resp *ProxyResponse) error {
 		if resp.Error == io.EOF {
 			// Streaming commands may return EOF
 			return nil
@@ -141,6 +142,10 @@ func (p *callCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		var unknownMethodErr *ErrUnknownMethod
+		if errors.As(err, &unknownMethodErr) {
+			return subcommands.ExitUsageError
+		}
 		return subcommands.ExitFailure
 	}
 

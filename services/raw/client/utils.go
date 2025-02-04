@@ -75,8 +75,31 @@ func processStreamedResponse(stream StreamingClientProxy, responseProcessors []R
 
 type ResponseProcessor func(*ProxyResponse) error
 
-func SendRequest(ctx context.Context, methodName string, input io.Reader, conn *proxy.Conn, responseProcessors ...ResponseProcessor) error {
-	inputDecoder := json.NewDecoder(input)
+type ErrUnknownMethod struct {
+	MethodName   string
+	KnownMethods []string
+}
+
+func (e *ErrUnknownMethod) Error() string {
+	return fmt.Sprintf("Unknown method %q, known ones are %v\n", e.MethodName, e.KnownMethods)
+}
+
+type ErrUnknownMessage struct {
+	MessageDescriptor protoreflect.MessageDescriptor
+	err               error
+}
+
+func (e *ErrUnknownMessage) Error() string {
+	return fmt.Sprintf("Unable to find %v in protoregistry: %v\n", e.MessageDescriptor.FullName(), e.err)
+}
+
+// InvokeMethod sends a request with the specified method name and payload data to the given proxy connection, then
+// processes the response using the provided ResponseProcessor functions.
+// It supports both unary and streaming RPC calls.
+// The method name must be in the format "/PackageName.ServiceName/MethodName".
+// The payload should be a JSON-encoded request message. It can be provided as an io.Reader, allowing for streaming input.
+func InvokeMethod(ctx context.Context, methodName string, payload io.Reader, conn *proxy.Conn, responseProcessors ...ResponseProcessor) error {
+	inputDecoder := json.NewDecoder(payload)
 	proxy := GenericClientProxy{conn: conn}
 	// Find our method
 	var methodDescriptor protoreflect.MethodDescriptor
@@ -101,17 +124,17 @@ func SendRequest(ctx context.Context, methodName string, input io.Reader, conn *
 	})
 	if methodDescriptor == nil {
 		sort.Strings(allMethodNames)
-		return fmt.Errorf("Unknown method %q, known ones are %v\n", methodName, allMethodNames)
+		return &ErrUnknownMethod{MethodName: methodName, KnownMethods: allMethodNames}
 	}
 
 	// Figure out the proto types to use for requests and responses.
 	inType, err := protoregistry.GlobalTypes.FindMessageByName(methodDescriptor.Input().FullName())
 	if err != nil {
-		return fmt.Errorf("Unable to find %v in protoregistry: %v\n", methodDescriptor.Input().FullName(), err)
+		return &ErrUnknownMessage{MessageDescriptor: methodDescriptor.Input(), err: err}
 	}
 	outType, err := protoregistry.GlobalTypes.FindMessageByName(methodDescriptor.Output().FullName())
 	if err != nil {
-		return fmt.Errorf("Unable to find %v in protoregistry: %v\n", methodDescriptor.Output().FullName(), err)
+		return &ErrUnknownMessage{MessageDescriptor: methodDescriptor.Output(), err: err}
 	}
 
 	// Make our actual call, using different ways based on the streaming options.
