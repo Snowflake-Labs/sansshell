@@ -27,15 +27,15 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// genericClientProxy is similar to generated sansshell proxy code but works with generic protobufs.
+// GenericClientProxy is similar to generated sansshell proxy code but works with generic protobufs.
 // This code is largely copied from the generated grpcproxy code.
-type genericClientProxy struct {
+type GenericClientProxy struct {
 	conn *proxy.Conn
 }
 
-// proxyResponse encapsulates a proxy data packet.
+// ProxyResponse encapsulates a proxy data packet.
 // It includes the target, index, response and possible error returned.
-type proxyResponse struct {
+type ProxyResponse struct {
 	Target string
 	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
 	Index int
@@ -47,13 +47,13 @@ type proxyResponse struct {
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *genericClientProxy) UnaryOneMany(ctx context.Context, method string, in proto.Message, out protoreflect.MessageType, opts ...grpc.CallOption) (<-chan *proxyResponse, error) {
+func (c *GenericClientProxy) UnaryOneMany(ctx context.Context, method string, in proto.Message, out protoreflect.MessageType, opts ...grpc.CallOption) (<-chan *ProxyResponse, error) {
 	conn := c.conn
-	ret := make(chan *proxyResponse)
+	ret := make(chan *ProxyResponse)
 	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
 	if len(conn.Targets) == 1 {
 		go func() {
-			out := &proxyResponse{
+			out := &ProxyResponse{
 				Target: conn.Targets[0],
 				Index:  0,
 				Resp:   out.New().Interface(),
@@ -75,7 +75,7 @@ func (c *genericClientProxy) UnaryOneMany(ctx context.Context, method string, in
 	// A goroutine to retrieve untyped responses and convert them to typed ones.
 	go func() {
 		for {
-			typedResp := &proxyResponse{
+			typedResp := &ProxyResponse{
 				Resp: out.New().Interface(),
 			}
 
@@ -100,20 +100,20 @@ func (c *genericClientProxy) UnaryOneMany(ctx context.Context, method string, in
 	return ret, nil
 }
 
-type streamingClientProxy interface {
-	Recv() ([]*proxyResponse, error)
+type StreamingClientProxy interface {
+	Recv() ([]*ProxyResponse, error)
 	grpc.ClientStream
 }
 
-type clientStreamingClientProxy struct {
+type ClientStreamingClientProxy struct {
 	cc         *proxy.Conn
 	directDone bool
 	outType    protoreflect.MessageType
 	grpc.ClientStream
 }
 
-func (x *clientStreamingClientProxy) Recv() ([]*proxyResponse, error) {
-	var ret []*proxyResponse
+func (x *ClientStreamingClientProxy) Recv() ([]*ProxyResponse, error) {
+	var ret []*ProxyResponse
 	// If this is a direct connection the RecvMsg call is to a standard grpc.ClientStream
 	// and not our proxy based one. This means we need to receive a typed response and
 	// convert it into a single slice entry return. This ensures the OneMany style calls
@@ -126,7 +126,7 @@ func (x *clientStreamingClientProxy) Recv() ([]*proxyResponse, error) {
 		}
 		m := x.outType.New().Interface()
 		err := x.ClientStream.RecvMsg(m)
-		ret = append(ret, &proxyResponse{
+		ret = append(ret, &ProxyResponse{
 			Resp:   m,
 			Error:  err,
 			Target: x.cc.Targets[0],
@@ -144,7 +144,7 @@ func (x *clientStreamingClientProxy) Recv() ([]*proxyResponse, error) {
 		return nil, err
 	}
 	for _, r := range m {
-		typedResp := &proxyResponse{
+		typedResp := &ProxyResponse{
 			Resp: x.outType.New().Interface(),
 		}
 		typedResp.Target = r.Target
@@ -164,7 +164,7 @@ func (x *clientStreamingClientProxy) Recv() ([]*proxyResponse, error) {
 // N can be a single destination.
 //
 // NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
-func (c *genericClientProxy) StreamingOneMany(ctx context.Context, method string, methodDescriptor protoreflect.MethodDescriptor, out protoreflect.MessageType, opts ...grpc.CallOption) (streamingClientProxy, error) {
+func (c *GenericClientProxy) StreamingOneMany(ctx context.Context, method string, methodDescriptor protoreflect.MethodDescriptor, out protoreflect.MessageType, opts ...grpc.CallOption) (StreamingClientProxy, error) {
 	streamDesc := &grpc.StreamDesc{
 		StreamName:    string(methodDescriptor.Name()),
 		ClientStreams: methodDescriptor.IsStreamingClient(),
@@ -174,6 +174,6 @@ func (c *genericClientProxy) StreamingOneMany(ctx context.Context, method string
 	if err != nil {
 		return nil, err
 	}
-	x := &clientStreamingClientProxy{c.conn, false, out, stream}
+	x := &ClientStreamingClientProxy{c.conn, false, out, stream}
 	return x, nil
 }
