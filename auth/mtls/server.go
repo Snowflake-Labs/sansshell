@@ -88,7 +88,7 @@ func NewServerCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentia
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		Certificates: []tls.Certificate{cert},
 		ClientCAs:    CAPool,
-		MinVersion:   tls.VersionTLS13,
+		MinVersion:   tls.VersionTLS12,
 	})
 }
 
