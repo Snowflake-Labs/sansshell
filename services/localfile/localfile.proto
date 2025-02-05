@@ -252,12 +252,19 @@ message SetFileAttributesRequest { FileAttributes attrs = 1; }
 message RmRequest {
   // The fully qualified path to the file to remove.
   string filename = 1;
+  // A list of fully qualified paths to the files to remove
+  repeated string filenames = 2;
 }
 
 message RmdirRequest {
   // The fully qualified path to the directory to remove.
   // Must be empty of any entries.
   string directory = 1;
+  // A list of fully qualified paths to the directory to remove.
+  // Must be either empty of entries or the recursive flag must be specified
+  repeated string directories = 2;
+  // Delete nested files and directories if there are any
+  bool recursive = 3;
 }
 
 message RenameRequest {

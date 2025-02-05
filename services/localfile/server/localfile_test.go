@@ -1722,6 +1722,16 @@ func TestRm(t *testing.T) {
 	testutil.FatalOnErr("os.CreateTemp", err, t)
 	err = unix.Chmod(badDir, 0)
 	testutil.FatalOnErr("Chmod", err, t)
+	f3, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	f4, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	f5, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	oldClientNewServerF1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	oldClientNewServerF2, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
@@ -1730,29 +1740,44 @@ func TestRm(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		name     string
-		filename string
-		wantErr  bool
+		name      string
+		filename  string
+		filenames []string
+		wantErr   bool
 	}{
 		{
-			name:     "bad path",
-			filename: "/tmp/foo/../../etc/passwd",
-			wantErr:  true,
+			name:      "bad path",
+			filenames: []string{"/tmp/foo/../../etc/passwd"},
+			wantErr:   true,
 		},
 		{
-			name:     "bad permissions to file",
-			filename: f2.Name(),
-			wantErr:  true,
+			name:      "bad permissions to file",
+			filenames: []string{f2.Name()},
+			wantErr:   true,
 		},
 		{
-			name:     "working remove",
-			filename: f1.Name(),
+			name:      "working remove",
+			filenames: []string{f1.Name()},
+		},
+		{
+			name:      "multiple files",
+			filenames: []string{f3.Name(), f4.Name()},
+		},
+		{
+			name:      "multiple files with non-existing file",
+			filenames: []string{f5.Name(), filepath.Join(temp, "/file-that-definitely-does-not-exist-hopefully-maybe")},
+			wantErr:   true,
+		},
+		{
+			name:      "old client new server",
+			filename:  oldClientNewServerF1.Name(),
+			filenames: []string{oldClientNewServerF2.Name()},
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
-			_, err := client.Rm(ctx, &pb.RmRequest{Filename: tc.filename})
+			_, err := client.Rm(ctx, &pb.RmRequest{Filename: tc.filename, Filenames: tc.filenames})
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
@@ -1776,6 +1801,25 @@ func TestRmdir(t *testing.T) {
 	testutil.FatalOnErr("os.Mkdir", err, t)
 	err = unix.Chmod(badDir, 0)
 	testutil.FatalOnErr("Chmod", err, t)
+	nestedDir := filepath.Join(temp, "/a")
+	err = os.MkdirAll(filepath.Join(nestedDir, "/b/c"), fs.ModePerm)
+	testutil.FatalOnErr("os.MkdirAll", err, t)
+	dirWithFile := filepath.Join(temp, "/dir-with-file")
+	err = os.Mkdir(dirWithFile, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	_, err = os.CreateTemp(dirWithFile, "testfile.*")
+	testutil.FatalOnErr("os.CreateTemp", err, t)
+	dirThatExists := filepath.Join(temp, "/dir-that-exists")
+	err = os.Mkdir(dirThatExists, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	dirThatDoesNotExist := filepath.Join(temp, "/dir-that-does-not-exist")
+	// old client new server
+	oldClientDir1 := filepath.Join(temp, "/old-client-dir1")
+	err = os.Mkdir(oldClientDir1, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
+	oldClientDir2 := filepath.Join(temp, "/old-client-dir2")
+	err = os.Mkdir(oldClientDir2, fs.ModePerm)
+	testutil.FatalOnErr("os.Mkdir", err, t)
 
 	t.Cleanup(func() {
 		// Needed or we panic with generated cleanup trying to remove tmp directories.
@@ -1784,29 +1828,62 @@ func TestRmdir(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		name      string
-		directory string
-		wantErr   bool
+		name        string
+		directory   string
+		directories []string
+		recursive   bool
+		wantErr     bool
 	}{
 		{
-			name:      "bad path",
-			directory: "/tmp/foo/../../etc",
-			wantErr:   true,
+			name:        "bad path",
+			directories: []string{"/tmp/foo/../../etc"},
+			wantErr:     true,
 		},
 		{
-			name:      "bad permissions to directory",
-			directory: failDir,
-			wantErr:   true,
+			name:        "bad permissions to directory",
+			directories: []string{failDir},
+			wantErr:     true,
 		},
 		{
-			name:      "working remove",
-			directory: dir,
+			name:        "working remove",
+			directories: []string{dir},
+		},
+		{
+			name:        "nested directories failure",
+			directories: []string{nestedDir},
+			wantErr:     true,
+		},
+		{
+			name:        "dir with file failure",
+			directories: []string{dirWithFile},
+			wantErr:     true,
+		},
+		{
+			name:        "nested directories",
+			directories: []string{nestedDir},
+			recursive:   true,
+		},
+		{
+			name:        "dir with file",
+			directories: []string{dirWithFile},
+			recursive:   true,
+		},
+		{
+			name:        "dirs that exist and do not",
+			directories: []string{dirThatExists, dirThatDoesNotExist},
+			wantErr:     true,
+		},
+		{
+			name:        "old client new server",
+			directory:   oldClientDir1,
+			directories: []string{oldClientDir2},
+			wantErr:     false,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			client := pb.NewLocalFileClient(conn)
-			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directory: tc.directory})
+			_, err := client.Rmdir(ctx, &pb.RmdirRequest{Directory: tc.directory, Directories: tc.directories, Recursive: tc.recursive})
 			testutil.WantErr(tc.name, err, tc.wantErr, t)
 		})
 	}
