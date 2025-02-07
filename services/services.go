@@ -19,14 +19,21 @@
 package services
 
 import (
+	"fmt"
 	"sync"
 
+	goversion "github.com/hashicorp/go-version"
 	"google.golang.org/grpc"
 )
 
 var (
-	mu          sync.RWMutex
-	rpcServices []SansShellRPCService
+	mu                   sync.RWMutex
+	rpcServices          []SansShellRPCService
+	apiVersion           string
+	supportedAPIVersions = map[string]bool{
+		"v1.0": true,
+		"v1.1": true,
+	}
 )
 
 // SansShellRPCService provides an interface for services to implement
@@ -48,4 +55,32 @@ func ListServices() []SansShellRPCService {
 	mu.RLock()
 	defer mu.RUnlock()
 	return rpcServices
+}
+
+// SetAPIVersion sets currently supported API version.
+// Versioning must follow https://semver.org/.
+func SetAPIVersion(version string) error {
+	mu.RLock()
+	defer mu.RUnlock()
+	if _, ok := supportedAPIVersions[version]; !ok {
+		return fmt.Errorf("Unsupported API version: %v supported ones are: %v", version, supportedAPIVersions)
+	}
+	apiVersion = version
+	return nil
+}
+
+// Check constraint of supported API version.
+// Versioning must follow https://semver.org/.
+func CheckConstraint(constraint string) (bool, error) {
+	mu.RLock()
+	defer mu.RUnlock()
+	gover, err := goversion.NewVersion(apiVersion)
+	if err != nil {
+		return false, err
+	}
+	constr, err := goversion.NewConstraint(constraint)
+	if err != nil {
+		return false, err
+	}
+	return constr.Check(gover), nil
 }

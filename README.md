@@ -225,6 +225,32 @@ time.
 
 TODO: Document service/.../client expectations.
 
+#### Services API versioning and OPA policy
+
+In most cases, services APIs evolve in a fully-backward compatible model,
+where adding new parameters or behaviors do not cause unintentional
+side-effects on authz decisions made by OPA policy.
+
+Now consider a localfile read which accepts a path to a file, for example
+`/tmp/test.txt`. If we extend this service to allow reading all files
+in a particular directory (through read request with `/tmp/*` as argument)
+we may end up allowing to read `/tmp/secret` file which could be explicitly
+denied in the OPA policy.
+
+To allow extensions of Sansshell services functions in a safe way we introduced
+a notion of `API version` which follows https://semver.org/. A MAJOR version will
+be changed each time we add a backward-incompatible change to Sansshell services.
+
+Default version supported by Sanasshell server is set to `v1`, in order to use
+features of higher API version you should audit your OPA policy to check if there
+are no unintentional side-effects of allowing new Sansshell features.
+
+#### List of current API versions
+
+  - `v1`
+  - `v2` -- allow to read a directory while specifying a trailing wildcard, for
+        example `localfile read /tmp/*`
+
 ### The Server class
 
 Most of the logic of instantiating a local SansShell server lives in the

@@ -158,6 +158,15 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	errs, ctx := errgroup.WithContext(ctx)
 	fileChan := make(chan string, 100)
 	if path, found := strings.CutSuffix(file, "/*"); found {
+		supported, err := services.CheckConstraint(">= v1.1")
+		if err != nil {
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "wildcard_version_check"))
+			return status.Error(codes.Internal, "unable to check version constraint for `/*` feature.")
+		}
+		if !supported {
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_args"))
+			return status.Error(codes.InvalidArgument, "wildcard reads are not supported in declared compatible API version.")
+		}
 		errs.Go(func() error {
 			if err := s.listFor(path, ctx, func(item *pb.StatReply) error {
 				if !fs.FileMode(item.Mode).IsDir() && item.Filename != path {
