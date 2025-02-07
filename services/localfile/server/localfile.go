@@ -158,10 +158,10 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	errs, ctx := errgroup.WithContext(ctx)
 	fileChan := make(chan string, 100)
 	if path, found := strings.CutSuffix(file, "/*"); found {
-		supported, err := services.CheckConstraint(">= v1.1")
+		supported, err := services.CheckConstraint(">= 2.0")
 		if err != nil {
 			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "wildcard_version_check"))
-			return status.Error(codes.Internal, "unable to check version constraint for `/*` feature.")
+			return status.Error(codes.Internal, fmt.Sprintf("unable to check version constraint for `/*` feature, err: %v.", err))
 		}
 		if !supported {
 			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_args"))

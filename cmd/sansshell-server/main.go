@@ -85,7 +85,7 @@ var (
 
 	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
 	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
-	apiVersion    = flag.String("api-version", "v1.0", "Version of the Sansshell services API accepted by the server. Policy set in proxy and server must be verified before upgrading against API extensions to avoid unintentional side effects.")
+	apiVersion    = flag.String("api-version", "v1", "Version of the Sansshell services API accepted by the server. Policy set in proxy and server must be verified before upgrading against API extensions to avoid unintentional side effects.")
 	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
 	debugport     = flag.String("debugport", "localhost:50044", "A separate port for http debug pages. Set to an empty string to disable.")
 	metricsport   = flag.String("metricsport", "localhost:50047", "A separate port for http debug pages. Set to an empty string to disable.")

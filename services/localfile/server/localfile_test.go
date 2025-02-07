@@ -58,7 +58,9 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 }
 
 func TestMain(m *testing.M) {
-	services.SetAPIVersion("v1.1")
+	if err := services.SetAPIVersion("v2"); err != nil {
+		log.Fatalf("SetAPIVersion err: %v", err)
+	}
 	lis = bufconn.Listen(bufSize)
 	s := grpc.NewServer()
 	lfs := &server{}
