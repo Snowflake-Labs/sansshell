@@ -249,7 +249,7 @@ are no unintentional side-effects of allowing new Sansshell features.
 
   - `1.0.0` -- current snapshot of Sansshell API as of
         https://github.com/Snowflake-Labs/sansshell/tree/v1.40.4.
-  - `v2` -- allow to read a contents of whole directory  by specifying a trailing
+  - `2.0.0` -- allow to read a contents of whole directory  by specifying a trailing
         wildcard, for example `localfile read /tmp/*`.
 
 ### The Server class
