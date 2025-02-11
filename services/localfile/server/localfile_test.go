@@ -58,7 +58,7 @@ func bufDialer(context.Context, string) (net.Conn, error) {
 }
 
 func TestMain(m *testing.M) {
-	if err := services.SetAPIVersion("v2"); err != nil {
+	if err := services.SetAPIVersion("2.0.0"); err != nil {
 		log.Fatalf("SetAPIVersion err: %v", err)
 	}
 	lis = bufconn.Listen(bufSize)

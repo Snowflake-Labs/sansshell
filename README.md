@@ -241,15 +241,16 @@ To allow extensions of Sansshell services functions in a safe way we introduced
 a notion of `API version` which follows https://semver.org/. A MAJOR version will
 be changed each time we add a backward-incompatible change to Sansshell services.
 
-Default version supported by Sanasshell server is set to `v1`, in order to use
+Default version supported by Sanasshell server is set to `1.0.0`, in order to use
 features of higher API version you should audit your OPA policy to check if there
 are no unintentional side-effects of allowing new Sansshell features.
 
 #### List of current API versions
 
-  - `v1`
-  - `v2` -- allow to read a directory while specifying a trailing wildcard, for
-        example `localfile read /tmp/*`
+  - `1.0.0` -- current snapshot of Sansshell API as of
+        https://github.com/Snowflake-Labs/sansshell/tree/v1.40.4.
+  - `v2` -- allow to read a contents of whole directory  by specifying a trailing
+        wildcard, for example `localfile read /tmp/*`.
 
 ### The Server class
 

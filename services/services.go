@@ -31,8 +31,8 @@ var (
 	rpcServices          []SansShellRPCService
 	apiVersion           string
 	supportedAPIVersions = map[string]bool{
-		"v1": true,
-		"v2": true,
+		"1.0.0": true,
+		"2.0.0": true,
 	}
 )
 
