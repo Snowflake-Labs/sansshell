@@ -49,6 +49,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
+	"github.com/Snowflake-Labs/sansshell/services"
 	ssutil "github.com/Snowflake-Labs/sansshell/services/util"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 
@@ -84,6 +85,7 @@ var (
 
 	policyFlag    = flag.String("policy", defaultPolicy, "Local OPA policy governing access.  If empty, use builtin policy.")
 	policyFile    = flag.String("policy-file", "", "Path to a file with an OPA policy.  If empty, uses --policy.")
+	apiVersion    = flag.String("api-version", "1.0.0", "Version of the Sansshell services API accepted by the server. Policy set in proxy and server must be verified before upgrading against API extensions to avoid unintentional side effects.")
 	hostport      = flag.String("hostport", "localhost:50042", "Where to listen for connections.")
 	debugport     = flag.String("debugport", "localhost:50044", "A separate port for http debug pages. Set to an empty string to disable.")
 	metricsport   = flag.String("metricsport", "localhost:50047", "A separate port for http debug pages. Set to an empty string to disable.")
@@ -129,6 +131,9 @@ func init() {
 
 func main() {
 	flag.Parse()
+	if err := services.SetAPIVersion(*apiVersion); err != nil {
+		log.Fatalf("Unable to set API version: %v\n", err)
+	}
 
 	if version {
 		fmt.Printf("Version: %s\n", ssserver.Version)

@@ -21,7 +21,6 @@ allow {
 
 allow {
 	input.type = "LocalFile.ReadActionRequest"
-	input.message.file.filename = "/etc/hosts"
 }
 
 allow {

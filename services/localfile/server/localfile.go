@@ -18,14 +18,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
-	app "github.com/Snowflake-Labs/sansshell/services/localfile/server/application"
-	"github.com/Snowflake-Labs/sansshell/services/localfile/server/infrastructure/output/file-data"
 	"hash"
 	"hash/crc32"
 	"io"
@@ -34,8 +33,14 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
+
+	app "github.com/Snowflake-Labs/sansshell/services/localfile/server/application"
+	file_data "github.com/Snowflake-Labs/sansshell/services/localfile/server/infrastructure/output/file-data"
 
 	"go.opentelemetry.io/otel/attribute"
 	"gocloud.dev/blob"
@@ -48,6 +53,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/go-logr/logr"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -106,7 +112,9 @@ var (
 const modeMask = uint32(fs.ModePerm | fs.ModeSticky | fs.ModeSetuid | fs.ModeSetgid)
 
 // server is used to implement the gRPC server
-type server struct{}
+type server struct {
+	mu sync.Mutex
+}
 
 // Read returns the contents of the named file
 func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer) error {
@@ -117,6 +125,20 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 	r := req.GetFile()
 	t := req.GetTail()
 
+	if req.Grep == "" && (req.IgnoreCase || req.InvertMatch) {
+		return status.Error(codes.InvalidArgument, "must provide grep argument before setting ignore_case or invert_match")
+	}
+
+	var pattern *regexp.Regexp
+	if req.Grep != "" {
+		regex := req.Grep
+		if req.IgnoreCase {
+			regex = `(?i)` + regex
+		}
+
+		pattern = regexp.MustCompile(regex)
+	}
+
 	var file string
 	var offset, length int64
 	switch {
@@ -124,6 +146,7 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 		file = r.Filename
 		offset = r.Offset
 		length = r.Length
+
 	case t != nil:
 		file = t.Filename
 		offset = t.Offset
@@ -132,89 +155,190 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 		return status.Error(codes.InvalidArgument, "must supply a ReadRequest or a TailRequest")
 	}
 
-	logger.Info("read request", "filename", file)
-	if err := util.ValidPath(file); err != nil {
-		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_path"))
-		return err
-	}
-	f, err := os.Open(file)
-	if err != nil {
-		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "open_err"))
-		return status.Errorf(codes.Internal, "can't open file %s: %v", file, err)
-	}
-
-	defer func() {
-		if err := f.Close(); err != nil {
-			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "close_err"))
-			logger.Error(err, "file.Close()", "file", file)
+	errs, ctx := errgroup.WithContext(ctx)
+	fileChan := make(chan string, 100)
+	if path, found := strings.CutSuffix(file, "/*"); found {
+		supported, err := services.CheckConstraint(">= 2.0")
+		if err != nil {
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "wildcard_version_check"))
+			return status.Error(codes.Internal, fmt.Sprintf("unable to check version constraint for `/*` feature, err: %v.", err))
 		}
-	}()
-
-	// Seek forward if requested
-	if offset != 0 {
-		whence := 0
-		// If negative we're tailing from the end so
-		// negate the sign and set whence.
-		if offset < 0 {
-			whence = 2
+		if !supported {
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_args"))
+			return status.Error(codes.InvalidArgument, "wildcard reads are not supported in declared compatible API version.")
 		}
-		if _, err := f.Seek(offset, whence); err != nil {
-			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "seek_err"))
-			return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
-		}
-	}
-
-	max := length
-	if max == 0 {
-		max = math.MaxInt64
-	}
-
-	buf := make([]byte, util.StreamingChunkSize)
-
-	reader := io.LimitReader(f, max)
-
-	td, closer, err := dataPrep(f)
-	if err != nil {
-		recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataprep_err"))
-		return err
-	}
-	defer closer()
-
-	for {
-		n, err := reader.Read(buf)
-		// If we got EOF we're done for normal reads and wait for tails.
-		if err == io.EOF {
-			// If we're not tailing then we're done.
-			if r != nil {
-				break
-			}
-			if err := dataReady(td, stream); err != nil {
-				recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataready_err"))
+		errs.Go(func() error {
+			if err := s.listFor(path, ctx, func(item *pb.StatReply) error {
+				if !fs.FileMode(item.Mode).IsDir() && item.Filename != path {
+					fileChan <- item.Filename
+				}
+				return nil
+			}); err != nil {
+				close(fileChan)
 				return err
 			}
-			continue
-		}
-
-		if err != nil {
-			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "read_err"))
-			return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
-		}
-
-		// Only send over the number of bytes we actually read or
-		// else we'll send over garbage in the last packet potentially.
-		if err := stream.Send(&pb.ReadReply{Contents: buf[:n]}); err != nil {
-			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
-			return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
-		}
-
-		// If we got back less than a full chunk we're done for non-tail cases.
-		if n < util.StreamingChunkSize {
-			if r != nil {
-				break
-			}
-		}
+			close(fileChan)
+			return nil
+		})
+	} else {
+		fileChan <- file
+		close(fileChan)
 	}
-	return nil
+
+	// TODO: Make it configurable in the future. We don't want to burn too much CPU on the parallel file reads though as it
+	// may easily get expensive.
+	parallelism := 2
+	for i := 0; i < parallelism; i++ {
+		errs.Go(func() error {
+
+			for {
+				file, more := <-fileChan
+				if !more {
+					return nil
+				}
+
+				logger.Info("read request", "filename", file)
+				if err := util.ValidPath(file); err != nil {
+					recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_path"))
+					return err
+				}
+				f, err := os.Open(file)
+				if err != nil {
+					recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "open_err"))
+					return status.Errorf(codes.Internal, "can't open file %s: %v", file, err)
+				}
+
+				defer func() {
+					if err := f.Close(); err != nil {
+						recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "close_err"))
+						logger.Error(err, "file.Close()", "file", file)
+					}
+				}()
+
+				// Seek forward if requested
+				if offset != 0 {
+					whence := 0
+					// If negative we're tailing from the end so
+					// negate the sign and set whence.
+					if offset < 0 {
+						whence = 2
+					}
+					if _, err := f.Seek(offset, whence); err != nil {
+						recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "seek_err"))
+						return status.Errorf(codes.Internal, "can't seek for file %s: %v", file, err)
+					}
+				}
+
+				max := length
+				if max == 0 {
+					max = math.MaxInt64
+				}
+
+				buf := make([]byte, util.StreamingChunkSize)
+
+				reader := io.LimitReader(f, max)
+
+				td, closer, err := dataPrep(f)
+				if err != nil {
+					recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataprep_err"))
+					return err
+				}
+				defer closer()
+				// Used only with grep / text procesing. A piece of text from a buffer below after last '\n'.
+				// it can accumulate up to 3 * util.StreamingChunkSize bytes.
+				var trailingLine bytes.Buffer
+
+				for {
+					n, err := reader.Read(buf)
+					// If we got EOF we're done for normal reads and wait for tails.
+					if err == io.EOF {
+						// If we're not tailing then we're done.
+						if r != nil {
+							break
+						}
+						if err := dataReady(td, stream); err != nil {
+							recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "dataready_err"))
+							return err
+						}
+						continue
+					}
+
+					if err != nil {
+						recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "read_err"))
+						return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+					}
+					if req.Grep != "" {
+						isInvert := req.InvertMatch
+
+						var outBuf bytes.Buffer
+
+						start := 0
+						for curr := 0; curr < n; curr++ {
+							if buf[curr] == '\n' {
+								if _, err = trailingLine.Write(buf[start : curr+1]); err != nil {
+									recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_write_read_err"))
+									return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+								}
+								line := trailingLine.String()
+								if match := pattern.MatchString(line); match != isInvert {
+									if _, err := outBuf.WriteString(line); err != nil {
+										recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_out_buf_read_err"))
+										return status.Errorf(codes.Internal, "can't read file %s: %v", file, err)
+									}
+								}
+
+								trailingLine.Reset()
+								start = curr + 1
+							}
+						}
+						if start < n {
+							if trailingLine.Len() > util.StreamingChunkSize*2 {
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_length_read_err"))
+								return status.Errorf(codes.Internal, "line too long, use read without grep -- can't read file %s: %v", file, err)
+							}
+							if _, err = trailingLine.Write(buf[start:n]); err != nil {
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "grep_line_extend_read_err"))
+								return status.Errorf(codes.Internal, "failed to append to line, use read without grep -- can't read file %s: %v", file, err)
+							}
+
+						}
+
+						// Only send over the number of bytes we actually read or
+						// else we'll send over garbage in the last packet potentially.
+						if outBuf.Len() > 0 {
+							s.mu.Lock()
+							if err := stream.Send(&pb.ReadReply{Contents: outBuf.Bytes()}); err != nil {
+								s.mu.Unlock()
+								recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+								return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
+							}
+							s.mu.Unlock()
+						}
+					} else {
+						// Only send over the number of bytes we actually read or
+						// else we'll send over garbage in the last packet potentially.
+						s.mu.Lock()
+						if err := stream.Send(&pb.ReadReply{Contents: buf[:n]}); err != nil {
+							s.mu.Unlock()
+							recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+							return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, err)
+						}
+						s.mu.Unlock()
+
+						// If we got back less than a full chunk we're done for non-tail cases.
+						if n < util.StreamingChunkSize {
+							if r != nil {
+								break
+							}
+						}
+					}
+
+				}
+			}
+		})
+	}
+
+	return errs.Wait()
 }
 
 func (s *server) Stat(stream pb.LocalFile_StatServer) error {
@@ -550,41 +674,40 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
-func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error {
-	ctx := server.Context()
+func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.StatReply) error) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	if req.Entry == "" {
+	if entry == "" {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
 		return status.Errorf(codes.InvalidArgument, "filename must be filled in")
 	}
-	if err := util.ValidPath(req.Entry); err != nil {
+	if err := util.ValidPath(entry); err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "invalid_path"))
 		return err
 	}
 
 	// We always send back the entry first.
-	logger.Info("ls", "filename", req.Entry)
-	resp, err := osStat(req.Entry, false)
+	logger.Info("ls", "filename", entry)
+	resp, err := osStat(entry, false)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
 		return err
 	}
-	if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
+	if err := consumer(resp); err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
 		return status.Errorf(codes.Internal, "list: send error %v", err)
 	}
 
 	// If it's directory we'll open it and go over its entries.
 	if fs.FileMode(resp.Mode).IsDir() {
-		entries, err := os.ReadDir(req.Entry)
+		entries, err := os.ReadDir(entry)
 		if err != nil {
 			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
 			return status.Errorf(codes.Internal, "readdir: %v", err)
 		}
 		// Only do one level so iterate these and we're done.
 		for _, e := range entries {
-			name := filepath.Join(req.Entry, e.Name())
+			name := filepath.Join(entry, e.Name())
 			logger.Info("ls", "filename", name)
 			// Use lstat so that we don't return misleading directory contents from
 			// following symlinks.
@@ -592,13 +715,19 @@ func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error
 			if err != nil {
 				return err
 			}
-			if err := server.Send(&pb.ListReply{Entry: resp}); err != nil {
+			if err := consumer(resp); err != nil {
 				recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
 				return status.Errorf(codes.Internal, "list: send error %v", err)
 			}
 		}
 	}
 	return nil
+}
+
+func (s *server) List(req *pb.ListRequest, server pb.LocalFile_ListServer) error {
+	return s.listFor(req.Entry, server.Context(), func(resp *pb.StatReply) error {
+		return server.Send(&pb.ListReply{Entry: resp})
+	})
 }
 
 // immutableState tracks the parsed state of immutable from the slice of FileAttribute.

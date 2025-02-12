@@ -21,7 +21,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	cli_controllers "github.com/Snowflake-Labs/sansshell/services/localfile/client/cli-controllers"
 	"io"
 	"io/fs"
 	"os"
@@ -29,6 +28,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	cli_controllers "github.com/Snowflake-Labs/sansshell/services/localfile/client/cli-controllers"
 
 	"github.com/google/subcommands"
 	"github.com/schollz/progressbar/v3"
@@ -88,14 +89,17 @@ func (p *fileCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 }
 
 type readCmd struct {
-	offset int64
-	length int64
+	offset      int64
+	length      int64
+	grep        string
+	ignoreCase  bool
+	invertMatch bool
 }
 
 func (*readCmd) Name() string     { return "read" }
 func (*readCmd) Synopsis() string { return "Read a file." }
 func (*readCmd) Usage() string {
-	return `read <path>:
+	return `read [--grep=PATTERN] [-i] [-v] [--offset=OFFSET] [--length=LENGTH] <path>:
   Read from the remote file named by <path> and write it to the appropriate --output destination.
 `
 }
@@ -103,6 +107,9 @@ func (*readCmd) Usage() string {
 func (p *readCmd) SetFlags(f *flag.FlagSet) {
 	f.Int64Var(&p.offset, "offset", 0, "If positive bytes to skip before reading. If negative apply from the end of the file")
 	f.Int64Var(&p.length, "length", 0, "If positive the maximum number of bytes to read")
+	f.StringVar(&p.grep, "grep", "", "regular expression filter")
+	f.BoolVar(&p.ignoreCase, "i", false, "ignore case")
+	f.BoolVar(&p.invertMatch, "v", false, "invert match")
 }
 
 func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -121,6 +128,9 @@ func (p *readCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 				Length:   p.length,
 			},
 		},
+		Grep:        p.grep,
+		InvertMatch: p.invertMatch,
+		IgnoreCase:  p.ignoreCase,
 	}
 
 	return readFile(ctx, state, req)
