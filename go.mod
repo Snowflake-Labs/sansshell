@@ -1,6 +1,7 @@
 module github.com/Snowflake-Labs/sansshell
 
 go 1.21
+toolchain go1.22.5
 
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
@@ -16,7 +17,7 @@ require (
 	github.com/open-policy-agent/opa v0.67.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.20.2
-	github.com/schollz/progressbar/v3 v3.14.4
+	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/stretchr/testify v1.9.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.53.0
 	go.opentelemetry.io/otel v1.28.0
