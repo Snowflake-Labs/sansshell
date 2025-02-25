@@ -48,8 +48,7 @@ func GetSansshellVersion(ctx context.Context, conn *proxy.Conn) (string, error) 
 
 // GetSansshellVersionForMany gets the version of the sansshell servers.
 // Returns error if:
-// - was provided not exactly one target
-// - could not get the version from target
+// - could not get the version from targets
 func GetSansshellVersionForMany(ctx context.Context, conn *proxy.Conn) (<-chan *pb.VersionManyResponse, error) {
 	client := pb.NewStateClientProxy(conn)
 
