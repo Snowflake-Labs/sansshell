@@ -20,8 +20,11 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/services/util"
+	"os"
 	"text/tabwriter"
 
 	"github.com/google/subcommands"
@@ -84,4 +87,61 @@ type PredictArgs interface {
 	// and can be used as a hint for what to return. The returned values will be
 	// automatically filtered by the prefix when needed.
 	PredictArgs(prefix string) []string
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TODO: refactor before release
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+type SansshellCommandController[TFlags interface{}, TReq interface{}, TResp interface{}] struct {
+	Name             string
+	Synopsis         string
+	Usage            string
+	Flags            func(f *flag.FlagSet) TFlags
+	GetGRPCRequest   func(ctx context.Context, flags TFlags, state *util.ExecuteState, args ...interface{}) (TReq, error)
+	SendGRPCRequest  func(ctx context.Context, state *util.ExecuteState, req TReq) (<-chan TResp, error)
+	HandleSingleResp func(ctx context.Context, state *util.ExecuteState, resp TResp) subcommands.ExitStatus
+}
+
+type commandAdapter[TFlags interface{}, TReq interface{}, TResp interface{}] struct {
+	ctl   *SansshellCommandController[TFlags, TReq, TResp]
+	flags TFlags
+}
+
+func (a *commandAdapter[TFlags, TReq, TResp]) Name() string     { return a.ctl.Name }
+func (a *commandAdapter[TFlags, TReq, TResp]) Synopsis() string { return a.ctl.Synopsis }
+func (a *commandAdapter[TFlags, TReq, TResp]) Usage() string    { return a.ctl.Usage }
+func (a *commandAdapter[TFlags, TReq, TResp]) SetFlags(f *flag.FlagSet) {
+	a.flags = a.ctl.Flags(f)
+}
+func (a *commandAdapter[TFlags, TReq, TResp]) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	if state == nil {
+		panic("state is nil")
+	}
+
+	req, err := a.ctl.GetGRPCRequest(ctx, a.flags, args[0].(*util.ExecuteState), args...)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return subcommands.ExitFailure
+	}
+
+	resp, err := a.ctl.SendGRPCRequest(ctx, state, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "All targets - Run returned error: %v\n", err)
+		return subcommands.ExitFailure
+	}
+
+	exitCode := subcommands.ExitSuccess
+	for singleResp := range resp {
+		respExistCode := a.ctl.HandleSingleResp(ctx, state, singleResp)
+		if respExistCode != subcommands.ExitSuccess {
+			exitCode = respExistCode
+		}
+	}
+
+	return exitCode
+}
+
+func NewCommandAdapter[TFlags interface{}, TReq interface{}, TResp interface{}](ctl *SansshellCommandController[TFlags, TReq, TResp]) subcommands.Command {
+	return &commandAdapter[TFlags, TReq, TResp]{ctl: ctl}
 }
