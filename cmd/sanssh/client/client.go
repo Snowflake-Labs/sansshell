@@ -78,6 +78,8 @@ type RunState struct {
 	BatchSize int
 	// If true, add an interceptor that performs the multi-party auth flow
 	EnableMPA bool
+	// If true, the command is authz dry run and real action should not be executed
+	AuthzDryRun bool
 
 	credentials.PerRPCCredentials
 }
@@ -298,7 +300,8 @@ func Run(ctx context.Context, rs RunState) {
 	)
 
 	state := &util.ExecuteState{
-		Dir: dir,
+		Dir:         dir,
+		AuthzDryRun: rs.AuthzDryRun,
 	}
 
 	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {

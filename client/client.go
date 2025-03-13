@@ -125,6 +125,12 @@ func (a *commandAdapter[TFlags, TReq, TResp]) Execute(ctx context.Context, f *fl
 		return subcommands.ExitFailure
 	}
 
+	if state.AuthzDryRun {
+		// TODO: send authz dry run request
+		fmt.Fprintln(os.Stderr, "authz-dry-run is not supported for this command")
+		return subcommands.ExitFailure
+	}
+
 	resp, err := a.ctl.SendGRPCRequest(ctx, state, req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "All targets - Run returned error: %v\n", err)
