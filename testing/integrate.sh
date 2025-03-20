@@ -476,6 +476,7 @@ if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
+echo "========================================"
 echo "Testing authz dry run"
 # Now use the real test cert org
 cat >${LOGS}/client-policy.rego <<EOF
@@ -493,6 +494,8 @@ authz_dry_run_output=$(grep -E -e "authz dry run passed\. Proxy\: Ok" ${LOGS}/au
 if [ -z "${authz_dry_run_output}" ]; then
   check_status 1 /dev/null "authz dry run failed to find expected output"
 fi
+echo "========================================"
+echo ""
 
 echo "Testing client policy"
 cat >${LOGS}/client-policy.rego <<EOF
