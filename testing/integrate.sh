@@ -476,6 +476,24 @@ if [ $? != 1 ]; then
   check_status 1 /dev/null missing justification failed
 fi
 
+echo "Testing authz dry run"
+# Now use the real test cert org
+cat >${LOGS}/client-policy.rego <<EOF
+package sansshell.authz
+
+default allow = false
+
+allow {
+  some i
+  input.peer.cert.subject.Organization[i] = "Acme Co"
+}
+EOF
+${SANSSH_PROXY} ${SINGLE_TARGET} --authz-dry-run --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate >&${LOGS}/authz-dry-run-test.log
+authz_dry_run_output=$(grep -E -e "authz dry run passed\. Proxy\: Ok" ${LOGS}/authz-dry-run-test.log)
+if [ -z "${authz_dry_run_output}" ]; then
+  check_status 1 /dev/null "authz dry run failed to find expected output"
+fi
+
 echo "Testing client policy"
 cat >${LOGS}/client-policy.rego <<EOF
 package sansshell.authz

@@ -49,8 +49,6 @@ type ExecuteState struct {
 	Out []io.Writer
 	// Error stream to write log lines related to particular target host.
 	Err []io.Writer
-	// Should execute authz dry run instead of actual command
-	AuthzDryRun bool
 }
 
 // StreamingChunkSize is the chunk size we use when sending replies on a stream.

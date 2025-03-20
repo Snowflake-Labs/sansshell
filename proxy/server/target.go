@@ -100,6 +100,9 @@ type TargetStream struct {
 	// If this is set it will be used as a blocking dial timeout to
 	// the remote target.
 	dialTimeout *time.Duration
+
+	// If true, the stream will not send requests to the target. It will execute only authz checks.
+	authzDryRun bool
 }
 
 func (s *TargetStream) getStream() grpc.ClientStream {
@@ -304,6 +307,13 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				return err
 			}
 
+			if s.authzDryRun {
+				// TODO: make authz dry run request to server
+				st := status.Newf(codes.Aborted, "authz dry run passed. Proxy: Ok, Server: Unknown. Aboarting \"%s\" futher execution", s.Method())
+				s.CloseWith(st.Err())
+				return nil
+			}
+
 			err = grpcStream.SendMsg(req)
 			// if this returns an EOF, then the final status
 			// will be returned via a call to RecvMsg, and we
@@ -360,7 +370,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
-func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer *rpcauth.Authorizer) (*TargetStream, error) {
+func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer *rpcauth.Authorizer, authzDryRun bool) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -370,6 +380,7 @@ func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, di
 		streamID:      rand.Uint64(),
 		target:        target,
 		serviceMethod: method,
+		authzDryRun:   authzDryRun,
 		grpcStream:    &unconnectedClientStream{ctx: ctx},
 		cancelFunc:    cancel,
 		reqChan:       make(chan proto.Message, ReqBufferSize),
@@ -475,7 +486,7 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		d := req.DialTimeout.AsDuration()
 		dialTimeout = &d
 	}
-	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer)
+	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer, req.GetAuthzDryRun())
 	if err != nil {
 		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
 			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),

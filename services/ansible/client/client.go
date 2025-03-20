@@ -21,6 +21,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/google/subcommands"
 
@@ -37,7 +38,7 @@ func init() {
 
 func (*ansibleCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c := client.SetupSubpackage(subPackage, f)
-	c.Register(NewPlaybookController(), "")
+	c.Register(&playbookCmd{}, "")
 	return c
 }
 
@@ -57,7 +58,7 @@ func (p *ansibleCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 	return c.Execute(ctx, args...)
 }
 
-type playbookFlags struct {
+type playbookCmd struct {
 	playbook string
 	vars     util.KeyValueSliceFlag
 	user     string
@@ -66,61 +67,71 @@ type playbookFlags struct {
 	verbose  bool
 }
 
-func NewPlaybookController() subcommands.Command {
-	controller := client.SansshellCommandController[*playbookFlags, *pb.RunRequest, *pb.RunManyResponse]{
-		Name:     "playbook",
-		Synopsis: "Run an ansible playbook on the server.",
-		Usage:    `ansible: Run an ansible playbook on the remote server.`,
-		Flags: func(f *flag.FlagSet) *playbookFlags {
-			flags := &playbookFlags{}
-			f.StringVar(&flags.playbook, "playbook", "", "The absolute path to the playbook to execute on the remote server.")
-			f.Var(&flags.vars, "vars", "Pass key=value (via -e) to ansible-playbook. Multiple values can be specified separated by commas")
-			f.StringVar(&flags.user, "user", "", "Run the playbook as this user")
-			f.BoolVar(&flags.check, "check", false, "If true the playbook will be run with --check passed as an argument")
-			f.BoolVar(&flags.diff, "diff", false, "If true the playbook will be run with --diff passed as an argument")
-			f.BoolVar(&flags.verbose, "verbose", false, "If true the playbook wiill be run with -vvv passed as an argument")
-			return flags
-		},
-		GetGRPCRequest: func(ctx context.Context, flags *playbookFlags, state *util.ExecuteState, args ...interface{}) (*pb.RunRequest, error) {
-			if flags.playbook == "" {
-				return nil, fmt.Errorf("--playbook is required")
-			}
+func (*playbookCmd) Name() string     { return "playbook" }
+func (*playbookCmd) Synopsis() string { return "Run an ansible playbook on the server." }
+func (*playbookCmd) Usage() string {
+	return `ansible:
+  Run an ansible playbook on the remote server.
+`
+}
 
-			req := &pb.RunRequest{
-				Playbook: flags.playbook,
-				User:     flags.user,
-				Check:    flags.check,
-				Diff:     flags.diff,
-				Verbose:  flags.verbose,
-			}
-			for _, kv := range flags.vars {
-				req.Vars = append(req.Vars, &pb.Var{
-					Key:   kv.Key,
-					Value: kv.Value,
-				})
-			}
-			return req, nil
-		},
-		SendGRPCRequest: func(ctx context.Context, state *util.ExecuteState, req *pb.RunRequest) (<-chan *pb.RunManyResponse, error) {
-			c := pb.NewPlaybookClientProxy(state.Conn)
-			resp, err := c.RunOneMany(ctx, req)
-			return resp, err
-		},
-		HandleSingleResp: func(ctx context.Context, state *util.ExecuteState, r *pb.RunManyResponse) subcommands.ExitStatus {
-			out := state.Out[r.Index]
-			err := state.Err[r.Index]
+func (a *playbookCmd) SetFlags(f *flag.FlagSet) {
+	f.StringVar(&a.playbook, "playbook", "", "The absolute path to the playbook to execute on the remote server.")
+	f.Var(&a.vars, "vars", "Pass key=value (via -e) to ansible-playbook. Multiple values can be specified separated by commas")
+	f.StringVar(&a.user, "user", "", "Run the playbook as this user")
+	f.BoolVar(&a.check, "check", false, "If true the playbook will be run with --check passed as an argument")
+	f.BoolVar(&a.diff, "diff", false, "If true the playbook will be run with --diff passed as an argument")
+	f.BoolVar(&a.verbose, "verbose", false, "If true the playbook wiill be run with -vvv passed as an argument")
+}
 
-			fmt.Fprintf(out, "Target: %s (%d)\n\n", r.Target, r.Index)
-			if r.Error != nil {
-				fmt.Fprintf(err, "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
-				return subcommands.ExitFailure
-			}
-			fmt.Fprintf(out, "Return code: %d\nStdout:%s\nStderr:%s\n", r.Resp.ReturnCode, r.Resp.Stdout, r.Resp.Stderr)
-			if r.Resp.ReturnCode != 0 {
-				return subcommands.ExitFailure
-			}
-			return subcommands.ExitSuccess
-		},
+func (a *playbookCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	if a.playbook == "" {
+		fmt.Fprintln(os.Stderr, "--playbook is required")
+		return subcommands.ExitFailure
 	}
-	return client.NewCommandAdapter(&controller)
+
+	state := args[0].(*util.ExecuteState)
+
+	c := pb.NewPlaybookClientProxy(state.Conn)
+
+	req := &pb.RunRequest{
+		Playbook: a.playbook,
+		User:     a.user,
+		Check:    a.check,
+		Diff:     a.diff,
+		Verbose:  a.verbose,
+	}
+	for _, kv := range a.vars {
+		req.Vars = append(req.Vars, &pb.Var{
+			Key:   kv.Key,
+			Value: kv.Value,
+		})
+	}
+
+	resp, err := c.RunOneMany(ctx, req)
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - Run returned error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		fmt.Fprintf(state.Out[r.Index], "Target: %s (%d)\n\n", r.Target, r.Index)
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "Ansible for target %s (%d) returned error: %v\n", r.Target, r.Index, r.Error)
+			// If any target had errors it needs to be reported for that target but we still
+			// need to process responses off the channel. Final return code though should
+			// indicate something failed.
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "Return code: %d\nStdout:%s\nStderr:%s\n", r.Resp.ReturnCode, r.Resp.Stdout, r.Resp.Stderr)
+		if r.Resp.ReturnCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+	return retCode
 }

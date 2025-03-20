@@ -76,6 +76,9 @@ type Conn struct {
 	// If this is true we're not proxy but instead direct connect.
 	direct bool
 
+	// authzDryRun flag to send rpc in authz dry run mode
+	AuthzDryRun bool
+
 	// UnaryInterceptors allow intercepting Invoke and InvokeOneMany calls
 	// that go through a proxy.
 	// It is unsafe to modify Intercepters while calls are in progress.
@@ -441,15 +444,17 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			req := &proxypb.ProxyRequest{
 				Request: &proxypb.ProxyRequest_StartStream{
 					StartStream: &proxypb.StartStream{
-						Target:     t,
-						MethodName: method,
-						Nonce:      uint32(i),
+						Target:      t,
+						MethodName:  method,
+						Nonce:       uint32(i),
+						AuthzDryRun: p.AuthzDryRun,
 					},
 				},
 			}
 			if p.dialTimeouts[i] != nil {
 				req.GetStartStream().DialTimeout = durationpb.New(*p.dialTimeouts[i])
 			}
+
 			err = stream.Send(req)
 
 			// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
