@@ -488,7 +488,7 @@ allow {
   input.peer.cert.subject.Organization[i] = "Acme Co"
 }
 EOF
-${SANSSH_PROXY} ${SINGLE_TARGET} --authz-dry-run --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate >&${LOGS}/authz-dry-run-test.log
+${SANSSH_PROXY} ${SINGLE_TARGET} --authz-dry-run --v=1 --client-policy-file=${LOGS}/client-policy.rego healthcheck validate 2>&1 | tee ${LOGS}/authz-dry-run-test.log
 authz_dry_run_output=$(grep -E -e "authz dry run passed\. Proxy\: Ok" ${LOGS}/authz-dry-run-test.log)
 if [ -z "${authz_dry_run_output}" ]; then
   check_status 1 /dev/null "authz dry run failed to find expected output"

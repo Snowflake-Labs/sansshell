@@ -372,7 +372,6 @@ func Run(ctx context.Context, rs RunState) {
 			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
 			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
 		}
-
 		state.Conn = conn
 		state.Out = output[start:end]
 		state.Err = errors[start:end]

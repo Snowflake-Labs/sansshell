@@ -454,7 +454,6 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			if p.dialTimeouts[i] != nil {
 				req.GetStartStream().DialTimeout = durationpb.New(*p.dialTimeouts[i])
 			}
-
 			err = stream.Send(req)
 
 			// If Send reports an error and is EOF we have to use Recv to get the actual error according to documentation
