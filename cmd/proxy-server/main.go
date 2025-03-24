@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"log"
 	"os"
 	"strings"
@@ -37,7 +38,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
@@ -80,7 +80,7 @@ var (
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS creds (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate         = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
-	justification    = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	justification    = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauthz.ReqJustKey+"'")
 	version          bool
 )
 
@@ -144,7 +144,7 @@ func main() {
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
 		server.WithJustification(*justification),
-		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
+		server.WithAuthzHook(rpcauthz.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpahooks.ProxyMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),

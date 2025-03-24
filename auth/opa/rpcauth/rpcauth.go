@@ -21,6 +21,7 @@ package rpcauth
 import (
 	"context"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"strings"
 	"sync"
 
@@ -47,42 +48,35 @@ var (
 		Description: "number of authorization failure due to policy evaluation error"}
 )
 
-// An Authorizer performs authorization of Sanshsell RPCs based on
+// An OPAAuthorizer performs authorization of Sanshsell RPCs based on
 // an OPA/Rego policy.
 //
 // It can be used as both a unary and stream interceptor, or manually
 // invoked to perform policy checks using `Eval`
-type Authorizer struct {
+type OPAAuthorizer struct {
 	// The AuthzPolicy used to perform authorization checks.
 	policy *opa.AuthzPolicy
 
 	// Additional authorization hooks invoked before policy evaluation.
-	hooks []RPCAuthzHook
+	hooks []rpcauthz.RPCAuthzHook
 }
 
-// A RPCAuthzHook is invoked on populated RpcAuthInput prior to policy
-// evaluation, and may augment / mutate the input, or pre-emptively
-// reject a request.
-type RPCAuthzHook interface {
-	Hook(context.Context, *RPCAuthInput) error
-}
-
-// New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
+// New creates a new OPAAuthorizer from an opa.AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
 //
-//	distinct policy for client vs server, create 2 Authorizer's.
-func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
-	return &Authorizer{policy: policy, hooks: authzHooks}
+//	distinct policy for client vs server, create 2 OPAAuthorizer's.
+func New(policy *opa.AuthzPolicy, authzHooks ...rpcauthz.RPCAuthzHook) rpcauthz.RPCAuthorizer {
+	return &OPAAuthorizer{policy: policy, hooks: authzHooks}
 }
 
-// NewWithPolicy creates a new Authorizer from a policy string. Any supplied
+// NewWithPolicy creates a new OPAAuthorizer from a policy string. Any supplied
 // authorization hooks will be executed, in the order provided, on each policy
 // evaluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
 //
-//	distinct policy for client vs server, create 2 Authorizer's.
-func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHook) (*Authorizer, error) {
+//	distinct policy for client vs server, create 2 OPAAuthorizer's.
+func NewWithPolicy(ctx context.Context, policy string, authzHooks ...rpcauthz.RPCAuthzHook) (rpcauthz.RPCAuthorizer, error) {
 	p, err := opa.NewAuthzPolicy(ctx, policy)
 	if err != nil {
 		return nil, err
@@ -95,7 +89,7 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 // an appropriate status.Error otherwise. Any input hooks will be executed
 // prior to policy evaluation, and may mutate `input`, regardless of the
 // the success or failure of policy.
-func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
+func (g *OPAAuthorizer) Eval(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
@@ -160,29 +154,29 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 }
 
 // Authorize implements grpc.UnaryServerInterceptor
-func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func (g *OPAAuthorizer) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	msg, ok := req.(proto.Message)
 	if !ok {
 		return nil, status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
-	authInput, err := NewRPCAuthInput(ctx, info.FullMethod, msg)
+	authInput, err := rpcauthz.NewRPCAuthInput(ctx, info.FullMethod, msg)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to create auth input: %v", err)
 	}
 	if err := g.Eval(ctx, authInput); err != nil {
 		return nil, err
 	}
-	ctx = AddPeerToContext(ctx, authInput.Peer)
+	ctx = rpcauthz.AddPeerToContext(ctx, authInput.Peer)
 	return handler(ctx, req)
 }
 
 // AuthorizeClient implements grpc.UnaryClientInterceptor
-func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func (g *OPAAuthorizer) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	msg, ok := req.(proto.Message)
 	if !ok {
 		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
-	authInput, err := NewRPCAuthInput(ctx, method, msg)
+	authInput, err := rpcauthz.NewRPCAuthInput(ctx, method, msg)
 	if err != nil {
 		return status.Errorf(codes.Internal, "unable to create auth input: %v", err)
 	}
@@ -193,7 +187,7 @@ func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, re
 }
 
 // AuthorizeClientStream implements grpc.StreamClientInterceptor and applies policy checks on any SendMsg calls.
-func (g *Authorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+func (g *OPAAuthorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	clientStream, err := streamer(ctx, desc, cc, method, opts...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "can't create clientStream: %v", err)
@@ -206,11 +200,15 @@ func (g *Authorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.Strea
 	return wrapped, nil
 }
 
+func (g *OPAAuthorizer) AppendHooks(hooks ...rpcauthz.RPCAuthzHook) {
+	g.hooks = append(g.hooks, hooks...)
+}
+
 // wrappedClientStream wraps an existing grpc.ClientStream with authorization checking.
 type wrappedClientStream struct {
 	grpc.ClientStream
 	method string
-	authz  *Authorizer
+	authz  *OPAAuthorizer
 }
 
 // see: grpc.ClientStream.SendMsg
@@ -220,7 +218,7 @@ func (e *wrappedClientStream) SendMsg(req interface{}) error {
 	if !ok {
 		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
-	authInput, err := NewRPCAuthInput(ctx, e.method, msg)
+	authInput, err := rpcauthz.NewRPCAuthInput(ctx, e.method, msg)
 	if err != nil {
 		return err
 	}
@@ -231,7 +229,7 @@ func (e *wrappedClientStream) SendMsg(req interface{}) error {
 }
 
 // AuthorizeStream implements grpc.StreamServerInterceptor and applies policy checks on any RecvMsg calls.
-func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func (g *OPAAuthorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	wrapped := &wrappedStream{
 		ServerStream: ss,
 		info:         info,
@@ -244,15 +242,15 @@ func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info
 type wrappedStream struct {
 	grpc.ServerStream
 	info  *grpc.StreamServerInfo
-	authz *Authorizer
+	authz *OPAAuthorizer
 
 	peerMu            sync.Mutex
-	lastPeerAuthInput *PeerAuthInput
+	lastPeerAuthInput *rpcauthz.PeerAuthInput
 }
 
 func (e *wrappedStream) Context() context.Context {
 	e.peerMu.Lock()
-	ctx := AddPeerToContext(e.ServerStream.Context(), e.lastPeerAuthInput)
+	ctx := rpcauthz.AddPeerToContext(e.ServerStream.Context(), e.lastPeerAuthInput)
 	e.peerMu.Unlock()
 	return ctx
 }
@@ -271,7 +269,7 @@ func (e *wrappedStream) RecvMsg(req interface{}) error {
 	if !ok {
 		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
 	}
-	authInput, err := NewRPCAuthInput(ctx, e.info.FullMethod, msg)
+	authInput, err := rpcauthz.NewRPCAuthInput(ctx, e.info.FullMethod, msg)
 	if err != nil {
 		return err
 	}

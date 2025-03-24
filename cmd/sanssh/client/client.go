@@ -23,6 +23,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"google.golang.org/grpc/credentials"
 	"io"
 	"os"
@@ -261,7 +262,7 @@ func Run(ctx context.Context, rs RunState) {
 		os.Exit(1)
 	}
 
-	var clientAuthz *rpcauth.Authorizer
+	var clientAuthz rpcauthz.RPCAuthorizer
 	if rs.ClientPolicy != "" {
 		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.ClientPolicy)
 		if err != nil {

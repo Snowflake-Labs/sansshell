@@ -20,6 +20,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"io/fs"
 	"net"
 	"os"
@@ -30,8 +31,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 )
@@ -39,10 +38,11 @@ import (
 // serveSetup describes everything needed to setup the RPC server.
 // Documentation provided below in each WithXXX function.
 type serveSetup struct {
-	creds              credentials.TransportCredentials
-	policy             *opa.AuthzPolicy
-	logger             logr.Logger
-	authzHooks         []rpcauth.RPCAuthzHook
+	creds      credentials.TransportCredentials
+	authorizer rpcauthz.RPCAuthorizer
+	logger     logr.Logger
+	// TODO: remove from here
+	authzHooks         []rpcauthz.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
 	statsHandler       stats.Handler
@@ -73,22 +73,9 @@ func WithInsecure() Option {
 	return WithCredentials(insecure.NewCredentials())
 }
 
-// WithPolicy applies an OPA policy used against incoming RPC requests.
-func WithPolicy(policy string) Option {
-	return optionFunc(func(ctx context.Context, s *serveSetup) error {
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		s.policy = p
-		return nil
-	})
-}
-
-// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
-func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
+func WithRPCAuthorizer(a rpcauthz.RPCAuthorizer) Option {
 	return optionFunc(func(_ context.Context, s *serveSetup) error {
-		s.policy = policy
+		s.authorizer = a
 		return nil
 	})
 }
@@ -102,8 +89,9 @@ func WithLogger(l logr.Logger) Option {
 	})
 }
 
+// TODO: remote it from here
 // WithAuthzHook adds an authz hook which is checked by the installed authorizer.
-func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
+func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.authzHooks = append(s.authzHooks, hook)
 		return nil
@@ -197,7 +185,7 @@ func ServeUnix(socketPath string, socketConfigHook func(string) error, opts ...O
 //
 // listener will be closed when this function returns.
 func serveListener(listener net.Listener, opts ...Option) error {
-	h := rpcauth.HostNetHook(listener.Addr())
+	h := rpcauthz.HostNetHook(listener.Addr())
 	opts = append(opts, WithAuthzHook(h))
 	srv, err := BuildServer(opts...)
 	if err != nil {
@@ -207,7 +195,7 @@ func serveListener(listener net.Listener, opts ...Option) error {
 	return srv.Serve(listener)
 }
 
-// BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
+// BuildServer creates a gRPC server, attaches the RPC authz interceptor with supplied args and then
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(opts ...Option) (*grpc.Server, error) {
@@ -220,25 +208,24 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 			return nil, err
 		}
 	}
-	if ss.policy == nil {
-		return nil, fmt.Errorf("policy was not provided")
+	if ss.authorizer == nil {
+		return nil, fmt.Errorf("rpc authorizer was not provided")
 	}
-
-	authz := rpcauth.New(ss.policy, ss.authzHooks...)
+	ss.authorizer.AppendHooks(ss.authzHooks...)
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,
 		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.UnaryServerLogInterceptor(ss.logger),
 		// Execute authz after logger is setup
-		authz.Authorize,
+		ss.authorizer.Authorize,
 	)
 	streaming := ss.streamInterceptors
 	streaming = append(streaming,
 		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.StreamServerLogInterceptor(ss.logger),
 		// Execute authz after logger is setup
-		authz.AuthorizeStream,
+		ss.authorizer.AuthorizeStream,
 	)
 	serverOpts := []grpc.ServerOption{
 		grpc.Creds(ss.creds),

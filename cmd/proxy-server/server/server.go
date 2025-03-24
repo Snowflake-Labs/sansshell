@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -71,7 +72,7 @@ type runState struct {
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	statsHandler             stats.Handler
 	statsClientHandler       stats.Handler
-	authzHooks               []rpcauth.RPCAuthzHook
+	authzHooks               []rpcauthz.RPCAuthzHook
 	services                 []func(*grpc.Server)
 	metricsRecorder          metrics.MetricsRecorder
 }
@@ -224,7 +225,7 @@ func WithStreamClientInterceptor(i grpc.StreamClientInterceptor) Option {
 }
 
 // WithAuthzHook adds an additional authz hook to be applied to the server.
-func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
+func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
 		return nil
@@ -385,18 +386,18 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	rs.logger.Info("listening", "hostport", rs.hostport)
 
-	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
+	addressHook := rpcauthz.HookIf(rpcauthz.HostNetHook(lis.Addr()), func(input *rpcauthz.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
-	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+	justificationHook := rpcauthz.HookIf(rpcauthz.JustificationHook(rs.justificationFunc), func(input *rpcauthz.RPCAuthInput) bool {
 		return rs.justification
 	})
 
-	h := []rpcauth.RPCAuthzHook{addressHook, justificationHook}
+	h := []rpcauthz.RPCAuthzHook{addressHook, justificationHook}
 	h = append(h, rs.authzHooks...)
 	authz := rpcauth.New(rs.policy, h...)
 
-	var clientAuthz *rpcauth.Authorizer
+	var clientAuthz rpcauthz.RPCAuthorizer
 	if rs.clientPolicy != nil {
 		clientAuthz = rpcauth.New(rs.clientPolicy)
 	}

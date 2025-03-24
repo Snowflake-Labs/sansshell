@@ -14,7 +14,7 @@
    under the License.
 */
 
-package rpcauth
+package rpcauthz
 
 import (
 	"context"
@@ -277,4 +277,31 @@ func CertInputFrom(authInfo credentials.AuthInfo) *CertAuthInput {
 		out.DNSNames = cert.DNSNames
 	}
 	return out
+}
+
+// HostNetHook returns an RPCAuthzHook that sets host networking information.
+func HostNetHook(addr net.Addr) RPCAuthzHook {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+		if input.Host == nil {
+			input.Host = &HostAuthInput{}
+		}
+		input.Host.Net = NetInputFromAddr(addr)
+		return nil
+	})
+}
+
+// PeerPrincipalFromCertHook returns an RPCAuthzHook that sets principal
+// information based on the peer's certificate, using the common name as
+// the id and the organizational units as the groups.
+func PeerPrincipalFromCertHook() RPCAuthzHook {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+		if input.Peer == nil || input.Peer.Cert == nil {
+			return nil
+		}
+		input.Peer.Principal = &PrincipalAuthInput{
+			ID:     input.Peer.Cert.Subject.CommonName,
+			Groups: input.Peer.Cert.Subject.OrganizationalUnit,
+		}
+		return nil
+	})
 }

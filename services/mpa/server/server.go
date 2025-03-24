@@ -21,13 +21,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"reflect"
 	"sort"
 	"sync"
 	"time"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
@@ -48,8 +48,8 @@ var (
 )
 
 // ServerMPAAuthzHook populates approver information based on an internal MPA store.
-func ServerMPAAuthzHook() rpcauth.RPCAuthzHook {
-	return rpcauth.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauth.RPCAuthInput) error {
+func ServerMPAAuthzHook() rpcauthz.RPCAuthzHook {
+	return rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
 		mpaID, ok := mpahooks.MPAFromIncomingContext(ctx)
 		if !ok {
 			// Nothing to look up if MPA wasn't requested
@@ -71,7 +71,7 @@ func ServerMPAAuthzHook() rpcauth.RPCAuthzHook {
 			return err
 		}
 		for _, a := range resp.Approver {
-			input.Approvers = append(input.Approvers, &rpcauth.PrincipalAuthInput{
+			input.Approvers = append(input.Approvers, &rpcauthz.PrincipalAuthInput{
 				ID:     a.Id,
 				Groups: a.Groups,
 			})
@@ -116,13 +116,13 @@ type server struct {
 	mu      sync.Mutex
 }
 
-func callerIdentity(ctx context.Context) (*rpcauth.PrincipalAuthInput, bool) {
+func callerIdentity(ctx context.Context) (*rpcauthz.PrincipalAuthInput, bool) {
 	// Prefer using a proxied identity if provided
 	p := proxiedidentity.FromContext(ctx)
 	if p != nil {
 		return p, true
 	}
-	peer := rpcauth.PeerInputFromContext(ctx)
+	peer := rpcauthz.PeerInputFromContext(ctx)
 	if peer != nil {
 		return peer.Principal, true
 	}
@@ -144,8 +144,8 @@ func (s *server) clearOutdatedApprovals() {
 
 func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreResponse, error) {
 	var justification string
-	if md, found := metadata.FromIncomingContext(ctx); found && len(md[rpcauth.ReqJustKey]) > 0 {
-		justification = md[rpcauth.ReqJustKey][0]
+	if md, found := metadata.FromIncomingContext(ctx); found && len(md[rpcauthz.ReqJustKey]) > 0 {
+		justification = md[rpcauthz.ReqJustKey][0]
 	}
 
 	p, ok := callerIdentity(ctx)
@@ -195,7 +195,7 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 	}, nil
 }
 
-func containsPrincipal(principals []*mpa.Principal, p *rpcauth.PrincipalAuthInput) bool {
+func containsPrincipal(principals []*mpa.Principal, p *rpcauthz.PrincipalAuthInput) bool {
 	for _, s := range principals {
 		if s.Id == p.ID && reflect.DeepEqual(s.Groups, p.Groups) {
 			return true

@@ -19,6 +19,7 @@ package mpahooks_test
 import (
 	"context"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"io"
 	"log"
 	"net"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
+	// TODO: make independent from rpcauth
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	proxyserver "github.com/Snowflake-Labs/sansshell/proxy/server"
@@ -66,7 +68,7 @@ func TestActionMatchesInput(t *testing.T) {
 		desc    string
 		ctx     context.Context
 		action  *mpa.Action
-		input   *rpcauth.RPCAuthInput
+		input   *rpcauthz.RPCAuthInput
 		matches bool
 	}{
 		{
@@ -77,12 +79,12 @@ func TestActionMatchesInput(t *testing.T) {
 				Method:  "foobar",
 				Message: mustAny(anypb.New(&emptypb.Empty{})),
 			},
-			input: &rpcauth.RPCAuthInput{
+			input: &rpcauthz.RPCAuthInput{
 				Method:      "foobar",
 				MessageType: "google.protobuf.Empty",
 				Message:     []byte("{}"),
-				Peer: &rpcauth.PeerAuthInput{
-					Principal: &rpcauth.PrincipalAuthInput{
+				Peer: &rpcauthz.PeerAuthInput{
+					Principal: &rpcauthz.PrincipalAuthInput{
 						ID: "requester",
 					},
 				},
@@ -97,7 +99,7 @@ func TestActionMatchesInput(t *testing.T) {
 				Method:  "foobar",
 				Message: mustAny(anypb.New(&emptypb.Empty{})),
 			},
-			input: &rpcauth.RPCAuthInput{
+			input: &rpcauthz.RPCAuthInput{
 				Method:      "foobar",
 				MessageType: "google.protobuf.Empty",
 				Message:     []byte("{}"),
@@ -112,12 +114,12 @@ func TestActionMatchesInput(t *testing.T) {
 				Method:  "foobar",
 				Message: mustAny(anypb.New(&mpa.Action{})),
 			},
-			input: &rpcauth.RPCAuthInput{
+			input: &rpcauthz.RPCAuthInput{
 				Method:      "foobar",
 				MessageType: "google.protobuf.Empty",
 				Message:     []byte("{}"),
-				Peer: &rpcauth.PeerAuthInput{
-					Principal: &rpcauth.PrincipalAuthInput{
+				Peer: &rpcauthz.PeerAuthInput{
+					Principal: &rpcauthz.PrincipalAuthInput{
 						ID: "requester",
 					},
 				},
@@ -132,12 +134,12 @@ func TestActionMatchesInput(t *testing.T) {
 				Method:  "foobar",
 				Message: mustAny(anypb.New(&emptypb.Empty{})),
 			},
-			input: &rpcauth.RPCAuthInput{
+			input: &rpcauthz.RPCAuthInput{
 				Method:      "foobar",
 				MessageType: "google.protobuf.Empty",
 				Message:     []byte("{}"),
-				Peer: &rpcauth.PeerAuthInput{
-					Principal: &rpcauth.PrincipalAuthInput{
+				Peer: &rpcauthz.PeerAuthInput{
+					Principal: &rpcauthz.PrincipalAuthInput{
 						ID: "requester",
 					},
 				},
@@ -152,7 +154,7 @@ func TestActionMatchesInput(t *testing.T) {
 				Method:  "foobar",
 				Message: mustAny(anypb.New(&emptypb.Empty{})),
 			},
-			input: &rpcauth.RPCAuthInput{
+			input: &rpcauthz.RPCAuthInput{
 				Method:      "foobar",
 				MessageType: "google.protobuf.Empty",
 				Message:     []byte("{}"),
@@ -234,7 +236,7 @@ func TestClientInterceptors(t *testing.T) {
 		t.Fatal(err)
 	}
 	srvAddr := lis.Addr().String()
-	authz, err := rpcauth.NewWithPolicy(ctx, serverPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
+	authz, err := rpcauth.NewWithPolicy(ctx, serverPolicy, rpcauthz.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +412,7 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}
 	srvAddr := lis.Addr().String()
 	proxyAddr := proxyLis.Addr().String()
-	authz, err := rpcauth.NewWithPolicy(ctx, serverBehindProxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
+	authz, err := rpcauth.NewWithPolicy(ctx, serverBehindProxyPolicy, rpcauthz.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +439,7 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}()
 	defer s.GracefulStop()
 
-	proxyAuthz, err := rpcauth.NewWithPolicy(ctx, proxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpahooks.ProxyMPAAuthzHook())
+	proxyAuthz, err := rpcauth.NewWithPolicy(ctx, proxyPolicy, rpcauthz.PeerPrincipalFromCertHook(), mpahooks.ProxyMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}

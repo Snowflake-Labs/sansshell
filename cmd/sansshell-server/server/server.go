@@ -23,6 +23,8 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -40,7 +42,6 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
@@ -68,7 +69,7 @@ type runState struct {
 	unaryInterceptors    []grpc.UnaryServerInterceptor
 	streamInterceptors   []grpc.StreamServerInterceptor
 	statsHandler         stats.Handler
-	authzHooks           []rpcauth.RPCAuthzHook
+	authzHooks           []rpcauthz.RPCAuthzHook
 	services             []func(*grpc.Server)
 
 	refreshCredsOnSIGHUP bool
@@ -179,7 +180,7 @@ func WithStreamInterceptor(i grpc.StreamServerInterceptor) Option {
 }
 
 // WithAuthzHook adds an additional authz hook to be applied to the server.
-func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
+func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
 		return nil
@@ -408,12 +409,13 @@ func runInsecureUnixSocketServer(_ context.Context, rs *runState) error {
 // extractCommonOptionsFromRunState extracts infers server options from runState
 // which can be used for both the TCP and Unix socket servers.
 func extractCommonOptionsFromRunState(rs *runState) []server.Option {
-	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
+	justificationHook := rpcauthz.HookIf(rpcauthz.JustificationHook(rs.justificationFunc), func(input *rpcauthz.RPCAuthInput) bool {
 		return rs.justification
 	})
 
 	var serverOpts []server.Option
-	serverOpts = append(serverOpts, server.WithParsedPolicy(rs.policy))
+	serverOpts = append(serverOpts, server.WithRPCAuthorizer(rpcauth.New(rs.policy)))
+
 	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
 	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
 	for _, a := range rs.authzHooks {

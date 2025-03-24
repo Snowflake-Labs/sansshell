@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"log"
 	"net"
 	"strings"
@@ -166,11 +167,14 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
 
+	opaAuthorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
+	testutil.FatalOnErr("NewWithPolicy", err, t)
+
 	s, err := server.BuildServer(
 		server.WithCredentials(creds),
-		server.WithPolicy(policy),
-		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
-		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
+		server.WithRPCAuthorizer(opaAuthorizer),
+		server.WithAuthzHook(rpcauthz.HostNetHook(lis.Addr())),
+		server.WithAuthzHook(rpcauthz.PeerPrincipalFromCertHook()),
 	)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
@@ -312,6 +316,7 @@ func TestHealthCheck(t *testing.T) {
 	creds, err := LoadClientCredentials(ctx, "refresh")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	err = creds.OverrideServerName("bufnet") //nolint:staticcheck
+	// TODO:
 	testutil.FatalOnErr("OverrideServerName", err, t)
 	for _, tc := range []struct {
 		name   string

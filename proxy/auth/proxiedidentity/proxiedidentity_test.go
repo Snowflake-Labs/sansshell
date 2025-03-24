@@ -18,6 +18,7 @@ package proxiedidentity
 
 import (
 	"context"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 	"reflect"
 	"testing"
@@ -132,13 +133,13 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			}
 			client := healthcheckpb.NewHealthCheckClient(conn)
 
-			identity := &rpcauth.PrincipalAuthInput{
+			identity := &rpcauthz.PrincipalAuthInput{
 				ID:     "foobar",
 				Groups: []string{"baz"},
 			}
 
 			ctx = AppendToMetadataInOutgoingContext(ctx, identity)
-			var gotIdentity *rpcauth.PrincipalAuthInput
+			var gotIdentity *rpcauthz.PrincipalAuthInput
 			var gotMetadata []string
 			healthcheck.callback = func(ctx context.Context) {
 				gotIdentity = FromContext(ctx)
