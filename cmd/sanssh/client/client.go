@@ -78,6 +78,8 @@ type RunState struct {
 	BatchSize int
 	// If true, add an interceptor that performs the multi-party auth flow
 	EnableMPA bool
+	// If true, the command is authz dry run and real action should not be executed
+	AuthzDryRun bool
 
 	credentials.PerRPCCredentials
 }
@@ -363,6 +365,9 @@ func Run(ctx context.Context, rs RunState) {
 			fmt.Fprintf(os.Stderr, "Could not connect to proxy %q node(s) in batch %d: %v\n", rs.Proxy, i, err)
 			os.Exit(1)
 		}
+
+		conn.AuthzDryRun = rs.AuthzDryRun
+
 		if rs.EnableMPA {
 			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
 			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}

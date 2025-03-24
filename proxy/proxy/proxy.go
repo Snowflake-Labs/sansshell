@@ -76,6 +76,9 @@ type Conn struct {
 	// If this is true we're not proxy but instead direct connect.
 	direct bool
 
+	// Perform authz dry run instead of actual execution
+	AuthzDryRun bool
+
 	// UnaryInterceptors allow intercepting Invoke and InvokeOneMany calls
 	// that go through a proxy.
 	// It is unsafe to modify Intercepters while calls are in progress.
@@ -111,12 +114,13 @@ func (p *Conn) Proxy() *grpc.ClientConn {
 // proxyStream provides all the context for send/receive in a grpc stream sense then translated to the streaming connection
 // we hold to the proxy. It also implements a fully functional grpc.ClientStream interface.
 type proxyStream struct {
-	method     string
-	stream     proxypb.Proxy_ProxyClient
-	ids        map[uint64]*Ret
-	errors     []*Ret
-	sentErrors bool
-	sendClosed bool
+	method      string
+	stream      proxypb.Proxy_ProxyClient
+	ids         map[uint64]*Ret
+	authzDryRun bool
+	errors      []*Ret
+	sentErrors  bool
+	sendClosed  bool
 }
 
 // Invoke - see grpc.ClientConnInterface
@@ -196,10 +200,11 @@ func (p *Conn) newStream(ctx context.Context, desc *grpc.StreamDesc, method stri
 	}
 
 	s := &proxyStream{
-		method: method,
-		stream: stream,
-		ids:    streamIds,
-		errors: errors,
+		method:      method,
+		stream:      stream,
+		ids:         streamIds,
+		errors:      errors,
+		authzDryRun: p.AuthzDryRun,
 	}
 
 	return s, nil
@@ -388,6 +393,15 @@ func (p *proxyStream) RecvMsg(m any) error {
 			}
 		}
 
+		if p.authzDryRun && code == codes.Aborted && strings.Contains(msg, "authz dry run passed") {
+			// capitalize msg first letter
+			msg = fmt.Sprintf("%s%s", strings.ToUpper(msg[:1]), msg[1:])
+			for _, id := range cl.StreamIds {
+				fmt.Printf("%v: %s\n", p.ids[id].Target, msg)
+			}
+			msg = "Aborted by proxy"
+		}
+
 		// See if it's normal close. We can ignore those except to remove tracking.
 		// Otherwise send errors back for each target and then remove.
 
@@ -441,9 +455,10 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			req := &proxypb.ProxyRequest{
 				Request: &proxypb.ProxyRequest_StartStream{
 					StartStream: &proxypb.StartStream{
-						Target:     t,
-						MethodName: method,
-						Nonce:      uint32(i),
+						Target:      t,
+						MethodName:  method,
+						Nonce:       uint32(i),
+						AuthzDryRun: p.AuthzDryRun,
 					},
 				},
 			}
@@ -589,9 +604,10 @@ func (p *Conn) invokeOneMany(ctx context.Context, method string, args any, opts 
 	}
 
 	s := &proxyStream{
-		method: method,
-		stream: stream,
-		ids:    streamIds,
+		method:      method,
+		stream:      stream,
+		ids:         streamIds,
+		authzDryRun: p.AuthzDryRun,
 	}
 	if err := s.send(requestMsg); err != nil {
 		return nil, err
