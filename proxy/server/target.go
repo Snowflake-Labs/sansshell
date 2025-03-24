@@ -309,7 +309,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			if s.authzDryRun {
 				// TODO: make authz dry run request to server
-				st := status.Newf(codes.Aborted, "authz dry run passed. Proxy: Ok, Server: Unknown. Aboarting \"%s\" futher execution", s.Method())
+				st := status.Newf(codes.Aborted, "authz dry run passed. Proxy: Ok, Server: Unknown. Aborting \"%s\" futher execution", s.Method())
 				s.CloseWith(st.Err())
 				return nil
 			}

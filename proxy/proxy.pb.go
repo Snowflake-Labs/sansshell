@@ -274,7 +274,7 @@ type StartStream struct {
 	// to that timeout before proceeding. Each Dial() happens in their
 	// own routine so this will not block the overall progress for a stream.
 	DialTimeout *durationpb.Duration `protobuf:"bytes,4,opt,name=dial_timeout,json=dialTimeout,proto3" json:"dial_timeout,omitempty"`
-	// Flag to execute rpc in authz dry run mode
+	// Perform authz dry run instead actual execution.
 	AuthzDryRun bool `protobuf:"varint,5,opt,name=authz_dry_run,json=authzDryRun,proto3" json:"authz_dry_run,omitempty"`
 }
 

@@ -85,7 +85,7 @@ message StartStream {
   // own routine so this will not block the overall progress for a stream.
   google.protobuf.Duration dial_timeout = 4;
 
-  // Flag to execute rpc in authz dry run mode
+  // Perform authz dry run instead actual execution.
   bool authz_dry_run = 5;
 }
 
