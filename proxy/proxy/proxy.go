@@ -76,7 +76,7 @@ type Conn struct {
 	// If this is true we're not proxy but instead direct connect.
 	direct bool
 
-	// authzDryRun flag to send rpc in authz dry run mode
+	// Perform authz dry run instead of actual execution
 	AuthzDryRun bool
 
 	// UnaryInterceptors allow intercepting Invoke and InvokeOneMany calls
