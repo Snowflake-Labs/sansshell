@@ -334,7 +334,6 @@ func ProxyClientStreamInterceptor(state *util.ExecuteState) proxy.StreamIntercep
 	}
 }
 
-// TODO:
 // ProxyMPAAuthzHook populates MPA information in the input message
 func ProxyMPAAuthzHook() rpcauthz.RPCAuthzHook {
 	return rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
@@ -345,8 +344,7 @@ func ProxyMPAAuthzHook() rpcauthz.RPCAuthzHook {
 		}
 
 		if input.Environment == nil || !input.Environment.NonHostPolicyCheck {
-			// TODO:
-			// Proxies will evaluate OPA polices on both proxy-level calls and host-level
+			// Proxies will evaluate Authz polices on both proxy-level calls and host-level
 			// calls. We want to only gather MPA info for host-level calls.
 			return nil
 		}

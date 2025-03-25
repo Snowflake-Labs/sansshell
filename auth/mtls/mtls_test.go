@@ -316,7 +316,6 @@ func TestHealthCheck(t *testing.T) {
 	creds, err := LoadClientCredentials(ctx, "refresh")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	err = creds.OverrideServerName("bufnet") //nolint:staticcheck
-	// TODO:
 	testutil.FatalOnErr("OverrideServerName", err, t)
 	for _, tc := range []struct {
 		name   string

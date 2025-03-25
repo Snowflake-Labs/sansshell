@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	// TODO: make independent from rpcauth
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	proxyserver "github.com/Snowflake-Labs/sansshell/proxy/server"
