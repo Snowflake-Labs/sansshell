@@ -306,7 +306,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &rpcauthz.RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					"ReqJustKey": []string{"justification"},
+					rpcauthz.ReqJustKey: []string{"justification"},
 				},
 			},
 			hooks: []rpcauthz.RPCAuthzHook{
@@ -331,7 +331,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &rpcauthz.RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					"ReqJustKey": []string{"justification"},
+					rpcauthz.ReqJustKey: []string{"justification"},
 				},
 			},
 			hooks: []rpcauthz.RPCAuthzHook{
@@ -345,7 +345,7 @@ func TestAuthzHook(t *testing.T) {
 			input: &rpcauthz.RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					"ReqJustKey": []string{"justification"},
+					rpcauthz.ReqJustKey: []string{"justification"},
 				},
 			},
 			hooks: []rpcauthz.RPCAuthzHook{

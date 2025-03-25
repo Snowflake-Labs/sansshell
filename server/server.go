@@ -38,10 +38,9 @@ import (
 // serveSetup describes everything needed to setup the RPC server.
 // Documentation provided below in each WithXXX function.
 type serveSetup struct {
-	creds      credentials.TransportCredentials
-	authorizer rpcauthz.RPCAuthorizer
-	logger     logr.Logger
-	// TODO: remove from here
+	creds              credentials.TransportCredentials
+	authorizer         rpcauthz.RPCAuthorizer
+	logger             logr.Logger
 	authzHooks         []rpcauthz.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
@@ -89,7 +88,6 @@ func WithLogger(l logr.Logger) Option {
 	})
 }
 
-// TODO: remote it from here
 // WithAuthzHook adds an authz hook which is checked by the installed authorizer.
 func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, s *serveSetup) error {

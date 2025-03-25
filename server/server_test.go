@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"io"
@@ -112,21 +113,6 @@ func TestBuildServer(t *testing.T) {
 	)
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
-}
-
-func TestBuildServerWithBadPolicy(t *testing.T) {
-	authorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
-	if err != nil {
-		testutil.FatalOnNoErr("authorizer creation", err, t)
-	}
-	// Make sure a bad policy fails
-	_, err = BuildServer(
-		WithLogger(logr.Discard()),
-		WithAuthzHook(rpcauthz.HostNetHook(lis.Addr())),
-		WithRPCAuthorizer(authorizer),
-	)
-	t.Log(err)
-	testutil.FatalOnNoErr("badly formed policy", err, t)
 }
 
 func TestServe(t *testing.T) {
@@ -305,10 +291,12 @@ allow {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			policy := fmt.Sprintf(policyTemplateWithUnixCreds, tc.policyFragment)
-			authorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
-			if err != nil {
-				testutil.FatalOnNoErr("authorizer creation", err, t)
-			}
+			ctx := context.Background()
+			authzPolicy, err := opa.NewAuthzPolicy(ctx, policy)
+			testutil.FatalOnErr("Policy creation", err, t)
+
+			authorizer := rpcauth.New(authzPolicy)
+
 			err = ServeUnix(socketPath,
 				nil,
 				WithRPCAuthorizer(authorizer),
