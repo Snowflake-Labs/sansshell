@@ -38,41 +38,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
-var policyString = `
-package sansshell.authz
-
-default allow = false
-
-allow {
-  input.method = "/Foo.Bar/Baz"
-  input.type = "google.protobuf.Empty"
-}
-
-allow {
-  input.method = "/Foo/Bar"
-}
-
-allow {
-  input.peer.principal.id = "admin@foo"
-}
-
-allow {
-  input.host.net.address = "127.0.0.1"
-  input.host.net.port = "1"
-}
-
-allow {
-  some i
-  input.peer.principal.groups[i] = "admin_users"
-}
-
-allow {
-  some i, j
-  input.extensions[i].value = 12345
-  input.extensions[j].key = "key1"
-}
-`
-
 type KeyValExtension struct {
 	Key string `json:"key"`
 	Val string `json:"val"`

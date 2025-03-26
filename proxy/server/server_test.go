@@ -583,7 +583,7 @@ allow {
 					ServerClose: &pb.ServerClose{
 						Status: &pb.Status{
 							Code:    int32(codes.PermissionDenied),
-							Message: "OPA policy does not permit this request",
+							Message: "Authz policy does not permit this request",
 						},
 					},
 				},
