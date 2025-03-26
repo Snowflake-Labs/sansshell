@@ -23,7 +23,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"google.golang.org/grpc/credentials"
 	"io"
 	"os"
@@ -34,7 +33,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
@@ -70,8 +69,8 @@ type RunState struct {
 	// IdleTimeout is the time duration to wait before closing an idle connection.
 	// If no messages are sent/received within this timeframe, connection will be terminated.
 	IdleTimeout time.Duration
-	// ClientPolicy is an optional OPA policy for determining outbound decisions.
-	ClientPolicy string
+	// ClientAuthzPolicy is an optional authz policy for determining outbound decisions.
+	ClientAuthzPolicy rpcauth.AuthzPolicy
 	// PrefixOutput if true will prefix every line of output with '<index>-<target>: '
 	PrefixOutput bool
 	// BatchSize if non-zero will do the requested operation to the targets but in
@@ -262,12 +261,9 @@ func Run(ctx context.Context, rs RunState) {
 		os.Exit(1)
 	}
 
-	var clientAuthz rpcauthz.RPCAuthorizer
-	if rs.ClientPolicy != "" {
-		clientAuthz, err = rpcauth.NewWithPolicy(ctx, rs.ClientPolicy)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Could not load policy: %v\n", err)
-		}
+	var clientAuthz rpcauth.RPCAuthorizer
+	if rs.ClientAuthzPolicy != nil {
+		clientAuthz = rpcauth.NewRPCAuthorizer(rs.ClientAuthzPolicy)
 	}
 
 	// We may need an option for doing client OPA checks.

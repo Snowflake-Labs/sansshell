@@ -22,7 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"io"
 	"math/rand"
 	"net"
@@ -36,7 +36,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -206,15 +206,15 @@ func (e *EchoTestDataServer) TestBidiStream(stream tdpb.TestService_TestBidiStre
 }
 
 // NewOpaRPCAuthorizer generates a new authorizer with the given policy. Will handle errors for testing.
-func NewOpaRPCAuthorizer(ctx context.Context, t *testing.T, policy string) rpcauthz.RPCAuthorizer {
+func NewOpaRPCAuthorizer(ctx context.Context, t *testing.T, policy string) rpcauth.RPCAuthorizer {
 	t.Helper()
-	auth, err := rpcauth.NewWithPolicy(ctx, policy)
+	auth, err := opa.NewOpaRPCAuthorizer(ctx, policy)
 	testutil.FatalOnErr(fmt.Sprintf("rpcauth.NewWithPolicy(%s)", policy), err, t)
 	return auth
 }
 
 // NewAllowAllRPCAuthorizer generates a new authorizer which allows all RPCs to pass through.
-func NewAllowAllRPCAuthorizer(ctx context.Context, t *testing.T) rpcauthz.RPCAuthorizer {
+func NewAllowAllRPCAuthorizer(ctx context.Context, t *testing.T) rpcauth.RPCAuthorizer {
 	policy := `
 package sansshell.authz
 default allow = true

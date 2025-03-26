@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
-	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"io"
 	"math/rand"
 	"sync"
@@ -36,7 +34,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 )
 
 var (
@@ -92,7 +92,7 @@ type TargetStream struct {
 
 	// The authorizer (from the stream set) used to authz requests
 	// sent to this stream.
-	authorizer rpcauthz.RPCAuthorizer
+	authorizer rpcauth.RPCAuthorizer
 
 	// The dialer to use for connecting to targets.
 	dialer TargetDialer
@@ -138,8 +138,8 @@ func (s *TargetStream) Target() string {
 }
 
 // PeerAuthInfo returns authz-relevant information about the stream peer
-func (s *TargetStream) PeerAuthInfo() *rpcauthz.PeerAuthInput {
-	return rpcauthz.PeerInputFromContext(s.getStream().Context())
+func (s *TargetStream) PeerAuthInfo() *rpcauth.PeerAuthInput {
+	return rpcauth.PeerInputFromContext(s.getStream().Context())
 }
 
 // NewRequest returns a new, empty request message for this target stream.
@@ -193,7 +193,7 @@ func (s *TargetStream) Send(req proto.Message) error {
 func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.ctx)
 
-	peer := rpcauthz.PeerInputFromContext(ctx)
+	peer := rpcauth.PeerInputFromContext(ctx)
 	if peer != nil && peer.Principal != nil {
 		// Unconditionally add information on the original caller to outgoing RPCs
 		ctx = proxiedidentity.AppendToMetadataInOutgoingContext(ctx, peer.Principal)
@@ -279,7 +279,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				}
 			}
 
-			authinput, err := rpcauthz.NewRPCAuthInput(ctx, s.Method(), req)
+			authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
 			if err != nil {
 				err = status.Errorf(codes.Internal, "error creating authz input %v", err)
 				s.CloseWith(err)
@@ -291,12 +291,12 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				s.CloseWith(err)
 				return err
 			}
-			authinput.Host = &rpcauthz.HostAuthInput{
+			authinput.Host = &rpcauth.HostAuthInput{
 				Net:       streamPeerInfo.Net,
 				Cert:      streamPeerInfo.Cert,
 				Principal: streamPeerInfo.Principal,
 			}
-			authinput.Environment = &rpcauthz.EnvironmentInput{
+			authinput.Environment = &rpcauth.EnvironmentInput{
 				NonHostPolicyCheck: true,
 			}
 			authinput.TargetConn = grpcConn
@@ -370,7 +370,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
-func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer rpcauthz.RPCAuthorizer, authzDryRun bool) (*TargetStream, error) {
+func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer rpcauth.RPCAuthorizer, authzDryRun bool) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -404,8 +404,8 @@ type TargetStreamSet struct {
 	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
-	// [rpcauthz.RPCAuthorizer], for authorizing requests sent to targets.
-	authorizer rpcauthz.RPCAuthorizer
+	// [rpcauthz.rpcAuthorizerImpl], for authorizing requests sent to targets.
+	authorizer rpcauth.RPCAuthorizer
 
 	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
@@ -422,7 +422,7 @@ type TargetStreamSet struct {
 }
 
 // NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
-func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer rpcauthz.RPCAuthorizer) *TargetStreamSet {
+func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
 		targetDialer:   dialer,

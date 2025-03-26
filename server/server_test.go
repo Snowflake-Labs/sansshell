@@ -20,9 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"io"
 	"log"
 	"net"
@@ -39,6 +36,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -82,15 +81,15 @@ func stopSoon(s *grpc.Server) {
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
 
-	authorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		log.Fatalf("Could not build authorizer: %s", err)
 		os.Exit(m.Run())
 	}
 	s, err := BuildServer(
 		WithInsecure(),
-		WithRPCAuthorizer(authorizer),
-		WithAuthzHook(rpcauthz.HostNetHook(lis.Addr())),
+		WithAuthzPolicy(authzPolicy),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
 	)
 	if err != nil {
 		log.Fatalf("Could not build server: %s", err)
@@ -109,7 +108,7 @@ func TestBuildServer(t *testing.T) {
 	// Make sure a bad policy fails
 	_, err := BuildServer(
 		WithLogger(logr.Discard()),
-		WithAuthzHook(rpcauthz.HostNetHook(lis.Addr())),
+		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
 	)
 	t.Log(err)
 	testutil.FatalOnNoErr("empty policy", err, t)
@@ -119,16 +118,16 @@ func TestServe(t *testing.T) {
 	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	authorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		testutil.FatalOnNoErr("authorizer creation", err, t)
 	}
 
-	err = Serve("-", WithRPCAuthorizer(authorizer))
+	err = Serve("-", WithAuthzPolicy(authzPolicy))
 	testutil.FatalOnNoErr("bad hostport", err, t)
 	// Add an 2nd copy of the logging interceptor just to prove adding works.
 	err = Serve("127.0.0.1:0",
-		WithRPCAuthorizer(authorizer),
+		WithAuthzPolicy(authzPolicy),
 		WithUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logr.Discard())),
 		WithStreamInterceptor(telemetry.StreamServerLogInterceptor(logr.Discard())),
 		WithOnStartListener(stopSoon),
@@ -141,14 +140,14 @@ func TestServeUnix(t *testing.T) {
 	err := ServeUnix(socketPath, nil)
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	authorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		testutil.FatalOnNoErr("authorizer creation", err, t)
 	}
 
 	// If an existing directory path is given as the socket path, we
 	// should fail to start server.
-	err = ServeUnix(t.TempDir(), nil, WithRPCAuthorizer(authorizer))
+	err = ServeUnix(t.TempDir(), nil, WithAuthzPolicy(authzPolicy))
 	testutil.FatalOnNoErr("ServeUnix with directory path", err, t)
 
 	// If the socket already exists, it's OK - it will be removed.
@@ -161,7 +160,7 @@ func TestServeUnix(t *testing.T) {
 	}
 	err = ServeUnix(socketPath,
 		nil,
-		WithRPCAuthorizer(authorizer),
+		WithAuthzPolicy(authzPolicy),
 		WithOnStartListener(stopSoon))
 	testutil.FatalOnErr("ServeUnix with existing socket", err, t)
 
@@ -172,7 +171,7 @@ func TestServeUnix(t *testing.T) {
 		func(sp string) error {
 			return os.Chmod(sp, os.FileMode(0667))
 		},
-		WithRPCAuthorizer(authorizer),
+		WithAuthzPolicy(authzPolicy),
 		WithOnStartListener(
 			func(srv *grpc.Server) {
 				time.Sleep(50 * time.Millisecond)
@@ -295,11 +294,9 @@ allow {
 			authzPolicy, err := opa.NewAuthzPolicy(ctx, policy)
 			testutil.FatalOnErr("Policy creation", err, t)
 
-			authorizer := rpcauth.New(authzPolicy)
-
 			err = ServeUnix(socketPath,
 				nil,
-				WithRPCAuthorizer(authorizer),
+				WithAuthzPolicy(authzPolicy),
 				WithCredentials(NewUnixPeerTransportCredentials()),
 				WithOnStartListener(runHealthCheck(t, tc.expectedSuccess)))
 			testutil.FatalOnErr("ServeUnix with Unix creds policy", err, t)

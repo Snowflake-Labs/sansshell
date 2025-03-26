@@ -14,10 +14,12 @@
    under the License.
 */
 
-package rpcauthz
+package rpcauth
 
 import (
 	"context"
+	"net"
+
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
@@ -63,6 +65,17 @@ func (c *conditionalHook) Hook(ctx context.Context, input *RPCAuthInput) error {
 	return nil
 }
 
+// HostNetHook returns an RPCAuthzHook that sets host networking information.
+func HostNetHook(addr net.Addr) RPCAuthzHook {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+		if input.Host == nil {
+			input.Host = &HostAuthInput{}
+		}
+		input.Host.Net = NetInputFromAddr(addr)
+		return nil
+	})
+}
+
 const (
 	// ReqJustKey is the key name that must exist in the incoming
 	// context metadata if client side provided justification is required.
@@ -95,6 +108,22 @@ func JustificationHook(justificationFunc func(string) error) RPCAuthzHook {
 				recorder.CounterOrLog(ctx, authzDeniedJustificationMetric, 1, attribute.String("reason", "denied"))
 				return status.Errorf(codes.FailedPrecondition, "justification failed: %v", err)
 			}
+		}
+		return nil
+	})
+}
+
+// PeerPrincipalFromCertHook returns an RPCAuthzHook that sets principal
+// information based on the peer's certificate, using the common name as
+// the id and the organizational units as the groups.
+func PeerPrincipalFromCertHook() RPCAuthzHook {
+	return RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+		if input.Peer == nil || input.Peer.Cert == nil {
+			return nil
+		}
+		input.Peer.Principal = &PrincipalAuthInput{
+			ID:     input.Peer.Cert.Subject.CommonName,
+			Groups: input.Peer.Cert.Subject.OrganizationalUnit,
 		}
 		return nil
 	})

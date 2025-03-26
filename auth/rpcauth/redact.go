@@ -20,7 +20,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	rpcauthz "github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -160,11 +159,11 @@ func redactFields(message protoreflect.Message) error {
 	return err
 }
 
-func getRedactedInput(input *rpcauthz.RPCAuthInput) (rpcauthz.RPCAuthInput, error) {
+func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 	if input == nil {
-		return rpcauthz.RPCAuthInput{}, nil
+		return RPCAuthInput{}, nil
 	}
-	redactedInput := rpcauthz.RPCAuthInput{
+	redactedInput := RPCAuthInput{
 		Method:      input.Method,
 		MessageType: input.MessageType,
 		Metadata:    input.Metadata,
@@ -181,20 +180,20 @@ func getRedactedInput(input *rpcauthz.RPCAuthInput) (rpcauthz.RPCAuthInput, erro
 		// Transform the rpcauth input into the original proto
 		messageType, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
 		if err != nil {
-			return rpcauthz.RPCAuthInput{}, fmt.Errorf("unable to find proto type %v: %v", input.MessageType, err)
+			return RPCAuthInput{}, fmt.Errorf("unable to find proto type %v: %v", input.MessageType, err)
 		}
 		redactedMessage = messageType.New().Interface()
 		if err := protojson.Unmarshal([]byte(input.Message), redactedMessage); err != nil {
-			return rpcauthz.RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
+			return RPCAuthInput{}, fmt.Errorf("could not marshal input into %v: %v", input.MessageType, err)
 		}
 		errRedact := redactFields(redactedMessage.ProtoReflect())
 		if errRedact != nil {
-			return rpcauthz.RPCAuthInput{}, fmt.Errorf("failed to redact message fields: %v", errRedact)
+			return RPCAuthInput{}, fmt.Errorf("failed to redact message fields: %v", errRedact)
 		}
 	}
 	marshaled, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(redactedMessage)
 	if err != nil {
-		return rpcauthz.RPCAuthInput{}, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
+		return RPCAuthInput{}, status.Errorf(codes.Internal, "error marshalling request for auth: %v", err)
 	}
 	redactedInput.Message = json.RawMessage(marshaled)
 	return redactedInput, nil

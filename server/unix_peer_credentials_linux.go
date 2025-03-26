@@ -20,18 +20,18 @@ package server
 
 import (
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 	"os/user"
 	"strconv"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"golang.org/x/sys/unix"
 )
 
 // getUnixPeerCredentials returns the peer's Unix credentials from the given network connection.
 //
 // The provided connection should be established over a Unix domain socket.
-func getUnixPeerCredentials(conn net.Conn) (*rpcauthz.UnixPeerCredentials, error) {
+func getUnixPeerCredentials(conn net.Conn) (*rpcauth.UnixPeerCredentials, error) {
 	uc, ok := conn.(*net.UnixConn)
 	if !ok {
 		return nil, fmt.Errorf("called getUnixPeerCredentials on non-Unix connection")
@@ -87,7 +87,7 @@ func getUnixPeerCredentials(conn net.Conn) (*rpcauthz.UnixPeerCredentials, error
 		}
 	}
 
-	return &rpcauthz.UnixPeerCredentials{
+	return &rpcauth.UnixPeerCredentials{
 		Uid:        uid,
 		Gids:       groupIds,
 		UserName:   userName,

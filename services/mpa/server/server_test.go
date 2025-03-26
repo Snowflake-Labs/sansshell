@@ -18,11 +18,11 @@ package server
 
 import (
 	"context"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"reflect"
 	"strconv"
 	"testing"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -44,7 +44,7 @@ func TestAuthzHook(t *testing.T) {
 
 	// Create a hook and make sure that hooking with no mpa request works
 	hook := ServerMPAAuthzHook()
-	newInput, err := rpcauthz.NewRPCAuthInput(ctx, "foobar", &emptypb.Empty{})
+	newInput, err := rpcauth.NewRPCAuthInput(ctx, "foobar", &emptypb.Empty{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,8 +53,8 @@ func TestAuthzHook(t *testing.T) {
 	}
 
 	// Add a request
-	rCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-		Principal: &rpcauthz.PrincipalAuthInput{ID: "requester"},
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
 	})
 	if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
 		Method:  "foobar",
@@ -75,8 +75,8 @@ func TestAuthzHook(t *testing.T) {
 		t.Fatalf("expected failure when self-approving: %v", err)
 	}
 
-	aCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-		Principal: &rpcauthz.PrincipalAuthInput{ID: "approver", Groups: []string{"g1"}},
+	aCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "approver", Groups: []string{"g1"}},
 	})
 	// Approve the request twice to make sure approval is idempotent
 	for i := 0; i < 2; i++ {
@@ -86,14 +86,14 @@ func TestAuthzHook(t *testing.T) {
 	}
 
 	mpaCtx := metadata.NewIncomingContext(rCtx, map[string][]string{"sansshell-mpa-request-id": {"3e31b2b4-f8724bae-c1504987"}})
-	passingInput, err := rpcauthz.NewRPCAuthInput(mpaCtx, "foobar", &emptypb.Empty{})
+	passingInput, err := rpcauth.NewRPCAuthInput(mpaCtx, "foobar", &emptypb.Empty{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := hook.Hook(mpaCtx, passingInput); err != nil {
 		t.Fatal(err)
 	}
-	wantApprovers := []*rpcauthz.PrincipalAuthInput{
+	wantApprovers := []*rpcauth.PrincipalAuthInput{
 		{ID: "approver", Groups: []string{"g1"}},
 	}
 	if !reflect.DeepEqual(passingInput.Approvers, wantApprovers) {
@@ -101,7 +101,7 @@ func TestAuthzHook(t *testing.T) {
 	}
 
 	// An action not matching the input should fail
-	wrongInput, err := rpcauthz.NewRPCAuthInput(mpaCtx, "foobar", &mpa.ApproveRequest{})
+	wrongInput, err := rpcauth.NewRPCAuthInput(mpaCtx, "foobar", &mpa.ApproveRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,8 +113,8 @@ func TestAuthzHook(t *testing.T) {
 func TestMaxNumApprovals(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < maxMPAApprovals+20; i++ {
-		rCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-			Principal: &rpcauthz.PrincipalAuthInput{ID: "requester"},
+		rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+			Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
 		})
 		if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
 			Method:  "foobar" + strconv.Itoa(i),
@@ -135,8 +135,8 @@ func TestMaxNumApprovals(t *testing.T) {
 func TestWaitForApproval(t *testing.T) {
 	ctx := context.Background()
 
-	rCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-		Principal: &rpcauthz.PrincipalAuthInput{ID: "requester"},
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
 	})
 	if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
 		Method:  "foobar",
@@ -147,8 +147,8 @@ func TestWaitForApproval(t *testing.T) {
 
 	var g errgroup.Group
 	g.Go(func() error {
-		aCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-			Principal: &rpcauthz.PrincipalAuthInput{ID: "approver", Groups: []string{"g1"}},
+		aCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+			Principal: &rpcauth.PrincipalAuthInput{ID: "approver", Groups: []string{"g1"}},
 		})
 		_, err := serverSingleton.Approve(aCtx, &mpa.ApproveRequest{
 			Action: &mpa.Action{
@@ -184,8 +184,8 @@ func TestWaitForApprovalNotFound(t *testing.T) {
 	}
 
 	// Call store only later to check if we don't have a case of a "deadlock" (or close).
-	rCtx := rpcauthz.AddPeerToContext(ctx, &rpcauthz.PeerAuthInput{
-		Principal: &rpcauthz.PrincipalAuthInput{ID: "requester"},
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
 	})
 	if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
 		Method:  "foobar",

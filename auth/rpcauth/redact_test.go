@@ -18,7 +18,6 @@ package rpcauth
 
 import (
 	"context"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"testing"
 
 	proxypb "github.com/Snowflake-Labs/sansshell/proxy"
@@ -43,7 +42,7 @@ func TestGetRedactedInput(t *testing.T) {
 			},
 		},
 	}
-	httpReqInput, _ := rpcauthz.NewRPCAuthInput(context.TODO(), "/HTTPOverRPC.HTTPOverRPC/Host", httpReq.ProtoReflect().Interface())
+	httpReqInput, _ := NewRPCAuthInput(context.TODO(), "/HTTPOverRPC.HTTPOverRPC/Host", httpReq.ProtoReflect().Interface())
 
 	payload, _ := anypb.New(httpReq.ProtoReflect().Interface())
 	proxyReq := &proxypb.ProxyRequest{
@@ -54,7 +53,7 @@ func TestGetRedactedInput(t *testing.T) {
 			},
 		},
 	}
-	proxyReqInput, _ := rpcauthz.NewRPCAuthInput(context.TODO(), "/Proxy.Proxy/Proxy", proxyReq.ProtoReflect().Interface())
+	proxyReqInput, _ := NewRPCAuthInput(context.TODO(), "/Proxy.Proxy/Proxy", proxyReq.ProtoReflect().Interface())
 
 	testReq := testdata.TestRequest{
 		ListScalar: []string{"s1"},
@@ -78,20 +77,20 @@ func TestGetRedactedInput(t *testing.T) {
 			},
 		},
 	}
-	testdataInput, _ := rpcauthz.NewRPCAuthInput(context.TODO(), "/Testdata.TestService/TestUnary",
+	testdataInput, _ := NewRPCAuthInput(context.TODO(), "/Testdata.TestService/TestUnary",
 		testReq.ProtoReflect().Interface())
 	for _, tc := range []struct {
 		name          string
-		createInputFn func() *rpcauthz.RPCAuthInput
-		assertionFn   func(rpcauthz.RPCAuthInput)
+		createInputFn func() *RPCAuthInput
+		assertionFn   func(RPCAuthInput)
 		errFunc       func(*testing.T, error)
 	}{
 		{
 			name: "redacted fields should be redacted",
-			createInputFn: func() *rpcauthz.RPCAuthInput {
+			createInputFn: func() *RPCAuthInput {
 				return httpReqInput
 			},
-			assertionFn: func(result rpcauthz.RPCAuthInput) {
+			assertionFn: func(result RPCAuthInput) {
 				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(httpReqInput.MessageType)
 				resultMessage := messageType.New().Interface()
 				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
@@ -108,10 +107,10 @@ func TestGetRedactedInput(t *testing.T) {
 		},
 		{
 			name: "any containing redacted_fields should be redacted",
-			createInputFn: func() *rpcauthz.RPCAuthInput {
+			createInputFn: func() *RPCAuthInput {
 				return proxyReqInput
 			},
-			assertionFn: func(result rpcauthz.RPCAuthInput) {
+			assertionFn: func(result RPCAuthInput) {
 				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(proxyReqInput.MessageType)
 				resultMessage := messageType.New().Interface()
 				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
@@ -131,10 +130,10 @@ func TestGetRedactedInput(t *testing.T) {
 		},
 		{
 			name: "redacted nested message in map or list fields",
-			createInputFn: func() *rpcauthz.RPCAuthInput {
+			createInputFn: func() *RPCAuthInput {
 				return testdataInput
 			},
-			assertionFn: func(result rpcauthz.RPCAuthInput) {
+			assertionFn: func(result RPCAuthInput) {
 				messageType, _ := protoregistry.GlobalTypes.FindMessageByURL(testdataInput.MessageType)
 				resultMessage := messageType.New().Interface()
 				err := protojson.Unmarshal([]byte(result.Message), resultMessage)
@@ -157,8 +156,8 @@ func TestGetRedactedInput(t *testing.T) {
 		},
 		{
 			name: "malformed input should return err",
-			createInputFn: func() *rpcauthz.RPCAuthInput {
-				i := &rpcauthz.RPCAuthInput{
+			createInputFn: func() *RPCAuthInput {
+				i := &RPCAuthInput{
 					MessageType: "malformed",
 				}
 				return i
@@ -169,11 +168,11 @@ func TestGetRedactedInput(t *testing.T) {
 		},
 		{
 			name: "nil input should return nil",
-			createInputFn: func() *rpcauthz.RPCAuthInput {
+			createInputFn: func() *RPCAuthInput {
 				return nil
 			},
-			assertionFn: func(i rpcauthz.RPCAuthInput) {
-				assert.Equal(t, rpcauthz.RPCAuthInput{}, i)
+			assertionFn: func(i RPCAuthInput) {
+				assert.Equal(t, RPCAuthInput{}, i)
 			},
 			errFunc: func(t *testing.T, err error) {
 				assert.NoError(t, err)

@@ -21,12 +21,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
-	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"os"
 	"sort"
 	"strings"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -66,9 +66,9 @@ func MPAFromIncomingContext(ctx context.Context) (mpaID string, ok bool) {
 
 // ActionMatchesInput returns an error if an MPA action doesn't match the
 // message being checked in the RPCAuthInput.
-func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauthz.RPCAuthInput) error {
+func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.RPCAuthInput) error {
 	var justification string
-	if j := input.Metadata[rpcauthz.ReqJustKey]; len(j) > 0 {
+	if j := input.Metadata[rpcauth.ReqJustKey]; len(j) > 0 {
 		justification = j[0]
 	}
 
@@ -335,8 +335,8 @@ func ProxyClientStreamInterceptor(state *util.ExecuteState) proxy.StreamIntercep
 }
 
 // ProxyMPAAuthzHook populates MPA information in the input message
-func ProxyMPAAuthzHook() rpcauthz.RPCAuthzHook {
-	return rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+func ProxyMPAAuthzHook() rpcauth.RPCAuthzHook {
+	return rpcauth.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauth.RPCAuthInput) error {
 		mpaID, ok := MPAFromIncomingContext(ctx)
 		if !ok {
 			// No need to call out if MPA wasn't requested
@@ -364,7 +364,7 @@ func ProxyMPAAuthzHook() rpcauthz.RPCAuthzHook {
 			return err
 		}
 		for _, a := range resp.Approver {
-			input.Approvers = append(input.Approvers, &rpcauthz.PrincipalAuthInput{
+			input.Approvers = append(input.Approvers, &rpcauth.PrincipalAuthInput{
 				ID:     a.Id,
 				Groups: a.Groups,
 			})

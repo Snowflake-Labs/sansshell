@@ -24,7 +24,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -41,8 +40,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
@@ -55,8 +53,8 @@ import (
 // WithXXX function.
 type runState struct {
 	logger                   logr.Logger
-	policy                   *opa.AuthzPolicy
-	clientPolicy             *opa.AuthzPolicy
+	policy                   rpcauth.AuthzPolicy
+	clientPolicy             rpcauth.AuthzPolicy
 	credSource               string
 	tlsConfig                *tls.Config
 	hostport                 string
@@ -72,7 +70,7 @@ type runState struct {
 	streamClientInterceptors []grpc.StreamClientInterceptor
 	statsHandler             stats.Handler
 	statsClientHandler       stats.Handler
-	authzHooks               []rpcauthz.RPCAuthzHook
+	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
 	metricsRecorder          metrics.MetricsRecorder
 }
@@ -96,45 +94,18 @@ func WithLogger(l logr.Logger) Option {
 	})
 }
 
-// WithPolicy applies an OPA policy used against incoming RPC requests.
-func WithPolicy(policy string) Option {
+// WithAuthzPolicy applies authz policy used against incoming RPC requests.
+func WithAuthzPolicy(policy rpcauth.AuthzPolicy) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		r.policy = p
-		return nil
-	})
-}
-
-// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
-func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
 		r.policy = policy
 		return nil
 	})
 }
 
-// WithClientPolicy appplies an optional OPA policy for determining outbound decisions.
-func WithClientPolicy(policy string) Option {
+// WithClientAuthzPolicy appplies an optional authz policy for determining outbound decisions.
+func WithClientAuthzPolicy(clientPolicy rpcauth.AuthzPolicy) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		if policy == "" {
-			return nil
-		}
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		r.clientPolicy = p
-		return nil
-	})
-}
-
-// WithParsedClientPolicy appplies an optional OPA policy for determining outbound decisions.
-func WithParsedClientPolicy(policy *opa.AuthzPolicy) Option {
-	return optionFunc(func(ctx context.Context, r *runState) error {
-		r.clientPolicy = policy
+		r.clientPolicy = clientPolicy
 		return nil
 	})
 }
@@ -225,7 +196,7 @@ func WithStreamClientInterceptor(i grpc.StreamClientInterceptor) Option {
 }
 
 // WithAuthzHook adds an additional authz hook to be applied to the server.
-func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
+func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
 		return nil
@@ -386,20 +357,20 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 	rs.logger.Info("listening", "hostport", rs.hostport)
 
-	addressHook := rpcauthz.HookIf(rpcauthz.HostNetHook(lis.Addr()), func(input *rpcauthz.RPCAuthInput) bool {
+	addressHook := rpcauth.HookIf(rpcauth.HostNetHook(lis.Addr()), func(input *rpcauth.RPCAuthInput) bool {
 		return input.Host == nil || input.Host.Net == nil
 	})
-	justificationHook := rpcauthz.HookIf(rpcauthz.JustificationHook(rs.justificationFunc), func(input *rpcauthz.RPCAuthInput) bool {
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
 		return rs.justification
 	})
 
-	h := []rpcauthz.RPCAuthzHook{addressHook, justificationHook}
+	h := []rpcauth.RPCAuthzHook{addressHook, justificationHook}
 	h = append(h, rs.authzHooks...)
-	authz := rpcauth.New(rs.policy, h...)
+	authz := rpcauth.NewRPCAuthorizer(rs.policy, h...)
 
-	var clientAuthz rpcauthz.RPCAuthorizer
+	var clientAuthz rpcauth.RPCAuthorizer
 	if rs.clientPolicy != nil {
-		clientAuthz = rpcauth.New(rs.clientPolicy)
+		clientAuthz = rpcauth.NewRPCAuthorizer(rs.clientPolicy)
 	}
 
 	unaryClient := rs.unaryClientInterceptors

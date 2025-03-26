@@ -34,14 +34,14 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
-func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz rpcauthz.RPCAuthorizer) pb.Proxy_ProxyClient {
+func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz rpcauth.RPCAuthorizer) pb.Proxy_ProxyClient {
 	t.Helper()
 	targetDialer := NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	lis := bufconn.Listen(testutil.BufSize)

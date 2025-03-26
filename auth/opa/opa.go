@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
@@ -103,7 +104,7 @@ func WithDenialHintsQuery(query string) Option {
 // in the string `policy`.
 // It returns an error if the policy cannot be parsed, or does not use
 // SansshellRegoPackage in its package declaration.
-func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (*AuthzPolicy, error) {
+func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth.AuthzPolicy, error) {
 	options := &policyOptions{
 		query: DefaultAuthzQuery,
 	}
@@ -201,4 +202,18 @@ func (q *AuthzPolicy) DenialHints(ctx context.Context, input interface{}) ([]str
 	}
 	sort.Strings(hints)
 	return hints, nil
+}
+
+// NewOpaRPCAuthorizer creates a new Authorizer from a policy string. Any supplied
+// authorization hooks will be executed, in the order provided, on each policy
+// evaluation.
+// NOTE: The policy is used for both client and server hooks below. If you need
+//
+//	distinct policy for client vs server, create 2 Authorizer's.
+func NewOpaRPCAuthorizer(ctx context.Context, opaPolicy string, authzHooks ...rpcauth.RPCAuthzHook) (rpcauth.RPCAuthorizer, error) {
+	authzPolicy, err := NewAuthzPolicy(ctx, opaPolicy)
+	if err != nil {
+		return nil, err
+	}
+	return rpcauth.NewRPCAuthorizer(authzPolicy, authzHooks...), nil
 }

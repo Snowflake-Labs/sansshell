@@ -264,3 +264,47 @@ denial_hints[msg] {
 		})
 	}
 }
+
+func TestNewWithPolicy(t *testing.T) {
+	var policyString = `
+package sansshell.authz
+
+default allow = false
+
+allow {
+  input.method = "/Foo.Bar/Baz"
+  input.type = "google.protobuf.Empty"
+}
+
+allow {
+  input.method = "/Foo/Bar"
+}
+
+allow {
+  input.peer.principal.id = "admin@foo"
+}
+
+allow {
+  input.host.net.address = "127.0.0.1"
+  input.host.net.port = "1"
+}
+
+allow {
+  some i
+  input.peer.principal.groups[i] = "admin_users"
+}
+
+allow {
+  some i, j
+  input.extensions[i].value = 12345
+  input.extensions[j].key = "key1"
+}
+`
+
+	ctx := context.Background()
+	_, err := NewOpaRPCAuthorizer(ctx, policyString)
+	testutil.FatalOnErr("NewOpaRPCAuthorizer valid", err, t)
+	if _, err := NewOpaRPCAuthorizer(ctx, ""); err == nil {
+		t.Error("didn't get error for empty policy")
+	}
+}

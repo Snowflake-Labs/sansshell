@@ -14,13 +14,13 @@
    under the License.
 */
 
-package rpcauthz
+package rpcauth
 
 import (
 	"google.golang.org/grpc/credentials"
 )
 
-// UnixPeerCredentials represents the credentials of a Unix peer.
+// UnixPeerCreds represents the credentials of a Unix peer.
 type UnixPeerCredentials struct {
 	Uid        int
 	Gids       []int // Primary and supplementary group IDs.

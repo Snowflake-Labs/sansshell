@@ -22,7 +22,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"log"
 	"os"
 	"strings"
@@ -35,6 +34,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -80,7 +81,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	idleTimeout      = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
 	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	outputsDir       = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
-	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauthz.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
+	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
 	targetsFile      = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
 	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
 	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
@@ -182,29 +183,38 @@ func main() {
 		(*targetsFlag.Target)[i] = cmdUtil.ValidateAndAddPortAndTimeout(t, defaultTargetPort, *dialTimeout)
 	}
 
-	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
+	opaClientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanssh")
 	stdr.SetVerbosity(*verbosity)
 
-	rs := client.RunState{
-		Proxy:        *proxyAddr,
-		Targets:      *targetsFlag.Target,
-		Outputs:      *outputsFlag.Target,
-		AuthzDryRun:  *authzDryRun,
-		OutputsDir:   *outputsDir,
-		CredSource:   *credSource,
-		IdleTimeout:  *idleTimeout,
-		ClientPolicy: clientPolicy,
-		PrefixOutput: *prefixHeader,
-		BatchSize:    *batchSize,
-		EnableMPA:    *mpa,
-	}
 	ctx := logr.NewContext(context.Background(), logger)
+	var clientPolicy rpcauth.AuthzPolicy
+	if opaClientPolicy != "" {
+		var err error
+		clientPolicy, err = opa.NewAuthzPolicy(ctx, opaClientPolicy)
+		if err != nil {
+			logger.Error(err, "Could not load policy")
+		}
+	}
+
+	rs := client.RunState{
+		Proxy:             *proxyAddr,
+		Targets:           *targetsFlag.Target,
+		Outputs:           *outputsFlag.Target,
+		AuthzDryRun:       *authzDryRun,
+		OutputsDir:        *outputsDir,
+		CredSource:        *credSource,
+		IdleTimeout:       *idleTimeout,
+		ClientAuthzPolicy: clientPolicy,
+		PrefixOutput:      *prefixHeader,
+		BatchSize:         *batchSize,
+		EnableMPA:         *mpa,
+	}
 
 	if *justification != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, rpcauthz.ReqJustKey, *justification)
+		ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, *justification)
 	}
 	client.Run(ctx, rs)
 }

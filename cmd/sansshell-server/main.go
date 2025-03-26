@@ -25,7 +25,6 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"log"
 	"os"
 	"strings"
@@ -47,6 +46,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -93,7 +93,7 @@ var (
 	credSource    = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
 	verbosity     = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate      = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
-	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauthz.ReqJustKey+"'")
+	justification = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
 	version       bool
 
 	fdbCLIEnvList ssutil.StringSliceFlag
@@ -162,7 +162,7 @@ func main() {
 	ctx := logr.NewContext(context.Background(), logger)
 	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
-	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	authzPolicy, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
 		log.Fatalf("Invalid policy: %v\n", err)
 	}
@@ -177,9 +177,9 @@ func main() {
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
 		server.WithUnixSocket(*unixSocket),
-		server.WithParsedPolicy(parsed),
+		server.WithAuthzPolicy(authzPolicy),
 		server.WithJustification(*justification),
-		server.WithAuthzHook(rpcauthz.PeerPrincipalFromCertHook()),
+		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
 		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),

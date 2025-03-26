@@ -21,12 +21,12 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"io"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
@@ -81,7 +81,7 @@ type Server struct {
 	dialer TargetDialer
 
 	// A policy authorizer, for authorizing proxy -> target requests
-	authorizer rpcauthz.RPCAuthorizer
+	authorizer rpcauth.RPCAuthorizer
 }
 
 // Register registers this server with the given ServiceRegistrar
@@ -95,7 +95,7 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 // registry to resolve service methods
 // The supplied authorizer is used to authorize requests made
 // to targets.
-func New(dialer TargetDialer, authorizer rpcauthz.RPCAuthorizer) *Server {
+func New(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *Server {
 	return NewWithServiceMap(dialer, authorizer, LoadGlobalServiceMap())
 }
 
@@ -103,7 +103,7 @@ func New(dialer TargetDialer, authorizer rpcauthz.RPCAuthorizer) *Server {
 // and service map.
 // The supplied authorizer is used to authorize requests made
 // to targets.
-func NewWithServiceMap(dialer TargetDialer, authorizer rpcauthz.RPCAuthorizer, serviceMap map[string]*ServiceMethod) *Server {
+func NewWithServiceMap(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
 		dialer:     dialer,
@@ -279,7 +279,7 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 				// Peer information might not be properly populated until rpcauth
 				// evaluates the initial received message, so let's grab fresh
 				// peer information when we know we've gotten at least one message.
-				ctx = rpcauthz.AddPeerToContext(ctx, rpcauthz.PeerInputFromContext(stream.Context()))
+				ctx = rpcauth.AddPeerToContext(ctx, rpcauth.PeerInputFromContext(stream.Context()))
 				addedPeerToContext = true
 			}
 			// We have a new request

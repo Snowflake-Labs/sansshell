@@ -23,8 +23,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -41,7 +39,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
@@ -63,13 +61,13 @@ type runState struct {
 	metricsRecorder      metrics.MetricsRecorder
 	unixSocket           string
 	unixSocketConfigHook func(string) error
-	policy               *opa.AuthzPolicy
+	policy               rpcauth.AuthzPolicy
 	justification        bool
 	justificationFunc    func(string) error
 	unaryInterceptors    []grpc.UnaryServerInterceptor
 	streamInterceptors   []grpc.StreamServerInterceptor
 	statsHandler         stats.Handler
-	authzHooks           []rpcauthz.RPCAuthzHook
+	authzHooks           []rpcauth.RPCAuthzHook
 	services             []func(*grpc.Server)
 
 	refreshCredsOnSIGHUP bool
@@ -94,21 +92,9 @@ func WithLogger(l logr.Logger) Option {
 	})
 }
 
-// WithPolicy applies an OPA policy used against incoming RPC requests.
-func WithPolicy(policy string) Option {
+// WithAuthzPolicy applies an authz policy used against incoming RPC requests.
+func WithAuthzPolicy(policy rpcauth.AuthzPolicy) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		r.policy = p
-		return nil
-	})
-}
-
-// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
-func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
 		r.policy = policy
 		return nil
 	})
@@ -180,7 +166,7 @@ func WithStreamInterceptor(i grpc.StreamServerInterceptor) Option {
 }
 
 // WithAuthzHook adds an additional authz hook to be applied to the server.
-func WithAuthzHook(hook rpcauthz.RPCAuthzHook) Option {
+func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
 		return nil
@@ -409,13 +395,12 @@ func runInsecureUnixSocketServer(_ context.Context, rs *runState) error {
 // extractCommonOptionsFromRunState extracts infers server options from runState
 // which can be used for both the TCP and Unix socket servers.
 func extractCommonOptionsFromRunState(rs *runState) []server.Option {
-	justificationHook := rpcauthz.HookIf(rpcauthz.JustificationHook(rs.justificationFunc), func(input *rpcauthz.RPCAuthInput) bool {
+	justificationHook := rpcauth.HookIf(rpcauth.JustificationHook(rs.justificationFunc), func(input *rpcauth.RPCAuthInput) bool {
 		return rs.justification
 	})
 
 	var serverOpts []server.Option
-	serverOpts = append(serverOpts, server.WithRPCAuthorizer(rpcauth.New(rs.policy)))
-
+	serverOpts = append(serverOpts, server.WithAuthzPolicy(rs.policy))
 	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
 	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
 	for _, a := range rs.authzHooks {

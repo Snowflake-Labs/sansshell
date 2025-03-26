@@ -19,9 +19,9 @@ package server
 import (
 	"context"
 	"fmt"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -53,7 +53,7 @@ func (uc *unixPeerTransportCredentials) ServerHandshake(conn net.Conn) (net.Conn
 		return conn, insecureAuthInfo, nil
 	}
 
-	unixPeerAuthInfo := rpcauthz.UnixPeerAuthInfo{
+	unixPeerAuthInfo := rpcauth.UnixPeerAuthInfo{
 		CommonAuthInfo: credentials.CommonAuthInfo{SecurityLevel: credentials.NoSecurity},
 		Credentials:    *unixCreds,
 	}

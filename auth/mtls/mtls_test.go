@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"log"
 	"net"
 	"strings"
@@ -32,7 +31,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
@@ -167,14 +167,14 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
 
-	opaAuthorizer, err := rpcauth.NewWithPolicy(context.Background(), policy)
-	testutil.FatalOnErr("NewWithPolicy", err, t)
+	opaAuthzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
+	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
 	s, err := server.BuildServer(
 		server.WithCredentials(creds),
-		server.WithRPCAuthorizer(opaAuthorizer),
-		server.WithAuthzHook(rpcauthz.HostNetHook(lis.Addr())),
-		server.WithAuthzHook(rpcauthz.PeerPrincipalFromCertHook()),
+		server.WithAuthzPolicy(opaAuthzPolicy),
+		server.WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
+		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 	)
 	testutil.FatalOnErr("Could not build server", err, t)
 	listening := make(chan struct{})
@@ -330,7 +330,7 @@ func TestHealthCheck(t *testing.T) {
 		{
 			name:   "denied request",
 			policy: denyPolicy,
-			err:    "OPA policy does not permit this request",
+			err:    "Authz policy does not permit this request",
 		},
 		{
 			name:   "allowed peer by subject common name",
@@ -340,7 +340,7 @@ func TestHealthCheck(t *testing.T) {
 		{
 			name:   "denied peer by subject common name",
 			policy: denyPeerCommonName,
-			err:    "OPA policy does not permit this request",
+			err:    "Authz policy does not permit this request",
 		},
 		{
 			name:   "allowed peer by principal parsed from cert",
@@ -350,7 +350,7 @@ func TestHealthCheck(t *testing.T) {
 		{
 			name:   "denied peer by principal parsed from cert",
 			policy: denyPeerPrincipal,
-			err:    "OPA policy does not permit this request",
+			err:    "Authz policy does not permit this request",
 		},
 	} {
 		tc := tc

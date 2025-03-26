@@ -78,7 +78,7 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
    proxy.WithAuthzHook(mpa.ProxyMPAAuthzHook)
    ```
 
-   You'll also need to update the server's rego policies to reject requests that unexpectedly set `proxied-sansshell-identity` metadata if it allows callers other than the proxy to make direct calls. If you fail to do so, a direct caller can manipulate the metadata to approve their own request. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
+   If you use OPA for authz, you'll also need to update the server's rego policies to reject requests that unexpectedly set `proxied-sansshell-identity` metadata if it allows callers other than the proxy to make direct calls. If you fail to do so, a direct caller can manipulate the metadata to approve their own request. For example, the policy below will reject calls if proxied identity information is in the metadata and the caller is something other than a peer with an identity of `"proxy"`.
 
    ```rego
    package sansshell.authz
@@ -95,7 +95,7 @@ SansShell is built on a principle of "Don't pay for what you don't use". MPA is 
 
 4. Any approvers must be able to call `/Mpa.Mpa/Approve` and any requestor must be able to call `/Mpa.Mpa/Store`. It's highly recommended to additionally let potential approvers call `/Mpa.Mpa/Get` and potential requestors call `/Mpa.Mpa/WaitForApproval` for better user experiences. `/Mpa.Mpa/Clear` can be used for cancelling MPA requests.
 
-Approvers will show up in [RPCAuthInput](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth#RPCAuthInput). Match on these in the OPA policies.
+Approvers will show up in [RPCAuthInput](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell/auth/rpcauth/rpcauth#RPCAuthInput). If you use OPA for authz, here how you could match on these in the OPA policies.
 
 ```rego
 allow if {
@@ -190,7 +190,7 @@ sequenceDiagram
 
 ## Caveats
 
-- Due to the complexity of OPA policies, we don't support automatically recognizing that a request requires MPA.
+- Due to the complexity of authz implementation, we don't support automatically recognizing that a request requires MPA.
   - If you want to give feedback that an action would succeed with MPA, check out [DenialHints](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell/auth/opa#WithDenialHintsQuery)
 - We also don't support recognizing in advance whether MPA would let an action succeed.
 - You can easily write policies that allow people to approve actions even if their approval isn't useful

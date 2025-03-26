@@ -18,29 +18,23 @@ package rpcauth
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
-	"net/url"
 	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"go.uber.org/mock/gomock"
+
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
@@ -93,9 +87,6 @@ func TestAuthzHook(t *testing.T) {
 	var logs string
 	logger := funcr.NewJSON(func(obj string) { logs = obj }, funcr.Options{Verbosity: 2})
 	ctx = logr.NewContext(ctx, logger)
-	// This way the tests exercise the logging code.
-	policy, err := opa.NewAuthzPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewAuthzPolicy", err, t)
 
 	tcp, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:1")
 	testutil.FatalOnErr("ResolveIPAddr", err, t)
@@ -139,28 +130,34 @@ func TestAuthzHook(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		input   *rpcauthz.RPCAuthInput
-		hooks   []rpcauthz.RPCAuthzHook
+		input   *RPCAuthInput
+		hooks   []RPCAuthzHook
 		errFunc func(*testing.T, error)
 		logFunc func(*testing.T, string)
+
+		authzMockEval   bool
+		authzEvalResult bool
 	}{
 		{
 			name:    "nil input, no hooks",
 			input:   nil,
-			hooks:   []rpcauthz.RPCAuthzHook{},
+			hooks:   []RPCAuthzHook{},
 			errFunc: wantStatusCode(codes.InvalidArgument),
 		},
 		{
 			name:    "empty input, no hooks, deny",
-			input:   &rpcauthz.RPCAuthInput{},
-			hooks:   []rpcauthz.RPCAuthzHook{},
+			input:   &RPCAuthInput{},
+			hooks:   []RPCAuthzHook{},
 			errFunc: wantStatusCode(codes.PermissionDenied),
+
+			authzMockEval:   true,
+			authzEvalResult: false,
 		},
 		{
 			name:  "single hook, create allow",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.Message = []byte("{}")
 					input.MessageType = "google.protobuf.Empty"
@@ -168,41 +165,50 @@ func TestAuthzHook(t *testing.T) {
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "extension hook",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Extensions = extensions
 					return nil
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "multiple hooks, create allow",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.Message = []byte("{}")
 					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Message = []byte("{}")
 					input.MessageType = "google.protobuf.Empty"
 					return nil
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "single hook, hook reject with code",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					return status.Error(codes.FailedPrecondition, "hook failed")
 				}),
 			},
@@ -210,12 +216,12 @@ func TestAuthzHook(t *testing.T) {
 		},
 		{
 			name:  "multi-hook, first hook rejects with code",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					return status.Error(codes.FailedPrecondition, "hook failed")
 				}),
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					// never invoked
 					return nil
 				}),
@@ -224,12 +230,12 @@ func TestAuthzHook(t *testing.T) {
 		},
 		{
 			name:  "multi-hook, last hook rejects with code",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					return nil
 				}),
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					return status.Error(codes.FailedPrecondition, "hook failed")
 				}),
 			},
@@ -237,9 +243,9 @@ func TestAuthzHook(t *testing.T) {
 		},
 		{
 			name:  "single hook, hook reject without code",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(ctx context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(ctx context.Context, input *RPCAuthInput) error {
 					return errors.New("non status")
 				}),
 			},
@@ -247,30 +253,33 @@ func TestAuthzHook(t *testing.T) {
 		},
 		{
 			name:  "hook ordering",
-			input: &rpcauthz.RPCAuthInput{},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.Method = "/Foo.Bar/Baz"
 					input.MessageType = "google.protobuf.Empty"
 					input.Message = []byte("{}")
 					return nil
 				}),
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					input.MessageType = "google.protobuf.Empty"
 					input.Message = []byte("{}")
 					return nil
 				}),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "synthesize data, allow",
-			input: &rpcauthz.RPCAuthInput{Method: "/Foo.Bar/Foo"},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
+			input: &RPCAuthInput{Method: "/Foo.Bar/Foo"},
+			hooks: []RPCAuthzHook{
+				RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
 					if input.Peer == nil {
-						input.Peer = &rpcauthz.PeerAuthInput{
-							Principal: &rpcauthz.PrincipalAuthInput{
+						input.Peer = &PeerAuthInput{
+							Principal: &PrincipalAuthInput{
 								ID:     "admin@foo",
 								Groups: []string{"group_bar"},
 							},
@@ -292,81 +301,93 @@ func TestAuthzHook(t *testing.T) {
 					},
 				},
 			),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "synthesize network data, allow",
-			input: &rpcauthz.RPCAuthInput{Method: "/Foo.Bar/Foo"},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HostNetHook(tcp),
+			input: &RPCAuthInput{Method: "/Foo.Bar/Foo"},
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name: "network data allow with justification (no func)",
-			input: &rpcauthz.RPCAuthInput{
+			input: &RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					rpcauthz.ReqJustKey: []string{"justification"},
+					ReqJustKey: []string{"justification"},
 				},
 			},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HostNetHook(tcp),
-				rpcauthz.JustificationHook(nil),
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(nil),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name: "network data allow with justification req but none given (no func)",
-			input: &rpcauthz.RPCAuthInput{
+			input: &RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 			},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HostNetHook(tcp),
-				rpcauthz.JustificationHook(nil),
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(nil),
 			},
 			errFunc: wantStatusCode(codes.FailedPrecondition),
 		},
 		{
 			name: "network data allow with justification (with func)",
-			input: &rpcauthz.RPCAuthInput{
+			input: &RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					rpcauthz.ReqJustKey: []string{"justification"},
+					ReqJustKey: []string{"justification"},
 				},
 			},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HostNetHook(tcp),
-				rpcauthz.JustificationHook(func(string) error { return nil }),
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(func(string) error { return nil }),
 			},
 			errFunc: wantStatusCode(codes.OK),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name: "network data allow with justification req given and func fails",
-			input: &rpcauthz.RPCAuthInput{
+			input: &RPCAuthInput{
 				Method: "/Foo.Bar/Foo",
 				Metadata: metadata.MD{
-					rpcauthz.ReqJustKey: []string{"justification"},
+					ReqJustKey: []string{"justification"},
 				},
 			},
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HostNetHook(tcp),
-				rpcauthz.JustificationHook(func(string) error { return errors.New("error") }),
+			hooks: []RPCAuthzHook{
+				HostNetHook(tcp),
+				JustificationHook(func(string) error { return errors.New("error") }),
 			},
 			errFunc: wantStatusCode(codes.FailedPrecondition),
 		},
 		{
 			name:  "conditional hook, triggered",
-			input: &rpcauthz.RPCAuthInput{Method: "/Some.Random/Method"},
+			input: &RPCAuthInput{Method: "/Some.Random/Method"},
 			// Set principal to admin if method = "/Some.Random/Method"
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HookIf(rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
-					input.Peer = &rpcauthz.PeerAuthInput{
-						Principal: &rpcauthz.PrincipalAuthInput{
+			hooks: []RPCAuthzHook{
+				HookIf(RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+					input.Peer = &PeerAuthInput{
+						Principal: &PrincipalAuthInput{
 							ID: "admin@foo",
 						},
 					}
 					return nil
-				}), func(input *rpcauthz.RPCAuthInput) bool {
+				}), func(input *RPCAuthInput) bool {
 					return input.Method == "/Some.Random/Method"
 				}),
 			},
@@ -383,29 +404,43 @@ func TestAuthzHook(t *testing.T) {
 					},
 				},
 			),
+
+			authzMockEval:   true,
+			authzEvalResult: true,
 		},
 		{
 			name:  "conditional hook, not-triggered",
-			input: &rpcauthz.RPCAuthInput{Method: "/Some.Other/Method"},
+			input: &RPCAuthInput{Method: "/Some.Other/Method"},
 			// Set principal to admin if method = "/Some.Random/Method"
-			hooks: []rpcauthz.RPCAuthzHook{
-				rpcauthz.HookIf(rpcauthz.RPCAuthzHookFunc(func(_ context.Context, input *rpcauthz.RPCAuthInput) error {
-					input.Peer = &rpcauthz.PeerAuthInput{
-						Principal: &rpcauthz.PrincipalAuthInput{
+			hooks: []RPCAuthzHook{
+				HookIf(RPCAuthzHookFunc(func(_ context.Context, input *RPCAuthInput) error {
+					input.Peer = &PeerAuthInput{
+						Principal: &PrincipalAuthInput{
 							ID: "admin@foo",
 						},
 					}
 					return nil
-				}), func(input *rpcauthz.RPCAuthInput) bool {
+				}), func(input *RPCAuthInput) bool {
 					return input.Method == "/Some.Random/Method"
 				}),
 			},
 			errFunc: wantStatusCode(codes.PermissionDenied),
+
+			authzMockEval:   true,
+			authzEvalResult: false,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			authz := New(policy, tc.hooks...)
+			ctrl := gomock.NewController(t)
+			authzPolicyMock := NewMockAuthzPolicy(ctrl)
+			if tc.authzMockEval {
+				authzPolicyMock.EXPECT().Eval(gomock.Any(), gomock.Any()).Return(tc.authzEvalResult, nil)
+				if !tc.authzEvalResult {
+					authzPolicyMock.EXPECT().DenialHints(gomock.Any(), gomock.Any()).Return([]string{""}, nil)
+				}
+			}
+			authz := NewRPCAuthorizer(authzPolicyMock, tc.hooks...)
 			err := authz.Eval(ctx, tc.input)
 			tc.errFunc(t, err)
 			if tc.logFunc != nil {
@@ -413,190 +448,6 @@ func TestAuthzHook(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestNewWithPolicy(t *testing.T) {
-	ctx := context.Background()
-	_, err := NewWithPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewWithPolicy valid", err, t)
-	if _, err := NewWithPolicy(ctx, ""); err == nil {
-		t.Error("didn't get error for empty policy")
-	}
-}
-
-type testAuthInfo struct {
-	credentials.CommonAuthInfo
-}
-
-func (testAuthInfo) AuthType() string {
-	return "testAuthInfo"
-}
-
-func TestRpcAuthInput(t *testing.T) {
-	md := metadata.New(map[string]string{
-		"foo": "foo",
-		"bar": "bar",
-	})
-	tcp, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:1")
-	testutil.FatalOnErr("ResolveIPAddr", err, t)
-
-	ctx := context.Background()
-
-	for _, tc := range []struct {
-		name    string
-		ctx     context.Context
-		method  string
-		req     proto.Message
-		compare *rpcauthz.RPCAuthInput
-	}{
-		{
-			name:   "method only",
-			ctx:    ctx,
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer:   nil,
-			},
-		},
-		{
-			name:   "method and metadata",
-			ctx:    metadata.NewIncomingContext(ctx, md),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method:   "/AMethod",
-				Metadata: md,
-				Peer:     nil,
-			},
-		},
-		{
-			name:   "method and request",
-			ctx:    ctx,
-			method: "/AMethod",
-			req:    &emptypb.Empty{},
-			compare: &rpcauthz.RPCAuthInput{
-				Method:      "/AMethod",
-				Message:     json.RawMessage{0x7b, 0x7d},
-				MessageType: "google.protobuf.Empty",
-				Peer:        nil,
-			},
-		},
-		{
-			name:   "method and a peer context but no addr",
-			ctx:    peer.NewContext(ctx, &peer.Peer{}),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer:   &rpcauthz.PeerAuthInput{},
-			},
-		},
-		{
-			name: "method and a peer context",
-			ctx: peer.NewContext(ctx, &peer.Peer{
-				Addr: tcp,
-			}),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer: &rpcauthz.PeerAuthInput{
-					Net: &rpcauthz.NetAuthInput{
-						Network: "tcp",
-						Address: "127.0.0.1",
-						Port:    "1",
-					},
-				},
-			},
-		},
-		{
-			name: "method and a peer context with non tls auth",
-			ctx: peer.NewContext(ctx, &peer.Peer{
-				Addr:     tcp,
-				AuthInfo: testAuthInfo{},
-			}),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer: &rpcauthz.PeerAuthInput{
-					Net: &rpcauthz.NetAuthInput{
-						Network: "tcp",
-						Address: "127.0.0.1",
-						Port:    "1",
-					},
-					Cert: &rpcauthz.CertAuthInput{},
-				},
-			},
-		},
-		{
-			name: "method and a peer context with tls auth",
-			ctx: peer.NewContext(ctx, &peer.Peer{
-				Addr: tcp,
-				AuthInfo: credentials.TLSInfo{
-					SPIFFEID: &url.URL{
-						Path: "/",
-					},
-					State: tls.ConnectionState{
-						PeerCertificates: []*x509.Certificate{
-							{}, // Don't need an actual cert, a placeholder will work.
-						},
-					},
-				},
-			}),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer: &rpcauthz.PeerAuthInput{
-					Net: &rpcauthz.NetAuthInput{
-						Network: "tcp",
-						Address: "127.0.0.1",
-						Port:    "1",
-					},
-					Cert: &rpcauthz.CertAuthInput{SPIFFEID: "/"},
-				},
-			},
-		},
-		{
-			name: "method and a peer context with unix creds",
-			ctx: peer.NewContext(ctx, &peer.Peer{
-				Addr: &net.UnixAddr{Net: "unix", Name: "@"},
-				AuthInfo: rpcauthz.UnixPeerAuthInfo{
-					CommonAuthInfo: credentials.CommonAuthInfo{
-						SecurityLevel: credentials.NoSecurity,
-					},
-					Credentials: rpcauthz.UnixPeerCredentials{
-						Uid:        1,
-						UserName:   "george",
-						Gids:       []int{1001, 2},
-						GroupNames: []string{"george", "the_gang"},
-					},
-				},
-			}),
-			method: "/AMethod",
-			compare: &rpcauthz.RPCAuthInput{
-				Method: "/AMethod",
-				Peer: &rpcauthz.PeerAuthInput{
-					Net: &rpcauthz.NetAuthInput{
-						Network: "unix",
-						Address: "@",
-						Port:    "",
-					},
-					Unix: &rpcauthz.UnixAuthInput{
-						Uid:        1,
-						UserName:   "george",
-						Gids:       []int{1001, 2},
-						GroupNames: []string{"george", "the_gang"},
-					},
-					Cert: &rpcauthz.CertAuthInput{},
-				},
-			},
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			rpcauth, err := rpcauthz.NewRPCAuthInput(tc.ctx, tc.method, tc.req)
-			testutil.FatalOnErr(tc.name, err, t)
-			testutil.DiffErr(tc.name, rpcauth, tc.compare, t)
-		})
-	}
-
 }
 
 func TestAuthorize(t *testing.T) {
@@ -610,12 +461,14 @@ func TestAuthorize(t *testing.T) {
 		return nil, nil
 	}
 	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	authzPolicyMock := NewMockAuthzPolicy(ctrl)
+	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
 
-	authorizer, err := NewWithPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewWithPolicy", err, t)
+	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
 	// Should fail on no proto.Message
-	_, err = authorizer.Authorize(ctx, nil, info, handler)
+	_, err := authorizer.Authorize(ctx, nil, info, handler)
 	testutil.FatalOnNoErr("not a proto message", err, t)
 
 	// Should function normally
@@ -626,10 +479,9 @@ func TestAuthorize(t *testing.T) {
 	}
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(ctx, policyString, rpcauthz.RPCAuthzHookFunc(func(context.Context, *rpcauthz.RPCAuthInput) error {
+	authorizer = NewRPCAuthorizer(authzPolicyMock, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
-	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
 
 	// This time it should fail due to the hook.
 	_, err = authorizer.Authorize(ctx, req, info, handler)
@@ -647,11 +499,14 @@ func TestAuthorizeClient(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	authorizer, err := NewWithPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewWithPolicy", err, t)
+	ctrl := gomock.NewController(t)
+	authzPolicyMock := NewMockAuthzPolicy(ctrl)
+	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+
+	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
 	// Should fail on no proto.Message
-	err = authorizer.AuthorizeClient(ctx, method, nil, nil, nil, invoker)
+	err := authorizer.AuthorizeClient(ctx, method, nil, nil, nil, invoker)
 	testutil.FatalOnNoErr("not a proto message", err, t)
 
 	// Should function normally
@@ -662,10 +517,9 @@ func TestAuthorizeClient(t *testing.T) {
 	}
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(ctx, policyString, rpcauthz.RPCAuthzHookFunc(func(context.Context, *rpcauthz.RPCAuthInput) error {
+	authorizer = NewRPCAuthorizer(authzPolicyMock, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
-	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
 
 	// This time it should fail due to the hook.
 	err = authorizer.AuthorizeClient(ctx, method, req, nil, nil, invoker)
@@ -706,10 +560,12 @@ func TestAuthorizeStream(t *testing.T) {
 
 	fake := &fakeServerStream{Ctx: ctx}
 
-	authorizer, err := NewWithPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewWithPolicy", err, t)
+	ctrl := gomock.NewController(t)
+	authzPolicyMock := NewMockAuthzPolicy(ctrl)
+	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
-	err = authorizer.AuthorizeStream(req, fake, info, handler)
+	err := authorizer.AuthorizeStream(req, fake, info, handler)
 	testutil.FatalOnErr("AuthorizeStream", err, t)
 
 	// Should fail with a normal fake server
@@ -721,10 +577,9 @@ func TestAuthorizeStream(t *testing.T) {
 	testutil.FatalOnNoErr("AuthorizeStream non proto", err, t)
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(ctx, policyString, rpcauthz.RPCAuthzHookFunc(func(context.Context, *rpcauthz.RPCAuthInput) error {
+	authorizer = NewRPCAuthorizer(authzPolicyMock, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
-	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
 
 	// This time it should fail due to the hook.
 	err = authorizer.AuthorizeStream(req, fake, info, handler)
@@ -748,11 +603,13 @@ func TestAuthorizeClientStream(t *testing.T) {
 		return nil, errors.New("error")
 	}
 
-	authorizer, err := NewWithPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewWithPolicy", err, t)
+	ctrl := gomock.NewController(t)
+	authzPolicyMock := NewMockAuthzPolicy(ctrl)
+	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
 	// Test bad streamer returns error
-	_, err = authorizer.AuthorizeClientStream(ctx, desc, nil, method, badStreamer)
+	_, err := authorizer.AuthorizeClientStream(ctx, desc, nil, method, badStreamer)
 	testutil.FatalOnNoErr("AuthorizeClientStream with bad streamer", err, t)
 
 	stream, err := authorizer.AuthorizeClientStream(ctx, desc, nil, method, streamer)
@@ -767,10 +624,9 @@ func TestAuthorizeClientStream(t *testing.T) {
 	testutil.FatalOnErr("AuthorizeClientStream real request", err, t)
 
 	// Create one with a hook so we can fail.
-	authorizer, err = NewWithPolicy(ctx, policyString, rpcauthz.RPCAuthzHookFunc(func(context.Context, *rpcauthz.RPCAuthInput) error {
+	authorizer = NewRPCAuthorizer(authzPolicyMock, RPCAuthzHookFunc(func(context.Context, *RPCAuthInput) error {
 		return status.Error(codes.FailedPrecondition, "hook failed")
 	}))
-	testutil.FatalOnErr("NewWithPolicy with hooks", err, t)
 
 	// This time it should fail due to the hook.
 	stream, err = authorizer.AuthorizeClientStream(ctx, desc, nil, method, streamer)

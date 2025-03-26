@@ -21,8 +21,8 @@ package proxiedidentity
 import (
 	"context"
 	"encoding/json"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -44,7 +44,7 @@ func ServerProxiedIdentityUnaryInterceptor() grpc.UnaryServerInterceptor {
 
 // AppendToMetadataInOutgoingContext includes the identity in the grpc metadata
 // used in outgoing calls with the context.
-func AppendToMetadataInOutgoingContext(ctx context.Context, p *rpcauthz.PrincipalAuthInput) context.Context {
+func AppendToMetadataInOutgoingContext(ctx context.Context, p *rpcauth.PrincipalAuthInput) context.Context {
 	b, err := json.Marshal(p)
 	if err != nil {
 		// There shouldn't be any possible value of PrincipalAuthInput that fails to marshal, so let's
@@ -62,7 +62,7 @@ func AppendToMetadataInOutgoingContext(ctx context.Context, p *rpcauthz.Principa
 //
 // Failing to do this authz check can let any caller assert any proxied identity, which
 // can let a caller take dangerous actions like approving their own MPA requests.
-func FromContext(ctx context.Context) *rpcauthz.PrincipalAuthInput {
+func FromContext(ctx context.Context) *rpcauth.PrincipalAuthInput {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		return nil
@@ -73,7 +73,7 @@ func FromContext(ctx context.Context) *rpcauthz.PrincipalAuthInput {
 		return nil
 	}
 
-	parsed := new(rpcauthz.PrincipalAuthInput)
+	parsed := new(rpcauth.PrincipalAuthInput)
 	if err := json.Unmarshal([]byte(identity[0]), parsed); err != nil {
 		return nil
 	}

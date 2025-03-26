@@ -18,13 +18,12 @@ package proxiedidentity
 
 import (
 	"context"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauthz"
 	"net"
 	"reflect"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	healthcheckpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -98,7 +97,7 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			desc: "passed",
 			srvInterceptors: []grpc.UnaryServerInterceptor{
 				ServerProxiedIdentityUnaryInterceptor(),
-				rpcauth.New(passingAuthz).Authorize,
+				rpcauth.NewRPCAuthorizer(passingAuthz).Authorize,
 			},
 			identityProxied: true,
 		},
@@ -106,7 +105,7 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			desc: "interceptor says no",
 			srvInterceptors: []grpc.UnaryServerInterceptor{
 				ServerProxiedIdentityUnaryInterceptor(),
-				rpcauth.New(failingAuthz).Authorize,
+				rpcauth.NewRPCAuthorizer(failingAuthz).Authorize,
 			},
 			rpcError:        true,
 			identityProxied: false,
@@ -133,13 +132,13 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			}
 			client := healthcheckpb.NewHealthCheckClient(conn)
 
-			identity := &rpcauthz.PrincipalAuthInput{
+			identity := &rpcauth.PrincipalAuthInput{
 				ID:     "foobar",
 				Groups: []string{"baz"},
 			}
 
 			ctx = AppendToMetadataInOutgoingContext(ctx, identity)
-			var gotIdentity *rpcauthz.PrincipalAuthInput
+			var gotIdentity *rpcauth.PrincipalAuthInput
 			var gotMetadata []string
 			healthcheck.callback = func(ctx context.Context) {
 				gotIdentity = FromContext(ctx)
