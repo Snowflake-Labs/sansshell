@@ -49,8 +49,8 @@ var (
 )
 
 type AuthzPolicy interface {
-	Eval(ctx context.Context, input interface{}) (bool, error)
-	DenialHints(ctx context.Context, input interface{}) ([]string, error)
+	Eval(ctx context.Context, input *RPCAuthInput) (bool, error)
+	DenialHints(ctx context.Context, input *RPCAuthInput) ([]string, error)
 }
 
 type RPCAuthorizer interface {

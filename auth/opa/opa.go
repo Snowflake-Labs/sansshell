@@ -155,7 +155,7 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth
 // Eval evaluates this policy using the provided input, returning 'true'
 // iff the evaulation was successful, and the operation represented by
 // `input` is permitted by the policy.
-func (q *AuthzPolicy) Eval(ctx context.Context, input interface{}) (bool, error) {
+func (q *AuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) (bool, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	results, err := q.query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
@@ -171,7 +171,7 @@ func (q *AuthzPolicy) Eval(ctx context.Context, input interface{}) (bool, error)
 // of strings with reasons for the denial. This is typically used after getting
 // a rejection from Eval to give more hints on why the rejection happened.
 // It is a no-op if opa.WithDenialHintsQuery was not used.
-func (q *AuthzPolicy) DenialHints(ctx context.Context, input interface{}) ([]string, error) {
+func (q *AuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuthInput) ([]string, error) {
 	if q.denialHintsQuery == nil {
 		return nil, nil
 	}
