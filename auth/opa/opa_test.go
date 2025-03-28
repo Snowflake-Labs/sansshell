@@ -99,7 +99,7 @@ func TestNewAuthzPolicy(t *testing.T) {
 			if tc.hintQuery != "" {
 				opts = append(opts, WithDenialHintsQuery(tc.hintQuery))
 			}
-			_, err := NewAuthzPolicy(context.Background(), tc.policy, opts...)
+			_, err := NewOpaAuthzPolicy(context.Background(), tc.policy, opts...)
 			tc.errFunc(t, err)
 		})
 	}
@@ -127,8 +127,8 @@ allow {
 }
 `
 	ctx := context.Background()
-	policy, err := NewAuthzPolicy(ctx, policyString)
-	testutil.FatalOnErr("NewAuthzPolicy", err, t)
+	policy, err := NewOpaAuthzPolicy(ctx, policyString)
+	testutil.FatalOnErr("NewOpaAuthzPolicy", err, t)
 
 	expectNoError := func(t *testing.T, err error) {
 		testutil.FatalOnErr(t.Name(), err, t)
@@ -223,8 +223,8 @@ denial_hints[msg] {
 }
 `
 	ctx := context.Background()
-	policy, err := NewAuthzPolicy(ctx, policyString, WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
-	testutil.FatalOnErr("NewAuthzPolicy", err, t)
+	policy, err := NewOpaAuthzPolicy(ctx, policyString, WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	testutil.FatalOnErr("NewOpaAuthzPolicy", err, t)
 
 	for _, tc := range []struct {
 		name    string

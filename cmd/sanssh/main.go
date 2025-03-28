@@ -193,7 +193,7 @@ func main() {
 	var clientPolicy rpcauth.AuthzPolicy
 	if opaClientPolicy != "" {
 		var err error
-		clientPolicy, err = opa.NewAuthzPolicy(ctx, opaClientPolicy)
+		clientPolicy, err = opa.NewOpaAuthzPolicy(ctx, opaClientPolicy)
 		if err != nil {
 			logger.Error(err, "Could not load policy")
 		}

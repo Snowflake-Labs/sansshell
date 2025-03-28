@@ -48,9 +48,9 @@ var (
 	sansshellPackage = ast.MustParsePackage(fmt.Sprintf("package %s", SansshellRegoPackage))
 )
 
-// An AuthzPolicy performs policy checking by evaluating input against
+// An opaAuthzPolicy performs policy checking by evaluating input against
 // a sansshell rego policy file.
-type AuthzPolicy struct {
+type opaAuthzPolicy struct {
 	query            rego.PreparedEvalQuery
 	denialHintsQuery *rego.PreparedEvalQuery
 	b                *bytes.Buffer
@@ -61,7 +61,7 @@ type policyOptions struct {
 	denialHintsQuery string
 }
 
-// An Option controls the behavior of an AuthzPolicy
+// An Option controls the behavior of an opaAuthzPolicy
 type Option interface {
 	apply(*policyOptions)
 }
@@ -100,11 +100,11 @@ func WithDenialHintsQuery(query string) Option {
 	})
 }
 
-// NewAuthzPolicy creates a new AuthzPolicy by parsing the policy given
+// NewOpaAuthzPolicy creates a new opaAuthzPolicy by parsing the policy given
 // in the string `policy`.
 // It returns an error if the policy cannot be parsed, or does not use
 // SansshellRegoPackage in its package declaration.
-func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth.AuthzPolicy, error) {
+func NewOpaAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth.AuthzPolicy, error) {
 	options := &policyOptions{
 		query: DefaultAuthzQuery,
 	}
@@ -145,7 +145,7 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth
 		}
 		denialHintsQuery = &hints
 	}
-	return &AuthzPolicy{
+	return &opaAuthzPolicy{
 		query:            prepared,
 		denialHintsQuery: denialHintsQuery,
 		b:                b,
@@ -155,7 +155,7 @@ func NewAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpcauth
 // Eval evaluates this policy using the provided input, returning 'true'
 // iff the evaulation was successful, and the operation represented by
 // `input` is permitted by the policy.
-func (q *AuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) (bool, error) {
+func (q *opaAuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) (bool, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	results, err := q.query.Eval(ctx, rego.EvalInput(input))
 	if err != nil {
@@ -171,7 +171,7 @@ func (q *AuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) (bo
 // of strings with reasons for the denial. This is typically used after getting
 // a rejection from Eval to give more hints on why the rejection happened.
 // It is a no-op if opa.WithDenialHintsQuery was not used.
-func (q *AuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuthInput) ([]string, error) {
+func (q *opaAuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuthInput) ([]string, error) {
 	if q.denialHintsQuery == nil {
 		return nil, nil
 	}
@@ -211,9 +211,9 @@ func (q *AuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuthInp
 //
 //	distinct policy for client vs server, create 2 Authorizer's.
 func NewOpaRPCAuthorizer(ctx context.Context, opaPolicy string, authzHooks ...rpcauth.RPCAuthzHook) (rpcauth.RPCAuthorizer, error) {
-	authzPolicy, err := NewAuthzPolicy(ctx, opaPolicy)
+	opaAuthzPolicy, err := NewOpaAuthzPolicy(ctx, opaPolicy)
 	if err != nil {
 		return nil, err
 	}
-	return rpcauth.NewRPCAuthorizer(authzPolicy, authzHooks...), nil
+	return rpcauth.NewRPCAuthorizer(opaAuthzPolicy, authzHooks...), nil
 }

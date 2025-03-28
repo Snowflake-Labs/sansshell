@@ -34,7 +34,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
-//go:generate mockgen -source=./rpcauth.go -destination=./rpcauth_mock.go -package=rpcauth AuthzPolicy
+//go:generate mockgen -destination=./rpcauth_mock.go -package=rpcauth . AuthzPolicy
 
 // Metrics
 var (
@@ -72,9 +72,6 @@ type RPCAuthorizer interface {
 
 	// AuthorizeClientStream implements grpc.StreamClientInterceptor and applies policy checks on any SendMsg calls to remote service
 	AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error)
-
-	// AppendHooks adds additional hooks to the authorizer to execute before authz policy evaluation
-	AppendHooks(hooks ...RPCAuthzHook)
 }
 
 // An Authorizer performs authorization of Sanshsell RPCs based on
@@ -223,10 +220,6 @@ func (g *rpcAuthorizerImpl) AuthorizeClientStream(ctx context.Context, desc *grp
 		authz:        g,
 	}
 	return wrapped, nil
-}
-
-func (g *rpcAuthorizerImpl) AppendHooks(hooks ...RPCAuthzHook) {
-	g.hooks = append(g.hooks, hooks...)
 }
 
 // wrappedClientStream wraps an existing grpc.ClientStream with authorization checking.

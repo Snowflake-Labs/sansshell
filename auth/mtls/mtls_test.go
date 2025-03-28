@@ -167,8 +167,8 @@ func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Ser
 	testutil.FatalOnErr("Failed to load server cert", err, t)
 	lis := bufconn.Listen(bufSize)
 
-	opaAuthzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
-	testutil.FatalOnErr("NewAuthzPolicy", err, t)
+	opaAuthzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
+	testutil.FatalOnErr("NewOpaAuthzPolicy", err, t)
 
 	s, err := server.BuildServer(
 		server.WithCredentials(creds),

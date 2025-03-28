@@ -129,14 +129,14 @@ func main() {
 	var clientOpaAuthzPolicy rpcauth.AuthzPolicy
 	if clientPolicy != "" {
 		var err error
-		clientOpaAuthzPolicy, err = opa.NewAuthzPolicy(ctx, clientPolicy)
+		clientOpaAuthzPolicy, err = opa.NewOpaAuthzPolicy(ctx, clientPolicy)
 		if err != nil {
 			log.Fatalf("Invalid client policy: %v\n", err)
 		}
 	}
 
 	// authz policy for inbound requests
-	parsedOpaAuthPolicy, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	parsedOpaAuthPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
 		log.Fatalf("Invalid policy: %v\n", err)
 	}

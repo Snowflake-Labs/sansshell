@@ -81,7 +81,7 @@ func stopSoon(s *grpc.Server) {
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
 
-	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		log.Fatalf("Could not build authorizer: %s", err)
 		os.Exit(m.Run())
@@ -118,7 +118,7 @@ func TestServe(t *testing.T) {
 	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		testutil.FatalOnNoErr("authorizer creation", err, t)
 	}
@@ -140,7 +140,7 @@ func TestServeUnix(t *testing.T) {
 	err := ServeUnix(socketPath, nil)
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	authzPolicy, err := opa.NewAuthzPolicy(context.Background(), policy)
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
 	if err != nil {
 		testutil.FatalOnNoErr("authorizer creation", err, t)
 	}
@@ -291,7 +291,7 @@ allow {
 		t.Run(tc.name, func(t *testing.T) {
 			policy := fmt.Sprintf(policyTemplateWithUnixCreds, tc.policyFragment)
 			ctx := context.Background()
-			authzPolicy, err := opa.NewAuthzPolicy(ctx, policy)
+			authzPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy)
 			testutil.FatalOnErr("Policy creation", err, t)
 
 			err = ServeUnix(socketPath,

@@ -162,7 +162,7 @@ func main() {
 	ctx := logr.NewContext(context.Background(), logger)
 	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
-	authzPolicy, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	authzPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
 		log.Fatalf("Invalid policy: %v\n", err)
 	}

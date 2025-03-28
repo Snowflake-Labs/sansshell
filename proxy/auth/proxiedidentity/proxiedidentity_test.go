@@ -74,11 +74,11 @@ allow {
 func TestProxyingIdentityOverRPC(t *testing.T) {
 	ctx := context.Background()
 
-	passingAuthz, err := opa.NewAuthzPolicy(ctx, passingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	passingAuthz, err := opa.NewOpaAuthzPolicy(ctx, passingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	failingAuthz, err := opa.NewAuthzPolicy(ctx, failingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	failingAuthz, err := opa.NewOpaAuthzPolicy(ctx, failingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
 	if err != nil {
 		t.Fatal(err)
 	}
