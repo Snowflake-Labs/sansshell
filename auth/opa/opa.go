@@ -208,8 +208,7 @@ func (q *opaAuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuth
 // authorization hooks will be executed, in the order provided, on each policy
 // evaluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
-//
-//	distinct policy for client vs server, create 2 Authorizer's.
+// distinct policy for client vs server, create 2 Authorizer's.
 func NewOpaRPCAuthorizer(ctx context.Context, opaPolicy string, authzHooks ...rpcauth.RPCAuthzHook) (rpcauth.RPCAuthorizer, error) {
 	opaAuthzPolicy, err := NewOpaAuthzPolicy(ctx, opaPolicy)
 	if err != nil {
