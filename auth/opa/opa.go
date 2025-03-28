@@ -157,7 +157,15 @@ func NewOpaAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpca
 // `input` is permitted by the policy.
 func (q *opaAuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) (bool, error) {
 	logger := logr.FromContextOrDiscard(ctx)
-	results, err := q.query.Eval(ctx, rego.EvalInput(input))
+
+	var evalInput rego.EvalOption
+	if input == nil {
+		evalInput = rego.EvalInput(nil)
+	} else {
+		evalInput = rego.EvalInput(input)
+	}
+
+	results, err := q.query.Eval(ctx, evalInput)
 	if err != nil {
 		return false, fmt.Errorf("authz policy evaluation error: %w", err)
 	}

@@ -18,6 +18,8 @@ package opa
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"reflect"
 	"strings"
 	"testing"
@@ -110,20 +112,20 @@ func TestAuthzPolicyEval(t *testing.T) {
 package sansshell.authz
 
 allow {
-  input.foo = "bar"
+  input.method = "foo/bar"
 }
 
 allow {
-  input.bar = "foo"
+  input.type = "bar/foo"
 }
 
 allow {
-  input.foo = "baz"
-  input.bar = "bazzle"
+  input.method = "foo/baz"
+  input.type = "bar/bazzle"
 }
 
 allow {
-  "okayOne" in input.group
+  "okayOne" in input.approvers[_].groups
 }
 `
 	ctx := context.Background()
@@ -136,7 +138,7 @@ allow {
 
 	for _, tc := range []struct {
 		name    string
-		input   interface{}
+		input   *rpcauth.RPCAuthInput
 		allowed bool
 		errFunc func(*testing.T, error)
 	}{
@@ -148,43 +150,58 @@ allow {
 		},
 		{
 			name:    "unmatched input",
-			input:   map[string]string{"no": "match"},
+			input:   &rpcauth.RPCAuthInput{Method: "no-match"},
 			allowed: false,
 			errFunc: expectNoError,
 		},
 		{
 			name:    "partial match",
-			input:   map[string]string{"foo": "baz"},
+			input:   &rpcauth.RPCAuthInput{Method: "foo/baz"},
 			allowed: false,
 			errFunc: expectNoError,
 		},
 		{
 			name:    "allowed case 1",
-			input:   map[string]string{"foo": "bar"},
+			input:   &rpcauth.RPCAuthInput{Method: "foo/bar"},
 			allowed: true,
 			errFunc: expectNoError,
 		},
 		{
 			name:    "allowed case 2",
-			input:   map[string]string{"foo": "baz", "bar": "bazzle"},
+			input:   &rpcauth.RPCAuthInput{Method: "foo/baz", MessageType: "bar/bazzle"},
 			allowed: true,
 			errFunc: expectNoError,
 		},
 		{
-			name:    "allowed case 3",
-			input:   map[string][]string{"group": {"okayOne", "okayTwo"}},
+			name: "allowed case 3",
+			input: &rpcauth.RPCAuthInput{
+				Method: "foo/baz",
+				Approvers: []*rpcauth.PrincipalAuthInput{
+					{
+						Groups: []string{"okayOne", "okayTwo"},
+					},
+				},
+			},
 			allowed: true,
 			errFunc: expectNoError,
 		},
 		{
-			name:    "in not matched",
-			input:   map[string][]string{"group": {"okayThree", "okayFour"}},
+			name: "in not matched",
+			input: &rpcauth.RPCAuthInput{
+				Method: "foo/baz", Approvers: []*rpcauth.PrincipalAuthInput{
+					{
+						Groups: []string{"okayThree", "okayFour"},
+					},
+				},
+			},
 			allowed: false,
 			errFunc: expectNoError,
 		},
 		{
-			name:  "input with unmarshalable type",
-			input: func() {},
+			name: "input with unmarshalable type",
+			input: &rpcauth.RPCAuthInput{
+				Message: json.RawMessage(`foo"`), // invalid type, cause error on unmarshalling
+			},
 			errFunc: func(t *testing.T, err error) {
 				if err == nil || !strings.Contains(err.Error(), "policy evaluation") {
 					t.Errorf("Eval(), got %v, want err with 'policy evaulation'", err)
@@ -208,8 +225,8 @@ func TestAuthzPolicyDenialHints(t *testing.T) {
 package sansshell.authz
 
 allow {
-  input.foo = "baz"
-  input.bar = "bazzle"
+  input.Method = "foo"
+  input.MessageType = "bazzle"
 }
 
 denial_hints[msg] {
@@ -217,8 +234,8 @@ denial_hints[msg] {
 	msg := "you need to be allowed"
 }
 denial_hints[msg] {
-	input.foo == "baz"
-	not input.bar == "bazzle"
+	input.Method == "baz"
+	not input.MessageType == "bazzle"
 	msg := "where is your bazzle"
 }
 `
@@ -228,7 +245,7 @@ denial_hints[msg] {
 
 	for _, tc := range []struct {
 		name    string
-		input   interface{}
+		input   *rpcauth.RPCAuthInput
 		hints   []string
 		errFunc func(*testing.T, error)
 	}{
@@ -238,18 +255,27 @@ denial_hints[msg] {
 			hints: []string{"you need to be allowed"},
 		},
 		{
-			name:  "unmatched input",
-			input: map[string]string{"no": "match"},
+			name: "unmatched input",
+			input: &rpcauth.RPCAuthInput{
+				Method:      "no",
+				MessageType: "match",
+			},
 			hints: []string{"you need to be allowed"},
 		},
 		{
-			name:  "partial match",
-			input: map[string]string{"foo": "baz"},
+			name: "partial match",
+			input: &rpcauth.RPCAuthInput{
+				Method:      "foo",
+				MessageType: "baz",
+			},
 			hints: []string{"where is your bazzle", "you need to be allowed"},
 		},
 		{
-			name:  "allowed case",
-			input: map[string]string{"foo": "baz", "bar": "bazzle"},
+			name: "allowed case",
+			input: &rpcauth.RPCAuthInput{
+				Method:      "foo",
+				MessageType: "bazzle",
+			},
 		},
 	} {
 		tc := tc
