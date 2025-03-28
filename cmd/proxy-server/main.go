@@ -128,7 +128,6 @@ func main() {
 	// Optional authz policy for outbount requests
 	var clientOpaAuthzPolicy rpcauth.AuthzPolicy
 	if clientPolicy != "" {
-		var err error
 		clientOpaAuthzPolicy, err = opa.NewOpaAuthzPolicy(ctx, clientPolicy)
 		if err != nil {
 			log.Fatalf("Invalid client policy: %v\n", err)
