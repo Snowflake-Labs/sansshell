@@ -225,8 +225,8 @@ func TestAuthzPolicyDenialHints(t *testing.T) {
 package sansshell.authz
 
 allow {
-  input.Method = "foo"
-  input.MessageType = "bazzle"
+  input.method = "foo"
+  input.type = "bazzle"
 }
 
 denial_hints[msg] {
@@ -234,8 +234,8 @@ denial_hints[msg] {
 	msg := "you need to be allowed"
 }
 denial_hints[msg] {
-	input.Method == "baz"
-	not input.MessageType == "bazzle"
+	input.method == "foo"
+	not input.type == "bazzle"
 	msg := "where is your bazzle"
 }
 `
