@@ -26,7 +26,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
@@ -81,7 +81,7 @@ type Server struct {
 	dialer TargetDialer
 
 	// A policy authorizer, for authorizing proxy -> target requests
-	authorizer *rpcauth.Authorizer
+	authorizer rpcauth.RPCAuthorizer
 }
 
 // Register registers this server with the given ServiceRegistrar
@@ -95,7 +95,7 @@ func (s *Server) Register(sr grpc.ServiceRegistrar) {
 // registry to resolve service methods
 // The supplied authorizer is used to authorize requests made
 // to targets.
-func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
+func New(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *Server {
 	return NewWithServiceMap(dialer, authorizer, LoadGlobalServiceMap())
 }
 
@@ -103,7 +103,7 @@ func New(dialer TargetDialer, authorizer *rpcauth.Authorizer) *Server {
 // and service map.
 // The supplied authorizer is used to authorize requests made
 // to targets.
-func NewWithServiceMap(dialer TargetDialer, authorizer *rpcauth.Authorizer, serviceMap map[string]*ServiceMethod) *Server {
+func NewWithServiceMap(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
 		dialer:     dialer,

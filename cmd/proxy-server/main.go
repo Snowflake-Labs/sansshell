@@ -37,7 +37,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/proxy-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
@@ -125,7 +125,17 @@ func main() {
 	ctx := logr.NewContext(context.Background(), logger)
 	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
-	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	// Optional authz policy for outbount requests
+	var clientOpaAuthzPolicy rpcauth.AuthzPolicy
+	if clientPolicy != "" {
+		clientOpaAuthzPolicy, err = opa.NewOpaAuthzPolicy(ctx, clientPolicy)
+		if err != nil {
+			log.Fatalf("Invalid client policy: %v\n", err)
+		}
+	}
+
+	// authz policy for inbound requests
+	parsedOpaAuthPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
 		log.Fatalf("Invalid policy: %v\n", err)
 	}
@@ -139,8 +149,8 @@ func main() {
 
 	server.Run(ctx,
 		server.WithLogger(logger),
-		server.WithParsedPolicy(parsed),
-		server.WithClientPolicy(clientPolicy),
+		server.WithAuthzPolicy(parsedOpaAuthPolicy),
+		server.WithClientAuthzPolicy(clientOpaAuthzPolicy),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
 		server.WithJustification(*justification),

@@ -30,8 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/telemetry"
 )
@@ -40,7 +39,7 @@ import (
 // Documentation provided below in each WithXXX function.
 type serveSetup struct {
 	creds              credentials.TransportCredentials
-	policy             *opa.AuthzPolicy
+	policy             rpcauth.AuthzPolicy
 	logger             logr.Logger
 	authzHooks         []rpcauth.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
@@ -73,21 +72,9 @@ func WithInsecure() Option {
 	return WithCredentials(insecure.NewCredentials())
 }
 
-// WithPolicy applies an OPA policy used against incoming RPC requests.
-func WithPolicy(policy string) Option {
+// WithAuthzPolicy applies an OPA policy used against incoming RPC requests.
+func WithAuthzPolicy(policy rpcauth.AuthzPolicy) Option {
 	return optionFunc(func(ctx context.Context, s *serveSetup) error {
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		s.policy = p
-		return nil
-	})
-}
-
-// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
-func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
-	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.policy = policy
 		return nil
 	})
@@ -207,7 +194,7 @@ func serveListener(listener net.Listener, opts ...Option) error {
 	return srv.Serve(listener)
 }
 
-// BuildServer creates a gRPC server, attaches the OPA policy interceptor with supplied args and then
+// BuildServer creates a gRPC server, attaches the RPC authz interceptor with supplied args and then
 // registers all of the imported SansShell modules. Separating this from Serve
 // primarily facilitates testing.
 func BuildServer(opts ...Option) (*grpc.Server, error) {
@@ -221,10 +208,10 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 		}
 	}
 	if ss.policy == nil {
-		return nil, fmt.Errorf("policy was not provided")
+		return nil, fmt.Errorf("rpc authorizer was not provided")
 	}
 
-	authz := rpcauth.New(ss.policy, ss.authzHooks...)
+	authz := rpcauth.NewRPCAuthorizer(ss.policy, ss.authzHooks...)
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,

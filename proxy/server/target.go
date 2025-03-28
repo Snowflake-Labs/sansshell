@@ -34,9 +34,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 )
 
 var (
@@ -90,9 +90,9 @@ type TargetStream struct {
 	// A logger used to log additional information
 	logger logr.Logger
 
-	// The authorizer (from the stream set) used to OPA check requests
+	// The authorizer (from the stream set) used to authz requests
 	// sent to this stream.
-	authorizer *rpcauth.Authorizer
+	authorizer rpcauth.RPCAuthorizer
 
 	// The dialer to use for connecting to targets.
 	dialer TargetDialer
@@ -370,7 +370,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 }
 
 // NewTargetStream creates a new TargetStream for calling `method` on `target`
-func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer *rpcauth.Authorizer, authzDryRun bool) (*TargetStream, error) {
+func NewTargetStream(ctx context.Context, target string, dialer TargetDialer, dialTimeout *time.Duration, method *ServiceMethod, authorizer rpcauth.RPCAuthorizer, authzDryRun bool) (*TargetStream, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -404,8 +404,8 @@ type TargetStreamSet struct {
 	// A TargetDialer for initiating target connections
 	targetDialer TargetDialer
 
-	// an Authorizer, for authorizing requests sent to targets.
-	authorizer *rpcauth.Authorizer
+	// [rpcauthz.rpcAuthorizerImpl], for authorizing requests sent to targets.
+	authorizer rpcauth.RPCAuthorizer
 
 	// The set of streams managed by this set
 	streams map[uint64]*TargetStream
@@ -422,7 +422,7 @@ type TargetStreamSet struct {
 }
 
 // NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
-func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer *rpcauth.Authorizer) *TargetStreamSet {
+func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
 		targetDialer:   dialer,

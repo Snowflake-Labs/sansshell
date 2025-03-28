@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	healthcheckpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -74,11 +74,11 @@ allow {
 func TestProxyingIdentityOverRPC(t *testing.T) {
 	ctx := context.Background()
 
-	passingAuthz, err := opa.NewAuthzPolicy(ctx, passingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	passingAuthz, err := opa.NewOpaAuthzPolicy(ctx, passingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	failingAuthz, err := opa.NewAuthzPolicy(ctx, failingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
+	failingAuthz, err := opa.NewOpaAuthzPolicy(ctx, failingPolicy, opa.WithAllowQuery("data.sansshell.authz.authz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			desc: "passed",
 			srvInterceptors: []grpc.UnaryServerInterceptor{
 				ServerProxiedIdentityUnaryInterceptor(),
-				rpcauth.New(passingAuthz).Authorize,
+				rpcauth.NewRPCAuthorizer(passingAuthz).Authorize,
 			},
 			identityProxied: true,
 		},
@@ -105,7 +105,7 @@ func TestProxyingIdentityOverRPC(t *testing.T) {
 			desc: "interceptor says no",
 			srvInterceptors: []grpc.UnaryServerInterceptor{
 				ServerProxiedIdentityUnaryInterceptor(),
-				rpcauth.New(failingAuthz).Authorize,
+				rpcauth.NewRPCAuthorizer(failingAuthz).Authorize,
 			},
 			rpcError:        true,
 			identityProxied: false,

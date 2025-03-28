@@ -19,6 +19,7 @@ package mpahooks_test
 import (
 	"context"
 	"fmt"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"io"
 	"log"
 	"net"
@@ -27,7 +28,7 @@ import (
 	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	proxyserver "github.com/Snowflake-Labs/sansshell/proxy/server"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -234,7 +235,7 @@ func TestClientInterceptors(t *testing.T) {
 		t.Fatal(err)
 	}
 	srvAddr := lis.Addr().String()
-	authz, err := rpcauth.NewWithPolicy(ctx, serverPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
+	authz, err := opa.NewOpaRPCAuthorizer(ctx, serverPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,7 +411,7 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}
 	srvAddr := lis.Addr().String()
 	proxyAddr := proxyLis.Addr().String()
-	authz, err := rpcauth.NewWithPolicy(ctx, serverBehindProxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
+	authz, err := opa.NewOpaRPCAuthorizer(ctx, serverBehindProxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpaserver.ServerMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +438,7 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}()
 	defer s.GracefulStop()
 
-	proxyAuthz, err := rpcauth.NewWithPolicy(ctx, proxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpahooks.ProxyMPAAuthzHook())
+	proxyAuthz, err := opa.NewOpaRPCAuthorizer(ctx, proxyPolicy, rpcauth.PeerPrincipalFromCertHook(), mpahooks.ProxyMPAAuthzHook())
 	if err != nil {
 		t.Fatal(err)
 	}

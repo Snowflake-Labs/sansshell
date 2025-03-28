@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"

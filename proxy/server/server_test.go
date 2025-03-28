@@ -34,14 +34,14 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	pb "github.com/Snowflake-Labs/sansshell/proxy"
 	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
-func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz *rpcauth.Authorizer) pb.Proxy_ProxyClient {
+func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz rpcauth.RPCAuthorizer) pb.Proxy_ProxyClient {
 	t.Helper()
 	targetDialer := NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	lis := bufconn.Listen(testutil.BufSize)
@@ -478,7 +478,7 @@ allow {
   input.message.start_stream.target = "foo:123"
 }
 `
-	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
+	authz := testutil.NewOpaRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 
@@ -536,7 +536,7 @@ allow {
   input.host.net.address = "bar"
 }
 `
-	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
+	authz := testutil.NewOpaRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 
 	packReply := func(t *testing.T, reply *tdpb.TestResponse) *pb.ProxyReply {
@@ -583,7 +583,7 @@ allow {
 					ServerClose: &pb.ServerClose{
 						Status: &pb.Status{
 							Code:    int32(codes.PermissionDenied),
-							Message: "OPA policy does not permit this request",
+							Message: "Authz policy does not permit this request",
 						},
 					},
 				},
@@ -624,7 +624,7 @@ allow {
   input.message.input = "allowed_input"
 }
 `
-	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
+	authz := testutil.NewOpaRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 
@@ -666,7 +666,7 @@ allow {
   input.host.net.address = "foo"
 }
 `
-	authz := testutil.NewRPCAuthorizer(ctx, t, policy)
+	authz := testutil.NewOpaRPCAuthorizer(ctx, t, policy)
 	testServerMap := testutil.StartTestDataServers(t, "foo:123", "bar:456")
 	proxyStream := startTestProxyWithAuthz(ctx, t, testServerMap, authz)
 
