@@ -183,7 +183,15 @@ func (q *opaAuthzPolicy) DenialHints(ctx context.Context, input *rpcauth.RPCAuth
 	if q.denialHintsQuery == nil {
 		return nil, nil
 	}
-	results, err := q.denialHintsQuery.Eval(ctx, rego.EvalInput(input))
+
+	var evalInput rego.EvalOption
+	if input == nil {
+		evalInput = rego.EvalInput(nil)
+	} else {
+		evalInput = rego.EvalInput(input)
+	}
+
+	results, err := q.denialHintsQuery.Eval(ctx, evalInput)
 	if err != nil {
 		return nil, fmt.Errorf("authz policy evaluation error: %w", err)
 	}
