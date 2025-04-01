@@ -88,6 +88,7 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	prefixHeader     = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
 	batchSize        = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
 	mpa              = flag.Bool("mpa", false, "Request multi-party approval for commands. This will create an MPA request, wait for approval, and then execute the command.")
+	methodWideMpa    = flag.Bool("method-wide-mpa", false, "Request multi-party approval for entire method, regardless of the payload.")
 	authzDryRun      = flag.Bool("authz-dry-run", false, "If true, the client will send a request to the server to check if the user has the permission to run the command. The server will respond with a success or failure message.")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
@@ -189,17 +190,18 @@ func main() {
 	stdr.SetVerbosity(*verbosity)
 
 	rs := client.RunState{
-		Proxy:        *proxyAddr,
-		Targets:      *targetsFlag.Target,
-		Outputs:      *outputsFlag.Target,
-		AuthzDryRun:  *authzDryRun,
-		OutputsDir:   *outputsDir,
-		CredSource:   *credSource,
-		IdleTimeout:  *idleTimeout,
-		ClientPolicy: clientPolicy,
-		PrefixOutput: *prefixHeader,
-		BatchSize:    *batchSize,
-		EnableMPA:    *mpa,
+		Proxy:               *proxyAddr,
+		Targets:             *targetsFlag.Target,
+		Outputs:             *outputsFlag.Target,
+		AuthzDryRun:         *authzDryRun,
+		OutputsDir:          *outputsDir,
+		CredSource:          *credSource,
+		IdleTimeout:         *idleTimeout,
+		ClientPolicy:        clientPolicy,
+		PrefixOutput:        *prefixHeader,
+		BatchSize:           *batchSize,
+		EnableMPA:           *mpa,
+		EnableMethodWideMPA: *methodWideMpa,
 	}
 	ctx := logr.NewContext(context.Background(), logger)
 

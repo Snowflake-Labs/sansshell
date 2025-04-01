@@ -56,6 +56,9 @@ type RPCAuthInput struct {
 	// Information about approvers when using multi-party authentication.
 	Approvers []*PrincipalAuthInput `json:"approvers"`
 
+	// TODO: commentary.
+	ApprovedMethodWideMpa bool `json:"approved-method-wide-mpa"`
+
 	// Information about the environment in which the policy evaluation is
 	// happening.
 	Environment *EnvironmentInput `json:"environment"`
