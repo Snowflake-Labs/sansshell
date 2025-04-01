@@ -84,6 +84,9 @@ message StartStream {
   // to that timeout before proceeding. Each Dial() happens in their
   // own routine so this will not block the overall progress for a stream.
   google.protobuf.Duration dial_timeout = 4;
+
+  // Perform authz dry run instead actual execution.
+  bool authz_dry_run = 5;
 }
 
 message StartStreamReply {
