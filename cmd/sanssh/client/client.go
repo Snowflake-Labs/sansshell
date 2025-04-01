@@ -23,11 +23,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"google.golang.org/grpc/credentials"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"google.golang.org/grpc/credentials"
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -78,6 +79,8 @@ type RunState struct {
 	BatchSize int
 	// If true, add an interceptor that performs the multi-party auth flow
 	EnableMPA bool
+	// If true, configure MPA interceptor to request approval method-wide.
+	EnableMethodWideMPA bool
 	// If true, the command is authz dry run and real action should not be executed
 	AuthzDryRun bool
 
@@ -287,8 +290,8 @@ func Run(ctx context.Context, rs RunState) {
 		unaryInterceptors = append(unaryInterceptors, clientAuthz.AuthorizeClient)
 	}
 	if rs.EnableMPA {
-		unaryInterceptors = append(unaryInterceptors, mpahooks.UnaryClientIntercepter())
-		streamInterceptors = append(streamInterceptors, mpahooks.StreamClientIntercepter())
+		unaryInterceptors = append(unaryInterceptors, mpahooks.UnaryClientIntercepter(rs.EnableMethodWideMPA))
+		streamInterceptors = append(streamInterceptors, mpahooks.StreamClientIntercepter(rs.EnableMethodWideMPA))
 	}
 	// timeout interceptor should be the last item in ops so that it's executed first.
 	streamInterceptors = append(streamInterceptors, StreamClientTimeoutInterceptor(rs.IdleTimeout))
@@ -369,8 +372,8 @@ func Run(ctx context.Context, rs RunState) {
 		conn.AuthzDryRun = rs.AuthzDryRun
 
 		if rs.EnableMPA {
-			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}
-			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
+			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state, rs.EnableMethodWideMPA)}
+			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state, rs.EnableMethodWideMPA)}
 		}
 		state.Conn = conn
 		state.Out = output[start:end]

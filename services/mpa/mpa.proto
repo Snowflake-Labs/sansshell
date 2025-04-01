@@ -61,6 +61,9 @@ message Action {
   string method = 3;
   // The request protocol buffer.
   google.protobuf.Any message = 4;
+  // Method-wide MPA requested, will ignore `message` and only match request on
+  // `method`.
+  bool method_wide_mpa = 5;
 }
 
 message Principal {
@@ -76,6 +79,9 @@ message StoreRequest {
   string method = 1;
   // The request protocol buffer. 
   google.protobuf.Any message = 2;
+    // Method-wide MPA requested, will ignore `message` and only match request on
+  // `method`.
+  bool method_wide_mpa = 5;
 }
 
 message StoreResponse {
