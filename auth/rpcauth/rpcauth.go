@@ -34,8 +34,6 @@ import (
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
-//go:generate mockgen -destination=./rpcauth_mock.go -package=rpcauth . AuthzPolicy
-
 // Metrics
 var (
 	authzDeniedPolicyCounter = metrics.MetricDefinition{Name: "authz_denied_policy",

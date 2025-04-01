@@ -33,8 +33,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
 
-	"go.uber.org/mock/gomock"
-
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
@@ -100,7 +98,6 @@ func TestAuthzHook(t *testing.T) {
 		errFunc func(*testing.T, error)
 		logFunc func(*testing.T, string)
 
-		authzMockEval   bool
 		authzEvalResult bool
 	}{
 		{
@@ -115,7 +112,6 @@ func TestAuthzHook(t *testing.T) {
 			hooks:   []RPCAuthzHook{},
 			errFunc: wantStatusCode(codes.PermissionDenied),
 
-			authzMockEval:   true,
 			authzEvalResult: false,
 		},
 		{
@@ -131,7 +127,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -145,7 +140,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -166,7 +160,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -234,7 +227,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -267,7 +259,6 @@ func TestAuthzHook(t *testing.T) {
 				},
 			),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -278,7 +269,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -295,7 +285,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -323,7 +312,6 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.OK),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -370,7 +358,6 @@ func TestAuthzHook(t *testing.T) {
 				},
 			),
 
-			authzMockEval:   true,
 			authzEvalResult: true,
 		},
 		{
@@ -391,20 +378,16 @@ func TestAuthzHook(t *testing.T) {
 			},
 			errFunc: wantStatusCode(codes.PermissionDenied),
 
-			authzMockEval:   true,
 			authzEvalResult: false,
 		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			authzPolicyMock := NewMockAuthzPolicy(ctrl)
-			if tc.authzMockEval {
-				authzPolicyMock.EXPECT().Eval(gomock.Any(), gomock.Any()).Return(tc.authzEvalResult, nil)
-				if !tc.authzEvalResult {
-					authzPolicyMock.EXPECT().DenialHints(gomock.Any(), gomock.Any()).Return([]string{""}, nil)
-				}
-			}
+			authzPolicyMock := NewMockAuthzPolicy(func(ctx context.Context, input *RPCAuthInput) (bool, error) {
+				return tc.authzEvalResult, nil
+			}, func(ctx context.Context, input *RPCAuthInput) ([]string, error) {
+				return []string{""}, nil
+			})
 			authz := NewRPCAuthorizer(authzPolicyMock, tc.hooks...)
 			err := authz.Eval(ctx, tc.input)
 			tc.errFunc(t, err)
@@ -426,9 +409,12 @@ func TestAuthorize(t *testing.T) {
 		return nil, nil
 	}
 	ctx := context.Background()
-	ctrl := gomock.NewController(t)
-	authzPolicyMock := NewMockAuthzPolicy(ctrl)
-	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+
+	authzPolicyMock := NewMockAuthzPolicy(func(ctx context.Context, input *RPCAuthInput) (bool, error) {
+		return true, nil
+	}, func(ctx context.Context, input *RPCAuthInput) ([]string, error) {
+		return []string{}, nil
+	})
 
 	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
@@ -464,9 +450,11 @@ func TestAuthorizeClient(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	ctrl := gomock.NewController(t)
-	authzPolicyMock := NewMockAuthzPolicy(ctrl)
-	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+	authzPolicyMock := NewMockAuthzPolicy(func(ctx context.Context, input *RPCAuthInput) (bool, error) {
+		return true, nil
+	}, func(ctx context.Context, input *RPCAuthInput) ([]string, error) {
+		return []string{}, nil
+	})
 
 	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
@@ -525,9 +513,11 @@ func TestAuthorizeStream(t *testing.T) {
 
 	fake := &fakeServerStream{Ctx: ctx}
 
-	ctrl := gomock.NewController(t)
-	authzPolicyMock := NewMockAuthzPolicy(ctrl)
-	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+	authzPolicyMock := NewMockAuthzPolicy(func(ctx context.Context, input *RPCAuthInput) (bool, error) {
+		return true, nil
+	}, func(ctx context.Context, input *RPCAuthInput) ([]string, error) {
+		return []string{}, nil
+	})
 	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
 	err := authorizer.AuthorizeStream(req, fake, info, handler)
@@ -568,9 +558,11 @@ func TestAuthorizeClientStream(t *testing.T) {
 		return nil, errors.New("error")
 	}
 
-	ctrl := gomock.NewController(t)
-	authzPolicyMock := NewMockAuthzPolicy(ctrl)
-	authzPolicyMock.EXPECT().Eval(ctx, gomock.Any()).Return(true, nil).Times(1)
+	authzPolicyMock := NewMockAuthzPolicy(func(ctx context.Context, input *RPCAuthInput) (bool, error) {
+		return true, nil
+	}, func(ctx context.Context, input *RPCAuthInput) ([]string, error) {
+		return []string{}, nil
+	})
 	authorizer := NewRPCAuthorizer(authzPolicyMock)
 
 	// Test bad streamer returns error

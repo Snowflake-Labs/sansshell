@@ -24,7 +24,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.28.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	go.opentelemetry.io/otel/trace v1.28.0
-	go.uber.org/mock v0.4.0
 	gocloud.dev v0.32.0
 	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.30.0
@@ -112,6 +111,7 @@ require (
 	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
+	golang.org/x/tools v0.22.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/api v0.169.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
