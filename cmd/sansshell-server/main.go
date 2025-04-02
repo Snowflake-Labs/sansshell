@@ -46,7 +46,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
 	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sansshell-server/server"
 	"github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -162,7 +162,7 @@ func main() {
 	ctx := logr.NewContext(context.Background(), logger)
 	ctx = metrics.NewContextWithRecorder(ctx, recorder)
 
-	parsed, err := opa.NewAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	authzPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy, opa.WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
 	if err != nil {
 		log.Fatalf("Invalid policy: %v\n", err)
 	}
@@ -177,7 +177,7 @@ func main() {
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
 		server.WithUnixSocket(*unixSocket),
-		server.WithParsedPolicy(parsed),
+		server.WithAuthzPolicy(authzPolicy),
 		server.WithJustification(*justification),
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),

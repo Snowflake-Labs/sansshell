@@ -34,7 +34,8 @@ import (
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	mtlsFlags "github.com/Snowflake-Labs/sansshell/auth/mtls/flags"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/cmd/sanssh/client"
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -182,26 +183,35 @@ func main() {
 		(*targetsFlag.Target)[i] = cmdUtil.ValidateAndAddPortAndTimeout(t, defaultTargetPort, *dialTimeout)
 	}
 
-	clientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
+	opaClientPolicy := cmdUtil.ChoosePolicy(logr.Discard(), "", *clientPolicyFlag, *clientPolicyFile)
 
 	logOpts := log.Ldate | log.Ltime | log.Lshortfile
 	logger := stdr.New(log.New(os.Stderr, "", logOpts)).WithName("sanssh")
 	stdr.SetVerbosity(*verbosity)
 
-	rs := client.RunState{
-		Proxy:        *proxyAddr,
-		Targets:      *targetsFlag.Target,
-		Outputs:      *outputsFlag.Target,
-		AuthzDryRun:  *authzDryRun,
-		OutputsDir:   *outputsDir,
-		CredSource:   *credSource,
-		IdleTimeout:  *idleTimeout,
-		ClientPolicy: clientPolicy,
-		PrefixOutput: *prefixHeader,
-		BatchSize:    *batchSize,
-		EnableMPA:    *mpa,
-	}
 	ctx := logr.NewContext(context.Background(), logger)
+	var clientPolicy rpcauth.AuthzPolicy
+	if opaClientPolicy != "" {
+		var err error
+		clientPolicy, err = opa.NewOpaAuthzPolicy(ctx, opaClientPolicy)
+		if err != nil {
+			logger.Error(err, "Could not load policy")
+		}
+	}
+
+	rs := client.RunState{
+		Proxy:             *proxyAddr,
+		Targets:           *targetsFlag.Target,
+		Outputs:           *outputsFlag.Target,
+		AuthzDryRun:       *authzDryRun,
+		OutputsDir:        *outputsDir,
+		CredSource:        *credSource,
+		IdleTimeout:       *idleTimeout,
+		ClientAuthzPolicy: clientPolicy,
+		PrefixOutput:      *prefixHeader,
+		BatchSize:         *batchSize,
+		EnableMPA:         *mpa,
+	}
 
 	if *justification != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, *justification)

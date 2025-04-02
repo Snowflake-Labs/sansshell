@@ -39,8 +39,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/server"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"google.golang.org/grpc/credentials"
@@ -62,7 +61,7 @@ type runState struct {
 	metricsRecorder      metrics.MetricsRecorder
 	unixSocket           string
 	unixSocketConfigHook func(string) error
-	policy               *opa.AuthzPolicy
+	policy               rpcauth.AuthzPolicy
 	justification        bool
 	justificationFunc    func(string) error
 	unaryInterceptors    []grpc.UnaryServerInterceptor
@@ -93,21 +92,9 @@ func WithLogger(l logr.Logger) Option {
 	})
 }
 
-// WithPolicy applies an OPA policy used against incoming RPC requests.
-func WithPolicy(policy string) Option {
+// WithAuthzPolicy applies an authz policy used against incoming RPC requests.
+func WithAuthzPolicy(policy rpcauth.AuthzPolicy) Option {
 	return optionFunc(func(ctx context.Context, r *runState) error {
-		p, err := opa.NewAuthzPolicy(ctx, policy)
-		if err != nil {
-			return err
-		}
-		r.policy = p
-		return nil
-	})
-}
-
-// WithParsedPolicy applies an already-parsed OPA policy used against incoming RPC requests.
-func WithParsedPolicy(policy *opa.AuthzPolicy) Option {
-	return optionFunc(func(_ context.Context, r *runState) error {
 		r.policy = policy
 		return nil
 	})
@@ -413,7 +400,7 @@ func extractCommonOptionsFromRunState(rs *runState) []server.Option {
 	})
 
 	var serverOpts []server.Option
-	serverOpts = append(serverOpts, server.WithParsedPolicy(rs.policy))
+	serverOpts = append(serverOpts, server.WithAuthzPolicy(rs.policy))
 	serverOpts = append(serverOpts, server.WithLogger(rs.logger))
 	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
 	for _, a := range rs.authzHooks {

@@ -36,7 +36,8 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/opa"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	hcpb "github.com/Snowflake-Labs/sansshell/services/healthcheck"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/server"
 	lfpb "github.com/Snowflake-Labs/sansshell/services/localfile"
@@ -79,9 +80,15 @@ func stopSoon(s *grpc.Server) {
 
 func TestMain(m *testing.M) {
 	lis = bufconn.Listen(bufSize)
+
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
+	if err != nil {
+		log.Fatalf("Could not build authorizer: %s", err)
+		os.Exit(m.Run())
+	}
 	s, err := BuildServer(
 		WithInsecure(),
-		WithPolicy(policy),
+		WithAuthzPolicy(authzPolicy),
 		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
 	)
 	if err != nil {
@@ -107,26 +114,20 @@ func TestBuildServer(t *testing.T) {
 	testutil.FatalOnNoErr("empty policy", err, t)
 }
 
-func TestBuildServerWithBadPolicy(t *testing.T) {
-	// Make sure a bad policy fails
-	_, err := BuildServer(
-		WithLogger(logr.Discard()),
-		WithAuthzHook(rpcauth.HostNetHook(lis.Addr())),
-		WithPolicy("not a real policy"),
-	)
-	t.Log(err)
-	testutil.FatalOnNoErr("badly formed policy", err, t)
-}
-
 func TestServe(t *testing.T) {
 	err := Serve("127.0.0.1:0")
 	testutil.FatalOnNoErr("empty policy", err, t)
 
-	err = Serve("-", WithPolicy(policy))
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
+	if err != nil {
+		testutil.FatalOnNoErr("authorizer creation", err, t)
+	}
+
+	err = Serve("-", WithAuthzPolicy(authzPolicy))
 	testutil.FatalOnNoErr("bad hostport", err, t)
 	// Add an 2nd copy of the logging interceptor just to prove adding works.
 	err = Serve("127.0.0.1:0",
-		WithPolicy(policy),
+		WithAuthzPolicy(authzPolicy),
 		WithUnaryInterceptor(telemetry.UnaryServerLogInterceptor(logr.Discard())),
 		WithStreamInterceptor(telemetry.StreamServerLogInterceptor(logr.Discard())),
 		WithOnStartListener(stopSoon),
@@ -139,9 +140,14 @@ func TestServeUnix(t *testing.T) {
 	err := ServeUnix(socketPath, nil)
 	testutil.FatalOnNoErr("empty policy", err, t)
 
+	authzPolicy, err := opa.NewOpaAuthzPolicy(context.Background(), policy)
+	if err != nil {
+		testutil.FatalOnNoErr("authorizer creation", err, t)
+	}
+
 	// If an existing directory path is given as the socket path, we
 	// should fail to start server.
-	err = ServeUnix(t.TempDir(), nil, WithPolicy(policy))
+	err = ServeUnix(t.TempDir(), nil, WithAuthzPolicy(authzPolicy))
 	testutil.FatalOnNoErr("ServeUnix with directory path", err, t)
 
 	// If the socket already exists, it's OK - it will be removed.
@@ -154,7 +160,7 @@ func TestServeUnix(t *testing.T) {
 	}
 	err = ServeUnix(socketPath,
 		nil,
-		WithPolicy(policy),
+		WithAuthzPolicy(authzPolicy),
 		WithOnStartListener(stopSoon))
 	testutil.FatalOnErr("ServeUnix with existing socket", err, t)
 
@@ -165,7 +171,7 @@ func TestServeUnix(t *testing.T) {
 		func(sp string) error {
 			return os.Chmod(sp, os.FileMode(0667))
 		},
-		WithPolicy(policy),
+		WithAuthzPolicy(authzPolicy),
 		WithOnStartListener(
 			func(srv *grpc.Server) {
 				time.Sleep(50 * time.Millisecond)
@@ -221,7 +227,7 @@ allow {
 	testutil.FatalOnErr("Failed to convert current user UID to int", err, t)
 
 	// We will check that both the primary and supplementary groups can be
-	// used in OPA policies.
+	// used in RPC authz.
 	groupIdStrings, err := currentUser.GroupIds()
 	testutil.FatalOnErr("Failed to get group IDs of current user", err, t)
 	groupNameStrings := []string{}
@@ -284,9 +290,13 @@ allow {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			policy := fmt.Sprintf(policyTemplateWithUnixCreds, tc.policyFragment)
-			err := ServeUnix(socketPath,
+			ctx := context.Background()
+			authzPolicy, err := opa.NewOpaAuthzPolicy(ctx, policy)
+			testutil.FatalOnErr("Policy creation", err, t)
+
+			err = ServeUnix(socketPath,
 				nil,
-				WithPolicy(policy),
+				WithAuthzPolicy(authzPolicy),
 				WithCredentials(NewUnixPeerTransportCredentials()),
 				WithOnStartListener(runHealthCheck(t, tc.expectedSuccess)))
 			testutil.FatalOnErr("ServeUnix with Unix creds policy", err, t)

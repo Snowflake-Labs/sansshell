@@ -26,8 +26,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/services"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
