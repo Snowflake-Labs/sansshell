@@ -39,6 +39,12 @@ allow {
 	input.message.args = ["hello", "world"]
 }
 
+# Allow fdbbackup commands
+allow {
+	input.type = "Exec.ExecRequest"
+	input.message.command = "/usr/local/bin/fdbbackup"
+}
+
 allow {
 	input.type = "Process.ListRequest"
 }
