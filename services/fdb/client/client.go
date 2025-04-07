@@ -102,6 +102,7 @@ func (*fdbCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&fdbConfCmd{}, "")
 	c.Register(&fdbServerCmd{}, "")
 	c.Register(&fdbMoveDataCmd{}, "")
+	c.Register(&fdbBackupCmd{}, "")
 
 	return c
 }
