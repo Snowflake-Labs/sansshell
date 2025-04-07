@@ -25,7 +25,6 @@ import (
 
 	"github.com/google/subcommands"
 
-	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	execpb "github.com/Snowflake-Labs/sansshell/services/exec"
 	"github.com/Snowflake-Labs/sansshell/services/util"
 )
@@ -61,9 +60,7 @@ func (p *fdbBackupCmd) Usage() string {
 }
 
 func (p *fdbBackupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	state := &util.ExecuteState{
-		Conn: args[0].(*proxy.Conn),
-	}
+	state := args[0].(*util.ExecuteState)
 
 	if f.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "fdbbackup requires a subcommand")
