@@ -564,3 +564,331 @@ var Server_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "fdb.proto",
 }
+
+const (
+	FDBBackup_FDBBackupStatus_FullMethodName   = "/Fdb.FDBBackup/FDBBackupStatus"
+	FDBBackup_FDBBackupAbort_FullMethodName    = "/Fdb.FDBBackup/FDBBackupAbort"
+	FDBBackup_FDBBackupStart_FullMethodName    = "/Fdb.FDBBackup/FDBBackupStart"
+	FDBBackup_FDBBackupDescribe_FullMethodName = "/Fdb.FDBBackup/FDBBackupDescribe"
+	FDBBackup_FDBBackupExpire_FullMethodName   = "/Fdb.FDBBackup/FDBBackupExpire"
+	FDBBackup_FDBBackupPause_FullMethodName    = "/Fdb.FDBBackup/FDBBackupPause"
+	FDBBackup_FDBBackupResume_FullMethodName   = "/Fdb.FDBBackup/FDBBackupResume"
+)
+
+// FDBBackupClient is the client API for FDBBackup service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type FDBBackupClient interface {
+	FDBBackupStatus(ctx context.Context, in *FDBBackupStatusRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupAbort(ctx context.Context, in *FDBBackupAbortRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupStart(ctx context.Context, in *FDBBackupStartRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupDescribe(ctx context.Context, in *FDBBackupDescribeRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupExpire(ctx context.Context, in *FDBBackupExpireRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupPause(ctx context.Context, in *FDBBackupPauseRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+	FDBBackupResume(ctx context.Context, in *FDBBackupResumeRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error)
+}
+
+type fDBBackupClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewFDBBackupClient(cc grpc.ClientConnInterface) FDBBackupClient {
+	return &fDBBackupClient{cc}
+}
+
+func (c *fDBBackupClient) FDBBackupStatus(ctx context.Context, in *FDBBackupStatusRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupAbort(ctx context.Context, in *FDBBackupAbortRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupAbort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupStart(ctx context.Context, in *FDBBackupStartRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupStart_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupDescribe(ctx context.Context, in *FDBBackupDescribeRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupDescribe_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupExpire(ctx context.Context, in *FDBBackupExpireRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupExpire_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupPause(ctx context.Context, in *FDBBackupPauseRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupPause_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fDBBackupClient) FDBBackupResume(ctx context.Context, in *FDBBackupResumeRequest, opts ...grpc.CallOption) (*FDBBackupResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FDBBackupResponse)
+	err := c.cc.Invoke(ctx, FDBBackup_FDBBackupResume_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// FDBBackupServer is the server API for FDBBackup service.
+// All implementations should embed UnimplementedFDBBackupServer
+// for forward compatibility.
+type FDBBackupServer interface {
+	FDBBackupStatus(context.Context, *FDBBackupStatusRequest) (*FDBBackupResponse, error)
+	FDBBackupAbort(context.Context, *FDBBackupAbortRequest) (*FDBBackupResponse, error)
+	FDBBackupStart(context.Context, *FDBBackupStartRequest) (*FDBBackupResponse, error)
+	FDBBackupDescribe(context.Context, *FDBBackupDescribeRequest) (*FDBBackupResponse, error)
+	FDBBackupExpire(context.Context, *FDBBackupExpireRequest) (*FDBBackupResponse, error)
+	FDBBackupPause(context.Context, *FDBBackupPauseRequest) (*FDBBackupResponse, error)
+	FDBBackupResume(context.Context, *FDBBackupResumeRequest) (*FDBBackupResponse, error)
+}
+
+// UnimplementedFDBBackupServer should be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedFDBBackupServer struct{}
+
+func (UnimplementedFDBBackupServer) FDBBackupStatus(context.Context, *FDBBackupStatusRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupStatus not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupAbort(context.Context, *FDBBackupAbortRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupAbort not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupStart(context.Context, *FDBBackupStartRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupStart not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupDescribe(context.Context, *FDBBackupDescribeRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupDescribe not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupExpire(context.Context, *FDBBackupExpireRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupExpire not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupPause(context.Context, *FDBBackupPauseRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupPause not implemented")
+}
+func (UnimplementedFDBBackupServer) FDBBackupResume(context.Context, *FDBBackupResumeRequest) (*FDBBackupResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FDBBackupResume not implemented")
+}
+func (UnimplementedFDBBackupServer) testEmbeddedByValue() {}
+
+// UnsafeFDBBackupServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to FDBBackupServer will
+// result in compilation errors.
+type UnsafeFDBBackupServer interface {
+	mustEmbedUnimplementedFDBBackupServer()
+}
+
+func RegisterFDBBackupServer(s grpc.ServiceRegistrar, srv FDBBackupServer) {
+	// If the following call pancis, it indicates UnimplementedFDBBackupServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&FDBBackup_ServiceDesc, srv)
+}
+
+func _FDBBackup_FDBBackupStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupStatus(ctx, req.(*FDBBackupStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupAbort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupAbortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupAbort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupAbort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupAbort(ctx, req.(*FDBBackupAbortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupStart_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupStartRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupStart(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupStart_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupStart(ctx, req.(*FDBBackupStartRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupDescribe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupDescribeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupDescribe(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupDescribe_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupDescribe(ctx, req.(*FDBBackupDescribeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupExpire_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupExpireRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupExpire(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupExpire_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupExpire(ctx, req.(*FDBBackupExpireRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupPause_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupPauseRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupPause(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupPause_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupPause(ctx, req.(*FDBBackupPauseRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FDBBackup_FDBBackupResume_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FDBBackupResumeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FDBBackupServer).FDBBackupResume(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FDBBackup_FDBBackupResume_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FDBBackupServer).FDBBackupResume(ctx, req.(*FDBBackupResumeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// FDBBackup_ServiceDesc is the grpc.ServiceDesc for FDBBackup service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var FDBBackup_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "Fdb.FDBBackup",
+	HandlerType: (*FDBBackupServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "FDBBackupStatus",
+			Handler:    _FDBBackup_FDBBackupStatus_Handler,
+		},
+		{
+			MethodName: "FDBBackupAbort",
+			Handler:    _FDBBackup_FDBBackupAbort_Handler,
+		},
+		{
+			MethodName: "FDBBackupStart",
+			Handler:    _FDBBackup_FDBBackupStart_Handler,
+		},
+		{
+			MethodName: "FDBBackupDescribe",
+			Handler:    _FDBBackup_FDBBackupDescribe_Handler,
+		},
+		{
+			MethodName: "FDBBackupExpire",
+			Handler:    _FDBBackup_FDBBackupExpire_Handler,
+		},
+		{
+			MethodName: "FDBBackupPause",
+			Handler:    _FDBBackup_FDBBackupPause_Handler,
+		},
+		{
+			MethodName: "FDBBackupResume",
+			Handler:    _FDBBackup_FDBBackupResume_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "fdb.proto",
+}
