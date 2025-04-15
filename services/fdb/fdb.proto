@@ -718,3 +718,60 @@ message FDBServerResponse {
   bytes stderr = 2;
   int32 retCode = 3;
 }
+
+// fdbbackup
+service FDBBackup {
+  rpc FDBBackupStatus(FDBBackupStatusRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupAbort(FDBBackupAbortRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupStart(FDBBackupStartRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupDescribe(FDBBackupDescribeRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupExpire(FDBBackupExpireRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupPause(FDBBackupPauseRequest) returns (FDBBackupResponse) {}
+  rpc FDBBackupResume(FDBBackupResumeRequest) returns (FDBBackupResponse) {}
+}
+
+message FDBBackupStatusRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+}
+
+message FDBBackupAbortRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+}
+
+message FDBBackupStartRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+  bool snapshot = 3;
+  string tag = 4;
+}
+
+message FDBBackupDescribeRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+}
+
+message FDBBackupExpireRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+  string version = 3;
+}
+
+message FDBBackupPauseRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+  string tag = 3;
+}
+
+message FDBBackupResumeRequest {
+  string cluster_file = 1;
+  string backup_url = 2;
+  string tag = 3;
+}
+
+message FDBBackupResponse {
+  bytes stdout = 1;
+  bytes stderr = 2;
+  int32 retCode = 3;
+}
