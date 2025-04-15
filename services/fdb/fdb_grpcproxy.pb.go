@@ -598,3 +598,495 @@ func (c *serverClientProxy) FDBServerOneMany(ctx context.Context, in *FDBServerR
 
 	return ret, nil
 }
+
+// FDBBackupClientProxy is the superset of FDBBackupClient which additionally includes the OneMany proxy methods
+type FDBBackupClientProxy interface {
+	FDBBackupClient
+	FDBBackupStatusOneMany(ctx context.Context, in *FDBBackupStatusRequest, opts ...grpc.CallOption) (<-chan *FDBBackupStatusManyResponse, error)
+	FDBBackupAbortOneMany(ctx context.Context, in *FDBBackupAbortRequest, opts ...grpc.CallOption) (<-chan *FDBBackupAbortManyResponse, error)
+	FDBBackupStartOneMany(ctx context.Context, in *FDBBackupStartRequest, opts ...grpc.CallOption) (<-chan *FDBBackupStartManyResponse, error)
+	FDBBackupDescribeOneMany(ctx context.Context, in *FDBBackupDescribeRequest, opts ...grpc.CallOption) (<-chan *FDBBackupDescribeManyResponse, error)
+	FDBBackupExpireOneMany(ctx context.Context, in *FDBBackupExpireRequest, opts ...grpc.CallOption) (<-chan *FDBBackupExpireManyResponse, error)
+	FDBBackupPauseOneMany(ctx context.Context, in *FDBBackupPauseRequest, opts ...grpc.CallOption) (<-chan *FDBBackupPauseManyResponse, error)
+	FDBBackupResumeOneMany(ctx context.Context, in *FDBBackupResumeRequest, opts ...grpc.CallOption) (<-chan *FDBBackupResumeManyResponse, error)
+}
+
+// Embed the original client inside of this so we get the other generated methods automatically.
+type fDBBackupClientProxy struct {
+	*fDBBackupClient
+}
+
+// NewFDBBackupClientProxy creates a FDBBackupClientProxy for use in proxied connections.
+// NOTE: This takes a proxy.Conn instead of a generic ClientConnInterface as the methods here are only valid in proxy.Conn contexts.
+func NewFDBBackupClientProxy(cc *proxy.Conn) FDBBackupClientProxy {
+	return &fDBBackupClientProxy{NewFDBBackupClient(cc).(*fDBBackupClient)}
+}
+
+// FDBBackupStatusManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupStatusManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupStatusOneMany provides the same API as FDBBackupStatus but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupStatusOneMany(ctx context.Context, in *FDBBackupStatusRequest, opts ...grpc.CallOption) (<-chan *FDBBackupStatusManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupStatusManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupStatusManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupStatus", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupStatus", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupStatusManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupAbortManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupAbortManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupAbortOneMany provides the same API as FDBBackupAbort but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupAbortOneMany(ctx context.Context, in *FDBBackupAbortRequest, opts ...grpc.CallOption) (<-chan *FDBBackupAbortManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupAbortManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupAbortManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupAbort", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupAbort", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupAbortManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupStartManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupStartManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupStartOneMany provides the same API as FDBBackupStart but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupStartOneMany(ctx context.Context, in *FDBBackupStartRequest, opts ...grpc.CallOption) (<-chan *FDBBackupStartManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupStartManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupStartManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupStart", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupStart", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupStartManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupDescribeManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupDescribeManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupDescribeOneMany provides the same API as FDBBackupDescribe but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupDescribeOneMany(ctx context.Context, in *FDBBackupDescribeRequest, opts ...grpc.CallOption) (<-chan *FDBBackupDescribeManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupDescribeManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupDescribeManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupDescribe", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupDescribe", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupDescribeManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupExpireManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupExpireManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupExpireOneMany provides the same API as FDBBackupExpire but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupExpireOneMany(ctx context.Context, in *FDBBackupExpireRequest, opts ...grpc.CallOption) (<-chan *FDBBackupExpireManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupExpireManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupExpireManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupExpire", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupExpire", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupExpireManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupPauseManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupPauseManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupPauseOneMany provides the same API as FDBBackupPause but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupPauseOneMany(ctx context.Context, in *FDBBackupPauseRequest, opts ...grpc.CallOption) (<-chan *FDBBackupPauseManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupPauseManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupPauseManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupPause", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupPause", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupPauseManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
+
+// FDBBackupResumeManyResponse encapsulates a proxy data packet.
+// It includes the target, index, response and possible error returned.
+type FDBBackupResumeManyResponse struct {
+	Target string
+	// As targets can be duplicated this is the index into the slice passed to proxy.Conn.
+	Index int
+	Resp  *FDBBackupResponse
+	Error error
+}
+
+// FDBBackupResumeOneMany provides the same API as FDBBackupResume but sends the same request to N destinations at once.
+// N can be a single destination.
+//
+// NOTE: The returned channel must be read until it closes in order to avoid leaking goroutines.
+func (c *fDBBackupClientProxy) FDBBackupResumeOneMany(ctx context.Context, in *FDBBackupResumeRequest, opts ...grpc.CallOption) (<-chan *FDBBackupResumeManyResponse, error) {
+	conn := c.cc.(*proxy.Conn)
+	ret := make(chan *FDBBackupResumeManyResponse)
+	// If this is a single case we can just use Invoke and marshal it onto the channel once and be done.
+	if len(conn.Targets) == 1 {
+		go func() {
+			out := &FDBBackupResumeManyResponse{
+				Target: conn.Targets[0],
+				Index:  0,
+				Resp:   &FDBBackupResponse{},
+			}
+			err := conn.Invoke(ctx, "/Fdb.FDBBackup/FDBBackupResume", in, out.Resp, opts...)
+			if err != nil {
+				out.Error = err
+			}
+			// Send and close.
+			ret <- out
+			close(ret)
+		}()
+		return ret, nil
+	}
+	manyRet, err := conn.InvokeOneMany(ctx, "/Fdb.FDBBackup/FDBBackupResume", in, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// A goroutine to retrive untyped responses and convert them to typed ones.
+	go func() {
+		for {
+			typedResp := &FDBBackupResumeManyResponse{
+				Resp: &FDBBackupResponse{},
+			}
+
+			resp, ok := <-manyRet
+			if !ok {
+				// All done so we can shut down.
+				close(ret)
+				return
+			}
+			typedResp.Target = resp.Target
+			typedResp.Index = resp.Index
+			typedResp.Error = resp.Error
+			if resp.Error == nil {
+				if err := resp.Resp.UnmarshalTo(typedResp.Resp); err != nil {
+					typedResp.Error = fmt.Errorf("can't decode any response - %v. Original Error - %v", err, resp.Error)
+				}
+			}
+			ret <- typedResp
+		}
+	}()
+
+	return ret, nil
+}
