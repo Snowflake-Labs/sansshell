@@ -719,6 +719,7 @@ message FDBServerResponse {
   int32 retCode = 3;
 }
 
+// fdbbackup
 service FDBBackup {
   rpc FDBBackupStatus(FDBBackupStatusRequest) returns (FDBBackupResponse) {}
   rpc FDBBackupAbort(FDBBackupAbortRequest) returns (FDBBackupResponse) {}
