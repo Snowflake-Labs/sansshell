@@ -20,6 +20,7 @@ package server
 import (
 	"context"
 	"net"
+	"time"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -51,14 +52,18 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 	hostname := req.GetHostname()
 
 	logger.Info("dns request", "hostname", hostname)
+	timeStart := time.Now()
 	// TODO(elsesiy): We only care about ipv4 for now but we could allow clients to explicitly specify opts such as network, prefer go resolver, etc.
 	ips, err := resolver(ctx, "ip4", hostname)
+	duration := time.Since(timeStart)
 	if err != nil {
 		recorder.CounterOrLog(ctx, dnsLookupFailureCounter, 1)
 		return nil, status.Errorf(codes.Internal, "failed to lookup %q", hostname)
 	}
 
-	reply := &pb.LookupReply{}
+	reply := &pb.LookupReply{
+		LookupDuration: duration.Nanoseconds(),
+	}
 	for _, ip := range ips {
 		reply.Result = append(reply.Result, ip.String())
 	}
