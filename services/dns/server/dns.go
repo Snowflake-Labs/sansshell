@@ -62,7 +62,7 @@ func (s *server) Lookup(ctx context.Context, req *pb.LookupRequest) (*pb.LookupR
 	}
 
 	reply := &pb.LookupReply{
-		LookupDuration: duration.Nanoseconds(),
+		LookupLatencyNs: duration.Nanoseconds(),
 	}
 	for _, ip := range ips {
 		reply.Result = append(reply.Result, ip.String())
