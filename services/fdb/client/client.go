@@ -102,6 +102,7 @@ func (*fdbCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
 	c.Register(&fdbConfCmd{}, "")
 	c.Register(&fdbServerCmd{}, "")
 	c.Register(&fdbMoveDataCmd{}, "")
+	c.Register(&fdbBackupCmd{}, "")
 
 	return c
 }
@@ -3768,4 +3769,382 @@ func (r *fdbMoveDataWaitCmd) Execute(ctx context.Context, f *flag.FlagSet, args 
 			r.printCommandOutput(state, res.Index, res.Resp, res.Error)
 		}
 	}
+}
+
+const fdbBackupCLIPackage = "fdbbackup"
+
+func (*fdbBackupCmd) GetSubpackage(f *flag.FlagSet) *subcommands.Commander {
+	c := client.SetupSubpackage(fdbBackupCLIPackage, f)
+	c.Register(&fdbBackupStatusCmd{}, "")
+	c.Register(&fdbBackupAbortCmd{}, "")
+	c.Register(&fdbBackupStartCmd{}, "")
+	c.Register(&fdbBackupDescribeCmd{}, "")
+	c.Register(&fdbBackupExpireCmd{}, "")
+	c.Register(&fdbBackupPauseCmd{}, "")
+	c.Register(&fdbBackupResumeCmd{}, "")
+	return c
+}
+
+type fdbBackupCmd struct{}
+
+func (*fdbBackupCmd) Name() string             { return fdbBackupCLIPackage }
+func (*fdbBackupCmd) SetFlags(_ *flag.FlagSet) {}
+func (r *fdbBackupCmd) Synopsis() string {
+	return "Run fdbbackup commands to manage backups.\n" + client.GenerateSynopsis(r.GetSubpackage(flag.NewFlagSet("", flag.ContinueOnError)), 4)
+}
+func (r *fdbBackupCmd) Usage() string {
+	return client.GenerateUsage(fdbBackupCLIPackage, r.Synopsis())
+}
+
+func (r *fdbBackupCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	c := r.GetSubpackage(f)
+	return c.Execute(ctx, args...)
+}
+
+type fdbBackupStatusCmd struct {
+	req *pb.FDBBackupStatusRequest
+}
+
+func (*fdbBackupStatusCmd) Name() string { return "status" }
+func (*fdbBackupStatusCmd) Synopsis() string {
+	return "Get the status of a backup."
+}
+func (r *fdbBackupStatusCmd) Usage() string {
+	return "fdbbackup status [--cluster-file <path>] [--blob_url <URL>]"
+}
+
+func (r *fdbBackupStatusCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupStatusRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+}
+
+func (r *fdbBackupStatusCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupStatusOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup status error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup status error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupAbortCmd struct {
+	req *pb.FDBBackupAbortRequest
+}
+
+func (*fdbBackupAbortCmd) Name() string { return "abort" }
+func (*fdbBackupAbortCmd) Synopsis() string {
+	return "Abort a backup."
+}
+func (r *fdbBackupAbortCmd) Usage() string {
+	return "fdbbackup abort [--cluster-file <path>] [--blob_url <URL>]"
+}
+
+func (r *fdbBackupAbortCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupAbortRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+}
+
+func (r *fdbBackupAbortCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupAbortOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup abort error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup abort error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupStartCmd struct {
+	req *pb.FDBBackupStartRequest
+}
+
+func (*fdbBackupStartCmd) Name() string { return "start" }
+func (*fdbBackupStartCmd) Synopsis() string {
+	return "Start a backup."
+}
+func (r *fdbBackupStartCmd) Usage() string {
+	return "fdbbackup start [--cluster-file <path>] [--blob_url <URL>] [--snapshot] [--tag <tag>]"
+}
+
+func (r *fdbBackupStartCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupStartRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+	f.BoolVar(&r.req.Snapshot, "snapshot", false, "Create a snapshot backup.")
+	f.StringVar(&r.req.Tag, "tag", "", "Tag for the backup.")
+}
+
+func (r *fdbBackupStartCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupStartOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup start error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup start error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupDescribeCmd struct {
+	req *pb.FDBBackupDescribeRequest
+}
+
+func (*fdbBackupDescribeCmd) Name() string { return "describe" }
+func (*fdbBackupDescribeCmd) Synopsis() string {
+	return "Describe a backup."
+}
+func (r *fdbBackupDescribeCmd) Usage() string {
+	return "fdbbackup describe [--cluster-file <path>] [--blob_url <URL>]"
+}
+
+func (r *fdbBackupDescribeCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupDescribeRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+}
+
+func (r *fdbBackupDescribeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupDescribeOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup describe error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup describe error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupExpireCmd struct {
+	req *pb.FDBBackupExpireRequest
+}
+
+func (*fdbBackupExpireCmd) Name() string { return "expire" }
+func (*fdbBackupExpireCmd) Synopsis() string {
+	return "Expire backups before a specified version."
+}
+func (r *fdbBackupExpireCmd) Usage() string {
+	return "fdbbackup expire [--cluster-file <path>] [--blob_url <URL>] [--version <version>]"
+}
+
+func (r *fdbBackupExpireCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupExpireRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+	f.StringVar(&r.req.Version, "version", "", "Version before which to expire backups.")
+}
+
+func (r *fdbBackupExpireCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupExpireOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup expire error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup expire error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupPauseCmd struct {
+	req *pb.FDBBackupPauseRequest
+}
+
+func (*fdbBackupPauseCmd) Name() string { return "pause" }
+func (*fdbBackupPauseCmd) Synopsis() string {
+	return "Pause a backup."
+}
+func (r *fdbBackupPauseCmd) Usage() string {
+	return "fdbbackup pause [--cluster-file <path>] [--blob_url <URL>] [--tag <tag>]"
+}
+
+func (r *fdbBackupPauseCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupPauseRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+	f.StringVar(&r.req.Tag, "tag", "", "Tag for the backup.")
+}
+
+func (r *fdbBackupPauseCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupPauseOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup pause error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup pause error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
+}
+
+type fdbBackupResumeCmd struct {
+	req *pb.FDBBackupResumeRequest
+}
+
+func (*fdbBackupResumeCmd) Name() string { return "resume" }
+func (*fdbBackupResumeCmd) Synopsis() string {
+	return "Resume a backup."
+}
+func (r *fdbBackupResumeCmd) Usage() string {
+	return "fdbbackup resume [--cluster-file <path>] [--blob_url <URL>] [--tag <tag>]"
+}
+
+func (r *fdbBackupResumeCmd) SetFlags(f *flag.FlagSet) {
+	r.req = &pb.FDBBackupResumeRequest{}
+	f.StringVar(&r.req.ClusterFile, "cluster-file", "", "Path to the cluster file.")
+	f.StringVar(&r.req.BackupUrl, "blob_url", "", "Backup URL.")
+	f.StringVar(&r.req.Tag, "tag", "", "Tag for the backup.")
+}
+
+func (r *fdbBackupResumeCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
+	state := args[0].(*util.ExecuteState)
+	c := pb.NewFDBBackupClientProxy(state.Conn)
+
+	resp, err := c.FDBBackupResumeOneMany(ctx, r.req)
+	if err != nil {
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "fdbbackup resume error: %v\n", err)
+		}
+		return subcommands.ExitFailure
+	}
+
+	retCode := subcommands.ExitSuccess
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "fdbbackup resume error: %v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		fmt.Fprintf(state.Out[r.Index], "%s", r.Resp.Stdout)
+		if len(r.Resp.Stderr) > 0 {
+			fmt.Fprintf(state.Err[r.Index], "%s", r.Resp.Stderr)
+		}
+		if r.Resp.RetCode != 0 {
+			retCode = subcommands.ExitFailure
+		}
+	}
+
+	return retCode
 }
