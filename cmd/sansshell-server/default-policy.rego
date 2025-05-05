@@ -121,3 +121,14 @@ allow {
     input.message.zero = true
     input.message.remove = true
 }
+
+# Allow fdbbackup commands
+allow {
+    input.type = "Exec.ExecRequest"
+    input.message.command = "/usr/sbin/fdbbackup"
+}
+
+# Allow all FDBBackup service methods
+allow {
+    startswith(input.method, "/Fdb.FDBBackup/")
+}
