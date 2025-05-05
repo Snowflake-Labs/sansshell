@@ -1,7 +1,8 @@
 module github.com/Snowflake-Labs/sansshell
 
-go 1.21
-toolchain go1.24.1
+go 1.23.0
+
+toolchain go1.24.2
 
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
