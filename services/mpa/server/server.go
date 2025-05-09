@@ -227,11 +227,9 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	if !ok {
 		return nil, status.Error(codes.NotFound, "MPA request with provided input not found")
 	}
-	/*
-		if act.action.User == p.ID {
-			return nil, status.Error(codes.InvalidArgument, "MPA requests cannot be approved by their requestor")
-		}
-	*/
+	if act.action.User == p.ID {
+		return nil, status.Error(codes.InvalidArgument, "MPA requests cannot be approved by their requestor")
+	}
 	act.lastModified = time.Now()
 	// Only add the approver if it's new compared to existing approvals
 	if !containsPrincipal(act.approvers, p) {
