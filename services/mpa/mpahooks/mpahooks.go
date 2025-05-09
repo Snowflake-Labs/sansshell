@@ -88,7 +88,7 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 
 	// Redact fields that shouldn't be checked for equality
 	if _, err := RedactFieldsForMPA(&msg); err != nil {
-		return fmt.Errorf("error redacting marked fields: %v", err)
+		return fmt.Errorf("error redacting message for MPA: %v", err)
 	}
 
 	// Prefer using a proxied identity if provided
@@ -127,7 +127,7 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 
 	// Redact fields that shouldn't be stored in the MPA
 	if _, err := RedactFieldsForMPA(&msg); err != nil {
-		return "", fmt.Errorf("error redacting marked fields: %v", err)
+		return "", fmt.Errorf("error redacting message for MPA: %v", err)
 	}
 
 	mpaClient := mpa.NewMpaClient(cc)

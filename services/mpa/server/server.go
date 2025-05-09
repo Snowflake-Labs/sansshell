@@ -90,7 +90,7 @@ func actionId(action *mpa.Action) (string, error) {
 	msg := action.Message
 	// Redact fields that shouldn't be checked for equality
 	if _, err := mpahooks.RedactFieldsForMPA(msg); err != nil {
-		return "", fmt.Errorf("error redacting marked fields: %v", err)
+		return "", fmt.Errorf("error redacting message for MPA: %v", err)
 	}
 
 	b, err := protojson.Marshal(action)

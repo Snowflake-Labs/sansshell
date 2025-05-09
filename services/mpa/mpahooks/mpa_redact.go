@@ -30,6 +30,9 @@ import (
 // any fields that are marked with the mpa_redacted annotation.
 // Returns true if the message was modified.
 func RedactFieldsForMPA(anyMsg *anypb.Any) (bool, error) {
+	if anyMsg == nil {
+		return false, nil
+	}
 	// First extract the message from Any
 	msg, err := anyMsg.UnmarshalNew()
 	if err != nil {
