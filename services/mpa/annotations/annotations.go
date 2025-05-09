@@ -1,4 +1,4 @@
-/* Copyright (c) 2023 Snowflake Inc. All rights reserved.
+/* Copyright (c) 2019 Snowflake Inc. All rights reserved.
 
    Licensed under the Apache License, Version 2.0 (the
    "License"); you may not use this file except in compliance
@@ -14,9 +14,9 @@
    under the License.
 */
 
-// Package httpoverrpc defines the RPC interface for the sansshell HTTP actions.
-package httpoverrpc
+// Package mpa defines the RPC interface for the sansshell MPA actions.
+package annotations
 
-// To regenerate the proto headers if the proto changes, just run go generate
+// To regenerate the proto headers if the .proto changes, just run go generate
 // and this encodes the necessary magic:
-//go:generate protoc --proto_path=../../ --go_out=../../ --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative --go-grpcproxy_out=../../ --go-grpcproxy_opt=paths=source_relative services/httpoverrpc/httpoverrpc.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=require_unimplemented_servers=false:. --go-grpc_opt=paths=source_relative --go-grpcproxy_out=. --go-grpcproxy_opt=paths=source_relative mpa_annotations.proto

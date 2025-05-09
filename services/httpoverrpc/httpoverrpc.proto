@@ -17,6 +17,7 @@
 syntax = "proto3";
 
 import "google/protobuf/descriptor.proto";
+import "services/mpa/annotations/mpa_annotations.proto";
 
 option go_package = "github.com/Snowflake-Labs/sansshell/httpoverrpc";
 
@@ -29,7 +30,7 @@ service HTTPOverRPC {
 }
 
 message HostHTTPRequest {
-  HTTPRequest request = 1;
+  HTTPRequest request = 1 [(sansshell.annotations.mpa_redacted) = true];
   // The port to use for the request on the local host.
   int32 port = 2;
   // Hostname can be specified as either an ip address or domain name
