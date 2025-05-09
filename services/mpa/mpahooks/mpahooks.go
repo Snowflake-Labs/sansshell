@@ -86,6 +86,11 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 		return fmt.Errorf("unable to marshal into anyproto: %v", err)
 	}
 
+	// Redact fields that shouldn't be checked for equality
+	if _, err := RedactFieldsForMPA(&msg); err != nil {
+		return fmt.Errorf("error redacting marked fields: %v", err)
+	}
+
 	// Prefer using a proxied identity if provided
 	var user string
 	if p := proxiedidentity.FromContext(ctx); p != nil {
@@ -118,6 +123,11 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 	var msg anypb.Any
 	if err := msg.MarshalFrom(p); err != nil {
 		return "", fmt.Errorf("unable to marshal into anyproto: %v", err)
+	}
+
+	// Redact fields that shouldn't be stored in the MPA
+	if _, err := RedactFieldsForMPA(&msg); err != nil {
+		return "", fmt.Errorf("error redacting marked fields: %v", err)
 	}
 
 	mpaClient := mpa.NewMpaClient(cc)

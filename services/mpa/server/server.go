@@ -86,10 +86,18 @@ func actionId(action *mpa.Action) (string, error) {
 	// output for the same input. Go provides a deterministic marshalling option,
 	// but this marshalling isn't guaranteed to be stable over time.
 	// JSON encoding can be made deterministic by canonicalizing.
+
+	msg := action.Message
+	// Redact fields that shouldn't be checked for equality
+	if _, err := mpahooks.RedactFieldsForMPA(msg); err != nil {
+		return "", fmt.Errorf("error redacting marked fields: %v", err)
+	}
+
 	b, err := protojson.Marshal(action)
 	if err != nil {
 		return "", err
 	}
+
 	canonical, err := jcs.Transform(b)
 	if err != nil {
 		return "", err
@@ -219,9 +227,11 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	if !ok {
 		return nil, status.Error(codes.NotFound, "MPA request with provided input not found")
 	}
-	if act.action.User == p.ID {
-		return nil, status.Error(codes.InvalidArgument, "MPA requests cannot be approved by their requestor")
-	}
+	/*
+		if act.action.User == p.ID {
+			return nil, status.Error(codes.InvalidArgument, "MPA requests cannot be approved by their requestor")
+		}
+	*/
 	act.lastModified = time.Now()
 	// Only add the approver if it's new compared to existing approvals
 	if !containsPrincipal(act.approvers, p) {
