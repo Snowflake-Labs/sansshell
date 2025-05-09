@@ -35,11 +35,9 @@ func RedactFieldsForMPA(anyMsg *anypb.Any) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to unmarshal Any message: %v", err)
 	}
-	fmt.Printf("\n\n")
 
 	// Process the message to redact marked fields
 	modified := redactMessageFields(msg)
-	fmt.Printf("######################## Redacted %v fields on message: %v\n\n\n", modified, msg.ProtoReflect().Descriptor().FullName())
 
 	// If we made changes, update the Any message
 	if modified {
@@ -64,12 +62,8 @@ func redactMessageFields(message proto.Message) bool {
 	m.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		// Check if this field has the mpa_redacted option set
 		opts := fd.Options().(*descriptorpb.FieldOptions)
-		fmt.Printf("##### Field: %s, fd: %v Value: %v, opts: %v \n", fd.FullName(), fd, v, opts)
 
 		if proto.GetExtension(opts, annotations.E_MpaRedacted).(bool) {
-			// Field should be redacted
-			fmt.Printf("##### Redacting field: %s\n", fd.FullName())
-
 			m.Clear(fd)
 			modified = true
 			return true // Continue iteration
