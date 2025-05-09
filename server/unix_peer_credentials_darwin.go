@@ -24,7 +24,7 @@ import (
 	"os/user"
 	"strconv"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"golang.org/x/sys/unix"
 )
 

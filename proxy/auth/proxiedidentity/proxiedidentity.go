@@ -22,7 +22,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

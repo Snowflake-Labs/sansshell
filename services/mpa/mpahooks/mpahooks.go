@@ -25,8 +25,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa/proxiedidentity"
-	"github.com/Snowflake-Labs/sansshell/auth/opa/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
+	"github.com/Snowflake-Labs/sansshell/proxy/auth/proxiedidentity"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -355,7 +355,7 @@ func ProxyMPAAuthzHook() rpcauth.RPCAuthzHook {
 		}
 
 		if input.Environment == nil || !input.Environment.NonHostPolicyCheck {
-			// Proxies will evaluate OPA polices on both proxy-level calls and host-level
+			// Proxies will evaluate Authz polices on both proxy-level calls and host-level
 			// calls. We want to only gather MPA info for host-level calls.
 			return nil
 		}

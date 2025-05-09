@@ -14,7 +14,7 @@
    under the License.
 */
 
-// Package rpcauth provides OPA policy authorization
+// Package rpcauth provides authz policy authorization
 // for Sansshell RPCs.
 package rpcauth
 
@@ -31,7 +31,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/Snowflake-Labs/sansshell/auth/opa"
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 )
 
@@ -47,14 +46,40 @@ var (
 		Description: "number of authorization failure due to policy evaluation error"}
 )
 
+type AuthzPolicy interface {
+	Eval(ctx context.Context, input *RPCAuthInput) (bool, error)
+	DenialHints(ctx context.Context, input *RPCAuthInput) ([]string, error)
+}
+
+type RPCAuthorizer interface {
+	// Eval will evalulate the supplied input against the authorization policy, returning
+	// nil if policy evaulation was successful, and the request is permitted, or
+	// an appropriate status.Error otherwise. Any input hooks will be executed
+	// prior to policy evaluation, and may mutate `input`, regardless of the
+	// the success or failure of policy.
+	Eval(ctx context.Context, input *RPCAuthInput) error
+
+	// Authorize implements grpc.UnaryServerInterceptor, and will authorize each rpc to a service
+	Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error)
+
+	// AuthorizeStream implements grpc.StreamServerInterceptor and applies policy checks on any RecvMsg calls to a service
+	AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error
+
+	// AuthorizeClient implements grpc.UnaryClientInterceptor, and will authorize each rpc on each call to remote service
+	AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error
+
+	// AuthorizeClientStream implements grpc.StreamClientInterceptor and applies policy checks on any SendMsg calls to remote service
+	AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error)
+}
+
 // An Authorizer performs authorization of Sanshsell RPCs based on
 // an OPA/Rego policy.
 //
 // It can be used as both a unary and stream interceptor, or manually
 // invoked to perform policy checks using `Eval`
-type Authorizer struct {
+type rpcAuthorizerImpl struct {
 	// The AuthzPolicy used to perform authorization checks.
-	policy *opa.AuthzPolicy
+	policy AuthzPolicy
 
 	// Additional authorization hooks invoked before policy evaluation.
 	hooks []RPCAuthzHook
@@ -67,27 +92,16 @@ type RPCAuthzHook interface {
 	Hook(context.Context, *RPCAuthInput) error
 }
 
-// New creates a new Authorizer from an opa.AuthzPolicy. Any supplied authorization
+// NewRPCAuthorizer creates a new Authorizer with AuthzPolicy. Any supplied authorization
 // hooks will be executed, in the order provided, on each policy evauluation.
 // NOTE: The policy is used for both client and server hooks below. If you need
 //
 //	distinct policy for client vs server, create 2 Authorizer's.
-func New(policy *opa.AuthzPolicy, authzHooks ...RPCAuthzHook) *Authorizer {
-	return &Authorizer{policy: policy, hooks: authzHooks}
-}
-
-// NewWithPolicy creates a new Authorizer from a policy string. Any supplied
-// authorization hooks will be executed, in the order provided, on each policy
-// evaluation.
-// NOTE: The policy is used for both client and server hooks below. If you need
-//
-//	distinct policy for client vs server, create 2 Authorizer's.
-func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHook) (*Authorizer, error) {
-	p, err := opa.NewAuthzPolicy(ctx, policy)
-	if err != nil {
-		return nil, err
+func NewRPCAuthorizer(policy AuthzPolicy, authzHooks ...RPCAuthzHook) RPCAuthorizer {
+	return &rpcAuthorizerImpl{
+		policy: policy,
+		hooks:  authzHooks,
 	}
-	return New(p, authzHooks...), nil
 }
 
 // Eval will evalulate the supplied input against the authorization policy, returning
@@ -95,7 +109,7 @@ func NewWithPolicy(ctx context.Context, policy string, authzHooks ...RPCAuthzHoo
 // an appropriate status.Error otherwise. Any input hooks will be executed
 // prior to policy evaluation, and may mutate `input`, regardless of the
 // the success or failure of policy.
-func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
+func (g *rpcAuthorizerImpl) Eval(ctx context.Context, input *RPCAuthInput) error {
 	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
@@ -151,16 +165,16 @@ func (g *Authorizer) Eval(ctx context.Context, input *RPCAuthInput) error {
 			logger.V(1).Error(errRegister, "failed to add counter "+authzDeniedPolicyCounter.Name)
 		}
 		if len(hints) > 0 {
-			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request: %v", strings.Join(hints, ", "))
+			return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request: %v", strings.Join(hints, ", "))
 		} else {
-			return status.Errorf(codes.PermissionDenied, "OPA policy does not permit this request")
+			return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request")
 		}
 	}
 	return nil
 }
 
 // Authorize implements grpc.UnaryServerInterceptor
-func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func (g *rpcAuthorizerImpl) Authorize(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	msg, ok := req.(proto.Message)
 	if !ok {
 		return nil, status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
@@ -177,7 +191,7 @@ func (g *Authorizer) Authorize(ctx context.Context, req interface{}, info *grpc.
 }
 
 // AuthorizeClient implements grpc.UnaryClientInterceptor
-func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func (g *rpcAuthorizerImpl) AuthorizeClient(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 	msg, ok := req.(proto.Message)
 	if !ok {
 		return status.Errorf(codes.Internal, "unable to authorize request of type %T which is not proto.Message", req)
@@ -193,7 +207,7 @@ func (g *Authorizer) AuthorizeClient(ctx context.Context, method string, req, re
 }
 
 // AuthorizeClientStream implements grpc.StreamClientInterceptor and applies policy checks on any SendMsg calls.
-func (g *Authorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+func (g *rpcAuthorizerImpl) AuthorizeClientStream(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 	clientStream, err := streamer(ctx, desc, cc, method, opts...)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "can't create clientStream: %v", err)
@@ -210,7 +224,7 @@ func (g *Authorizer) AuthorizeClientStream(ctx context.Context, desc *grpc.Strea
 type wrappedClientStream struct {
 	grpc.ClientStream
 	method string
-	authz  *Authorizer
+	authz  *rpcAuthorizerImpl
 }
 
 // see: grpc.ClientStream.SendMsg
@@ -231,7 +245,7 @@ func (e *wrappedClientStream) SendMsg(req interface{}) error {
 }
 
 // AuthorizeStream implements grpc.StreamServerInterceptor and applies policy checks on any RecvMsg calls.
-func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func (g *rpcAuthorizerImpl) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	wrapped := &wrappedStream{
 		ServerStream: ss,
 		info:         info,
@@ -244,7 +258,7 @@ func (g *Authorizer) AuthorizeStream(srv interface{}, ss grpc.ServerStream, info
 type wrappedStream struct {
 	grpc.ServerStream
 	info  *grpc.StreamServerInfo
-	authz *Authorizer
+	authz *rpcAuthorizerImpl
 
 	peerMu            sync.Mutex
 	lastPeerAuthInput *PeerAuthInput
