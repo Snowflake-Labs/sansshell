@@ -106,6 +106,7 @@ allow {
 
 # Allow MPA setting when not sending a proxied identity. The proxy is allowed above.
 allow {
+	not input.metadata["proxied-sansshell-identity"]
 	input.method = ["/Mpa.Mpa/Store", "/Mpa.Mpa/Approve"][_]
 }
 
