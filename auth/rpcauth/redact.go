@@ -214,9 +214,5 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 }
 
 func isRedactedMetadata(key string) bool {
-	if strings.ToLower(key) == "authorization" {
-		return true
-	}
-
-	return false
+	return strings.ToLower(key) == "authorization"
 }
