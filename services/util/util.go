@@ -71,6 +71,7 @@ type cmdOptions struct {
 	env          []string
 	uid          uint32
 	gid          uint32
+	extraFiles   []*os.File
 }
 
 // Option will run the apply operation to change required checking/state
@@ -157,6 +158,18 @@ func CommandGroup(gid uint32) Option {
 func EnvVar(evar string) Option {
 	return optionfunc(func(o *cmdOptions) {
 		o.env = append(o.env, evar)
+	})
+}
+
+// ExtraFile adds a file descriptor to be passed to the command being run.
+//
+// The file descriptor number in the child process will be the same as the
+// file descriptor number in SansShell. The file descriptor number must be
+// equal to or greater than 3, as 0, 1, and 2 are reserved for the standard
+// streams.
+func ExtraFile(file *os.File) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.extraFiles = append(o.extraFiles, file)
 	})
 }
 
@@ -269,6 +282,11 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	cmd.Env = []string{}
 	// Now append any we received.
 	cmd.Env = append(cmd.Env, options.env...)
+	extraFilesTable, err := makeExtraFilesTable(options.extraFiles)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to pass extra files: %v", err)
+	}
+	cmd.ExtraFiles = extraFilesTable
 
 	// Set uid/gid if needed for the sub-process to run under.
 	// Only do this if it's different than our current ones since
@@ -294,6 +312,36 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		return nil, status.Errorf(codes.Internal, "unexpected error output:\n%s", TrimString(run.Stderr.String()))
 	}
 	return run, nil
+}
+
+// Prepare a table suitable for passing to the exec.Cmd.ExtraFiles field.
+//
+// The i-th entry in the table should correspond to the file with descriptor
+// number i+3 (0, 1, and 2 are always stdin, stdout, and stderr).
+//
+// This function creates the file descriptor table in such a way that the
+// file descriptor numbers are preserved in the called process: if the original
+// file had descriptor number N, it will have the same descriptor number in the
+// child process.
+func makeExtraFilesTable(files []*os.File) ([]*os.File, error) {
+	maxFd := -1
+	for _, f := range files {
+		fd := int(f.Fd())
+		if fd <= 2 {
+			return nil, fmt.Errorf("file descriptor %d is not a valid extra file", fd)
+		}
+		if fd > maxFd {
+			maxFd = fd
+		}
+	}
+	if maxFd < 0 {
+		return nil, nil
+	}
+	extraFiles := make([]*os.File, (maxFd-3)+1)
+	for _, f := range files {
+		extraFiles[int(f.Fd())-3] = f
+	}
+	return extraFiles, nil
 }
 
 // MaxBuf is the maximum we should allow stdout or stderr to be when sending back in an error string.
