@@ -86,10 +86,18 @@ func actionId(action *mpa.Action) (string, error) {
 	// output for the same input. Go provides a deterministic marshalling option,
 	// but this marshalling isn't guaranteed to be stable over time.
 	// JSON encoding can be made deterministic by canonicalizing.
+
+	msg := action.Message
+	// Redact fields that shouldn't be checked for equality
+	if _, err := mpahooks.RedactFieldsForMPA(msg); err != nil {
+		return "", fmt.Errorf("error redacting message for MPA: %v", err)
+	}
+
 	b, err := protojson.Marshal(action)
 	if err != nil {
 		return "", err
 	}
+
 	canonical, err := jcs.Transform(b)
 	if err != nil {
 		return "", err
