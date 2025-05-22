@@ -19,10 +19,12 @@ package util
 import (
 	"bytes"
 	"context"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestRunCommand(t *testing.T) {
@@ -39,6 +41,7 @@ func TestRunCommand(t *testing.T) {
 		stderr            string
 		stderrIsError     bool
 		env               []string
+		extraFilesFunc    func(tempdir string) []*os.File
 	}{
 		{
 			name:    "Not absolute path",
@@ -84,6 +87,63 @@ func TestRunCommand(t *testing.T) {
 			env:    []string{"FOO=bar", "BAZ=e"},
 		},
 		{
+			name:   "verify extra file passing",
+			bin:    testutil.ResolvePath(t, "bash"),
+			args:   []string{"-c", "cat <&25"},
+			stdout: "Hello!",
+			extraFilesFunc: func(tempdir string) []*os.File {
+				// Prepare the extra file with some contents.
+				f, err := os.OpenFile(tempdir+"/test", os.O_RDWR|os.O_CREATE, 0755)
+				if err != nil {
+					t.Fatalf("Couldn't open file %s: %v", tempdir+"/foo", err)
+				}
+				if _, err := f.WriteString("Hello!"); err != nil {
+					f.Close()
+					t.Fatalf("Couldn't write to file %s: %v", tempdir+"/foo", err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatalf("Couldn't close file %s: %v", tempdir+"/foo", err)
+				}
+
+				// Open the file again and duplicate its descriptor to fd 25.
+				//
+				// This simulates a file being opened on descriptor number number 25
+				// in the first place. We do this to force the number to be some
+				// statically-known value in the test.
+				f, err = os.OpenFile(tempdir+"/test", os.O_RDONLY, 0755)
+				if err != nil {
+					t.Fatalf("Couldn't open file %s: %v", tempdir+"/foo", err)
+				}
+				err = unix.Dup2(int(f.Fd()), 25)
+				if err != nil {
+					f.Close()
+					t.Fatalf("Couldn't dup2 file %s: %v", tempdir+"/foo", err)
+				}
+				if err := f.Close(); err != nil {
+					t.Fatalf("Couldn't close file %s: %v", tempdir+"/foo", err)
+				}
+				// Return the duplicated file descriptor so that we have a statically
+				// known file descriptor number to use in the child process.
+				return []*os.File{
+					os.NewFile(25, tempdir+"/test"),
+				}
+			},
+		},
+		{
+			name:   "verify extra file passing with bad file",
+			bin:    testutil.ResolvePath(t, "bash"),
+			args:   []string{"-c", "cat <&25"},
+			stdout: "Hello!",
+			extraFilesFunc: func(tempdir string) []*os.File {
+				return []*os.File{
+					// File descriptor number 1 corresponds to stdout,
+					// and ExtraFile cannot override it.
+					os.NewFile(1, tempdir+"/test"),
+				}
+			},
+			wantErr: true,
+		},
+		{
 			name:              "error codes",
 			bin:               testutil.ResolvePath(t, "false"),
 			returnCodeNonZero: true,
@@ -114,6 +174,11 @@ func TestRunCommand(t *testing.T) {
 			}
 			for _, e := range tc.env {
 				opts = append(opts, EnvVar(e))
+			}
+			if tc.extraFilesFunc != nil {
+				for _, f := range tc.extraFilesFunc(t.TempDir()) {
+					opts = append(opts, ExtraFile(f))
+				}
 			}
 			if tc.uid != 0 {
 				opts = append(opts, CommandUser(tc.uid))
