@@ -20,8 +20,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -166,12 +168,24 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 	redactedInput := RPCAuthInput{
 		Method:      input.Method,
 		MessageType: input.MessageType,
-		Metadata:    input.Metadata,
 		Peer:        input.Peer,
 		Host:        input.Host,
 		Environment: input.Environment,
 		Extensions:  input.Extensions,
 	}
+
+	if input.Metadata != nil {
+		redactedInput.Metadata = metadata.MD{}
+
+		for k, v := range input.Metadata {
+			if isRedactedMetadata(k) {
+				continue
+			}
+
+			redactedInput.Metadata[k] = v
+		}
+	}
+
 	if input.MessageType == "" {
 		return redactedInput, nil
 	}
@@ -197,4 +211,8 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 	}
 	redactedInput.Message = json.RawMessage(marshaled)
 	return redactedInput, nil
+}
+
+func isRedactedMetadata(key string) bool {
+	return strings.ToLower(key) == "authorization"
 }
