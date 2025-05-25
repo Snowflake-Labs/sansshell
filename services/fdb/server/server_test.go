@@ -55,6 +55,9 @@ func TestMain(m *testing.M) {
 	fdbm := &fdbmovedata{operations: make(map[int64]*moveOperation)}
 	fdbm.Register(s)
 
+	fbdb := &fdbbackup{}
+	fbdb.Register(s)
+
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("Server exited with error: %v", err)
