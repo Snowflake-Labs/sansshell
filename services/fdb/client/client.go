@@ -2008,7 +2008,7 @@ type fdbCLIListtenantsCmd struct {
 	req *pb.FDBCLIListtenants
 }
 
-func (*fdbCLIListtenantsCmd) Name() string { return "listtentants" }
+func (*fdbCLIListtenantsCmd) Name() string { return "listtenants" }
 func (*fdbCLIListtenantsCmd) Synopsis() string {
 	return "The listtenants command prints the names of tenants in the cluster."
 }
