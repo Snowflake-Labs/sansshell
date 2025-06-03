@@ -228,8 +228,12 @@ const (
 // FDBMoveClient is the client API for FDBMove service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Deprecated: Do not use.
 type FDBMoveClient interface {
+	// Deprecated: Do not use.
 	FDBMoveDataCopy(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (*FDBMoveDataCopyResponse, error)
+	// Deprecated: Do not use.
 	FDBMoveDataWait(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FDBMoveDataWaitResponse], error)
 }
 
@@ -237,10 +241,12 @@ type fDBMoveClient struct {
 	cc grpc.ClientConnInterface
 }
 
+// Deprecated: Do not use.
 func NewFDBMoveClient(cc grpc.ClientConnInterface) FDBMoveClient {
 	return &fDBMoveClient{cc}
 }
 
+// Deprecated: Do not use.
 func (c *fDBMoveClient) FDBMoveDataCopy(ctx context.Context, in *FDBMoveDataCopyRequest, opts ...grpc.CallOption) (*FDBMoveDataCopyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FDBMoveDataCopyResponse)
@@ -251,6 +257,7 @@ func (c *fDBMoveClient) FDBMoveDataCopy(ctx context.Context, in *FDBMoveDataCopy
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *fDBMoveClient) FDBMoveDataWait(ctx context.Context, in *FDBMoveDataWaitRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[FDBMoveDataWaitResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &FDBMove_ServiceDesc.Streams[0], FDBMove_FDBMoveDataWait_FullMethodName, cOpts...)
@@ -273,8 +280,12 @@ type FDBMove_FDBMoveDataWaitClient = grpc.ServerStreamingClient[FDBMoveDataWaitR
 // FDBMoveServer is the server API for FDBMove service.
 // All implementations should embed UnimplementedFDBMoveServer
 // for forward compatibility.
+//
+// Deprecated: Do not use.
 type FDBMoveServer interface {
+	// Deprecated: Do not use.
 	FDBMoveDataCopy(context.Context, *FDBMoveDataCopyRequest) (*FDBMoveDataCopyResponse, error)
+	// Deprecated: Do not use.
 	FDBMoveDataWait(*FDBMoveDataWaitRequest, grpc.ServerStreamingServer[FDBMoveDataWaitResponse]) error
 }
 
@@ -300,6 +311,7 @@ type UnsafeFDBMoveServer interface {
 	mustEmbedUnimplementedFDBMoveServer()
 }
 
+// Deprecated: Do not use.
 func RegisterFDBMoveServer(s grpc.ServiceRegistrar, srv FDBMoveServer) {
 	// If the following call pancis, it indicates UnimplementedFDBMoveServer was
 	// embedded by pointer and is nil.  This will cause panics if an
