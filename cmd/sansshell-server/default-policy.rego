@@ -16,7 +16,11 @@ allow {
 }
 
 allow {
-	input.method = "/HTTPOverRPC.HTTPOverRPC/Host"
+	input.method = "/HTTPOverRPC.HTTPOverRPC/Host"	
+}
+
+allow {
+	input.method = "/HTTPOverRPC.HTTPOverRPC/StreamHost"
 }
 
 allow {
