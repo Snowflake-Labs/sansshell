@@ -47,6 +47,72 @@ var (
 type server struct{}
 
 func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
+	httpResp, err := s.getHTTPResponse(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	return &pb.HTTPReply{
+		StatusCode: int32(httpResp.StatusCode),
+		Headers:    respHeaders,
+		Body:       body,
+	}, nil
+}
+
+func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
+	const responseStreamChunkSize = 1024 * 1024 // 1MB
+	httpResp, err := s.getHTTPResponse(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	defer httpResp.Body.Close()
+
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	err = stream.Send(&pb.HTTPStreamReply{
+		Reply: &pb.HTTPStreamReply_Header{
+			Header: &pb.HTTPHeaderReply{
+				StatusCode: int32(httpResp.StatusCode),
+				Headers:    respHeaders,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	chunk := make([]byte, responseStreamChunkSize)
+
+	for {
+		n, err := httpResp.Body.Read(chunk)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		s_err := stream.Send(&pb.HTTPStreamReply{
+			Reply: &pb.HTTPStreamReply_Body{
+				Body: chunk[:n],
+			},
+		})
+		if s_err != nil {
+			return s_err
+		}
+		if err == io.EOF {
+			return nil
+		}
+	}
+}
+
+func (s *server) getHTTPResponse(ctx context.Context, req *pb.HostHTTPRequest) (*http.Response, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
 	hostname := "localhost"
@@ -99,128 +165,9 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 
 		client.Transport = transport
 	}
-
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	httpResp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer httpResp.Body.Close()
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var respHeaders []*pb.Header
-	for k, v := range httpResp.Header {
-		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
-	}
-	return &pb.HTTPReply{
-		StatusCode: int32(httpResp.StatusCode),
-		Headers:    respHeaders,
-		Body:       body,
-	}, nil
-}
-
-func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
-	const responseStreamChunkSize = 1024 * 1024 // 1MB
-
-	ctx := stream.Context()
-	recorder := metrics.RecorderFromContextOrNoop(ctx)
-
-	hostname := "localhost"
-	if req.Hostname != "" {
-		hostname = req.Hostname
-	}
-	if req.Protocol != "http" && req.Protocol != "https" {
-		return status.Errorf(codes.InvalidArgument, "currently request protocol can only be http or https")
-	}
-
-	url := fmt.Sprintf("%s://%s:%v%v", req.Protocol, hostname, req.Port, req.Request.RequestUri)
-	httpReq, err := http.NewRequestWithContext(ctx, req.Request.Method, url, bytes.NewReader(req.Request.Body))
-	if err != nil {
-		recorder.CounterOrLog(ctx, localhostFailureCounter, 1)
-		return err
-	}
-	// Set a default user agent that can be overridden in the request.
-	httpReq.Header["User-Agent"] = []string{"sansshell/" + sansshellserver.Version}
-
-	for _, header := range req.Request.Headers {
-		if strings.ToLower(header.Key) == "host" {
-			// override the host with value from header
-			httpReq.Host = header.Values[0]
-			continue
-		}
-		httpReq.Header[header.Key] = header.Values
-	}
-
-	client := &http.Client{}
-
-	if req.Tlsconfig != nil || req.Dialconfig != nil {
-		transport := &http.Transport{}
-
-		if req.Tlsconfig != nil {
-			transport.TLSClientConfig = &tls.Config{
-				InsecureSkipVerify: req.Tlsconfig.InsecureSkipVerify,
-			}
-		}
-
-		if req.GetDialconfig() != nil {
-			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dailAddress := addr
-				if req.Dialconfig.GetDialAddress() != "" {
-					dailAddress = req.Dialconfig.GetDialAddress()
-				}
-
-				return net.Dial(network, dailAddress)
-			}
-		}
-
-		client.Transport = transport
-	}
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-	httpResp, err := client.Do(httpReq)
-	if err != nil {
-		return err
-	}
-	defer httpResp.Body.Close()
-
-	var respHeaders []*pb.Header
-	for k, v := range httpResp.Header {
-		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
-	}
-	err = stream.Send(&pb.HTTPStreamReply{
-		Reply: &pb.HTTPStreamReply_Header{
-			Header: &pb.HTTPHeaderReply{
-				StatusCode: int32(httpResp.StatusCode),
-				Headers:    respHeaders,
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	chunk := make([]byte, responseStreamChunkSize)
-
-	for {
-		n, err := httpResp.Body.Read(chunk)
-		if err != nil && err != io.EOF {
-			return err
-		}
-		s_err := stream.Send(&pb.HTTPStreamReply{
-			Reply: &pb.HTTPStreamReply_Body{
-				Body: chunk[:n],
-			},
-		})
-		if s_err != nil {
-			return s_err
-		}
-		if err == io.EOF {
-			return nil
-		}
-	}
+	return client.Do(httpReq)
 }
 
 // Register is called to expose this handler to the gRPC server

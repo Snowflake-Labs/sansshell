@@ -320,65 +320,74 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
-	retCode := subcommands.ExitSuccess
 	if g.stream {
-		resp, err := proxy.StreamHostOneMany(ctx, req)
-		if err != nil {
-			return subcommands.ExitFailure
+		return g.handleStream(ctx, state, &proxy, req)
+	}
+	return g.handleHost(ctx, state, &proxy, req)
+}
+
+func (g *getCmd) handleHost(ctx context.Context, state *util.ExecuteState, proxy *pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) subcommands.ExitStatus {
+	resp, err := (*proxy).HostOneMany(ctx, req)
+	retCode := subcommands.ExitSuccess
+	if err != nil {
+		// Emit this to every error file as it's not specific to a given target.
+		for _, e := range state.Err {
+			fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
 		}
-		for {
-			rs, err := resp.Recv()
-			if err == io.EOF {
-				break
+		return subcommands.ExitFailure
+	}
+	for r := range resp {
+		if r.Error != nil {
+			fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		if g.showResponseHeaders {
+			fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.StatusCode, http.StatusText(int(r.Resp.StatusCode)))
+			for _, h := range r.Resp.Headers {
+				for _, v := range h.Values {
+					fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
+
+				}
 			}
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
+		}
+		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
+	}
+	return retCode
+}
+
+func (g *getCmd) handleStream(ctx context.Context, state *util.ExecuteState, proxy *pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) subcommands.ExitStatus {
+	resp, err := (*proxy).StreamHostOneMany(ctx, req)
+	retCode := subcommands.ExitSuccess
+	if err != nil {
+		return subcommands.ExitFailure
+	}
+	for {
+		rs, err := resp.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(state.Err[0], "Stream failure: %v\n", err)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		for _, r := range rs {
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
 				return subcommands.ExitFailure
 			}
-			for _, r := range rs {
-				if r.Error != nil && r.Error != io.EOF {
-					fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
-					retCode = subcommands.ExitFailure
-					continue
-				}
-				if g.showResponseHeaders && r.Resp.GetHeader() != nil {
-					fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.GetHeader().StatusCode, http.StatusText(int(r.Resp.GetHeader().StatusCode)))
-					for _, h := range r.Resp.GetHeader().Headers {
-						for _, v := range h.Values {
-							fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
-						}
-					}
-				}
-				if r.Resp.GetBody() != nil {
-					fmt.Fprint(state.Out[r.Index], string(r.Resp.GetBody()))
-				}
-			}
-		}
-	} else {
-		resp, err := proxy.HostOneMany(ctx, req)
-		if err != nil {
-			// Emit this to every error file as it's not specific to a given target.
-			for _, e := range state.Err {
-				fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
-			}
-			return subcommands.ExitFailure
-		}
-		for r := range resp {
-			if r.Error != nil {
-				fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
-				retCode = subcommands.ExitFailure
-				continue
-			}
-			if g.showResponseHeaders {
-				fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.StatusCode, http.StatusText(int(r.Resp.StatusCode)))
-				for _, h := range r.Resp.Headers {
+			if g.showResponseHeaders && r.Resp.GetHeader() != nil {
+				fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.GetHeader().StatusCode, http.StatusText(int(r.Resp.GetHeader().StatusCode)))
+				for _, h := range r.Resp.GetHeader().Headers {
 					for _, v := range h.Values {
 						fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
-
 					}
 				}
 			}
-			fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
+			if r.Resp.GetBody() != nil {
+				fmt.Fprint(state.Out[r.Index], string(r.Resp.GetBody()))
+			}
 		}
 	}
 	return retCode
