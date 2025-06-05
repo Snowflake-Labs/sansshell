@@ -268,6 +268,10 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		fmt.Fprintln(os.Stderr, "Please specify exactly two arguments: a port and a query.")
 		return subcommands.ExitUsageError
 	}
+	if len(state.Conn.Targets) > 1 && g.stream {
+		fmt.Fprintln(os.Stderr, "Streaming is not supported for multiple targets.")
+		return subcommands.ExitUsageError
+	}
 	port, err := strconv.Atoi(f.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Port could not be interpreted as a number.")
