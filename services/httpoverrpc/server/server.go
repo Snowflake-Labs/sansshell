@@ -123,7 +123,95 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 }
 
 func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
-	return nil
+	ctx := stream.Context()
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	hostname := "localhost"
+	if req.Hostname != "" {
+		hostname = req.Hostname
+	}
+	if req.Protocol != "http" && req.Protocol != "https" {
+		return status.Errorf(codes.InvalidArgument, "currently request protocol can only be http or https")
+	}
+
+	url := fmt.Sprintf("%s://%s:%v%v", req.Protocol, hostname, req.Port, req.Request.RequestUri)
+	httpReq, err := http.NewRequestWithContext(ctx, req.Request.Method, url, bytes.NewReader(req.Request.Body))
+	if err != nil {
+		recorder.CounterOrLog(ctx, localhostFailureCounter, 1)
+		return err
+	}
+	// Set a default user agent that can be overridden in the request.
+	httpReq.Header["User-Agent"] = []string{"sansshell/" + sansshellserver.Version}
+
+	for _, header := range req.Request.Headers {
+		if strings.ToLower(header.Key) == "host" {
+			// override the host with value from header
+			httpReq.Host = header.Values[0]
+			continue
+		}
+		httpReq.Header[header.Key] = header.Values
+	}
+
+	client := &http.Client{}
+
+	if req.Tlsconfig != nil || req.Dialconfig != nil {
+		transport := &http.Transport{}
+
+		if req.Tlsconfig != nil {
+			transport.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: req.Tlsconfig.InsecureSkipVerify,
+			}
+		}
+
+		if req.GetDialconfig() != nil {
+			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dailAddress := addr
+				if req.Dialconfig.GetDialAddress() != "" {
+					dailAddress = req.Dialconfig.GetDialAddress()
+				}
+
+				return net.Dial(network, dailAddress)
+			}
+		}
+
+		client.Transport = transport
+	}
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer httpResp.Body.Close()
+
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	err = stream.Send(&pb.HTTPStreamReply{
+		Reply: &pb.HTTPStreamReply_Header{
+			Header: &pb.HTTPHeaderReply{
+				StatusCode: int32(httpResp.StatusCode),
+				Headers:    respHeaders,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return err
+	}
+
+	err = stream.Send(&pb.HTTPStreamReply{
+		Reply: &pb.HTTPStreamReply_Body{
+			Body: body,
+		},
+	})
+
+	return err
 }
 
 // Register is called to expose this handler to the gRPC server
