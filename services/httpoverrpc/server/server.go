@@ -123,6 +123,8 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 }
 
 func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
+	const responseStreamChunkSize = 1024 * 1024 // 1MB
+
 	ctx := stream.Context()
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
@@ -200,18 +202,27 @@ func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_Strea
 		return err
 	}
 
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return err
+	chunk := make([]byte, responseStreamChunkSize)
+
+	for {
+		n, err := httpResp.Body.Read(chunk)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		err = stream.Send(&pb.HTTPStreamReply{
+			Reply: &pb.HTTPStreamReply_Body{
+				Body: chunk[:n],
+			},
+		})
+		if err != nil {
+			return err
+		}
 	}
 
-	err = stream.Send(&pb.HTTPStreamReply{
-		Reply: &pb.HTTPStreamReply_Body{
-			Body: body,
-		},
-	})
-
-	return err
+	return nil
 }
 
 // Register is called to expose this handler to the gRPC server
