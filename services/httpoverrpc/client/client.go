@@ -228,6 +228,7 @@ type getCmd struct {
 	hostname            string
 	insecureSkipVerify  bool
 	dialAddress         string
+	stream              bool
 }
 
 func (*getCmd) Name() string     { return "get" }
@@ -258,6 +259,7 @@ func (g *getCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")
 	f.BoolVar(&g.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
 	f.StringVar(&g.dialAddress, "dial-address", "", "host:port to dial to. If not provided would dial to original host and port")
+	f.BoolVar(&g.stream, "stream", false, "If true, stream the response back to the client")
 }
 
 func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -318,31 +320,71 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
-	resp, err := proxy.HostOneMany(ctx, req)
 	retCode := subcommands.ExitSuccess
-	if err != nil {
-		// Emit this to every error file as it's not specific to a given target.
-		for _, e := range state.Err {
-			fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
+	if g.stream {
+		resp, err := proxy.StreamHostOneMany(ctx, req)
+		if err != nil {
+			return subcommands.ExitFailure
 		}
-		return subcommands.ExitFailure
-	}
-	for r := range resp {
-		if r.Error != nil {
-			fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
-			retCode = subcommands.ExitFailure
-			continue
-		}
-		if g.showResponseHeaders {
-			fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.StatusCode, http.StatusText(int(r.Resp.StatusCode)))
-			for _, h := range r.Resp.Headers {
-				for _, v := range h.Values {
-					fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
-
+		for {
+			rs, err := resp.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return retCode
+				}
+				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
+				return subcommands.ExitFailure
+			}
+			for _, r := range rs {
+				if r.Error != nil {
+					fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+					retCode = subcommands.ExitFailure
+					continue
+				}
+				if r.Error != nil {
+					fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+					retCode = subcommands.ExitFailure
+					continue
+				}
+				if g.showResponseHeaders && r.Resp.GetHeader() != nil {
+					fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.GetHeader().StatusCode, http.StatusText(int(r.Resp.GetHeader().StatusCode)))
+					for _, h := range r.Resp.GetHeader().Headers {
+						for _, v := range h.Values {
+							fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
+						}
+					}
+				}
+				if r.Resp.GetBody() != nil {
+					fmt.Fprintln(state.Out[r.Index], string(r.Resp.GetBody()))
 				}
 			}
 		}
-		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
+	} else {
+		resp, err := proxy.HostOneMany(ctx, req)
+		if err != nil {
+			// Emit this to every error file as it's not specific to a given target.
+			for _, e := range state.Err {
+				fmt.Fprintf(e, "All targets - could not execute: %v\n", err)
+			}
+			return subcommands.ExitFailure
+		}
+		for r := range resp {
+			if r.Error != nil {
+				fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+				retCode = subcommands.ExitFailure
+				continue
+			}
+			if g.showResponseHeaders {
+				fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.StatusCode, http.StatusText(int(r.Resp.StatusCode)))
+				for _, h := range r.Resp.Headers {
+					for _, v := range h.Values {
+						fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
+
+					}
+				}
+			}
+			fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
+		}
 	}
 	return retCode
 }
