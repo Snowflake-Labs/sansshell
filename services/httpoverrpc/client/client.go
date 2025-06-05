@@ -328,20 +328,15 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 		}
 		for {
 			rs, err := resp.Recv()
+			if err == io.EOF {
+				break
+			}
 			if err != nil {
-				if err == io.EOF {
-					return retCode
-				}
 				fmt.Fprintf(os.Stderr, "Stream failure: %v\n", err)
 				return subcommands.ExitFailure
 			}
 			for _, r := range rs {
-				if r.Error != nil {
-					fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
-					retCode = subcommands.ExitFailure
-					continue
-				}
-				if r.Error != nil {
+				if r.Error != nil && r.Error != io.EOF {
 					fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
 					retCode = subcommands.ExitFailure
 					continue
@@ -355,7 +350,7 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 					}
 				}
 				if r.Resp.GetBody() != nil {
-					fmt.Fprintln(state.Out[r.Index], string(r.Resp.GetBody()))
+					fmt.Fprint(state.Out[r.Index], string(r.Resp.GetBody()))
 				}
 			}
 		}

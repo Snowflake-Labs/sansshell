@@ -206,23 +206,21 @@ func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_Strea
 
 	for {
 		n, err := httpResp.Body.Read(chunk)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
+		if err != nil && err != io.EOF {
 			return err
 		}
-		err = stream.Send(&pb.HTTPStreamReply{
+		s_err := stream.Send(&pb.HTTPStreamReply{
 			Reply: &pb.HTTPStreamReply_Body{
 				Body: chunk[:n],
 			},
 		})
-		if err != nil {
-			return err
+		if s_err != nil {
+			return s_err
+		}
+		if err == io.EOF {
+			return nil
 		}
 	}
-
-	return nil
 }
 
 // Register is called to expose this handler to the gRPC server
