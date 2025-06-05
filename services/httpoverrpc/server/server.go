@@ -122,6 +122,10 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 	}, nil
 }
 
+func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
+	return nil
+}
+
 // Register is called to expose this handler to the gRPC server
 func (s *server) Register(gs *grpc.Server) {
 	pb.RegisterHTTPOverRPCServer(gs, s)
