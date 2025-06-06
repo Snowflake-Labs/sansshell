@@ -46,73 +46,7 @@ var (
 // Server is used to implement the gRPC Server
 type server struct{}
 
-func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
-	httpResp, err := s.getHTTPResponse(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	defer httpResp.Body.Close()
-	body, err := io.ReadAll(httpResp.Body)
-	if err != nil {
-		return nil, err
-	}
-	var respHeaders []*pb.Header
-	for k, v := range httpResp.Header {
-		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
-	}
-	return &pb.HTTPReply{
-		StatusCode: int32(httpResp.StatusCode),
-		Headers:    respHeaders,
-		Body:       body,
-	}, nil
-}
-
-func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
-	const responseStreamChunkSize = 1024 * 1024 // 1MB
-	httpResp, err := s.getHTTPResponse(stream.Context(), req)
-	if err != nil {
-		return err
-	}
-	defer httpResp.Body.Close()
-
-	var respHeaders []*pb.Header
-	for k, v := range httpResp.Header {
-		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
-	}
-	err = stream.Send(&pb.HTTPStreamReply{
-		Reply: &pb.HTTPStreamReply_Header{
-			Header: &pb.HTTPHeaderReply{
-				StatusCode: int32(httpResp.StatusCode),
-				Headers:    respHeaders,
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	chunk := make([]byte, responseStreamChunkSize)
-
-	for {
-		n, err := httpResp.Body.Read(chunk)
-		if err != nil && err != io.EOF {
-			return err
-		}
-		s_err := stream.Send(&pb.HTTPStreamReply{
-			Reply: &pb.HTTPStreamReply_Body{
-				Body: chunk[:n],
-			},
-		})
-		if s_err != nil {
-			return s_err
-		}
-		if err == io.EOF {
-			return nil
-		}
-	}
-}
-
-func (s *server) getHTTPResponse(ctx context.Context, req *pb.HostHTTPRequest) (*http.Response, error) {
+func (s *server) sendHTTPRequestAndGetResponse(ctx context.Context, req *pb.HostHTTPRequest) (*http.Response, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
 	hostname := "localhost"
@@ -168,6 +102,72 @@ func (s *server) getHTTPResponse(ctx context.Context, req *pb.HostHTTPRequest) (
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	return client.Do(httpReq)
+}
+
+func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
+	httpResp, err := s.sendHTTPRequestAndGetResponse(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	defer httpResp.Body.Close()
+	body, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	return &pb.HTTPReply{
+		StatusCode: int32(httpResp.StatusCode),
+		Headers:    respHeaders,
+		Body:       body,
+	}, nil
+}
+
+func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
+	const responseStreamChunkSize = 1024 * 1024 // 1MB
+	httpResp, err := s.sendHTTPRequestAndGetResponse(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	defer httpResp.Body.Close()
+
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	err = stream.Send(&pb.HTTPStreamReply{
+		Reply: &pb.HTTPStreamReply_Header{
+			Header: &pb.HTTPHeaderReply{
+				StatusCode: int32(httpResp.StatusCode),
+				Headers:    respHeaders,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	chunk := make([]byte, responseStreamChunkSize)
+
+	for {
+		n, err := httpResp.Body.Read(chunk)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		s_err := stream.Send(&pb.HTTPStreamReply{
+			Reply: &pb.HTTPStreamReply_Body{
+				Body: chunk[:n],
+			},
+		})
+		if s_err != nil {
+			return s_err
+		}
+		if err == io.EOF {
+			return nil
+		}
+	}
 }
 
 // Register is called to expose this handler to the gRPC server
