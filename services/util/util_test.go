@@ -19,10 +19,14 @@ package util
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
+	"path"
 	"reflect"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestRunCommand(t *testing.T) {
@@ -39,6 +43,7 @@ func TestRunCommand(t *testing.T) {
 		stderr            string
 		stderrIsError     bool
 		env               []string
+		extraFilesFunc    func(tempdir string) []*os.File
 	}{
 		{
 			name:    "Not absolute path",
@@ -84,6 +89,42 @@ func TestRunCommand(t *testing.T) {
 			env:    []string{"FOO=bar", "BAZ=e"},
 		},
 		{
+			name:   "verify extra file passing",
+			bin:    testutil.ResolvePath(t, "bash"),
+			args:   []string{"-c", "cat <&3 && cat <&4"},
+			stdout: "Hello, world!",
+			extraFilesFunc: func(tempdir string) []*os.File {
+				extraFiles := []*os.File{}
+				for i, contents := range []string{"Hello, ", "world!"} {
+					// Prepare the file with some contents.
+					path := path.Join(tempdir, fmt.Sprintf("test_%d", i))
+					f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0755)
+					if err != nil {
+						t.Fatalf("Couldn't open file %s: %v", path, err)
+					}
+					if _, err := f.WriteString(contents); err != nil {
+						f.Close()
+						t.Fatalf("Couldn't write to file %s: %v", path, err)
+					}
+					if err := f.Close(); err != nil {
+						t.Fatalf("Couldn't close file %s: %v", path, err)
+					}
+					// Open the file again.
+					//
+					// This simulates a file being opened on some descriptor number
+					// within SansShell. We explicitly enable O_CLOEXEC to check that
+					// such descriptors will be duplicated properly and can make their
+					// way to the subprocess.
+					f, err = os.OpenFile(path, os.O_RDONLY|unix.O_CLOEXEC, 0755)
+					if err != nil {
+						t.Fatalf("Couldn't open file %s: %v", path, err)
+					}
+					extraFiles = append(extraFiles, f)
+				}
+				return extraFiles
+			},
+		},
+		{
 			name:              "error codes",
 			bin:               testutil.ResolvePath(t, "false"),
 			returnCodeNonZero: true,
@@ -114,6 +155,9 @@ func TestRunCommand(t *testing.T) {
 			}
 			for _, e := range tc.env {
 				opts = append(opts, EnvVar(e))
+			}
+			if tc.extraFilesFunc != nil {
+				opts = append(opts, ExtraFiles(tc.extraFilesFunc(t.TempDir())))
 			}
 			if tc.uid != 0 {
 				opts = append(opts, CommandUser(tc.uid))

@@ -71,6 +71,7 @@ type cmdOptions struct {
 	env          []string
 	uid          uint32
 	gid          uint32
+	extraFiles   []*os.File
 }
 
 // Option will run the apply operation to change required checking/state
@@ -157,6 +158,19 @@ func CommandGroup(gid uint32) Option {
 func EnvVar(evar string) Option {
 	return optionfunc(func(o *cmdOptions) {
 		o.env = append(o.env, evar)
+	})
+}
+
+// ExtraFiles sets file descriptors which should be available in the sub-process.
+//
+// The table gets passed to exec.Cmd.ExtraFiles, which means that the i-th entry
+// in the table, if not nil, will be available in the child process under file
+// descriptor number i+3 (0, 1, and 2 are always stdin, stdout, and stderr).
+//
+// Multiple calls to ExtraFiles will replace the table, not append to it.
+func ExtraFiles(files []*os.File) Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.extraFiles = files
 	})
 }
 
@@ -269,6 +283,7 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 	cmd.Env = []string{}
 	// Now append any we received.
 	cmd.Env = append(cmd.Env, options.env...)
+	cmd.ExtraFiles = options.extraFiles
 
 	// Set uid/gid if needed for the sub-process to run under.
 	// Only do this if it's different than our current ones since
