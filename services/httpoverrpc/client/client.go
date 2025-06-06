@@ -234,7 +234,7 @@ type getCmd struct {
 func (*getCmd) Name() string     { return "get" }
 func (*getCmd) Synopsis() string { return "Makes a HTTP(-S) call to a port on a remote host" }
 func (*getCmd) Usage() string {
-	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
+	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] [-stream] remoteport request_uri:
   Make a HTTP request to a specified port on the remote host.
 
   Examples:
@@ -247,6 +247,7 @@ func (*getCmd) Usage() string {
   1. The prefix / in request_uri is always needed, even there is nothing to put
   2. If we use --hostname to send requests to a specified host instead of the default localhost, and want to use snsshell proxy action
   to proxy requests, don't forget to add --allow-any-host for proxy action
+  3. If --stream is set, the response will be streamed back to the client. Useful for large responses. Works only for one target.
 `
 }
 
