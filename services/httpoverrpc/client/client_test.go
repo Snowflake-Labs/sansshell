@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/services"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc/server"
 	"github.com/Snowflake-Labs/sansshell/services/util"
+	"github.com/google/subcommands"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -174,6 +176,87 @@ func TestGet(t *testing.T) {
 	want := "hello world\n"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGetStream(t *testing.T) {
+	const (
+		bodyChunkCount   = 10
+		bodyChunkSize    = 1024 * 1024
+		headerStatusCode = http.StatusOK
+		uri              = "/stream"
+	)
+
+	ctx := context.Background()
+
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc(uri, func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		httpResp.WriteHeader(headerStatusCode)
+		for i := 0; i < bodyChunkCount; i++ {
+			_, _ = httpResp.Write([]byte(strings.Repeat(strconv.Itoa(i), bodyChunkSize)))
+		}
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// Start get command
+	f := flag.NewFlagSet("stream", flag.PanicOnError)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := &getCmd{}
+	g.SetFlags(f)
+	g.stream = true
+	_, port, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Parse([]string{port, uri}); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	exitStatusChan := make(chan subcommands.ExitStatus)
+	go func() {
+		exitStatusChan <- g.Execute(ctx, f, &util.ExecuteState{
+			Conn: conn,
+			Out:  []io.Writer{writer},
+			Err:  []io.Writer{os.Stderr},
+		})
+	}()
+
+	// See if we got the data
+	buf := make([]byte, bodyChunkSize)
+	for i := 0; i < bodyChunkCount; i++ {
+		n, err := reader.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := string(buf[:n])
+		want := strings.Repeat(strconv.Itoa(i), bodyChunkSize)
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+
+	n, err := reader.Read(buf)
+	if err != nil && n != 0 {
+		t.Fatalf("expected EOF, got %q", err)
+	}
+
+	exitStatus := <-exitStatusChan
+	if exitStatus != subcommands.ExitSuccess {
+		t.Fatalf("expected exit status %q, got %q", subcommands.ExitSuccess, exitStatus)
 	}
 }
 

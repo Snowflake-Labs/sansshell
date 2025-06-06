@@ -25,6 +25,10 @@ allow {
 	input.method = "/HTTPOverRPC.HTTPOverRPC/Host"
 }
 
+allow {
+	input.method = "/HTTPOverRPC.HTTPOverRPC/StreamHost"
+}
+
 # Allow anyone to call healthcheck on any host
 allow {
 	input.method = "/HealthCheck.HealthCheck/Ok"
