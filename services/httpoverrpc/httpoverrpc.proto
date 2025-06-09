@@ -75,14 +75,14 @@ message HTTPReply {
   bytes body = 3;
 }
 
-message HTTPHeaderReply {
+message HTTPHeaders {
   int32 status_code = 1;
   repeated Header headers = 2;
 }
 
 message HTTPStreamReply {
   oneof reply {
-    HTTPHeaderReply header = 1;
+    HTTPHeaders header = 1;
     bytes body = 2;
   }
 }

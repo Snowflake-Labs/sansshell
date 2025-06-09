@@ -139,7 +139,7 @@ func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_Strea
 	}
 	err = stream.Send(&pb.HTTPStreamReply{
 		Reply: &pb.HTTPStreamReply_Header{
-			Header: &pb.HTTPHeaderReply{
+			Header: &pb.HTTPHeaders{
 				StatusCode: int32(httpResp.StatusCode),
 				Headers:    respHeaders,
 			},
