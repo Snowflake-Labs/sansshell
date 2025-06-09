@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -346,6 +347,7 @@ func TestServer(t *testing.T) {
 			bodyChunkSize    = 1024 * 1024
 			headerStatusCode = http.StatusOK
 			uri              = "/stream"
+			randSeed         = int64(1234567890)
 		)
 
 		ctx := context.Background()
@@ -361,7 +363,7 @@ func TestServer(t *testing.T) {
 		m.HandleFunc(uri, func(httpResp http.ResponseWriter, httpReq *http.Request) {
 			httpResp.WriteHeader(headerStatusCode)
 			for i := 0; i < bodyChunkCount; i++ {
-				_, _ = httpResp.Write([]byte(strings.Repeat(strconv.Itoa(i), bodyChunkSize)))
+				_, _ = httpResp.Write([]byte(strings.Repeat(strconv.Itoa(rand.New(rand.NewSource(randSeed+int64(i))).Intn(10)), bodyChunkSize)))
 			}
 		})
 		l, err := net.Listen("tcp4", "localhost:0")
@@ -402,10 +404,10 @@ func TestServer(t *testing.T) {
 			chunk, err := stream.Recv()
 			testutil.FatalOnErr("failed to receive chunk", err, t)
 
-			expected := strings.Repeat(strconv.Itoa(i), bodyChunkSize)
+			expected := strings.Repeat(strconv.Itoa(rand.New(rand.NewSource(randSeed+int64(i))).Intn(10)), bodyChunkSize)
 			if got := string(chunk.GetBody()); got != expected {
-				t.Fatalf("chunk %d mismatch:\ngot first char: %q\nwant first char: %q",
-					i, got[0], expected[0])
+				t.Fatalf("chunk %d mismatch:\ngot: %q\nwant: %q",
+					i, got, expected)
 			}
 		}
 	})
