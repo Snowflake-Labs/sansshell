@@ -177,19 +177,32 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			Hostname:  p.hostname,
 			Tlsconfig: &pb.TLSConfig{InsecureSkipVerify: p.insecureSkipVerify},
 		}
-		resp, err := proxy.Host(ctx, req)
+		resp, err := proxy.StreamHost(ctx, req)
 		if err != nil {
 			sendError(httpResp, http.StatusInternalServerError, err)
 			return
 		}
-		for _, h := range resp.Headers {
-			for _, v := range h.Values {
-				httpResp.Header().Add(h.Key, v)
+		for {
+			rs, err := resp.Recv()
+			if err == io.EOF {
+				break
 			}
-		}
-		httpResp.WriteHeader(int(resp.StatusCode))
-		if _, err := httpResp.Write(resp.Body); err != nil {
-			fmt.Fprintln(os.Stdout, err)
+			if err != nil {
+				sendError(httpResp, http.StatusInternalServerError, err)
+			}
+			if rs.GetHeader() != nil {
+				for _, h := range rs.GetHeader().Headers {
+					for _, v := range h.Values {
+						httpResp.Header().Add(h.Key, v)
+					}
+				}
+				httpResp.WriteHeader(int(rs.GetHeader().StatusCode))
+			}
+			if rs.GetBody() != nil {
+				if _, err := httpResp.Write(rs.GetBody()); err != nil {
+					fmt.Fprintln(os.Stdout, err)
+				}
+			}
 		}
 	})
 	l, err := net.Listen("tcp4", p.listenAddr)
