@@ -156,16 +156,16 @@ func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_Strea
 		if err != nil && err != io.EOF {
 			return err
 		}
-		s_err := stream.Send(&pb.HTTPStreamReply{
+		if n == 0 && err == io.EOF {
+			return nil
+		}
+		err = stream.Send(&pb.HTTPStreamReply{
 			Reply: &pb.HTTPStreamReply_Body{
 				Body: chunk[:n],
 			},
 		})
-		if s_err != nil {
-			return s_err
-		}
-		if err == io.EOF {
-			return nil
+		if err != nil {
+			return err
 		}
 	}
 }
