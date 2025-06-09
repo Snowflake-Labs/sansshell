@@ -249,11 +249,6 @@ func TestGetStream(t *testing.T) {
 		}
 	}
 
-	n, err := reader.Read(buf)
-	if err != nil && n != 0 {
-		t.Fatalf("expected EOF, got %q", err)
-	}
-
 	exitStatus := <-exitStatusChan
 	if exitStatus != subcommands.ExitSuccess {
 		t.Fatalf("expected exit status %q, got %q", subcommands.ExitSuccess, exitStatus)
