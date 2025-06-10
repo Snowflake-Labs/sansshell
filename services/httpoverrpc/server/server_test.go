@@ -21,12 +21,14 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -335,6 +337,78 @@ func TestServer(t *testing.T) {
 		// ASSERT
 		if string(resp.Body) != expectedResponse {
 			t.Fatalf("Expected response body to be %q, got %q", expectedResponse, resp.Body)
+		}
+	})
+
+	t.Run("It should stream the response from the server", func(t *testing.T) {
+		// ARRANGE
+		const (
+			bodyChunkCount   = 10
+			bodyChunkSize    = 1024 * 1024
+			headerStatusCode = http.StatusOK
+			uri              = "/stream"
+			randSeed         = int64(1234567890)
+		)
+
+		ctx := context.Background()
+		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		testutil.FatalOnErr("Failed to dial bufnet", err, t)
+		t.Cleanup(func() { conn.Close() })
+
+		client := httpoverrpc.NewHTTPOverRPCClient(conn)
+
+		// Set up web server
+		m := http.NewServeMux()
+
+		m.HandleFunc(uri, func(httpResp http.ResponseWriter, httpReq *http.Request) {
+			httpResp.WriteHeader(headerStatusCode)
+			for i := 0; i < bodyChunkCount; i++ {
+				_, _ = httpResp.Write([]byte(strings.Repeat(strconv.Itoa(rand.New(rand.NewSource(randSeed+int64(i))).Intn(10)), bodyChunkSize)))
+			}
+		})
+		l, err := net.Listen("tcp4", "localhost:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		go func() { _ = http.Serve(l, m) }()
+
+		_, p, err := net.SplitHostPort(l.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpPort, err := strconv.Atoi(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// ACT
+		stream, err := client.StreamHost(ctx, &httpoverrpc.HostHTTPRequest{
+			Request: &httpoverrpc.HTTPRequest{
+				Method:     "GET",
+				RequestUri: uri,
+			},
+			Port:     int32(httpPort),
+			Protocol: "http",
+		})
+		testutil.FatalOnErr("failed to create stream", err, t)
+
+		// ASSERT
+		header, err := stream.Recv()
+		testutil.FatalOnErr("failed to receive header", err, t)
+
+		if header.GetHeader() == nil || header.GetHeader().StatusCode != int32(headerStatusCode) {
+			t.Fatalf("unexpected status code: got %v, want %v", header.GetHeader().StatusCode, headerStatusCode)
+		}
+
+		for i := 0; i < bodyChunkCount; i++ {
+			chunk, err := stream.Recv()
+			testutil.FatalOnErr("failed to receive chunk", err, t)
+
+			expected := strings.Repeat(strconv.Itoa(rand.New(rand.NewSource(randSeed+int64(i))).Intn(10)), bodyChunkSize)
+			if got := string(chunk.GetBody()); got != expected {
+				t.Fatalf("chunk %d mismatch:\ngot: %q\nwant: %q",
+					i, got, expected)
+			}
 		}
 	})
 }

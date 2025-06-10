@@ -46,7 +46,7 @@ var (
 // Server is used to implement the gRPC Server
 type server struct{}
 
-func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
+func (s *server) sendHTTPRequestAndGetResponse(ctx context.Context, req *pb.HostHTTPRequest) (*http.Response, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
 	hostname := "localhost"
@@ -99,10 +99,13 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 
 		client.Transport = transport
 	}
-
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
-	httpResp, err := client.Do(httpReq)
+	return client.Do(httpReq)
+}
+
+func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPReply, error) {
+	httpResp, err := s.sendHTTPRequestAndGetResponse(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +123,51 @@ func (s *server) Host(ctx context.Context, req *pb.HostHTTPRequest) (*pb.HTTPRep
 		Headers:    respHeaders,
 		Body:       body,
 	}, nil
+}
+
+func (s *server) StreamHost(req *pb.HostHTTPRequest, stream pb.HTTPOverRPC_StreamHostServer) error {
+	const responseStreamChunkSize = 1024 * 1024 // 1MB
+	httpResp, err := s.sendHTTPRequestAndGetResponse(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	defer httpResp.Body.Close()
+
+	var respHeaders []*pb.Header
+	for k, v := range httpResp.Header {
+		respHeaders = append(respHeaders, &pb.Header{Key: k, Values: v})
+	}
+	err = stream.Send(&pb.HTTPStreamReply{
+		Reply: &pb.HTTPStreamReply_Header{
+			Header: &pb.HTTPHeaders{
+				StatusCode: int32(httpResp.StatusCode),
+				Headers:    respHeaders,
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	chunk := make([]byte, responseStreamChunkSize)
+
+	for {
+		n, err := httpResp.Body.Read(chunk)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if n == 0 && err == io.EOF {
+			return nil
+		}
+		err = stream.Send(&pb.HTTPStreamReply{
+			Reply: &pb.HTTPStreamReply_Body{
+				Body: chunk[:n],
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // Register is called to expose this handler to the gRPC server

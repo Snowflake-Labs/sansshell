@@ -177,19 +177,32 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			Hostname:  p.hostname,
 			Tlsconfig: &pb.TLSConfig{InsecureSkipVerify: p.insecureSkipVerify},
 		}
-		resp, err := proxy.Host(ctx, req)
+		resp, err := proxy.StreamHost(ctx, req)
 		if err != nil {
 			sendError(httpResp, http.StatusInternalServerError, err)
 			return
 		}
-		for _, h := range resp.Headers {
-			for _, v := range h.Values {
-				httpResp.Header().Add(h.Key, v)
+		for {
+			rs, err := resp.Recv()
+			if err == io.EOF {
+				break
 			}
-		}
-		httpResp.WriteHeader(int(resp.StatusCode))
-		if _, err := httpResp.Write(resp.Body); err != nil {
-			fmt.Fprintln(os.Stdout, err)
+			if err != nil {
+				sendError(httpResp, http.StatusInternalServerError, err)
+			}
+			if rs.GetHeader() != nil {
+				for _, h := range rs.GetHeader().Headers {
+					for _, v := range h.Values {
+						httpResp.Header().Add(h.Key, v)
+					}
+				}
+				httpResp.WriteHeader(int(rs.GetHeader().StatusCode))
+			}
+			if rs.GetBody() != nil {
+				if _, err := httpResp.Write(rs.GetBody()); err != nil {
+					fmt.Fprintln(os.Stdout, err)
+				}
+			}
 		}
 	})
 	l, err := net.Listen("tcp4", p.listenAddr)
@@ -228,12 +241,13 @@ type getCmd struct {
 	hostname            string
 	insecureSkipVerify  bool
 	dialAddress         string
+	stream              bool
 }
 
 func (*getCmd) Name() string     { return "get" }
 func (*getCmd) Synopsis() string { return "Makes a HTTP(-S) call to a port on a remote host" }
 func (*getCmd) Usage() string {
-	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] remoteport request_uri:
+	return `get [-method METHOD] [-header Header...] [-dial-address dialAddress] [-body body] [-protocol Protocol] [-hostname Hostname] [-stream] remoteport request_uri:
   Make a HTTP request to a specified port on the remote host.
 
   Examples:
@@ -246,6 +260,7 @@ func (*getCmd) Usage() string {
   1. The prefix / in request_uri is always needed, even there is nothing to put
   2. If we use --hostname to send requests to a specified host instead of the default localhost, and want to use snsshell proxy action
   to proxy requests, don't forget to add --allow-any-host for proxy action
+  3. If --stream is set, the response will be streamed back to the client. Useful for large responses. Works only for one target.
 `
 }
 
@@ -258,12 +273,17 @@ func (g *getCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&g.showResponseHeaders, "show-response-headers", false, "If true, print response code and headers")
 	f.BoolVar(&g.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
 	f.StringVar(&g.dialAddress, "dial-address", "", "host:port to dial to. If not provided would dial to original host and port")
+	f.BoolVar(&g.stream, "stream", false, "If true, stream the response back to the client")
 }
 
 func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
 	state := args[0].(*util.ExecuteState)
 	if f.NArg() != 2 {
 		fmt.Fprintln(os.Stderr, "Please specify exactly two arguments: a port and a query.")
+		return subcommands.ExitUsageError
+	}
+	if len(state.Conn.Targets) > 1 && g.stream {
+		fmt.Fprintln(os.Stderr, "Streaming is not supported for multiple targets.")
 		return subcommands.ExitUsageError
 	}
 	port, err := strconv.Atoi(f.Arg(0))
@@ -318,7 +338,14 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	}
 
 	proxy := pb.NewHTTPOverRPCClientProxy(state.Conn)
-	resp, err := proxy.HostOneMany(ctx, req)
+	if g.stream {
+		return g.handleStream(ctx, state, &proxy, req)
+	}
+	return g.handleHost(ctx, state, &proxy, req)
+}
+
+func (g *getCmd) handleHost(ctx context.Context, state *util.ExecuteState, proxy *pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) subcommands.ExitStatus {
+	resp, err := (*proxy).HostOneMany(ctx, req)
 	retCode := subcommands.ExitSuccess
 	if err != nil {
 		// Emit this to every error file as it's not specific to a given target.
@@ -343,6 +370,43 @@ func (g *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			}
 		}
 		fmt.Fprintln(state.Out[r.Index], string(r.Resp.Body))
+	}
+	return retCode
+}
+
+func (g *getCmd) handleStream(ctx context.Context, state *util.ExecuteState, proxy *pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) subcommands.ExitStatus {
+	resp, err := (*proxy).StreamHostOneMany(ctx, req)
+	retCode := subcommands.ExitSuccess
+	if err != nil {
+		return subcommands.ExitFailure
+	}
+	for {
+		rs, err := resp.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Fprintf(state.Err[0], "Stream failure: %v\n", err)
+			retCode = subcommands.ExitFailure
+			continue
+		}
+		for _, r := range rs {
+			if r.Error != nil && r.Error != io.EOF {
+				fmt.Fprintf(state.Err[r.Index], "%v\n", r.Error)
+				return subcommands.ExitFailure
+			}
+			if g.showResponseHeaders && r.Resp.GetHeader() != nil {
+				fmt.Fprintf(state.Out[r.Index], "%v %v\n", r.Resp.GetHeader().StatusCode, http.StatusText(int(r.Resp.GetHeader().StatusCode)))
+				for _, h := range r.Resp.GetHeader().Headers {
+					for _, v := range h.Values {
+						fmt.Fprintf(state.Out[r.Index], "%v: %v\n", h.Key, v)
+					}
+				}
+			}
+			if r.Resp.GetBody() != nil {
+				fmt.Fprint(state.Out[r.Index], string(r.Resp.GetBody()))
+			}
+		}
 	}
 	return retCode
 }

@@ -34,7 +34,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	HTTPOverRPC_Host_FullMethodName = "/HTTPOverRPC.HTTPOverRPC/Host"
+	HTTPOverRPC_Host_FullMethodName       = "/HTTPOverRPC.HTTPOverRPC/Host"
+	HTTPOverRPC_StreamHost_FullMethodName = "/HTTPOverRPC.HTTPOverRPC/StreamHost"
 )
 
 // HTTPOverRPCClient is the client API for HTTPOverRPC service.
@@ -45,6 +46,8 @@ const (
 type HTTPOverRPCClient interface {
 	// Make an HTTP call to specified host
 	Host(ctx context.Context, in *HostHTTPRequest, opts ...grpc.CallOption) (*HTTPReply, error)
+	// StreamHost makes an HTTP call to specified host and streams the response back
+	StreamHost(ctx context.Context, in *HostHTTPRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HTTPStreamReply], error)
 }
 
 type hTTPOverRPCClient struct {
@@ -65,6 +68,25 @@ func (c *hTTPOverRPCClient) Host(ctx context.Context, in *HostHTTPRequest, opts 
 	return out, nil
 }
 
+func (c *hTTPOverRPCClient) StreamHost(ctx context.Context, in *HostHTTPRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[HTTPStreamReply], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &HTTPOverRPC_ServiceDesc.Streams[0], HTTPOverRPC_StreamHost_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[HostHTTPRequest, HTTPStreamReply]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HTTPOverRPC_StreamHostClient = grpc.ServerStreamingClient[HTTPStreamReply]
+
 // HTTPOverRPCServer is the server API for HTTPOverRPC service.
 // All implementations should embed UnimplementedHTTPOverRPCServer
 // for forward compatibility.
@@ -73,6 +95,8 @@ func (c *hTTPOverRPCClient) Host(ctx context.Context, in *HostHTTPRequest, opts 
 type HTTPOverRPCServer interface {
 	// Make an HTTP call to specified host
 	Host(context.Context, *HostHTTPRequest) (*HTTPReply, error)
+	// StreamHost makes an HTTP call to specified host and streams the response back
+	StreamHost(*HostHTTPRequest, grpc.ServerStreamingServer[HTTPStreamReply]) error
 }
 
 // UnimplementedHTTPOverRPCServer should be embedded to have
@@ -84,6 +108,9 @@ type UnimplementedHTTPOverRPCServer struct{}
 
 func (UnimplementedHTTPOverRPCServer) Host(context.Context, *HostHTTPRequest) (*HTTPReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Host not implemented")
+}
+func (UnimplementedHTTPOverRPCServer) StreamHost(*HostHTTPRequest, grpc.ServerStreamingServer[HTTPStreamReply]) error {
+	return status.Errorf(codes.Unimplemented, "method StreamHost not implemented")
 }
 func (UnimplementedHTTPOverRPCServer) testEmbeddedByValue() {}
 
@@ -123,6 +150,17 @@ func _HTTPOverRPC_Host_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HTTPOverRPC_StreamHost_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(HostHTTPRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HTTPOverRPCServer).StreamHost(m, &grpc.GenericServerStream[HostHTTPRequest, HTTPStreamReply]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type HTTPOverRPC_StreamHostServer = grpc.ServerStreamingServer[HTTPStreamReply]
+
 // HTTPOverRPC_ServiceDesc is the grpc.ServiceDesc for HTTPOverRPC service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -135,6 +173,12 @@ var HTTPOverRPC_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HTTPOverRPC_Host_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamHost",
+			Handler:       _HTTPOverRPC_StreamHost_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "httpoverrpc.proto",
 }

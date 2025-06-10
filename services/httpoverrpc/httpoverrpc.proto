@@ -26,6 +26,8 @@ package HTTPOverRPC;
 service HTTPOverRPC {
   // Make an HTTP call to specified host
   rpc Host(HostHTTPRequest) returns (HTTPReply) {}
+  // StreamHost makes an HTTP call to specified host and streams the response back
+  rpc StreamHost(HostHTTPRequest) returns (stream HTTPStreamReply) {}
 }
 
 message HostHTTPRequest {
@@ -71,4 +73,16 @@ message HTTPReply {
   int32 status_code = 1;
   repeated Header headers = 2;
   bytes body = 3;
+}
+
+message HTTPHeaders {
+  int32 status_code = 1;
+  repeated Header headers = 2;
+}
+
+message HTTPStreamReply {
+  oneof reply {
+    HTTPHeaders header = 1;
+    bytes body = 2;
+  }
 }
