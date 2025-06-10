@@ -20,9 +20,14 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -96,6 +101,8 @@ If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 
 	// outputs will be found to --outputs for directing output from a single request to N nodes.
 	outputsFlag util.StringSliceCommaOrWhitespaceFlag
+
+	useEmployeeIngress = flag.Bool("use-employee-ingress", false, "If true, use the employee ingress proxy for mTLS connections.")
 )
 
 func init() {
@@ -213,8 +220,72 @@ func main() {
 		EnableMPA:         *mpa,
 	}
 
+	if *useEmployeeIngress {
+		rs.ContextDialer = employeeIngressDialer
+	}
+
 	if *justification != "" {
 		ctx = metadata.AppendToOutgoingContext(ctx, rpcauth.ReqJustKey, *justification)
 	}
 	client.Run(ctx, rs)
+}
+
+func employeeIngressDialer(ctx context.Context, addr string) (net.Conn, error) {
+	username := os.Getenv("USER")
+
+	clientCert, err := tls.LoadX509KeyPair(
+		"/Volumes/DevShm/vault-ci-mtls-"+username+".pem",
+		"/Volumes/DevShm/vault-ci-mtls-"+username+".rsa",
+	)
+
+	log.Printf("gRPC is dialing to %s via employee ingress proxy...", addr)
+
+	envoyCa, err := os.ReadFile("/tmp/envoy-certs/certs/envoy-ingress.crt")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read vault CA file: %w", err)
+	}
+
+	rootCAs := x509.NewCertPool()
+
+	rootCAs.AppendCertsFromPEM(envoyCa)
+
+	ingressCon, err := tls.Dial("tcp", "localhost:8122", &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      rootCAs,
+	})
+
+	if err != nil {
+		fmt.Printf("failed to dial employee ingress: %v\n", err)
+		return nil, err
+	}
+
+	reqUrl, err := url.Parse("tcp://" + addr)
+	if err != nil {
+		fmt.Printf("failed to connect to employee ingress: %v\n", err)
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodConnect, reqUrl.String(), nil)
+	if err != nil {
+		fmt.Printf("failed to create employee ingress CONNECT request: %v\n", err)
+		return nil, err
+	}
+	req.Close = false
+
+	err = req.Write(ingressCon)
+	if err != nil {
+		fmt.Printf("failed to send employee ingress CONNECT request: %v\n", err)
+		return nil, err
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(ingressCon), req)
+	if err != nil {
+		fmt.Printf("failed to read employee ingress CONNECT response: %v\n", err)
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("unexpected status code: %d\n", resp.StatusCode)
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return ingressCon, nil
 }

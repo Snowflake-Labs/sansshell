@@ -43,7 +43,7 @@ subjectAltName = @alt_names
 
 [alt_names]
 DNS.0 = localhost
-DNS.1 = bufnet
+DNS.1 = sansshell-server
 IP.0 = 127.0.0.1
 IP.1 = ::1
 EOF

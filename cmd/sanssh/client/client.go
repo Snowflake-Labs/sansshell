@@ -23,11 +23,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"google.golang.org/grpc/credentials"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
+
+	"google.golang.org/grpc/credentials"
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -82,6 +84,8 @@ type RunState struct {
 	AuthzDryRun bool
 
 	credentials.PerRPCCredentials
+
+	ContextDialer func(ctx context.Context, addr string) (net.Conn, error)
 }
 
 const (
@@ -295,6 +299,10 @@ func Run(ctx context.Context, rs RunState) {
 		grpc.WithChainStreamInterceptor(streamInterceptors...),
 		grpc.WithChainUnaryInterceptor(unaryInterceptors...),
 	)
+
+	if rs.ContextDialer != nil {
+		ops = append(ops, grpc.WithContextDialer(rs.ContextDialer))
+	}
 
 	state := &util.ExecuteState{
 		Dir: dir,
