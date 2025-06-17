@@ -63,6 +63,17 @@ func TestRead(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:      "read key with colon in name",
+			respValue: "test_value",
+			req: &pb.ReadRequest{
+				Location: &pb.Location{
+					File:    path,
+					Section: "backup_agent",
+					Key:     "the:key:with:colon",
+				},
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -279,6 +290,396 @@ cluster_file = /etc/foundatindb/fdb.cluster`,
 			sGot, sExpected := strings.TrimSpace(string(got)), strings.TrimSpace(tc.expected)
 			if sGot != sExpected {
 				t.Errorf("expected: %q, got: %q", sExpected, sGot)
+			}
+		})
+	}
+}
+
+func TestWriteWithColonInKey(t *testing.T) {
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("can't create tmpfile", err, t)
+	_, err = f1.WriteString(`[general]
+cluster_file = /etc/foundationdb/fdb.cluster`)
+	testutil.FatalOnErr("WriteString", err, t)
+	name := f1.Name()
+	err = f1.Close()
+	testutil.FatalOnErr("can't close tmpfile", err, t)
+
+	// Mock chown and getUidGid functions
+	originUid, originGid, originMod := 1000, 1000, int(0775)
+
+	savedChown := chown
+	chown = func(path string, uid int, gid int) error {
+		return nil
+	}
+
+	savedGetUidGid := getUidGid
+	getUidGid = func(file fs.FileInfo) (uint32, uint32) {
+		return uint32(originUid), uint32(originGid)
+	}
+
+	if err = unix.Chmod(name, uint32(fs.FileMode(originMod).Perm())); err != nil {
+		testutil.FatalOnErr("can't change mod of the tmpfile", err, t)
+	}
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() {
+		conn.Close()
+		chown = savedChown
+		getUidGid = savedGetUidGid
+	})
+
+	client := pb.NewConfClient(conn)
+	for _, tc := range []struct {
+		name     string
+		req      *pb.WriteRequest
+		expected string
+	}{
+		{
+			name: "write key with colon in key name",
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+the:key:with:colon = test_value`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "backup_agent",
+					Key:     "the:key:with:colon",
+				},
+				Value: "test_value",
+			},
+		},
+		{
+			name: "write key containing colon in value",
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+the:key:with:colon = test_value
+
+[network]
+listen_address = 127.0.0.1:4500`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "network",
+					Key:     "listen_address",
+				},
+				Value: "127.0.0.1:4500",
+			},
+		},
+		{
+			name: "write key with multiple colons in key name",
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+the:key:with:colon = test_value
+
+[network]
+listen_address = 127.0.0.1:4500
+
+[cluster]
+database:connection:string:key = "connection://host:port/db"`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "cluster",
+					Key:     "database:connection:string:key",
+				},
+				Value: `"connection://host:port/db"`,
+			},
+		},
+		{
+			name: "write key with colon and equals in value",
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+the:key:with:colon = test_value
+
+[network]
+listen_address = 127.0.0.1:4500
+
+[cluster]
+database:connection:string:key = "connection://host:port/db"
+
+[advanced]
+connection:params = "timeout=30:retry=3:host=localhost"`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "advanced",
+					Key:     "connection:params",
+				},
+				Value: `"timeout=30:retry=3:host=localhost"`,
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Write(ctx, tc.req)
+			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			got, err := os.ReadFile(name)
+			testutil.FatalOnErr("failed reading config file", err, t)
+			sGot := strings.TrimSpace(string(got))
+			if sGot != tc.expected {
+				t.Errorf("expected: %q, got: %q", tc.expected, sGot)
+			}
+		})
+	}
+}
+
+func TestWriteValidationErrors(t *testing.T) {
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("can't create tmpfile", err, t)
+	name := f1.Name()
+	err = f1.Close()
+	testutil.FatalOnErr("can't close tmpfile", err, t)
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewConfClient(conn)
+	for _, tc := range []struct {
+		name            string
+		req             *pb.WriteRequest
+		expectErr       bool
+		expectErrString string
+	}{
+		{
+			name: "empty section name",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "",
+					Key:     "test_key",
+				},
+				Value: "test_value",
+			},
+			expectErr:       true,
+			expectErrString: "section name can not be empty",
+		},
+		{
+			name: "empty key name",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "test_section",
+					Key:     "",
+				},
+				Value: "test_value",
+			},
+			expectErr:       true,
+			expectErrString: "key name can not be empty",
+		},
+		{
+			name: "empty key value",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "test_section",
+					Key:     "test_key",
+				},
+				Value: "",
+			},
+			expectErr:       true,
+			expectErrString: "key value can not be empty",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.Write(ctx, tc.req)
+			if err == nil {
+				t.Fatal("expected error but got none")
+			}
+			if !strings.Contains(err.Error(), tc.expectErrString) {
+				t.Errorf("expected error to contain %q, got %q", tc.expectErrString, err.Error())
+			}
+		})
+	}
+}
+
+func TestDeleteWithColonInKey(t *testing.T) {
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("can't create tmpfile", err, t)
+	_, err = f1.WriteString(`[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+log_directory = /var/log/foundationdb
+the:key:with:colon = test_value
+backup_policy = always
+
+[network]
+listen_address = 127.0.0.1:4500
+public_address = auto
+
+[cluster]
+database:connection:string:key = "connection://host:port/db"`)
+	testutil.FatalOnErr("WriteString", err, t)
+	name := f1.Name()
+	err = f1.Close()
+	testutil.FatalOnErr("can't close tmpfile", err, t)
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewConfClient(conn)
+	for _, tc := range []struct {
+		name     string
+		req      *pb.DeleteRequest
+		expected string
+	}{
+		{
+			name: "delete key with colon in key name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "backup_agent", Key: "the:key:with:colon"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+log_directory = /var/log/foundationdb
+backup_policy = always
+
+[network]
+listen_address = 127.0.0.1:4500
+public_address = auto
+
+[cluster]
+database:connection:string:key = "connection://host:port/db"`,
+		},
+		{
+			name: "delete key with multiple colons in key name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "cluster", Key: "database:connection:string:key"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+log_directory = /var/log/foundationdb
+backup_policy = always
+
+[network]
+listen_address = 127.0.0.1:4500
+public_address = auto
+
+[cluster]`,
+		},
+		{
+			name: "delete key with colon in value",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "network", Key: "listen_address"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[backup_agent]
+log_directory = /var/log/foundationdb
+backup_policy = always
+
+[network]
+public_address = auto
+
+[cluster]`,
+		},
+		{
+			name: "delete entire section containing keys with colons",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "backup_agent", Key: ""},
+			},
+			expected: `[general]
+cluster_file = /etc/foundationdb/fdb.cluster
+
+[network]
+public_address = auto
+
+[cluster]`,
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := client.Delete(ctx, tc.req)
+			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
+			got, err := os.ReadFile(name)
+			testutil.FatalOnErr("failed reading config file", err, t)
+			sGot, sExpected := strings.TrimSpace(string(got)), strings.TrimSpace(tc.expected)
+			if sGot != sExpected {
+				t.Errorf("expected: %q, got: %q", sExpected, sGot)
+			}
+		})
+	}
+}
+
+func TestDeleteValidationErrors(t *testing.T) {
+	temp := t.TempDir()
+	f1, err := os.CreateTemp(temp, "testfile.*")
+	testutil.FatalOnErr("can't create tmpfile", err, t)
+	_, err = f1.WriteString(`[general]
+cluster_file = /etc/foundationdb/fdb.cluster`)
+	testutil.FatalOnErr("WriteString", err, t)
+	name := f1.Name()
+	err = f1.Close()
+	testutil.FatalOnErr("can't close tmpfile", err, t)
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewConfClient(conn)
+	for _, tc := range []struct {
+		name            string
+		req             *pb.DeleteRequest
+		expectErr       bool
+		expectErrString string
+	}{
+		{
+			name: "empty section name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "",
+					Key:     "test_key",
+				},
+			},
+			expectErr:       true,
+			expectErrString: "section name can not be empty",
+		},
+		{
+			name: "non-existent section",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "nonexistent",
+					Key:     "test_key",
+				},
+			},
+			expectErr:       true,
+			expectErrString: "section nonexistent does not exist",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := client.Delete(ctx, tc.req)
+			if err == nil {
+				t.Fatal("expected error but got none")
+			}
+			if !strings.Contains(err.Error(), tc.expectErrString) {
+				t.Errorf("expected error to contain %q, got %q", tc.expectErrString, err.Error())
 			}
 		})
 	}
