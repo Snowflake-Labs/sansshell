@@ -47,7 +47,10 @@ var (
 )
 
 func (s *cserver) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfResponse, error) {
-	cfg, err := ini.Load(req.Location.File)
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		KeyValueDelimiters:      "=",
+		PreserveSurroundedQuote: true,
+	}, req.Location.File)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not load config file %s: %v", req.Location.File, err)
 	}
@@ -75,7 +78,10 @@ func (s *cserver) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty
 		return nil, status.Error(codes.InvalidArgument, "key value can not be empty")
 	}
 
-	cfg, err := ini.Load(req.Location.File)
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		KeyValueDelimiters:      "=",
+		PreserveSurroundedQuote: true,
+	}, req.Location.File)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not load config file %s: %v", req.Location.File, err)
 	}
@@ -95,7 +101,10 @@ func (s *cserver) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Emp
 		return nil, status.Error(codes.InvalidArgument, "section name can not be empty")
 	}
 
-	cfg, err := ini.Load(req.Location.File)
+	cfg, err := ini.LoadSources(ini.LoadOptions{
+		KeyValueDelimiters:      "=",
+		PreserveSurroundedQuote: true,
+	}, req.Location.File)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "could not load config file %s: %v", req.Location.File, err)
 	}
