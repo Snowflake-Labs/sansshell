@@ -210,7 +210,6 @@ func (l *LimitedBuffer) Write(p []byte) (int, error) {
 			// Write enough to fill the buffer and then stop.
 			size := int(l.max) - l.buf.Len()
 			l.buf.Write(p[:size])
-			fmt.Printf("size: %d\n", size)
 		}
 		// Lie and return the length we could have written.
 		return len(p), nil
