@@ -72,20 +72,6 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 		justification = j[0]
 	}
 
-	// Transform the rpcauth input into the original proto
-	mt, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
-	if err != nil {
-		return fmt.Errorf("unable to find proto type: %v", err)
-	}
-	m2 := mt.New().Interface()
-	if err := protojson.Unmarshal([]byte(input.Message), m2); err != nil {
-		return fmt.Errorf("could not marshal input into %v: %v", input.Message, err)
-	}
-	var msg anypb.Any
-	if err := msg.MarshalFrom(m2); err != nil {
-		return fmt.Errorf("unable to marshal into anyproto: %v", err)
-	}
-
 	// Prefer using a proxied identity if provided
 	var user string
 	if p := proxiedidentity.FromContext(ctx); p != nil {
@@ -100,7 +86,24 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 		User:          user,
 		Method:        input.Method,
 		Justification: justification,
-		Message:       &msg,
+	}
+
+	if !action.MethodWideMpa {
+		// Transform the rpcauth input into the original proto
+		mt, err := protoregistry.GlobalTypes.FindMessageByURL(input.MessageType)
+		if err != nil {
+			return fmt.Errorf("unable to find proto type: %v", err)
+		}
+		m2 := mt.New().Interface()
+		if err := protojson.Unmarshal([]byte(input.Message), m2); err != nil {
+			return fmt.Errorf("could not marshal input into %v: %v", input.Message, err)
+		}
+		var msg anypb.Any
+		if err := msg.MarshalFrom(m2); err != nil {
+			return fmt.Errorf("unable to marshal into anyproto: %v", err)
+		}
+
+		sentAct.Message = &msg
 	}
 	// Make sure to use an any-proto-aware comparison
 	if !cmp.Equal(action, sentAct, protocmp.Transform()) {
@@ -109,7 +112,7 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 	return nil
 }
 
-func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any, cc *grpc.ClientConn) (mpaID string, err error) {
+func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any, cc *grpc.ClientConn, methodWideMpa bool) (mpaID string, err error) {
 	p, ok := req.(proto.Message)
 	if !ok {
 		return "", fmt.Errorf("unable to cast req to proto: %v", req)
@@ -121,10 +124,15 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 	}
 
 	mpaClient := mpa.NewMpaClient(cc)
-	result, err := mpaClient.Store(ctx, &mpa.StoreRequest{
-		Method:  method,
-		Message: &msg,
-	})
+	storeReq := &mpa.StoreRequest{
+		Method:        method,
+		MethodWideMpa: methodWideMpa,
+	}
+	if !methodWideMpa {
+		storeReq.Message = &msg
+	}
+	result, err := mpaClient.Store(ctx, storeReq)
+
 	if err != nil {
 		return "", err
 	}
@@ -140,7 +148,7 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 }
 
 // UnaryClientIntercepter is a grpc.UnaryClientIntercepter that will perform the MPA flow.
-func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
+func UnaryClientIntercepter(methodWideMpa bool) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		// Our interceptor will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
@@ -148,7 +156,7 @@ func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 
-		mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, req, cc)
+		mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, req, cc, methodWideMpa)
 		if err != nil {
 			return err
 		}
@@ -211,7 +219,7 @@ func (w *delayedStartStream) RecvMsg(m any) error {
 
 // StreamClientIntercepter is a grpc.StreamClientInterceptor that will perform
 // the MPA flow.
-func StreamClientIntercepter() grpc.StreamClientInterceptor {
+func StreamClientIntercepter(methodWideMpa bool) grpc.StreamClientInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		if method == "/Proxy.Proxy/Proxy" {
 			// No need to intercept proxying, that's handled specially.
@@ -220,7 +228,7 @@ func StreamClientIntercepter() grpc.StreamClientInterceptor {
 
 		return newStreamAfterFirstSend(func(m any) (grpc.ClientStream, error) {
 			// Figure out the MPA request
-			mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, m, cc)
+			mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, m, cc, methodWideMpa)
 			if err != nil {
 				return nil, err
 			}
@@ -233,7 +241,7 @@ func StreamClientIntercepter() grpc.StreamClientInterceptor {
 	}
 }
 
-func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, conn *proxy.Conn, state *util.ExecuteState) (mpaID string, err error) {
+func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, conn *proxy.Conn, state *util.ExecuteState, methodWideMpa bool) (mpaID string, err error) {
 	p, ok := args.(proto.Message)
 	if !ok {
 		return "", fmt.Errorf("unable to cast args to proto: %v", args)
@@ -243,10 +251,13 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 		return "", fmt.Errorf("unable to marshal into anyproto: %v", err)
 	}
 	mpaClient := mpa.NewMpaClientProxy(conn)
-	ch, err := mpaClient.StoreOneMany(ctx, &mpa.StoreRequest{
-		Method:  method,
-		Message: &msg,
-	})
+	storeReq := &mpa.StoreRequest{
+		Method: method,
+	}
+	if !methodWideMpa {
+		storeReq.Message = &msg
+	}
+	ch, err := mpaClient.StoreOneMany(ctx, storeReq)
 	if err != nil {
 		return "", err
 	}
@@ -296,7 +307,7 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 
 // ProxyClientUnaryInterceptor will perform the MPA flow prior to making the desired RPC
 // calls through the proxy.
-func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryInterceptor {
+func ProxyClientUnaryInterceptor(state *util.ExecuteState, methodWideMpa bool) proxy.UnaryInterceptor {
 	return func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
 		// Our hook will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
@@ -304,7 +315,7 @@ func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryIntercepto
 			return invoker(ctx, method, args, opts...)
 		}
 
-		mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, conn, state)
+		mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, conn, state, methodWideMpa)
 		if err != nil {
 			return nil, err
 		}
@@ -317,11 +328,11 @@ func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryIntercepto
 
 // ProxyClientStreamInterceptor will perform the MPA flow prior to making the desired streaming
 // RPC calls through the proxy.
-func ProxyClientStreamInterceptor(state *util.ExecuteState) proxy.StreamInterceptor {
+func ProxyClientStreamInterceptor(state *util.ExecuteState, methodWideMpa bool) proxy.StreamInterceptor {
 	return func(ctx context.Context, desc *grpc.StreamDesc, cc *proxy.Conn, method string, streamer proxy.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 		return newStreamAfterFirstSend(func(args any) (grpc.ClientStream, error) {
 			// Figure out the MPA request
-			mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, cc, state)
+			mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, cc, state, methodWideMpa)
 			if err != nil {
 				return nil, err
 			}
@@ -363,6 +374,11 @@ func ProxyMPAAuthzHook() rpcauth.RPCAuthzHook {
 		if err := ActionMatchesInput(ctx, resp.Action, input); err != nil {
 			return err
 		}
+
+		if resp.Action.MethodWideMpa {
+			input.ApprovedMethodWideMpa = true
+		}
+
 		for _, a := range resp.Approver {
 			input.Approvers = append(input.Approvers, &rpcauth.PrincipalAuthInput{
 				ID:     a.Id,

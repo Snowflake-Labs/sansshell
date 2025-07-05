@@ -317,8 +317,8 @@ func TestClientInterceptors(t *testing.T) {
 	// Make our calls
 	conn, err := grpc.DialContext(ctx, srvAddr,
 		grpc.WithTransportCredentials(clientCreds),
-		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
-		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter()),
+		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter(false)),
+		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter(false)),
 	)
 	if err != nil {
 		t.Error(err)
@@ -514,8 +514,8 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	// Make our calls
 	conn, err := proxy.DialContext(ctx, proxyAddr, []string{srvAddr},
 		grpc.WithTransportCredentials(clientCreds),
-		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter()),
-		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter()),
+		grpc.WithChainStreamInterceptor(mpahooks.StreamClientIntercepter(false)),
+		grpc.WithChainUnaryInterceptor(mpahooks.UnaryClientIntercepter(false)),
 	)
 	if err != nil {
 		t.Error(err)
@@ -533,10 +533,10 @@ func TestProxiedClientInterceptors(t *testing.T) {
 		Err:  []io.Writer{os.Stderr},
 	}
 	conn.StreamInterceptors = []proxy.StreamInterceptor{
-		mpahooks.ProxyClientStreamInterceptor(state),
+		mpahooks.ProxyClientStreamInterceptor(state, false),
 	}
 	conn.UnaryInterceptors = []proxy.UnaryInterceptor{
-		mpahooks.ProxyClientUnaryInterceptor(state),
+		mpahooks.ProxyClientUnaryInterceptor(state, false),
 	}
 	if _, err := hc.Ok(ctx, &emptypb.Empty{}); err != nil {
 		t.Error(err)
