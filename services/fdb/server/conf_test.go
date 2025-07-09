@@ -63,6 +63,17 @@ func TestRead(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:      "read key with colon in name",
+			respValue: "test_value",
+			req: &pb.ReadRequest{
+				Location: &pb.Location{
+					File:    path,
+					Section: "backup_agent",
+					Key:     "the:key:with:colon",
+				},
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -124,9 +135,11 @@ cluster_file = /etc/foundatindb/fdb.cluster`)
 
 	client := pb.NewConfClient(conn)
 	for _, tc := range []struct {
-		name     string
-		req      *pb.WriteRequest
-		expected string
+		name            string
+		req             *pb.WriteRequest
+		expected        string
+		expectErr       bool
+		expectErrString string
 	}{
 		{
 			name: "write cluster_file to general",
@@ -157,10 +170,124 @@ test = badcoffee`,
 				Value: "badcoffee",
 			},
 		},
+		{
+			name: "write key with colon in key name",
+			expected: `[general]
+cluster_file = /tmp/fdb.cluster
+
+[backup.1]
+test = badcoffee
+
+[backup_agent]
+the:key:with:colon = test_value`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "backup_agent",
+					Key:     "the:key:with:colon",
+				},
+				Value: "test_value",
+			},
+		},
+		{
+			name: "write key containing colon in value",
+			expected: `[general]
+cluster_file = /tmp/fdb.cluster
+
+[backup.1]
+test = badcoffee
+
+[backup_agent]
+the:key:with:colon = test_value
+
+[network]
+listen_address = 127.0.0.1:4500`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "network",
+					Key:     "listen_address",
+				},
+				Value: "127.0.0.1:4500",
+			},
+		},
+		{
+			name: "write key with multiple colons in key name",
+			expected: `[general]
+cluster_file = /tmp/fdb.cluster
+
+[backup.1]
+test = badcoffee
+
+[backup_agent]
+the:key:with:colon = test_value
+
+[network]
+listen_address = 127.0.0.1:4500
+
+[cluster]
+database:connection:string:key = "connection://host:port/db"`,
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "cluster",
+					Key:     "database:connection:string:key",
+				},
+				Value: `"connection://host:port/db"`,
+			},
+		},
+		{
+			name: "empty section name",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "",
+					Key:     "test_key",
+				},
+				Value: "test_value",
+			},
+			expectErr:       true,
+			expectErrString: "section name can not be empty",
+		},
+		{
+			name: "empty key name",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "test_section",
+					Key:     "",
+				},
+				Value: "test_value",
+			},
+			expectErr:       true,
+			expectErrString: "key name can not be empty",
+		},
+		{
+			name: "empty key value",
+			req: &pb.WriteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "test_section",
+					Key:     "test_key",
+				},
+				Value: "",
+			},
+			expectErr:       true,
+			expectErrString: "key value can not be empty",
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			resp, err := client.Write(ctx, tc.req)
+			if tc.expectErr {
+				if err == nil {
+					t.Fatal("expected error but got none")
+				}
+				if !strings.Contains(err.Error(), tc.expectErrString) {
+					t.Errorf("expected error to contain %q, got %q", tc.expectErrString, err.Error())
+				}
+				return
+			}
 			testutil.FatalOnErr(fmt.Sprintf("%v - resp %v", tc.name, resp), err, t)
 			got, err := os.ReadFile(name)
 			testutil.FatalOnErr("failed reading config file", err, t)
@@ -193,9 +320,13 @@ cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
 bar = baz
+the:key:with:colon = test_value
 
 [foo.2]
-bar = baz`)
+bar = baz
+
+[backup_agent]
+database:connection:string:key = "connection://host:port/db"`)
 	testutil.FatalOnErr("WriteString", err, t)
 	name := f1.Name()
 	err = f1.Close()
@@ -223,9 +354,13 @@ bar = baz`)
 cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
-bar = baz
+bar                = baz
+the:key:with:colon = test_value
 
-[foo.2]`,
+[foo.2]
+
+[backup_agent]
+database:connection:string:key = "connection://host:port/db"`,
 		},
 		{
 			name: "delete empty section",
@@ -236,7 +371,11 @@ bar = baz
 cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
-bar = baz`,
+bar                = baz
+the:key:with:colon = test_value
+
+[backup_agent]
+database:connection:string:key = "connection://host:port/db"`,
 		},
 		{
 			name: "delete section that doesnt exist",
@@ -247,9 +386,40 @@ bar = baz`,
 cluster_file = /etc/foundatindb/fdb.cluster
 
 [foo.1]
-bar = baz`,
+bar                = baz
+the:key:with:colon = test_value
+
+[backup_agent]
+database:connection:string:key = "connection://host:port/db"`,
 			expectErr:       true,
 			expectErrString: "section foo.42 does not exist",
+		},
+		{
+			name: "delete key with colon in key name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "foo.1", Key: "the:key:with:colon"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundatindb/fdb.cluster
+
+[foo.1]
+bar = baz
+
+[backup_agent]
+database:connection:string:key = "connection://host:port/db"`,
+		},
+		{
+			name: "delete key with multiple colons in key name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{File: name, Section: "backup_agent", Key: "database:connection:string:key"},
+			},
+			expected: `[general]
+cluster_file = /etc/foundatindb/fdb.cluster
+
+[foo.1]
+bar = baz
+
+[backup_agent]`,
 		},
 		{
 			name: "delete whole section with keys",
@@ -257,7 +427,33 @@ bar = baz`,
 				Location: &pb.Location{File: name, Section: "foo.1", Key: ""},
 			},
 			expected: `[general]
-cluster_file = /etc/foundatindb/fdb.cluster`,
+cluster_file = /etc/foundatindb/fdb.cluster
+
+[backup_agent]`,
+		},
+		{
+			name: "empty section name",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "",
+					Key:     "test_key",
+				},
+			},
+			expectErr:       true,
+			expectErrString: "section name can not be empty",
+		},
+		{
+			name: "non-existent section",
+			req: &pb.DeleteRequest{
+				Location: &pb.Location{
+					File:    name,
+					Section: "nonexistent",
+					Key:     "test_key",
+				},
+			},
+			expectErr:       true,
+			expectErrString: "section nonexistent does not exist",
 		},
 	} {
 		tc := tc
