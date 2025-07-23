@@ -64,6 +64,70 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestProxyStream(t *testing.T) {
+	ctx := context.Background()
+
+	// Set up web server
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		_, _ = httpResp.Write([]byte("hello world"))
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// Start proxying command
+	f := flag.NewFlagSet("proxy", flag.PanicOnError)
+	p := &proxyCmd{}
+	p.SetFlags(f)
+	p.stream = true
+	_, port, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Parse([]string{port}); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	go p.Execute(ctx, f, &util.ExecuteState{
+		Conn: conn,
+		Out:  []io.Writer{writer},
+		Err:  []io.Writer{os.Stderr},
+	})
+
+	// Find the port to use
+	buf := make([]byte, 1024)
+	if _, err := reader.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	msg := strings.Fields(string(buf))
+	// Parse out "Listening on http://%v, "
+	addr := msg[2][:len(msg[2])-1]
+
+	// Make a call
+	resp, err := http.Get(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+}
+
 func TestProxy(t *testing.T) {
 	ctx := context.Background()
 

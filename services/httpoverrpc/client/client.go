@@ -73,6 +73,7 @@ type proxyCmd struct {
 	protocol           string
 	hostname           string
 	insecureSkipVerify bool
+	stream             bool
 }
 
 func (*proxyCmd) Name() string { return "proxy" }
@@ -81,7 +82,7 @@ func (*proxyCmd) Synopsis() string {
 }
 func (*proxyCmd) Usage() string {
 	return `proxy [-addr ip:port] remoteport:
-    Launch a HTTP proxy server that translates HTTP calls into SansShell calls. Any HTTP request to the proxy server will be sent to the sansshell node and translated into a call to the node's localhost on the specified remote port. If -addr is unspecified, it listens on localhost on a random port. Only a single target at a time is supported.
+    Launch a HTTP proxy server that translates HTTP calls into SansShell calls. Any HTTP request to the proxy server will be sent to the sansshell node and translated into a call to the node's localhost on the specified remote port. If -addr is unspecified, it listens on localhost on a random port. Only a single target at a time is supported. If -stream is set, the response will be streamed back to the client. Useful for large responses.
 `
 }
 
@@ -91,7 +92,7 @@ func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.protocol, "protocol", "http", "protocol to communicate with specified hostname")
 	f.StringVar(&p.hostname, "hostname", "localhost", "ip address or domain name to specify host")
 	f.BoolVar(&p.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
-
+	f.BoolVar(&p.stream, "stream", false, "If true, stream the response back to the client. Useful for large responses.")
 }
 
 // This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
@@ -118,6 +119,53 @@ func sendError(resp http.ResponseWriter, code int, err error) {
 
 func validatePort(port int) bool {
 	return port >= 0 && port <= 65535
+}
+
+func handleProxyStream(ctx context.Context, httpResp http.ResponseWriter, proxy pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) {
+	resp, err := proxy.StreamHost(ctx, req)
+	if err != nil {
+		sendError(httpResp, http.StatusInternalServerError, err)
+		return
+	}
+	for {
+		rs, err := resp.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			sendError(httpResp, http.StatusInternalServerError, err)
+		}
+		if rs.GetHeader() != nil {
+			for _, h := range rs.GetHeader().Headers {
+				for _, v := range h.Values {
+					httpResp.Header().Add(h.Key, v)
+				}
+			}
+			httpResp.WriteHeader(int(rs.GetHeader().StatusCode))
+		}
+		if rs.GetBody() != nil {
+			if _, err := httpResp.Write(rs.GetBody()); err != nil {
+				fmt.Fprintln(os.Stdout, err)
+			}
+		}
+	}
+}
+
+func handleProxyHost(ctx context.Context, httpResp http.ResponseWriter, proxy pb.HTTPOverRPCClientProxy, req *pb.HostHTTPRequest) {
+	resp, err := proxy.Host(ctx, req)
+	if err != nil {
+		sendError(httpResp, http.StatusInternalServerError, err)
+		return
+	}
+	for _, h := range resp.Headers {
+		for _, v := range h.Values {
+			httpResp.Header().Add(h.Key, v)
+		}
+	}
+	httpResp.WriteHeader(int(resp.StatusCode))
+	if _, err := httpResp.Write(resp.Body); err != nil {
+		fmt.Fprintln(os.Stdout, err)
+	}
 }
 
 func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
@@ -177,32 +225,11 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			Hostname:  p.hostname,
 			Tlsconfig: &pb.TLSConfig{InsecureSkipVerify: p.insecureSkipVerify},
 		}
-		resp, err := proxy.StreamHost(ctx, req)
-		if err != nil {
-			sendError(httpResp, http.StatusInternalServerError, err)
-			return
-		}
-		for {
-			rs, err := resp.Recv()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				sendError(httpResp, http.StatusInternalServerError, err)
-			}
-			if rs.GetHeader() != nil {
-				for _, h := range rs.GetHeader().Headers {
-					for _, v := range h.Values {
-						httpResp.Header().Add(h.Key, v)
-					}
-				}
-				httpResp.WriteHeader(int(rs.GetHeader().StatusCode))
-			}
-			if rs.GetBody() != nil {
-				if _, err := httpResp.Write(rs.GetBody()); err != nil {
-					fmt.Fprintln(os.Stdout, err)
-				}
-			}
+
+		if p.stream {
+			handleProxyStream(ctx, httpResp, proxy, req)
+		} else {
+			handleProxyHost(ctx, httpResp, proxy, req)
 		}
 	})
 	l, err := net.Listen("tcp4", p.listenAddr)
