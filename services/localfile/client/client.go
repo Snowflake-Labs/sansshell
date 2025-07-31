@@ -97,7 +97,7 @@ type readCmd struct {
 }
 
 func (*readCmd) Name() string     { return "read" }
-func (*readCmd) Synopsis() string { return "Read a file." }
+func (*readCmd) Synopsis() string { return "Read a file with optional server-side grep filtering. (use file read --grep myRegEx /path/to/file)" }
 func (*readCmd) Usage() string {
 	return `read [--grep=PATTERN] [-i] [-v] [--offset=OFFSET] [--length=LENGTH] <path>:
   Read from the remote file named by <path> and write it to the appropriate --output destination.
