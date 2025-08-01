@@ -96,11 +96,43 @@ type readCmd struct {
 	invertMatch bool
 }
 
-func (*readCmd) Name() string     { return "read" }
-func (*readCmd) Synopsis() string { return "Read a file." }
+func (*readCmd) Name() string { return "read" }
+func (*readCmd) Synopsis() string {
+	return "Read a file with optional server-side grep filtering. (use file read --grep myRegEx /path/to/file)"
+}
 func (*readCmd) Usage() string {
 	return `read [--grep=PATTERN] [-i] [-v] [--offset=OFFSET] [--length=LENGTH] <path>:
   Read from the remote file named by <path> and write it to the appropriate --output destination.
+
+  Flags:
+    --grep=PATTERN    Regular expression filter to match lines (server-side filtering)
+                      Only lines matching the pattern will be returned, reducing network traffic
+    -i, --ignore-case Enable case-insensitive pattern matching (requires --grep)
+    -v, --invert-match Show lines that do NOT match the pattern (requires --grep)
+    --offset=OFFSET   Skip bytes before reading. Positive: from start, Negative: from end
+    --length=LENGTH   Maximum number of bytes to read (0 = unlimited)
+
+  Examples:
+    # Read entire file
+    sanssh --targets=host1 file read /var/log/app.log
+
+    # Search for error lines (case-sensitive)
+    sanssh --targets=host1 file read --grep="ERROR" /var/log/app.log
+
+    # Case-insensitive search for warnings
+    sanssh --targets=host1 file read --grep="warning" -i /var/log/app.log
+
+    # Show all non-error lines
+    sanssh --targets=host1 file read --grep="ERROR" -v /var/log/app.log
+
+    # Read last 1000 bytes with error filtering
+    sanssh --targets=host1 file read --grep="ERROR" --offset=-1000 /var/log/app.log
+
+    # Read with wildcard (multiple files)
+    sanssh --targets=host1 file read --grep="WARN" /var/log/*.log
+
+  Note: Grep filtering is performed on the server side, so only matching content
+        is transmitted over the network, making it efficient for large files.
 `
 }
 
