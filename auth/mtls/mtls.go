@@ -88,7 +88,7 @@ type CredentialsLoader interface {
 
 	// GetClientCertInfo extracts client certificate information from the client certificate
 	// and other sources, depending on the Certificate Loader type.
-	GetClientCertInfo(context.Context) (*ClientCertInfo, error)
+	GetClientCertInfo(context.Context, string) (*ClientCertInfo, error)
 }
 
 // WrappedTransportCredentials wraps a credentials.TransportCredentials and

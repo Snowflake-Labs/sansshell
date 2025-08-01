@@ -189,7 +189,7 @@ func Run(ctx context.Context, rs RunState) {
 			cmd := &client.WhoamiCommand{}
 			ctx := context.Background()
 			fs := flag.NewFlagSet("whoami", flag.ExitOnError)
-			os.Exit(int(cmd.Execute(ctx, fs, rs.CredSource)))
+			os.Exit(int(cmd.Execute(ctx, fs, client.WhoamiParams{CredSource: rs.CredSource, ProxyHost: rs.Proxy})))
 		}
 	}
 	if len(flag.Args()) <= 1 {

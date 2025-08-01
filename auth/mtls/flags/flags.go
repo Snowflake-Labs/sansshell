@@ -75,7 +75,7 @@ func (flagLoader) CertsRefreshed() bool {
 	return false
 }
 
-func (f flagLoader) GetClientCertInfo(ctx context.Context) (*mtls.ClientCertInfo, error) {
+func (f flagLoader) GetClientCertInfo(ctx context.Context, _ string) (*mtls.ClientCertInfo, error) {
 	cert, err := f.LoadClientCertificate(ctx)
 	if err != nil {
 		return nil, err

@@ -27,25 +27,34 @@ import (
 
 type WhoamiCommand struct{}
 
+type WhoamiParams struct {
+	CredSource string
+	ProxyHost  string
+}
+
 func (w *WhoamiCommand) Name() string             { return "whoami" }
 func (w *WhoamiCommand) Synopsis() string         { return "Prints the current user and its groups" }
 func (w *WhoamiCommand) Usage() string            { return "whoami\n" }
 func (w *WhoamiCommand) SetFlags(f *flag.FlagSet) {}
 
 func (w *WhoamiCommand) Execute(ctx context.Context, _ *flag.FlagSet, args ...interface{}) subcommands.ExitStatus {
-	var credSource string
+	params := WhoamiParams{
+		CredSource: "flags",
+		ProxyHost:  "",
+	}
 	if len(args) > 0 {
-		if v, ok := args[0].(string); ok {
-			credSource = v
+		if p, ok := args[0].(WhoamiParams); ok {
+			params = p
 		}
 	}
-	loader, err := mtls.Loader(credSource)
+
+	loader, err := mtls.Loader(params.CredSource)
 	if err != nil {
-		fmt.Printf("failed to load %s certificate loader: %v\n", credSource, err)
+		fmt.Printf("failed to load %s certificate loader: %v\n", params.CredSource, err)
 		return subcommands.ExitFailure
 	}
 
-	clientCertInfo, err := loader.GetClientCertInfo(ctx)
+	clientCertInfo, err := loader.GetClientCertInfo(ctx, params.ProxyHost)
 	if err != nil {
 		fmt.Printf("failed to get client cert info: %v\n", err)
 		return subcommands.ExitFailure
