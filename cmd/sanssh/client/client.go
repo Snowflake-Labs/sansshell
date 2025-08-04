@@ -23,11 +23,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"google.golang.org/grpc/credentials"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"google.golang.org/grpc/credentials"
 
 	"github.com/google/subcommands"
 	"google.golang.org/grpc"
@@ -35,6 +36,7 @@ import (
 	"github.com/Snowflake-Labs/sansshell/auth/mtls"
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
+	"github.com/Snowflake-Labs/sansshell/services/whoami/client"
 
 	cmdUtil "github.com/Snowflake-Labs/sansshell/cmd/util"
 	"github.com/Snowflake-Labs/sansshell/services/mpa/mpahooks"
@@ -173,15 +175,20 @@ func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
 func Run(ctx context.Context, rs RunState) {
 	// If we're running internal commands we don't need anything else.
 	for i, f := range flag.Args() {
+		// Omits unneeded part of the setup for internal commands, but only when they're passed as arguments in the beginning of the command (up to 2nd position).
+		// This prevents us from parsing e.g. user input `sanssh service enable help` as `sanssh help` and running `enable` command without
+		// the proper setup (e.g. a valid connection to sansshell-server), resulting in an error.
+		if i > 1 {
+			break
+		}
 		switch f {
 		case "help", "flags", "commands":
-			// Only do this if it's in the first couple positions.
-			// Otherwise we end up doing - sanssh service enable help
-			// which then tries to actually run the enable command without
-			// a conn and blows up.
-			if i < 2 {
-				os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
-			}
+			os.Exit(int(subcommands.Execute(ctx, &util.ExecuteState{})))
+		case "whoami":
+			cmd := &client.WhoamiCommand{}
+			ctx := context.Background()
+			fs := flag.NewFlagSet("whoami", flag.ExitOnError)
+			os.Exit(int(cmd.Execute(ctx, fs, client.WhoamiParams{CredSource: rs.CredSource, ProxyHost: rs.Proxy})))
 		}
 	}
 	if len(flag.Args()) <= 1 {

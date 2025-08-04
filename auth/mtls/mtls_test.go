@@ -159,6 +159,10 @@ func (s *simpleLoader) CertsRefreshed() bool {
 	return s.name == "refresh"
 }
 
+func (s *simpleLoader) GetClientCertInfo(context.Context, string) (*ClientCertInfo, error) {
+	return nil, nil
+}
+
 func serverWithPolicy(t *testing.T, policy string) (*bufconn.Listener, *grpc.Server) {
 	t.Helper()
 	err := Register("refresh", &simpleLoader{name: "refresh"})

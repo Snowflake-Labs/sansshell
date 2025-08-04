@@ -75,6 +75,24 @@ func (flagLoader) CertsRefreshed() bool {
 	return false
 }
 
+func (f flagLoader) GetClientCertInfo(ctx context.Context, _ string) (*mtls.ClientCertInfo, error) {
+	cert, err := f.LoadClientCertificate(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	x509Cert, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, err
+	}
+	return &mtls.ClientCertInfo{
+		Username:   x509Cert.Subject.CommonName,
+		CertIssuer: x509Cert.Issuer.CommonName,
+		ValidUntil: x509Cert.NotAfter,
+		Groups:     x509Cert.Subject.OrganizationalUnit,
+	}, nil
+}
+
 func init() {
 	if err := mtls.Register(loaderName, flagLoader{}); err != nil {
 		panic(err)

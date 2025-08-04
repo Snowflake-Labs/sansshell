@@ -26,6 +26,7 @@ import (
 	"net"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/telemetry/metrics"
 	"github.com/go-logr/logr"
@@ -46,6 +47,14 @@ var (
 	loaderMu sync.RWMutex
 	loaders  = make(map[string]CredentialsLoader)
 )
+
+// ClientCertInfo contains certificate-based user information
+type ClientCertInfo struct {
+	Username   string
+	CertIssuer string
+	ValidUntil time.Time
+	Groups     []string
+}
 
 // A CredentialsLoader loads mTLS credential data.
 type CredentialsLoader interface {
@@ -76,6 +85,10 @@ type CredentialsLoader interface {
 	// implementation to support but allows for dynamic refresh of certificates
 	// without a server restart.
 	CertsRefreshed() bool
+
+	// GetClientCertInfo extracts client certificate information from the client certificate
+	// and other sources, depending on the Certificate Loader type.
+	GetClientCertInfo(context.Context, string) (*ClientCertInfo, error)
 }
 
 // WrappedTransportCredentials wraps a credentials.TransportCredentials and
