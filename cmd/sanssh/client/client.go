@@ -175,10 +175,9 @@ func (t *clientStreamWithTimeout) RecvMsg(m interface{}) error {
 func Run(ctx context.Context, rs RunState) {
 	// If we're running internal commands we don't need anything else.
 	for i, f := range flag.Args() {
-		// Only do this if it's in the first couple positions. (up to 2nd position)
-		// Otherwise we end up doing - sanssh service enable help
-		// which then tries to actually run the enable command without
-		// a conn and blows up.
+		// Omits unneeded part of the setup for internal commands, but only when they're passed as arguments in the beginning of the command (up to 2nd position).
+		// This prevents us from parsing e.g. user input `sanssh service enable help` as `sanssh help` and running `enable` command without
+		// the proper setup (e.g. a valid connection to sansshell-server), resulting in an error.
 		if i > 1 {
 			break
 		}
