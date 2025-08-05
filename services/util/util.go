@@ -21,8 +21,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	writerUtils "github.com/Snowflake-Labs/sansshell/services/util/writer"
-	"golang.org/x/term"
 	"io"
 	"os"
 	"os/exec"
@@ -30,6 +28,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	writerUtils "github.com/Snowflake-Labs/sansshell/services/util/writer"
+	"golang.org/x/term"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -370,8 +371,12 @@ func (s *StringSliceCommaOrWhitespaceFlag) Set(val string) error {
 		s.Target = new([]string)
 	}
 	for _, vals := range strings.Fields(val) {
-
-		*s.Target = append(*s.Target, strings.Split(vals, ",")...)
+		for _, target := range strings.Split(vals, ",") {
+			trimmed := strings.TrimSpace(target)
+			if trimmed != "" {
+				*s.Target = append(*s.Target, trimmed)
+			}
+		}
 	}
 	return nil
 }
