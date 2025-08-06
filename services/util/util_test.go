@@ -330,6 +330,36 @@ baz`,
 			wantTarget: []string{"foo", "bar", "baz"},
 			wantString: "foo,bar,baz",
 		},
+		{
+			desc:       "trailing spaces in comma separated",
+			input:      "foo , bar  , baz   ",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "trailing spaces in space separated",
+			input:      "foo   bar   baz   ",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "leading and trailing spaces",
+			input:      "  foo  ,  bar  ,  baz  ",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "tabs and multiple spaces",
+			input:      "foo\t,\tbar\t\t,\tbaz\t",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
+		{
+			desc:       "empty strings are filtered out",
+			input:      "foo, , bar,  , baz",
+			wantTarget: []string{"foo", "bar", "baz"},
+			wantString: "foo,bar,baz",
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			var flag StringSliceCommaOrWhitespaceFlag

@@ -167,7 +167,16 @@ func main() {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
-			*targetsFlag.Target = append(*targetsFlag.Target, scanner.Text())
+			line := scanner.Text()
+			target := strings.TrimSpace(line)
+			// Warn if whitespace was trimmed to help users clean up their files
+			if len(target) != len(line) && target != "" {
+				log.Printf("Warning: trimmed whitespace from target %q in %s", line, *targetsFile)
+			}
+			// Skip empty lines (including lines with only whitespace)
+			if target != "" {
+				*targetsFlag.Target = append(*targetsFlag.Target, target)
+			}
 		}
 		if err := scanner.Err(); err != nil {
 			log.Fatalf("scanning error reading %s: %v", *targetsFile, err)
