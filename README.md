@@ -114,7 +114,7 @@ go run ./cmd/sanssh --proxy=localhost:50043 --targets=localhost:50042 file read 
 ### Monitoring and Debugging
 
 - **Server Debug UI**: http://localhost:50044
-- **Proxy Debug UI**: http://localhost:50046  
+- **Proxy Debug UI**: http://localhost:50046
 - **Metrics Endpoint**: http://localhost:50047 (server), http://localhost:50046 (proxy)
 
 ### Environment setup : protoc
