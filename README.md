@@ -5,7 +5,9 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/Snowflake-Labs/sansshell.svg)](https://pkg.go.dev/github.com/Snowflake-Labs/sansshell)
 [![Report Card](https://goreportcard.com/badge/github.com/Snowflake-Labs/sansshell)](https://goreportcard.com/report/github.com/Snowflake-Labs/sansshell)
 
-A non-interactive daemon for host management
+**A secure, non-interactive daemon for remote host management and debugging**
+
+SansShell is a powerful remote host management system built on gRPC that provides a secure alternative to traditional SSH-based administration. It offers fine-grained access control, comprehensive auditing, and policy-based authorization for critical system operations.
 
 ```mermaid
 flowchart LR;
@@ -47,49 +49,73 @@ client --"gRPC (mTLS)"--> proxy_server
 proxy_server --"grpc (mTLS)"---> server
 ```
 
-SansShell is primarily a gRPC server with a variety of options for localhost
-debugging and management. Its goal is to replace the need to use an
-interactive shell for emergency debugging and recovery with a much safer
-interface. Each authorized action can be evaluated against an OPA policy,
-audited in advance or after the fact, and is ideally deterministic (for a given
-state of the local machine).
+## Overview
 
-sanssh is a simple CLI with a friendly API for dumping debugging state and
-interacting with a remote machine. It also includes a set of convenient but
-perhaps-less-friendly subcommands to address the raw SansShell API endpoints.
+SansShell is a modern host management platform that replaces traditional interactive shell access with a secure, auditable, and policy-driven approach. Built entirely on gRPC, it provides:
+
+- **Security First**: mTLS encryption, certificate-based authentication, and OPA policy enforcement
+- **Fine-grained Authorization**: Every operation can be evaluated against custom policies
+- **Comprehensive Auditing**: All actions are logged and traceable
+- **Deterministic Operations**: Reproducible results for a given system state
+- **Zero Trust Architecture**: No persistent shell access or elevated privileges required
+
+### Core Components
+
+**SansShell Server (`sansshell-server`)**: A non-interactive daemon that runs on managed hosts, exposing secure gRPC services for system operations.
+
+**SansShell Client (`sanssh`)**: A CLI tool that provides both user-friendly commands and direct access to all gRPC endpoints.
+
+**Proxy Server (`proxy-server`)** *(Optional)*: A centralized gateway that enables:
+- Request fan-out to multiple hosts
+- Centralized policy enforcement
+- Network connectivity bridging
+- Enhanced logging and monitoring
 
 ## Getting Started
 
-How to set up, build and run locally for testing. All commands are relative to
-the project root directory.
+### Prerequisites
 
-Building SansShell requires a recent version of Go (check the go.mod file for
-the current version).
+- **Go 1.21+** (check `go.mod` for exact version requirements)
+- **Protocol Buffers compiler** (`protoc`) version 3+
+- **TLS certificates** for mTLS authentication
 
-### Build and run
+### Quick Start
 
-You need to populate ~/.sansshell with certificates before running.
+1. **Set up certificates** (for development/testing):
+   ```bash
+   cp -r auth/mtls/testdata ~/.sansshell
+   ```
 
+2. **Run the server**:
+   ```bash
+   go run ./cmd/sansshell-server
+   ```
+
+3. **Test with the client**:
+   ```bash
+   go run ./cmd/sanssh --targets=localhost file read /etc/hosts
+   ```
+
+### Full Proxy Setup
+
+For production-like testing with the proxy:
+
+```bash
+# Terminal 1: Start the server
+go run ./cmd/sansshell-server
+
+# Terminal 2: Start the proxy
+go run ./cmd/proxy-server
+
+# Terminal 3: Use client through proxy
+go run ./cmd/sanssh --proxy=localhost:50043 --targets=localhost:50042 file read /etc/hosts
 ```
-$ cp -r auth/mtls/testdata ~/.sansshell
-```
 
-Then you can build and run the server, in separate terminal windows:
+### Monitoring and Debugging
 
-```
-$ go run ./cmd/sansshell-server
-$ go run ./cmd/sanssh --targets=localhost file read /etc/hosts
-```
-
-You can also run the proxy to try the full flow:
-
-```
-$ go run ./cmd/sansshell-server
-$ go run ./cmd/proxy-server
-$ go run ./cmd/sanssh --proxy=localhost:50043 --targets=localhost:50042 file read /etc/hosts
-```
-
-Minimal debugging UIs are available at http://localhost:50044 for the server and http://localhost:50046 for the proxy by default.
+- **Server Debug UI**: http://localhost:50044
+- **Proxy Debug UI**: http://localhost:50046
+- **Metrics Endpoint**: http://localhost:50047 (server), http://localhost:50046 (proxy)
 
 ### Environment setup : protoc
 
@@ -185,19 +211,34 @@ if os.Getenv("INTEGRATION_TEST") == "" {
 }
 ```
 
-## A tour of the codebase
+## Architecture Overview
 
-SansShell is composed of 5 primary concepts:
+SansShell follows a modular, service-oriented architecture with several key components:
 
-1.  A series of services, which live in the `services/` directory.
-1.  A server which wraps these services into a local host agent.
-1.  A proxy server which can be used as an entry point to processing sansshell
-    RPCs by validating policy and then doing fanout to 1..N actual
-    sansshell servers. This can be done as a one to many RPC where
-    a single incoming RPC is replicated to N backend hosts in one RPC call.
-1.  A reference server binary, which includes all of the services.
-1.  A CLI, which serves as the reference implementation of how to use the
-    services via the agent.
+### Core Architecture Components
+
+1. **Services Layer** (`services/`): Modular gRPC services that implement specific functionality
+2. **Server Runtime** (`server/`): gRPC server framework with authentication, authorization, and service registration
+3. **Proxy Layer** (`proxy/`): Optional intermediary for request routing, policy enforcement, and fan-out
+4. **Client Library** (`client/`): Go client library for programmatic access
+5. **CLI Interface** (`cmd/sanssh/`): User-friendly command-line interface
+6. **Authentication** (`auth/`): mTLS and OPA policy-based security framework
+
+### Service Architecture
+
+Each service follows a consistent pattern:
+
+```
+services/<service-name>/
+├── <service>.proto        # gRPC service definition
+├── server/
+│   └── server.go         # Service implementation
+├── client/
+│   └── client.go         # CLI client commands
+└── README.md             # Service-specific documentation
+```
+
+Services self-register using `services.RegisterSansShellService()` in their `init()` functions, enabling compile-time service selection.
 
 ### Services
 
@@ -209,21 +250,33 @@ time.
 
 [Here](/docs/services-architecture.md) you could read more about services architecture.
 
-#### List of available Services
+#### Available Services
 
-1. Ansible: Run a local ansible playbook and return output
-1. Execute: Execute a command
-1. HealthCheck
-1. File operations: Read, Write, Stat, Sum, rm/rmdir, chmod/chown/chgrp
-   and immutable operations (if OS supported).
-1. Package operations: Install, Upgrade, List, Repolist
-1. Process operations: List, Get stacks (native or Java), Get dumps (core or Java heap)
-1. MPA operations: Multi party authorization for commands
-1. [Network](./services/network):
-   1. [TCP-Check](./services/network/README.md#sanssh-network-tcp-check) - Check if a TCP port is open on a remote host
-1. Service operations: List, Status, Start/stop/restart
+SansShell provides a comprehensive set of services for system management:
 
-TODO: Document service/.../client expectations.
+| Service | Description | Key Capabilities |
+|---------|-------------|------------------|
+| **Ansible** | Execute Ansible playbooks | Local playbook execution with output streaming |
+| **DNS** | DNS operations and diagnostics | Query resolution, record lookups |
+| **Exec** | Command execution | Secure command execution with output capture |
+| **FDB** | FoundationDB management | Database administration and monitoring |
+| **File (LocalFile)** | File system operations | Read, write, stat, checksum, permissions, symbolic links, directory operations |
+| **HealthCheck** | System health monitoring | Service health verification |
+| **HTTP-over-RPC** | HTTP proxy functionality | Secure HTTP requests through gRPC |
+| **MPA** | Multi-Party Authorization | Approval workflows for sensitive operations |
+| **Network** | Network diagnostics | TCP connectivity checks, network troubleshooting |
+| **Packages** | Package management | Install, upgrade, list packages (yum, apt, etc.) |
+| **Power** | Power management | System shutdown, reboot operations |
+| **Process** | Process management | List processes, stack traces, core dumps, Java heap dumps |
+| **Raw** | Low-level system access | Direct system call interface |
+| **SansShell** | Core system info | Version information, system metadata |
+| **Service** | Service management | SystemD service control (start, stop, restart, enable, disable) |
+| **SysInfo** | System information | Hardware and OS details |
+| **TLS Info** | TLS certificate management | Certificate inspection and validation |
+| **Util** | Utility functions | Common helper operations |
+| **WhoAmI** | Identity verification | Current user and permission context |
+
+Each service supports streaming operations where appropriate and includes comprehensive error handling and logging.
 
 #### Services API versioning and OPA policy
 
