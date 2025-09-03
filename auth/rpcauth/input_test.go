@@ -21,15 +21,16 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"net"
+	"net/url"
+	"testing"
+
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"net"
-	"net/url"
-	"testing"
 )
 
 type testAuthInfo struct {
@@ -193,6 +194,40 @@ func TestRpcAuthInput(t *testing.T) {
 						GroupNames: []string{"george", "the_gang"},
 					},
 					Cert: &CertAuthInput{},
+				},
+			},
+		},
+		{
+			name: "should add uris to cert auth input",
+			ctx: peer.NewContext(ctx, &peer.Peer{
+				Addr: tcp,
+				AuthInfo: credentials.TLSInfo{
+					State: tls.ConnectionState{
+						PeerCertificates: []*x509.Certificate{
+							{
+								URIs: []*url.URL{
+									{Scheme: "spiffe", Host: "spiffe://example.com/foo"},
+								},
+							},
+						},
+					},
+				},
+			}),
+			method: "/test",
+			compare: &RPCAuthInput{
+				Method: "/test",
+				Peer: &PeerAuthInput{
+					Net: &NetAuthInput{
+						// Net is not important for this test
+						Network: "tcp",
+						Address: "127.0.0.1",
+						Port:    "1",
+					},
+					Cert: &CertAuthInput{
+						URIs: []*url.URL{
+							{Scheme: "spiffe", Host: "spiffe://example.com/foo"},
+						},
+					},
 				},
 			},
 		},
