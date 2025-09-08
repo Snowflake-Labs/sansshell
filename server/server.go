@@ -44,6 +44,7 @@ type serveSetup struct {
 	authzHooks         []rpcauth.RPCAuthzHook
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
+	grpcServerOptions  []grpc.ServerOption
 	statsHandler       stats.Handler
 	services           []func(*grpc.Server)
 	onStartListeners   []func(*grpc.Server)
@@ -109,6 +110,14 @@ func WithUnaryInterceptor(unary grpc.UnaryServerInterceptor) Option {
 func WithStreamInterceptor(stream grpc.StreamServerInterceptor) Option {
 	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.streamInterceptors = append(s.streamInterceptors, stream)
+		return nil
+	})
+}
+
+// WithServerOption adds a grpc.ServerOption to be passed to grpc.NewServer.
+func WithServerOption(opt grpc.ServerOption) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
+		s.grpcServerOptions = append(s.grpcServerOptions, opt)
 		return nil
 	})
 }
@@ -237,6 +246,7 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 	if ss.statsHandler != nil {
 		serverOpts = append(serverOpts, grpc.StatsHandler(ss.statsHandler))
 	}
+	serverOpts = append(serverOpts, ss.grpcServerOptions...)
 
 	s := grpc.NewServer(serverOpts...)
 
