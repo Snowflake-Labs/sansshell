@@ -21,6 +21,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"net"
+	"net/url"
 	"reflect"
 
 	"google.golang.org/grpc"
@@ -144,6 +145,9 @@ type CertAuthInput struct {
 
 	// DNS names, from SubjectAlternativeName
 	DNSNames []string `json:"dnsnames"`
+
+	// URIs, from SubjectAlternativeName
+	URIs []*url.URL `json:"uris"`
 
 	// The raw SPIFFE identifier, if present
 	SPIFFEID string `json:"spiffeid"`
@@ -275,6 +279,7 @@ func CertInputFrom(authInfo credentials.AuthInfo) *CertAuthInput {
 		out.Subject = cert.Subject
 		out.Issuer = cert.Issuer
 		out.DNSNames = cert.DNSNames
+		out.URIs = cert.URIs
 	}
 	return out
 }
