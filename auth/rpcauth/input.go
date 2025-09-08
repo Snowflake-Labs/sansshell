@@ -146,7 +146,7 @@ type CertAuthInput struct {
 	// DNS names, from SubjectAlternativeName
 	DNSNames []string `json:"dnsnames"`
 
-	// URIs from cetificate
+	// URIs, from SubjectAlternativeName
 	URIs []*url.URL `json:"uris"`
 
 	// The raw SPIFFE identifier, if present
