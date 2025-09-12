@@ -106,12 +106,12 @@ func TestCleanWriter(t *testing.T) {
 	}{
 		{
 			desc:   "Basic input with prefix",
-			inputs: []string{"123:10.0.0.1:9500: some_output_strings\n"},
+			inputs: []string{"123-10.0.0.1:9500: some_output_strings\n"},
 			output: "some_output_strings\n",
 		},
 		{
 			desc:   "Multiple writes across a single line",
-			inputs: []string{"123:10.0.0.1:9500:", " some_output_strings\n"},
+			inputs: []string{"123-10.0.0.1:9500:", " some_output_strings\n"},
 			output: "some_output_strings\n",
 		},
 		{

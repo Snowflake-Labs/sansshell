@@ -27,7 +27,7 @@ import (
 //
 // This is useful for transforming lines like:
 //
-//	"123:10.0.0.1:9500: some_output_strings\n"
+//	"123-10.0.0.1:9500: some_output_strings\n"
 //
 // into:
 //
