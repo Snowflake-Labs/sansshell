@@ -170,7 +170,7 @@ func (g *rpcAuthorizerImpl) Eval(ctx context.Context, input *RPCAuthInput) error
 			}
 
 			errorMessageParts := []string{
-				"Authz policy does not permit this request, there is several reasons why:\n",
+				"Authz policy does not permit this request, there are several reasons why:\n",
 			}
 			for _, hint := range hints {
 				errorMessageParts = append(errorMessageParts, "  * ", hint, "\n")
