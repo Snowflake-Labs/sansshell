@@ -84,9 +84,9 @@ type RunState struct {
 	AuthzDryRun bool
 
 	// Interspectors for unary calls to the connection to the proxy
-	ConnectionUnaryInterceptors []proxy.UnaryInterceptor
+	ClientUnaryInterceptors []proxy.UnaryInterceptor
 	// Interspectors for streaming calls to the connection to the proxy
-	ConnectionStreamInterceptors []proxy.StreamInterceptor
+	ClientStreamInterceptors []proxy.StreamInterceptor
 
 	credentials.PerRPCCredentials
 }
@@ -382,11 +382,11 @@ func Run(ctx context.Context, rs RunState) {
 			conn.StreamInterceptors = []proxy.StreamInterceptor{mpahooks.ProxyClientStreamInterceptor(state)}
 		}
 
-		if len(rs.ConnectionUnaryInterceptors) > 0 {
-			conn.UnaryInterceptors = append(conn.UnaryInterceptors, rs.ConnectionUnaryInterceptors...)
+		if len(rs.ClientUnaryInterceptors) > 0 {
+			conn.UnaryInterceptors = append(conn.UnaryInterceptors, rs.ClientUnaryInterceptors...)
 		}
-		if len(rs.ConnectionStreamInterceptors) > 0 {
-			conn.StreamInterceptors = append(conn.StreamInterceptors, rs.ConnectionStreamInterceptors...)
+		if len(rs.ClientStreamInterceptors) > 0 {
+			conn.StreamInterceptors = append(conn.StreamInterceptors, rs.ClientStreamInterceptors...)
 		}
 
 		state.Conn = conn
