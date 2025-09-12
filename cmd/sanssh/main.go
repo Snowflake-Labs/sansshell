@@ -76,20 +76,22 @@ var (
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
 	// Deprecated: --timeout flag is deprecated. Use --idle-timeout or --dial-timeout instead
-	_                = flag.Duration("timeout", defaultDialTimeout, "DEPRECATED. Please use --idle-timeout or --dial-timeout instead")
-	dialTimeout      = flag.Duration("dial-timeout", defaultDialTimeout, "How long to wait for the connection to be accepted. Timeout specified in --targets or --proxy will take precedence")
-	idleTimeout      = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
-	credSource       = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
-	outputsDir       = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
-	justification    = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
-	targetsFile      = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
-	clientPolicyFlag = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
-	clientPolicyFile = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
-	verbosity        = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
-	prefixHeader     = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
-	batchSize        = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
-	mpa              = flag.Bool("mpa", false, "Request multi-party approval for commands. This will create an MPA request, wait for approval, and then execute the command.")
-	authzDryRun      = flag.Bool("authz-dry-run", false, "If true, the client will send a request to the server to check if the user has the permission to run the command. The server will respond with a success or failure message.")
+	_                 = flag.Duration("timeout", defaultDialTimeout, "DEPRECATED. Please use --idle-timeout or --dial-timeout instead")
+	dialTimeout       = flag.Duration("dial-timeout", defaultDialTimeout, "How long to wait for the connection to be accepted. Timeout specified in --targets or --proxy will take precedence")
+	idleTimeout       = flag.Duration("idle-timeout", defaultIdleTimeout, "Maximum time that a connection is idle. If no messages are received within this timeframe, connection will be terminated")
+	credSource        = flag.String("credential-source", mtlsFlags.Name(), fmt.Sprintf("Method used to obtain mTLS credentials (one of [%s])", strings.Join(mtls.Loaders(), ",")))
+	outputsDir        = flag.String("output-dir", "", "If set defines a directory to emit output/errors from commands. Files will be generated based on target as destination/0 destination/0.error, etc.")
+	justification     = flag.String("justification", "", "If non-empty will add the key '"+rpcauth.ReqJustKey+"' to the outgoing context Metadata to be passed along to the server for possible validation and logging.")
+	targetsFile       = flag.String("targets-file", "", "If set read the targets list line by line (as host[:port]) from the indicated file instead of using --targets (error if both flags are used). A blank port acts the same as --targets")
+	clientPolicyFlag  = flag.String("client-policy", "", "OPA policy for outbound client actions.  If empty no policy is applied.")
+	clientPolicyFile  = flag.String("client-policy-file", "", "Path to a file with a client OPA.  If empty uses --client-policy")
+	verbosity         = flag.Int("v", -1, "Verbosity level. > 0 indicates more extensive logging")
+	prefixHeader      = flag.Bool("h", false, "If true prefix each line of output with '<index>-<target>: '")
+	cleanOutput       = flag.Bool("clean-output", false, "If true, strip the first token up to the first space from each output line")
+	cleanOutputIPOnly = flag.Bool("clean-output-ip-only", false, "If true, print only the remote host/IP per output line")
+	batchSize         = flag.Int("batch-size", 0, "If non-zero will perform the proxy->target work in batches of this size (with any remainder done at the end).")
+	mpa               = flag.Bool("mpa", false, "Request multi-party approval for commands. This will create an MPA request, wait for approval, and then execute the command.")
+	authzDryRun       = flag.Bool("authz-dry-run", false, "If true, the client will send a request to the server to check if the user has the permission to run the command. The server will respond with a success or failure message.")
 
 	// targets will be bound to --targets for sending a single request to N nodes.
 	targetsFlag util.StringSliceCommaOrWhitespaceFlag
@@ -126,6 +128,8 @@ func init() {
 	subcommands.ImportantFlag("client-policy-file")
 	subcommands.ImportantFlag("mpa")
 	subcommands.ImportantFlag("v")
+	subcommands.ImportantFlag("clean-output")
+	subcommands.ImportantFlag("clean-output-ip-only")
 }
 
 func isFlagPassed(name string) bool {
@@ -218,6 +222,8 @@ func main() {
 		IdleTimeout:       *idleTimeout,
 		ClientAuthzPolicy: clientPolicy,
 		PrefixOutput:      *prefixHeader,
+		CleanOutput:       *cleanOutput,
+		CleanOutputIPOnly: *cleanOutputIPOnly,
 		BatchSize:         *batchSize,
 		EnableMPA:         *mpa,
 	}

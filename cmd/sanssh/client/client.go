@@ -75,6 +75,10 @@ type RunState struct {
 	ClientAuthzPolicy rpcauth.AuthzPolicy
 	// PrefixOutput if true will prefix every line of output with '<index>-<target>: '
 	PrefixOutput bool
+	// CleanOutputIPOnly if true will output only the remote host/IP per line
+	CleanOutputIPOnly bool
+	// CleanOutput if true will strip the first token up to the first space from each output line
+	CleanOutput bool
 	// BatchSize if non-zero will do the requested operation to the targets but in
 	// N calls to the proxy where N is the target list size divided by BatchSize.
 	BatchSize int
@@ -308,6 +312,13 @@ func Run(ctx context.Context, rs RunState) {
 	}
 
 	makeWriter := func(prefix bool, i int, dest io.Writer) io.Writer {
+		// Optionally clean original output lines first (IP-only takes precedence)
+		if rs.CleanOutputIPOnly {
+			dest = writerUtils.GetIPOnlyWriter(dest)
+		} else if rs.CleanOutput {
+			dest = writerUtils.GetCleanOutputWriter(dest)
+		}
+		// Then add our prefix (if requested)
 		if prefix {
 			targetName := cmdUtil.StripTimeout(rs.Targets[i])
 			dest = writerUtils.GetPrefixedWriter(
