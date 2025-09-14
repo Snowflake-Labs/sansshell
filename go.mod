@@ -1,6 +1,6 @@
 module github.com/Snowflake-Labs/sansshell
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/coreos/go-systemd/v22 v22.5.0
@@ -108,7 +108,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0 // indirect
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/oauth2 v0.21.0 // indirect
+	golang.org/x/oauth2 v0.27.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
