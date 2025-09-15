@@ -25,10 +25,12 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/stats/opentelemetry"
 
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -237,6 +239,19 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 	if ss.statsHandler != nil {
 		serverOpts = append(serverOpts, grpc.StatsHandler(ss.statsHandler))
 	}
+
+	openTelemetryServerOption := opentelemetry.ServerOption(opentelemetry.Options{
+		MetricsOptions: opentelemetry.MetricsOptions{
+			MeterProvider: otel.GetMeterProvider(),
+			Metrics: opentelemetry.DefaultMetrics().Add(
+				"grpc.server.call.started",
+				"grpc.server.call.sent_total_compressed_message_size",
+				"grpc.server.call.rcvd_total_compressed_message_size",
+				"grpc.server.call.duration",
+			),
+		},
+	})
+	serverOpts = append(serverOpts, openTelemetryServerOption)
 
 	s := grpc.NewServer(serverOpts...)
 
