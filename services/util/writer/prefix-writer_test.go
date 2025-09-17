@@ -97,3 +97,45 @@ func TestPrefixWriter(t *testing.T) {
 		}
 	})
 }
+
+func TestCleanWriter(t *testing.T) {
+	for _, tc := range []struct {
+		desc   string
+		inputs []string
+		output string
+	}{
+		{
+			desc:   "Basic input with prefix",
+			inputs: []string{"123-10.0.0.1:9500: some_output_strings\n"},
+			output: "some_output_strings\n",
+		},
+		{
+			desc:   "Multiple writes across a single line",
+			inputs: []string{"123-10.0.0.1:9500:", " some_output_strings\n"},
+			output: "some_output_strings\n",
+		},
+		{
+			desc:   "Two lines, both cleaned",
+			inputs: []string{"1:a b\n2:c d\n"},
+			output: "b\nd\n",
+		},
+		{
+			desc:   "Line without space remains unchanged",
+			inputs: []string{"nospace\n"},
+			output: "nospace\n",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := GetCleanOutputWriter(&buf)
+			for _, in := range tc.inputs {
+				if _, err := w.Write([]byte(in)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got, want := buf.String(), tc.output; got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
