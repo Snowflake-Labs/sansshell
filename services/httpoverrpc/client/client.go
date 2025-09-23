@@ -72,6 +72,7 @@ type proxyCmd struct {
 	allowAnyHost       bool
 	protocol           string
 	hostname           string
+  hostheader         string
 	insecureSkipVerify bool
 	stream             bool
 }
@@ -91,6 +92,7 @@ func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.BoolVar(&p.allowAnyHost, "allow-any-host", false, "Serve data regardless of the Host in HTTP requests instead of only allowing localhost and IPs. False by default to prevent DNS rebinding attacks.")
 	f.StringVar(&p.protocol, "protocol", "http", "protocol to communicate with specified hostname")
 	f.StringVar(&p.hostname, "hostname", "localhost", "ip address or domain name to specify host")
+  f.StringVar(&p.hostheader, "hostheader", "", "if set, a host header to set on requests (overriding the value from the incoming request")
 	f.BoolVar(&p.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
 	f.BoolVar(&p.stream, "stream", false, "If true, stream the response back to the client. Useful for large responses.")
 }
@@ -204,6 +206,9 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 			return
 		}
 
+    if p.hostheader != "" {
+      httpReq.Header.Set("host", p.hostheader)
+    }
 		var reqHeaders []*pb.Header
 		for k, v := range httpReq.Header {
 			reqHeaders = append(reqHeaders, &pb.Header{Key: k, Values: v})
