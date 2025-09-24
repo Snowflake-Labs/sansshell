@@ -213,7 +213,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
 			s.cancelFunc()
-			return fmt.Errorf("Proxy-target[%s] connection cannot be established: %w", s.Target(), err)
+			return fmt.Errorf("Proxy-target connection cannot be established: %w", err)
 		}
 		s.grpcConn = grpcConn
 		grpcStream, err := s.grpcConn.NewStream(ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
@@ -237,7 +237,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 				}
 				if err != nil {
 					s.CloseWith(err)
-					return fmt.Errorf("Proxy-target[%s] message recv failed: %w", s.Target(), err)
+					return fmt.Errorf("Proxy-target message recv failed: %w", err)
 				}
 				// otherwise, this is a streamData reply
 				packed, err := anypb.New(msg)
