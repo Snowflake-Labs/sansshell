@@ -165,7 +165,17 @@ func (g *rpcAuthorizerImpl) Eval(ctx context.Context, input *RPCAuthInput) error
 			logger.V(1).Error(errRegister, "failed to add counter "+authzDeniedPolicyCounter.Name)
 		}
 		if len(hints) > 0 {
-			return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request: %v", strings.Join(hints, ", "))
+			if len(hints) == 1 {
+				return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request: %v", hints[0])
+			}
+
+			errorMessageParts := []string{
+				"Authz policy does not permit this request, there are several reasons why:\n",
+			}
+			for _, hint := range hints {
+				errorMessageParts = append(errorMessageParts, "  * ", hint, "\n")
+			}
+			return status.Errorf(codes.PermissionDenied, strings.Join(errorMessageParts, ""))
 		} else {
 			return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request")
 		}
