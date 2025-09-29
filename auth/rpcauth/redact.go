@@ -172,6 +172,7 @@ func getRedactedInput(input *RPCAuthInput) (RPCAuthInput, error) {
 		Host:        input.Host,
 		Environment: input.Environment,
 		Extensions:  input.Extensions,
+		Approvers:   input.Approvers,
 	}
 
 	if input.Metadata != nil {
