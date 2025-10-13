@@ -22,8 +22,8 @@ repos:
       language: script
       pass_filenames: false
 - repo: https://github.com/golangci/golangci-lint
-  rev: v1.59.1
+  rev: v2.5.0
   hooks:
       - id: golangci-lint
-        args: ['--fast']
+        args: ['--timeout=2m']
         stages: [commit]

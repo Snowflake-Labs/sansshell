@@ -50,6 +50,8 @@ type ExecuteState struct {
 	Out []io.Writer
 	// Error stream to write log lines related to particular target host.
 	Err []io.Writer
+	// CredSource is the credential source to use for authn.
+	CredSource string
 }
 
 // StreamingChunkSize is the chunk size we use when sending replies on a stream.

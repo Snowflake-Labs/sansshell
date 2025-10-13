@@ -33,6 +33,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Allow to pass in a credential source for authn.
+var CredentialSource = ""
+
 const subPackage = "mpa"
 
 func init() {
