@@ -1,27 +1,12 @@
-version: "2"
-linters:
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
-    rules:
-      - linters:
-          - staticcheck
-        text: 'SA1019: grpc.DialContext is deprecated'
-      - linters:
-          - staticcheck
-        text: 'SA1019: grpc.WithBlock is deprecated'
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
-formatters:
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+issues:
+  exclude-rules:
+    # https://github.com/grpc/grpc-go/issues/7090
+    # Newer versions of grpc deprecate some commonly-used functions.
+    # Let's silence the deprecation notice until we decide to stop
+    # using them.
+    - linters:
+        - staticcheck
+      text: "SA1019: grpc.DialContext is deprecated"
+    - linters:
+        - staticcheck
+      text: "SA1019: grpc.WithBlock is deprecated"
