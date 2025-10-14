@@ -279,7 +279,7 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 
 	if len(targetsNeedingApproval) > 0 {
 		fmt.Fprintln(os.Stderr, "Waiting for multi-party approval on all targets, ask an approver to run:")
-		fmt.Fprintf(os.Stderr, "  sanssh -proxy %v -targets %v mpa approve %v\n", conn.Proxy().Target(), strings.Join(targetsNeedingApproval, ","), mpaID)
+		fmt.Fprintf(os.Stderr, "  sanssh %v-proxy %v -targets %v mpa approve %v\n", getSourceParam(state.CredSource), conn.Proxy().Target(), strings.Join(targetsNeedingApproval, ","), mpaID)
 		// We call WaitForApproval on all targets, even ones already approved. This is silly but not harmful.
 		waitCh, err := mpaClient.WaitForApprovalOneMany(ctx, &mpa.WaitForApprovalRequest{Id: mpaID})
 		if err != nil {
@@ -292,6 +292,13 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 		}
 	}
 	return mpaID, nil
+}
+
+func getSourceParam(credentialSource string) string {
+	if credentialSource != "" {
+		return fmt.Sprintf("--credential-source %s ", credentialSource)
+	}
+	return ""
 }
 
 // ProxyClientUnaryInterceptor will perform the MPA flow prior to making the desired RPC

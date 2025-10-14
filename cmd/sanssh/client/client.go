@@ -390,6 +390,7 @@ func Run(ctx context.Context, rs RunState) {
 		}
 
 		state.Conn = conn
+		state.CredSource = rs.CredSource
 		state.Out = output[start:end]
 		state.Err = errors[start:end]
 		if len(rs.Targets) == 0 {
