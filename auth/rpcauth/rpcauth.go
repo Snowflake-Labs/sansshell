@@ -175,7 +175,7 @@ func (g *rpcAuthorizerImpl) Eval(ctx context.Context, input *RPCAuthInput) error
 			for _, hint := range hints {
 				errorMessageParts = append(errorMessageParts, "  * ", hint, "\n")
 			}
-			return status.Errorf(codes.PermissionDenied, strings.Join(errorMessageParts, ""))
+			return status.Errorf(codes.PermissionDenied, "%s", strings.Join(errorMessageParts, ""))
 		} else {
 			return status.Errorf(codes.PermissionDenied, "Authz policy does not permit this request")
 		}
