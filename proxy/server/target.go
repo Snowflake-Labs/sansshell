@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -687,5 +688,5 @@ func isEOF(err error) bool {
 	}
 
 	// grpc-go 1.76+
-	return status.Code(err) == codes.Internal && err.Error() == "cardinality violation: received no response message from non-server-streaming RPC"
+	return status.Code(err) == codes.Internal && strings.HasSuffix(err.Error(), "cardinality violation: received no response message from non-server-streaming RPC")
 }
