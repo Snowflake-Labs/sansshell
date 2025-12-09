@@ -588,7 +588,7 @@ func (s *server) Write(stream pb.LocalFile_WriteServer) (retErr error) {
 		recorder.CounterOrLog(ctx, localfileWriteFailureCounter, 1, attribute.String("reason", "finalize_err"))
 		return err
 	}
-	return stream.SendAndClose(&emptypb.Empty{})
+	return nil
 }
 
 func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empty, retErr error) {
