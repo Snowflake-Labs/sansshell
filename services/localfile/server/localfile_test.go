@@ -1098,6 +1098,25 @@ func TestList(t *testing.T) {
 	symStat, err := osStat(symlink, true)
 	testutil.FatalOnErr("osStat", err, t)
 
+	// Create additional files for glob testing
+	globDir := t.TempDir()
+	logFile1, err := os.Create(filepath.Join(globDir, "app.log"))
+	testutil.FatalOnErr("os.Create", err, t)
+	logFile1.Close()
+	logFile2, err := os.Create(filepath.Join(globDir, "error.log"))
+	testutil.FatalOnErr("os.Create", err, t)
+	logFile2.Close()
+	txtFile, err := os.Create(filepath.Join(globDir, "readme.txt"))
+	testutil.FatalOnErr("os.Create", err, t)
+	txtFile.Close()
+
+	logFile1Stat, err := osStat(filepath.Join(globDir, "app.log"), true)
+	testutil.FatalOnErr("osStat", err, t)
+	logFile2Stat, err := osStat(filepath.Join(globDir, "error.log"), true)
+	testutil.FatalOnErr("osStat", err, t)
+	txtFileStat, err := osStat(filepath.Join(globDir, "readme.txt"), true)
+	testutil.FatalOnErr("osStat", err, t)
+
 	// Construct a directory with no perms. We should be able
 	// to stat this but then fail to readdir on it.
 	badDir := filepath.Join(t.TempDir(), "/foo")
@@ -1170,6 +1189,83 @@ func TestList(t *testing.T) {
 					return nil, errors.New("stat error")
 				}
 				return origOsStat(s, b)
+			},
+			wantErr: true,
+		},
+		{
+			name: "glob pattern matching log files",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "*.log"),
+			},
+			expected: []*pb.StatReply{
+				logFile1Stat,
+				logFile2Stat,
+			},
+		},
+		{
+			name: "glob pattern matching txt files",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "*.txt"),
+			},
+			expected: []*pb.StatReply{
+				txtFileStat,
+			},
+		},
+		{
+			name: "glob pattern with no matches",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "*.xyz"),
+			},
+			wantErr: true,
+		},
+		{
+			name: "glob pattern non-absolute path",
+			req: &pb.ListRequest{
+				Entry: "relative/*.log",
+			},
+			wantErr: true,
+		},
+		{
+			name: "glob pattern with directory traversal",
+			req: &pb.ListRequest{
+				Entry: "/tmp/../tmp/*.log",
+			},
+			wantErr: true,
+		},
+		{
+			name: "glob pattern matching all files",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "*"),
+			},
+			expected: []*pb.StatReply{
+				logFile1Stat,
+				logFile2Stat,
+				txtFileStat,
+			},
+		},
+		{
+			name: "glob pattern with question mark",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "???.log"),
+			},
+			expected: []*pb.StatReply{
+				logFile1Stat,
+			},
+		},
+		{
+			name: "glob pattern with bracket",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "*[om]*.*"),
+			},
+			expected: []*pb.StatReply{
+				logFile2Stat,
+				txtFileStat,
+			},
+		},
+		{
+			name: "broken pattern",
+			req: &pb.ListRequest{
+				Entry: filepath.Join(globDir, "[a"),
 			},
 			wantErr: true,
 		},
