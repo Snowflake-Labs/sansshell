@@ -680,7 +680,6 @@ func isGlobPattern(path string) bool {
 }
 
 func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.StatReply) error) error {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if entry == "" {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
@@ -691,19 +690,29 @@ func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.St
 		return err
 	}
 
-	matches, err := filepath.Glob(entry)
+	if isGlobPattern(entry) {
+		return s.listGlob(entry, ctx, consumer)
+	}
+	return s.listPath(entry, ctx, consumer)
+}
+
+// listGlob lists files matching a glob pattern. Does not descend into directories.
+func (s *server) listGlob(pattern string, ctx context.Context, consumer func(*pb.StatReply) error) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "glob_err"))
 		return status.Errorf(codes.InvalidArgument, "invalid pattern: %v", err)
 	}
 	if len(matches) == 0 {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "no_matches_err"))
-		return status.Errorf(codes.Internal, "no matches found for %s", entry)
+		return status.Errorf(codes.NotFound, "no matches found for pattern %s", pattern)
 	}
 
-	isGlobPattern := isGlobPattern(entry)
 	for _, match := range matches {
-		logger.Info("ls", "filename", match)
+		logger.Info("ls", "glob-match", match)
 		resp, err := osStat(match, false)
 		if err != nil {
 			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
@@ -713,28 +722,45 @@ func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.St
 			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
 			return status.Errorf(codes.Internal, "list: send error %v", err)
 		}
+	}
+	return nil
+}
 
-		// If entry is a directory (not matched by glob pattern) we'll open it and go over its entries.
-		if !isGlobPattern && fs.FileMode(resp.Mode).IsDir() {
-			entries, err := os.ReadDir(match)
+// listPath lists a specific path. If the path is a directory, its contents are listed (one level).
+func (s *server) listPath(path string, ctx context.Context, consumer func(*pb.StatReply) error) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	logger.Info("ls", "filename", path)
+	resp, err := osStat(path, false)
+	if err != nil {
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
+		return err
+	}
+	if err := consumer(resp); err != nil {
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
+		return status.Errorf(codes.Internal, "list: send error %v", err)
+	}
+
+	// If path is a directory, list its contents (one level only).
+	if fs.FileMode(resp.Mode).IsDir() {
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
+			return status.Errorf(codes.Internal, "readdir: %v", err)
+		}
+		for _, e := range entries {
+			name := filepath.Join(path, e.Name())
+			logger.Info("ls", "filename", name)
+			// Use lstat so that we don't return misleading directory contents from
+			// following symlinks.
+			resp, err := osStat(name, true)
 			if err != nil {
-				recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
-				return status.Errorf(codes.Internal, "readdir: %v", err)
+				return err
 			}
-			// Only do one level so iterate these and we're done.
-			for _, e := range entries {
-				name := filepath.Join(match, e.Name())
-				logger.Info("ls", "filename", name)
-				// Use lstat so that we don't return misleading directory contents from
-				// following symlinks.
-				resp, err := osStat(name, true)
-				if err != nil {
-					return err
-				}
-				if err := consumer(resp); err != nil {
-					recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
-					return status.Errorf(codes.Internal, "list: send error %v", err)
-				}
+			if err := consumer(resp); err != nil {
+				recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
+				return status.Errorf(codes.Internal, "list: send error %v", err)
 			}
 		}
 	}
