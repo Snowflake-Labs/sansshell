@@ -674,8 +674,12 @@ func (s *server) Copy(ctx context.Context, req *pb.CopyRequest) (_ *emptypb.Empt
 	return &emptypb.Empty{}, nil
 }
 
+// isGlobPattern checks if a path contains glob pattern characters.
+func isGlobPattern(path string) bool {
+	return strings.ContainsAny(path, "*?[")
+}
+
 func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.StatReply) error) error {
-	logger := logr.FromContextOrDiscard(ctx)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if entry == "" {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "missing_entry"))
@@ -686,9 +690,49 @@ func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.St
 		return err
 	}
 
-	// We always send back the entry first.
-	logger.Info("ls", "filename", entry)
-	resp, err := osStat(entry, false)
+	if isGlobPattern(entry) {
+		return s.listGlob(entry, ctx, consumer)
+	}
+	return s.listPath(entry, ctx, consumer)
+}
+
+// listGlob lists files matching a glob pattern. Does not descend into directories.
+func (s *server) listGlob(pattern string, ctx context.Context, consumer func(*pb.StatReply) error) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "glob_err"))
+		return status.Errorf(codes.InvalidArgument, "invalid pattern: %v", err)
+	}
+	if len(matches) == 0 {
+		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "no_matches_err"))
+		return status.Errorf(codes.NotFound, "no matches found for pattern %s", pattern)
+	}
+
+	for _, match := range matches {
+		logger.Info("ls", "glob-match", match)
+		resp, err := osStat(match, false)
+		if err != nil {
+			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
+			return err
+		}
+		if err := consumer(resp); err != nil {
+			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "send_err"))
+			return status.Errorf(codes.Internal, "list: send error %v", err)
+		}
+	}
+	return nil
+}
+
+// listPath lists a specific path. If the path is a directory, its contents are listed (one level).
+func (s *server) listPath(path string, ctx context.Context, consumer func(*pb.StatReply) error) error {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+
+	logger.Info("ls", "filename", path)
+	resp, err := osStat(path, false)
 	if err != nil {
 		recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "stat_err"))
 		return err
@@ -698,16 +742,15 @@ func (s *server) listFor(entry string, ctx context.Context, consumer func(*pb.St
 		return status.Errorf(codes.Internal, "list: send error %v", err)
 	}
 
-	// If it's directory we'll open it and go over its entries.
+	// If path is a directory, list its contents (one level only).
 	if fs.FileMode(resp.Mode).IsDir() {
-		entries, err := os.ReadDir(entry)
+		entries, err := os.ReadDir(path)
 		if err != nil {
 			recorder.CounterOrLog(ctx, localfileListFailureCounter, 1, attribute.String("reason", "read_dir_err"))
 			return status.Errorf(codes.Internal, "readdir: %v", err)
 		}
-		// Only do one level so iterate these and we're done.
 		for _, e := range entries {
-			name := filepath.Join(entry, e.Name())
+			name := filepath.Join(path, e.Name())
 			logger.Info("ls", "filename", name)
 			// Use lstat so that we don't return misleading directory contents from
 			// following symlinks.
