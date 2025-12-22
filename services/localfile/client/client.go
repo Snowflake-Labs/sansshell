@@ -917,6 +917,7 @@ func (*lsCmd) Usage() string {
 	return `ls [--long] [--directory] <path>:
   List the path given printing out each entry (N if it's a directory). Use --long to get ls -l style output.
   If the entry is a directory it will be suppressed from the output unless --directory is set (ls -d style).
+  The command supports glob patterns (*?[a-z]).
   NOTE: Only expands one level of a directory.
 `
 }
