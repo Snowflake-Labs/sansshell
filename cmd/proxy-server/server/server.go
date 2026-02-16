@@ -57,6 +57,8 @@ type runState struct {
 	clientPolicy             rpcauth.AuthzPolicy
 	credSource               string
 	tlsConfig                *tls.Config
+	fallbackCredSource       string
+	fallbackTlsConfig        *tls.Config
 	hostport                 string
 	debugport                string
 	debughandler             *http.ServeMux
@@ -122,6 +124,24 @@ func WithTlsConfig(tlsConfig *tls.Config) Option {
 func WithCredSource(credSource string) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.credSource = credSource
+		return nil
+	})
+}
+
+// WithFallbackCredSource applies a fallback credential source that will be tried
+// if the primary credential source fails with a TLS error when connecting to targets.
+func WithFallbackCredSource(credSource string) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.fallbackCredSource = credSource
+		return nil
+	})
+}
+
+// WithFallbackTlsConfig applies a fallback tls.Config that will be tried
+// if the primary credentials fail with a TLS error when connecting to targets.
+func WithFallbackTlsConfig(tlsConfig *tls.Config) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.fallbackTlsConfig = tlsConfig
 		return nil
 	})
 }
@@ -393,11 +413,31 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.statsClientHandler != nil {
 		dialOpts = append(dialOpts, grpc.WithStatsHandler(rs.statsClientHandler))
 	}
-	targetDialer := server.NewDialer(dialOpts...)
+
+	primaryDialer := server.NewDialer(dialOpts...)
+
+	// Check if fallback is configured and create FallbackDialer if so
+	var targetDialer server.TargetDialer = primaryDialer
+	if rs.fallbackCredSource != "" || rs.fallbackTlsConfig != nil {
+		fallbackCreds, err := extractFallbackClientCredentials(ctx, rs)
+		if err != nil {
+			rs.logger.Error(err, "unable to extract fallback credentials, continuing without fallback")
+		} else {
+			fallbackDialOpts := make([]grpc.DialOption, len(dialOpts))
+			copy(fallbackDialOpts, dialOpts)
+			// Replace the credentials in the first slot
+			fallbackDialOpts[0] = grpc.WithTransportCredentials(fallbackCreds)
+			fallbackDialer := server.NewDialer(fallbackDialOpts...)
+			targetDialer = server.NewFallbackDialer(primaryDialer, fallbackDialer, rs.logger)
+			rs.logger.Info("credential fallback enabled",
+				"primary", rs.credSource,
+				"fallback", rs.fallbackCredSource)
+		}
+	}
 
 	svcMap := server.LoadGlobalServiceMap()
 	rs.logger.Info("loaded service map", "serviceMap", svcMap)
-	server := server.New(targetDialer, authz)
+	proxyServer := server.New(targetDialer, authz)
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
@@ -428,7 +468,7 @@ func Run(ctx context.Context, opts ...Option) {
 	g := grpc.NewServer(serverOpts...)
 
 	// We always register the proxy.
-	server.Register(g)
+	proxyServer.Register(g)
 
 	// Now loop over any other registered and call them.
 	for _, s := range rs.services {
@@ -490,4 +530,19 @@ func extractServerTransportCredentialsFromRunState(ctx context.Context, rs *runS
 		creds = credentials.NewTLS(rs.tlsConfig)
 	}
 	return creds, nil
+}
+
+// extractFallbackClientCredentials extracts fallback transport credentials from runState.
+// Returns an error if neither fallbackCredSource nor fallbackTlsConfig is configured.
+func extractFallbackClientCredentials(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
+	if rs.fallbackCredSource != "" && rs.fallbackTlsConfig != nil {
+		return nil, fmt.Errorf("both fallbackCredSource and fallbackTlsConfig are defined")
+	}
+	if rs.fallbackCredSource != "" {
+		return mtls.LoadClientCredentials(ctx, rs.fallbackCredSource)
+	}
+	if rs.fallbackTlsConfig != nil {
+		return credentials.NewTLS(rs.fallbackTlsConfig), nil
+	}
+	return nil, fmt.Errorf("no fallback credentials configured")
 }
