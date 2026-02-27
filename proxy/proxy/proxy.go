@@ -79,6 +79,11 @@ type Conn struct {
 	// Perform authz dry run instead of actual execution
 	AuthzDryRun bool
 
+	// ForceCredential is passed in each StartStream to tell the proxy which
+	// client credential to use when dialing the target. The proxy will fail
+	// if the requested credential is not configured. Empty means default.
+	ForceCredential string
+
 	// UnaryInterceptors allow intercepting Invoke and InvokeOneMany calls
 	// that go through a proxy.
 	// It is unsafe to modify Intercepters while calls are in progress.
@@ -455,10 +460,11 @@ func (p *Conn) createStreams(ctx context.Context, method string) (proxypb.Proxy_
 			req := &proxypb.ProxyRequest{
 				Request: &proxypb.ProxyRequest_StartStream{
 					StartStream: &proxypb.StartStream{
-						Target:      t,
-						MethodName:  method,
-						Nonce:       uint32(i),
-						AuthzDryRun: p.AuthzDryRun,
+						Target:          t,
+						MethodName:      method,
+						Nonce:           uint32(i),
+						AuthzDryRun:     p.AuthzDryRun,
+						ForceCredential: p.ForceCredential,
 					},
 				},
 			}

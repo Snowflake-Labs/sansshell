@@ -82,6 +82,10 @@ type RunState struct {
 	EnableMPA bool
 	// If true, the command is authz dry run and real action should not be executed
 	AuthzDryRun bool
+	// ForceCredential is passed to the proxy to force a specific client
+	// credential when dialing targets. The proxy will fail with an error if
+	// the requested credential is not configured. Empty means default.
+	ForceCredential string
 
 	// Interspectors for unary calls to the connection to the proxy
 	ClientUnaryInterceptors []proxy.UnaryInterceptor
@@ -376,6 +380,7 @@ func Run(ctx context.Context, rs RunState) {
 		}
 
 		conn.AuthzDryRun = rs.AuthzDryRun
+		conn.ForceCredential = rs.ForceCredential
 
 		if rs.EnableMPA {
 			conn.UnaryInterceptors = []proxy.UnaryInterceptor{mpahooks.ProxyClientUnaryInterceptor(state)}

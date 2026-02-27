@@ -424,8 +424,10 @@ type TargetStreamSet struct {
 	// A service method map used to resolve incoming stream requests to service methods
 	serviceMethods map[string]*ServiceMethod
 
-	// A TargetDialer for initiating target connections
-	targetDialer TargetDialer
+	// Named dialers for initiating target connections.
+	// Key "" is the default dialer used when no force_credential is specified.
+	// Non-empty values that are not present in this map cause an error.
+	dialers map[string]TargetDialer
 
 	// [rpcauthz.rpcAuthorizerImpl], for authorizing requests sent to targets.
 	authorizer rpcauth.RPCAuthorizer
@@ -444,11 +446,12 @@ type TargetStreamSet struct {
 	noncePairs map[string]bool
 }
 
-// NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams
-func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *TargetStreamSet {
+// NewTargetStreamSet creates a TargetStreamSet which manages a set of related TargetStreams.
+// The dialers map must contain a "" key for the default dialer.
+func NewTargetStreamSet(serviceMethods map[string]*ServiceMethod, dialers map[string]TargetDialer, authorizer rpcauth.RPCAuthorizer) *TargetStreamSet {
 	return &TargetStreamSet{
 		serviceMethods: serviceMethods,
-		targetDialer:   dialer,
+		dialers:        dialers,
 		authorizer:     authorizer,
 		streams:        make(map[uint64]*TargetStream),
 		closedStreams:  make(map[uint64]bool),
@@ -504,12 +507,21 @@ func (t *TargetStreamSet) Add(ctx context.Context, req *pb.StartStream, replyCha
 		sendReply(reply)
 		return nil
 	}
+	hint := req.GetForceCredential()
+	dialer, ok := t.dialers[hint]
+	if !ok {
+		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
+			ErrorStatus: convertStatus(status.Newf(codes.InvalidArgument, "unknown credential %q: not configured on this proxy", hint)),
+		}
+		sendReply(reply)
+		return nil
+	}
 	var dialTimeout *time.Duration
 	if req.DialTimeout != nil {
 		d := req.DialTimeout.AsDuration()
 		dialTimeout = &d
 	}
-	stream, err := NewTargetStream(ctx, req.GetTarget(), t.targetDialer, dialTimeout, serviceMethod, t.authorizer, req.GetAuthzDryRun())
+	stream, err := NewTargetStream(ctx, req.GetTarget(), dialer, dialTimeout, serviceMethod, t.authorizer, req.GetAuthzDryRun())
 	if err != nil {
 		reply.GetStartStreamReply().Reply = &pb.StartStreamReply_ErrorStatus{
 			ErrorStatus: convertStatus(status.New(codes.Internal, err.Error())),
