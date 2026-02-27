@@ -73,6 +73,7 @@ type runState struct {
 	authzHooks               []rpcauth.RPCAuthzHook
 	services                 []func(*grpc.Server)
 	metricsRecorder          metrics.MetricsRecorder
+	namedCredSources         map[string]string // hint name -> mtls loader name
 }
 
 type Option interface {
@@ -308,6 +309,20 @@ func WithOtelTracing(interceptorOpts ...otelgrpc.Option) Option {
 	})
 }
 
+// WithNamedClientCredSource registers an additional client credential source
+// that the proxy can use when a client sends a matching force_credential in
+// StartStream. hintName is the value clients will send; credSource is the name
+// registered with the mtls package for loading client credentials.
+func WithNamedClientCredSource(hintName, credSource string) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		if r.namedCredSources == nil {
+			r.namedCredSources = make(map[string]string)
+		}
+		r.namedCredSources[hintName] = credSource
+		return nil
+	})
+}
+
 // Run takes the given context and RunState along with any authz hooks and starts up a sansshell proxy server
 // using the flags above to provide credentials. An address hook (based on the remote host) with always be added.
 // As this is intended to be called from main() it doesn't return errors and will instead exit on any errors.
@@ -383,21 +398,23 @@ func Run(ctx context.Context, opts ...Option) {
 		unaryClient = append(unaryClient, clientAuthz.AuthorizeClient)
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(clientCreds),
+	sharedDialOpts := []grpc.DialOption{
 		grpc.WithChainUnaryInterceptor(unaryClient...),
 		grpc.WithChainStreamInterceptor(streamClient...),
 		// Use 16MB instead of the default 4MB to allow larger responses
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
 	}
 	if rs.statsClientHandler != nil {
-		dialOpts = append(dialOpts, grpc.WithStatsHandler(rs.statsClientHandler))
+		sharedDialOpts = append(sharedDialOpts, grpc.WithStatsHandler(rs.statsClientHandler))
 	}
-	targetDialer := server.NewDialer(dialOpts...)
+	defaultDialOpts := append([]grpc.DialOption{grpc.WithTransportCredentials(clientCreds)}, sharedDialOpts...)
+	targetDialer := server.NewDialer(defaultDialOpts...)
+
+	dialers := buildDialers(ctx, rs, targetDialer, sharedDialOpts)
 
 	svcMap := server.LoadGlobalServiceMap()
 	rs.logger.Info("loaded service map", "serviceMap", svcMap)
-	server := server.New(targetDialer, authz)
+	server := server.NewWithDialersAndServiceMap(dialers, authz, svcMap)
 
 	// Even though the proxy RPC is streaming we have unary RPCs (logging, reflection) we
 	// also need to properly auth and log.
@@ -454,6 +471,24 @@ func Run(ctx context.Context, opts ...Option) {
 		rs.logger.Error(err, "grpcserver.Serve()")
 		os.Exit(1)
 	}
+}
+
+// buildDialers constructs the named dialers map from the default dialer and
+// any additional credential sources registered via WithNamedClientCredSource.
+// If a named source fails to load, it is logged and skipped; the default
+// dialer is always present under key "".
+func buildDialers(ctx context.Context, rs *runState, defaultDialer server.TargetDialer, sharedDialOpts []grpc.DialOption) map[string]server.TargetDialer {
+	dialers := map[string]server.TargetDialer{"": defaultDialer}
+	for hint, src := range rs.namedCredSources {
+		creds, err := mtls.LoadClientCredentials(ctx, src)
+		if err != nil {
+			rs.logger.Error(err, "failed to load named client cred source, skipping", "hint", hint, "source", src)
+			continue
+		}
+		hintDialOpts := append([]grpc.DialOption{grpc.WithTransportCredentials(creds)}, sharedDialOpts...)
+		dialers[hint] = server.NewDialer(hintDialOpts...)
+	}
+	return dialers
 }
 
 // extractClientTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
