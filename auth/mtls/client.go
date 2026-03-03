@@ -80,6 +80,25 @@ func NewClientCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentia
 	})
 }
 
+// LoadClientIdentity loads a client certificate and root CA pool from the
+// named CredentialsLoader and returns them as an Identity suitable for use
+// with NewMultiIdentityCredentials.
+func LoadClientIdentity(ctx context.Context, loaderName string) (Identity, error) {
+	loader, err := Loader(loaderName)
+	if err != nil {
+		return Identity{}, err
+	}
+	pool, err := loader.LoadRootCA(ctx)
+	if err != nil {
+		return Identity{}, err
+	}
+	cert, err := loader.LoadClientCertificate(ctx)
+	if err != nil {
+		return Identity{}, err
+	}
+	return Identity{Name: loaderName, Cert: cert, RootCAs: pool}, nil
+}
+
 // LoadClientTLS reads the certificates and keys from disk at the supplied paths,
 // and assembles them into a set of TransportCredentials for the gRPC client.
 func LoadClientTLS(clientCertFile, clientKeyFile string, CAPool *x509.CertPool) (credentials.TransportCredentials, error) {
