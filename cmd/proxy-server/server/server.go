@@ -56,6 +56,7 @@ type runState struct {
 	policy                   rpcauth.AuthzPolicy
 	clientPolicy             rpcauth.AuthzPolicy
 	credSource               string
+	serverName               string
 	tlsConfig                *tls.Config
 	hostport                 string
 	debugport                string
@@ -122,6 +123,14 @@ func WithTlsConfig(tlsConfig *tls.Config) Option {
 func WithCredSource(credSource string) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.credSource = credSource
+		return nil
+	})
+}
+
+// WithServerName overrides the TLS server name used for client certificate verification.
+func WithServerName(serverName string) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.serverName = serverName
 		return nil
 	})
 }
@@ -464,7 +473,7 @@ func extractClientTransportCredentialsFromRunState(ctx context.Context, rs *runS
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the client")
 	}
 	if rs.credSource != "" {
-		creds, err = mtls.LoadClientCredentials(ctx, rs.credSource)
+		creds, err = mtls.LoadClientCredentials(ctx, rs.credSource, rs.serverName)
 		if err != nil {
 			return nil, err
 		}
