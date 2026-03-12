@@ -19,6 +19,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -40,6 +41,34 @@ import (
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
+
+// oldBehaviorServer simulates a pre-v1.57 server that returns nil from
+// client-streaming handlers without calling SendAndClose.
+type oldBehaviorServer struct {
+	tdpb.UnimplementedTestServiceServer
+}
+
+func (s *oldBehaviorServer) TestClientStream(stream tdpb.TestService_TestClientStreamServer) error {
+	for {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func startOldBehaviorServer(t *testing.T, name string) *bufconn.Listener {
+	t.Helper()
+	lis := bufconn.Listen(testutil.BufSize)
+	rpcServer := grpc.NewServer()
+	tdpb.RegisterTestServiceServer(rpcServer, &oldBehaviorServer{})
+	go func() { _ = rpcServer.Serve(lis) }()
+	t.Cleanup(func() { rpcServer.Stop() })
+	return lis
+}
 
 func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz rpcauth.RPCAuthorizer) pb.Proxy_ProxyClient {
 	t.Helper()
@@ -709,5 +738,46 @@ allow {
 		default:
 			t.Errorf("got unexpected packet type: %+v", r)
 		}
+	}
+}
+
+func TestProxyServerClientStreamMissingSendAndClose(t *testing.T) {
+	ctx := context.Background()
+
+	targetMap := map[string]*bufconn.Listener{
+		"old:456": startOldBehaviorServer(t, "old:456"),
+	}
+	proxyStream := startTestProxy(ctx, t, targetMap)
+
+	streamID := testutil.MustStartStream(t, proxyStream, "old:456", "/Testdata.TestService/TestClientStream")
+
+	req := testutil.PackStreamData(t, &tdpb.TestRequest{Input: "Foo"}, streamID)
+	err := proxyStream.Send(req)
+	tu.FatalOnErr("proxyStream.Send", err, t)
+
+	hc := &pb.ProxyRequest{
+		Request: &pb.ProxyRequest_ClientClose{
+			ClientClose: &pb.ClientClose{
+				StreamIds: []uint64{streamID},
+			},
+		},
+	}
+
+	// The old server returns nil without SendAndClose, triggering a cardinality
+	// violation in gRPC. The proxy should synthesize an empty response.
+	reply := testutil.Exchange(t, proxyStream, hc)
+	sd := reply.GetStreamData()
+	if sd == nil {
+		t.Fatalf("expected StreamData reply, got %T: %+v", reply.Reply, reply)
+	}
+
+	// Final status should be OK.
+	reply = testutil.Exchange(t, proxyStream, nil)
+	sc := reply.GetServerClose()
+	if sc == nil {
+		t.Fatalf("expected ServerClose reply, got %T: %+v", reply.Reply, reply)
+	}
+	if sc.GetStatus() != nil {
+		t.Errorf("ServerClose.Status, want nil (OK), got %+v", sc.GetStatus())
 	}
 }

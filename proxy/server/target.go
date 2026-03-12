@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -236,6 +237,27 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					return nil
 				}
 				if err != nil {
+					// Backward compat: older server implementations of client-streaming
+					// RPCs may return nil without calling SendAndClose. Newer gRPC-Go
+					// versions (v1.66+) enforce response cardinality and reject this
+					// with an Internal error. Synthesize the missing empty response so
+					// the proxy closes the stream normally.
+					if isCardinalityViolation(err) && s.serviceMethod.ClientStreams() && !s.serviceMethod.ServerStreams() {
+						s.logger.Info("tolerating missing SendAndClose from target (old server compat)", "method", s.serviceMethod.FullName())
+						packed, packErr := anypb.New(msg)
+						if packErr != nil {
+							return packErr
+						}
+						replyChan <- &pb.ProxyReply{
+							Reply: &pb.ProxyReply_StreamData{
+								StreamData: &pb.StreamData{
+									StreamIds: []uint64{s.streamID},
+									Payload:   packed,
+								},
+							},
+						}
+						return nil
+					}
 					s.CloseWith(err)
 					return fmt.Errorf("proxy could not receive response from the target: %w", err)
 				}
@@ -635,6 +657,15 @@ func convertStatus(s *status.Status) *pb.Status {
 		Message: p.Message,
 		Details: p.Details,
 	}
+}
+
+// isCardinalityViolation returns true if err is a gRPC cardinality violation,
+// i.e. the server finished a non-server-streaming RPC without sending a
+// response message. This happens when the server handler returns nil instead
+// of calling SendAndClose, and gRPC-Go v1.66+ enforces the contract.
+func isCardinalityViolation(err error) bool {
+	return status.Code(err) == codes.Internal &&
+		strings.Contains(err.Error(), "cardinality violation")
 }
 
 // An unconnected client stream is a grpc.ClientStream
