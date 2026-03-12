@@ -242,7 +242,8 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					// versions (v1.66+) enforce response cardinality and reject this
 					// with an Internal error. Synthesize the missing empty response so
 					// the proxy closes the stream normally.
-					if isCardinalityViolation(err) && s.serviceMethod.ClientStreams() && !s.serviceMethod.ServerStreams() {
+					if s.serviceMethod.ClientStreams() && !s.serviceMethod.ServerStreams() &&
+						isCardinalityViolation(err) {
 						s.logger.Info("tolerating missing SendAndClose from target (old server compat)", "method", s.serviceMethod.FullName())
 						packed, packErr := anypb.New(msg)
 						if packErr != nil {

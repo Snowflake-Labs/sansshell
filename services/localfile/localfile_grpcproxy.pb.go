@@ -9,12 +9,15 @@ import (
 	context "context"
 	proxy "github.com/Snowflake-Labs/sansshell/proxy/proxy"
 	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // LocalFileClientProxy is the superset of LocalFileClient which additionally includes the OneMany proxy methods
@@ -354,6 +357,12 @@ func (x *localFileClientWriteClientProxy) CloseAndRecv() ([]*WriteManyResponse, 
 		}
 		m := &emptypb.Empty{}
 		err := x.ClientStream.RecvMsg(m)
+		// Backward compat: older servers may return nil from client-streaming
+		// handlers without calling SendAndClose. gRPC-Go v1.66+ enforces response
+		// cardinality and rejects this. Treat it as success with the zero-value response.
+		if err != nil && status.Code(err) == codes.Internal && strings.Contains(err.Error(), "cardinality violation") {
+			err = nil
+		}
 		ret = append(ret, &WriteManyResponse{
 			Resp:   m,
 			Error:  err,

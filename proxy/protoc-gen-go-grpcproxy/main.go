@@ -38,9 +38,11 @@ func main() {
 }
 
 const (
-	contextPackage   = protogen.GoImportPath("context")
-	grpcPackage      = protogen.GoImportPath("google.golang.org/grpc")
-	grpcProxyPackage = protogen.GoImportPath("github.com/Snowflake-Labs/sansshell/proxy/proxy")
+	contextPackage    = protogen.GoImportPath("context")
+	grpcPackage       = protogen.GoImportPath("google.golang.org/grpc")
+	grpcCodesPackage  = protogen.GoImportPath("google.golang.org/grpc/codes")
+	grpcStatusPackage = protogen.GoImportPath("google.golang.org/grpc/status")
+	grpcProxyPackage  = protogen.GoImportPath("github.com/Snowflake-Labs/sansshell/proxy/proxy")
 )
 
 func generate(plugin *protogen.Plugin, file *protogen.File) {
@@ -48,12 +50,16 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 		return
 	}
 
-	// In the streaming case we need to import io so check for that.
+	// In the streaming case we need to import io and strings so check for that.
 	needIO := false
+	needStrings := false
 	for _, service := range file.Services {
 		for _, method := range service.Methods {
 			if method.Desc.IsStreamingServer() || method.Desc.IsStreamingClient() {
 				needIO = true
+			}
+			if method.Desc.IsStreamingClient() && !method.Desc.IsStreamingServer() {
+				needStrings = true
 			}
 		}
 	}
@@ -72,6 +78,9 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 	g.P(`"fmt"`)
 	if needIO {
 		g.P(`"io"`)
+	}
+	if needStrings {
+		g.P(`"strings"`)
 	}
 	g.P()
 	g.P(")")
@@ -206,6 +215,14 @@ func generate(plugin *protogen.Plugin, file *protogen.File) {
 					g.P("}")
 					g.P("m := &", g.QualifiedGoIdent(method.Output.GoIdent), "{}")
 					g.P("err := x.ClientStream.RecvMsg(m)")
+					if clientOnly {
+						g.P("// Backward compat: older servers may return nil from client-streaming")
+						g.P("// handlers without calling SendAndClose. gRPC-Go v1.66+ enforces response")
+						g.P("// cardinality and rejects this. Treat it as success with the zero-value response.")
+						g.P("if err != nil && ", g.QualifiedGoIdent(grpcStatusPackage.Ident("Code")), "(err) == ", g.QualifiedGoIdent(grpcCodesPackage.Ident("Internal")), ` && strings.Contains(err.Error(), "cardinality violation") {`)
+						g.P("err = nil")
+						g.P("}")
+					}
 					g.P("ret = append(ret, &", method.GoName, "ManyResponse{")
 					g.P("Resp:   m,")
 					g.P("Error: err,")
