@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -184,6 +185,46 @@ func TestTargetStreamAddNonBlocking(t *testing.T) {
 		t.Fatal("TargetStreamSet.Add blocked")
 	case <-doneChan:
 		// return
+	}
+}
+
+func TestIsCardinalityViolation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "exact gRPC cardinality violation",
+			err:  status.Error(codes.Internal, "cardinality violation: received no response message from non-server-streaming RPC"),
+			want: true,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "plain error",
+			err:  errors.New("something else"),
+			want: false,
+		},
+		{
+			name: "internal error without cardinality",
+			err:  status.Error(codes.Internal, "write: recv error deadline exceeded"),
+			want: false,
+		},
+		{
+			name: "cardinality text but wrong code",
+			err:  status.Error(codes.Unknown, "cardinality violation"),
+			want: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isCardinalityViolation(tc.err); got != tc.want {
+				t.Errorf("isCardinalityViolation(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
 	}
 }
 
