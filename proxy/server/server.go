@@ -77,8 +77,9 @@ type Server struct {
 	// A map of /Package.Service/Method => ServiceMethod
 	serviceMap map[string]*ServiceMethod
 
-	// A dialer for making proxy -> target connections
-	dialer TargetDialer
+	// Named dialers for making proxy -> target connections.
+	// Key "" is the default dialer used when no force_credential is specified.
+	dialers map[string]TargetDialer
 
 	// A policy authorizer, for authorizing proxy -> target requests
 	authorizer rpcauth.RPCAuthorizer
@@ -104,9 +105,16 @@ func New(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer) *Server {
 // The supplied authorizer is used to authorize requests made
 // to targets.
 func NewWithServiceMap(dialer TargetDialer, authorizer rpcauth.RPCAuthorizer, serviceMap map[string]*ServiceMethod) *Server {
+	return NewWithDialersAndServiceMap(map[string]TargetDialer{"": dialer}, authorizer, serviceMap)
+}
+
+// NewWithDialers creates a new Server with named dialers for credential-hint-based
+// dialer selection and the global service map. The dialers map must contain a ""
+// key for the default dialer.
+func NewWithDialersAndServiceMap(dialers map[string]TargetDialer, authorizer rpcauth.RPCAuthorizer, serviceMap map[string]*ServiceMethod) *Server {
 	return &Server{
 		serviceMap: serviceMap,
-		dialer:     dialer,
+		dialers:    dialers,
 		authorizer: authorizer,
 	}
 }
@@ -122,7 +130,7 @@ func (s *Server) Proxy(stream pb.Proxy_ProxyServer) error {
 
 	// create a new TargetStreamSet to manage the target streams
 	// associated with this proxy connection
-	streamSet := NewTargetStreamSet(s.serviceMap, s.dialer, s.authorizer)
+	streamSet := NewTargetStreamSet(s.serviceMap, s.dialers, s.authorizer)
 
 	// A single go-routine for handling all sends to the reply
 	// channel

@@ -87,6 +87,12 @@ message StartStream {
 
   // Perform authz dry run instead actual execution.
   bool authz_dry_run = 5;
+
+  // Optional. Forces the proxy to use a specific client credential when
+  // dialing this target. If empty or unset, the proxy uses its default
+  // credential. The proxy will reject unrecognized non-empty values with
+  // InvalidArgument rather than falling back to the default.
+  string force_credential = 6;
 }
 
 message StartStreamReply {

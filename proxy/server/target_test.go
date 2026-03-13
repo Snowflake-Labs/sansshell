@@ -42,7 +42,7 @@ func (e dialErrTargetDialer) DialContext(ctx context.Context, target string, dia
 func TestEmptyStreamSet(t *testing.T) {
 	ctx := context.Background()
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
-	ss := NewTargetStreamSet(map[string]*ServiceMethod{}, errDialer, nil)
+	ss := NewTargetStreamSet(map[string]*ServiceMethod{}, map[string]TargetDialer{"": errDialer}, nil)
 
 	// wait does not block when no work is being done
 	finishedWait := make(chan struct{})
@@ -81,13 +81,14 @@ func TestEmptyStreamSet(t *testing.T) {
 func TestStreamSetAddErrors(t *testing.T) {
 	errDialer := dialErrTargetDialer(codes.Unimplemented)
 	serviceMap := LoadGlobalServiceMap()
-	ss := NewTargetStreamSet(serviceMap, errDialer, nil)
+	ss := NewTargetStreamSet(serviceMap, map[string]TargetDialer{"": errDialer}, nil)
 
 	for _, tc := range []struct {
-		name    string
-		method  string
-		nonce   uint32
-		errCode codes.Code
+		name            string
+		method          string
+		nonce           uint32
+		forceCredential string
+		errCode         codes.Code
 	}{
 		{
 			name:   "dial failure no error",
@@ -100,6 +101,13 @@ func TestStreamSetAddErrors(t *testing.T) {
 			method:  "/Nosuch.Method/Foo",
 			errCode: codes.InvalidArgument,
 		},
+		{
+			name:            "unknown credential hint",
+			nonce:           3,
+			method:          "/Testdata.TestService/TestUnary",
+			forceCredential: "nonexistent",
+			errCode:         codes.InvalidArgument,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,9 +115,10 @@ func TestStreamSetAddErrors(t *testing.T) {
 			replyChan := make(chan *pb.ProxyReply, 1)
 
 			req := &pb.StartStream{
-				Target:     "nosuchhost:000",
-				Nonce:      tc.nonce,
-				MethodName: tc.method,
+				Target:          "nosuchhost:000",
+				Nonce:           tc.nonce,
+				MethodName:      tc.method,
+				ForceCredential: tc.forceCredential,
 			}
 			err := ss.Add(context.Background(), req, replyChan, nil /*doneChan should not be called*/)
 			testutil.FatalOnErr(fmt.Sprintf("StartStream(+%v)", req), err, t)
@@ -166,7 +175,7 @@ func TestTargetStreamAddNonBlocking(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	serviceMap := LoadGlobalServiceMap()
-	ss := NewTargetStreamSet(serviceMap, blockingClientDialer{}, nil)
+	ss := NewTargetStreamSet(serviceMap, map[string]TargetDialer{"": blockingClientDialer{}}, nil)
 	replyChan := make(chan *pb.ProxyReply, 1)
 	doneChan := make(chan struct{})
 	req := &pb.StartStream{
