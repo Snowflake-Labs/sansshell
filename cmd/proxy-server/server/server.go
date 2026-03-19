@@ -56,6 +56,7 @@ type runState struct {
 	policy                   rpcauth.AuthzPolicy
 	clientPolicy             rpcauth.AuthzPolicy
 	credSource               string
+	clientCredSources        []string
 	tlsConfig                *tls.Config
 	hostport                 string
 	debugport                string
@@ -119,9 +120,28 @@ func WithTlsConfig(tlsConfig *tls.Config) Option {
 }
 
 // WithCredSource applies a registered credential source with the mtls package.
+// It always provides the server-side (incoming) identity. For outbound client
+// connections it is also used as the single client identity (via
+// WrappedTransportCredentials) when no WithClientCredSource options are set.
+// When WithClientCredSource options are present, WithCredSource still provides
+// the server-side identity and serves as the rootCALoader for server
+// certificate verification on the outbound leg.
 func WithCredSource(credSource string) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.credSource = credSource
+		return nil
+	})
+}
+
+// WithClientCredSource adds a credential source for outbound (proxy→target)
+// connections using MultiIdentityCredentials. Call multiple times to register
+// multiple identities; the correct one is selected during each TLS handshake
+// based on the server's AcceptableCAs. When set, WithCredSource is still
+// required to provide the server-side identity and the rootCALoader for
+// verifying target server certificates.
+func WithClientCredSource(credSource string) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.clientCredSources = append(r.clientCredSources, credSource)
 		return nil
 	})
 }
@@ -346,7 +366,7 @@ func Run(ctx context.Context, opts ...Option) {
 	clientCreds, err := extractClientTransportCredentialsFromRunState(ctx, rs)
 
 	if err != nil {
-		rs.logger.Error(err, "unable to extract transport credentials from runstate for the client", "credsource", rs.credSource)
+		rs.logger.Error(err, "unable to extract transport credentials from runstate for the client", "credSource", rs.credSource, "clientCredSources", rs.clientCredSources)
 		os.Exit(1)
 	}
 
@@ -447,7 +467,7 @@ func Run(ctx context.Context, opts ...Option) {
 		g.GracefulStop()
 	}()
 
-	rs.logger.Info("initialized proxy service", "credsource", rs.credSource)
+	rs.logger.Info("initialized proxy service", "credsource", rs.credSource, "clientCredsources", rs.clientCredSources)
 	rs.logger.Info("serving..")
 
 	if err := g.Serve(lis); err != nil {
@@ -456,38 +476,57 @@ func Run(ctx context.Context, opts ...Option) {
 	}
 }
 
-// extractClientTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
+// extractClientTransportCredentialsFromRunState builds outbound client credentials.
+//
+// When clientCredSources are set (WithClientCredSource), MultiIdentityCredentials
+// is used for dynamic identity selection based on the server's AcceptableCAs.
+// credSource is used as the rootCALoader for server certificate verification.
+//
+// Otherwise, when only credSource is set (WithCredSource), the single-identity
+// path is used via LoadClientCredentials / WrappedTransportCredentials.
 func extractClientTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
-	var creds credentials.TransportCredentials
-	var err error
+	hasMulti := len(rs.clientCredSources) > 0
+
+	if hasMulti {
+		if rs.tlsConfig != nil {
+			return nil, fmt.Errorf("both clientCredSources and tlsConfig are defined for the client")
+		}
+		if rs.credSource == "" {
+			return nil, fmt.Errorf("credSource is required as rootCALoader when clientCredSources are set")
+		}
+		return extractMultiClientCreds(ctx, rs.clientCredSources, rs.credSource)
+	}
+
 	if rs.credSource != "" && rs.tlsConfig != nil {
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the client")
 	}
 	if rs.credSource != "" {
-		creds, err = mtls.LoadClientCredentials(ctx, rs.credSource)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		creds = credentials.NewTLS(rs.tlsConfig)
+		return mtls.LoadClientCredentials(ctx, rs.credSource)
 	}
-	return creds, nil
+	return credentials.NewTLS(rs.tlsConfig), nil
+}
+
+func extractMultiClientCreds(ctx context.Context, sources []string, rootCALoader string) (credentials.TransportCredentials, error) {
+	logger := logr.FromContextOrDiscard(ctx)
+	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	identities := make([]mtls.ClientIdentity, 0, len(sources))
+	for _, src := range sources {
+		id, err := mtls.LoadClientIdentity(ctx, src)
+		if err != nil {
+			return nil, fmt.Errorf("loading client identity %q: %w", src, err)
+		}
+		identities = append(identities, id)
+	}
+	return mtls.NewMultiIdentityCredentials(identities, rootCALoader, logger, recorder)
 }
 
 // extractServerTransportCredentialsFromRunState extracts transport credentials from runState. Will error if both credSource and tlsConfig are specified
 func extractServerTransportCredentialsFromRunState(ctx context.Context, rs *runState) (credentials.TransportCredentials, error) {
-	var creds credentials.TransportCredentials
-	var err error
 	if rs.credSource != "" && rs.tlsConfig != nil {
 		return nil, fmt.Errorf("both credSource and tlsConfig are defined for the server")
 	}
-	if rs.credSource != "" {
-		creds, err = mtls.LoadServerCredentials(ctx, rs.credSource)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		creds = credentials.NewTLS(rs.tlsConfig)
+	if rs.credSource == "" {
+		return credentials.NewTLS(rs.tlsConfig), nil
 	}
-	return creds, nil
+	return mtls.LoadServerCredentials(ctx, rs.credSource)
 }

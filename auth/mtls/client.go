@@ -27,6 +27,13 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// ClientIdentity represents a single client identity (certificate + loader
+// name) that can be presented during a TLS handshake.
+type ClientIdentity struct {
+	LoaderName string
+	Cert       tls.Certificate
+}
+
 // LoadClientCredentials returns transport credentials for SansShell clients,
 // based on the provided `loaderName`
 func LoadClientCredentials(ctx context.Context, loaderName string) (credentials.TransportCredentials, error) {
@@ -78,6 +85,21 @@ func NewClientCredentials(cert tls.Certificate, CAPool *x509.CertPool) credentia
 		RootCAs:      CAPool,
 		MinVersion:   tls.VersionTLS12,
 	})
+}
+
+// LoadClientIdentity loads a client certificate from the named
+// CredentialsLoader and returns it as a ClientIdentity suitable for use
+// with NewMultiIdentityCredentials.
+func LoadClientIdentity(ctx context.Context, loaderName string) (ClientIdentity, error) {
+	loader, err := Loader(loaderName)
+	if err != nil {
+		return ClientIdentity{}, err
+	}
+	cert, err := loader.LoadClientCertificate(ctx)
+	if err != nil {
+		return ClientIdentity{}, err
+	}
+	return ClientIdentity{LoaderName: loaderName, Cert: cert}, nil
 }
 
 // LoadClientTLS reads the certificates and keys from disk at the supplied paths,
