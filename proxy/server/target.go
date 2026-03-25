@@ -27,6 +27,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
+	otelcodes "go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -192,28 +195,52 @@ func (s *TargetStream) Send(req proto.Message) error {
 // messages for sending to a proxy client, including the final
 // status of the target stream
 func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
-	group, ctx := errgroup.WithContext(s.ctx)
+	// Create a child span for this target stream.
+	spanAttrs := []attribute.KeyValue{
+		attrTargetAddress.String(s.target),
+		attrTargetMethod.String(s.serviceMethod.FullName()),
+		attrTargetStreamID.String(fmt.Sprintf("%d", s.streamID)),
+		attrTargetStreamType.String(streamType(s.serviceMethod.ClientStreams(), s.serviceMethod.ServerStreams())),
+		attrTargetAuthzDryRun.Bool(s.authzDryRun),
+	}
+	if s.dialTimeout != nil {
+		spanAttrs = append(spanAttrs, attrTargetDialTimeoutMs.Int64(s.dialTimeout.Milliseconds()))
+	}
+	spanCtx, span := getTracer().Start(s.ctx, "proxy.target"+s.serviceMethod.FullName(),
+		trace.WithAttributes(spanAttrs...),
+	)
+	defer span.End()
+
+	group, ctx := errgroup.WithContext(spanCtx)
 
 	peer := rpcauth.PeerInputFromContext(ctx)
 	if peer != nil && peer.Principal != nil {
 		// Unconditionally add information on the original caller to outgoing RPCs
 		ctx = proxiedidentity.AppendToMetadataInOutgoingContext(ctx, peer.Principal)
+		span.SetAttributes(attrTargetProxiedPrincipal.String(peer.Principal.ID))
 	}
 
 	group.Go(func() error {
-		dialCtx, cancel := context.WithCancel(ctx)
+		// Sub-span for dial + stream creation.
+		dialCtx, dialSpan := getTracer().Start(ctx, "proxy.target.dial",
+			trace.WithAttributes(attrTargetAddress.String(s.target)),
+		)
+		dialCtx, dialCancel := context.WithCancel(dialCtx)
 		var opts []grpc.DialOption
 		if s.dialTimeout != nil {
-			dialCtx, cancel = context.WithTimeout(ctx, *s.dialTimeout)
+			dialCtx, dialCancel = context.WithTimeout(dialCtx, *s.dialTimeout)
 			opts = append(opts, grpc.WithBlock())
 		}
 		var err error
-		defer cancel()
+		defer dialCancel()
 		grpcConn, err := s.dialer.DialContext(dialCtx, s.target, opts...)
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
 			s.cancelFunc()
+			dialSpan.RecordError(err)
+			dialSpan.SetStatus(otelcodes.Error, "dial failed")
+			dialSpan.End()
 			return fmt.Errorf("could not connect to target from the proxy: %w", err)
 		}
 		s.grpcConn = grpcConn
@@ -221,8 +248,13 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
+			dialSpan.RecordError(err)
+			dialSpan.SetStatus(otelcodes.Error, "new stream failed")
+			dialSpan.End()
 			return fmt.Errorf("could not connect to target from the proxy: %w", err)
 		}
+		dialSpan.End()
+		span.AddEvent("stream.connected")
 
 		// We've successfully connected and can replace the initial unconnected stream
 		// with the target stream.
@@ -230,6 +262,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 		// Receives messages from the server stream
 		group.Go(func() error {
+			var receivedFirst bool
 			for {
 				msg := s.serviceMethod.NewReply()
 				err := grpcStream.RecvMsg(msg)
@@ -262,7 +295,10 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 					s.CloseWith(err)
 					return fmt.Errorf("proxy could not receive response from the target: %w", err)
 				}
-				// otherwise, this is a streamData reply
+				if !receivedFirst {
+					span.AddEvent("stream.first_response")
+					receivedFirst = true
+				}
 				packed, err := anypb.New(msg)
 				if err != nil {
 					return err
@@ -326,9 +362,19 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 
 			// If authz fails, close immediately with an error
 			if err := s.authorizer.Eval(ctx, authinput); err != nil {
+				span.AddEvent("authz.evaluated", trace.WithAttributes(
+					attrAuthzResult.String("denied"),
+					attrAuthzMethod.String(s.Method()),
+				))
+				span.RecordError(err)
+				span.SetStatus(otelcodes.Error, "authz denied")
 				s.CloseWith(err)
 				return err
 			}
+			span.AddEvent("authz.evaluated", trace.WithAttributes(
+				attrAuthzResult.String("allowed"),
+				attrAuthzMethod.String(s.Method()),
+			))
 
 			if s.authzDryRun {
 				// TODO: make authz dry run request to server
@@ -380,12 +426,23 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	case err = <-s.errChan:
 	default:
 	}
+
+	// Record final stream status on span.
+	grpcStatus := status.Convert(err)
+	span.AddEvent("stream.finished", trace.WithAttributes(
+		attrGRPCStatusCode.String(grpcStatus.Code().String()),
+	))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(otelcodes.Error, grpcStatus.Message())
+	}
+
 	s.logger.Info("finished", "status", err)
 	reply := &pb.ProxyReply{
 		Reply: &pb.ProxyReply_ServerClose{
 			ServerClose: &pb.ServerClose{
 				StreamIds: []uint64{s.streamID},
-				Status:    convertStatus(status.Convert(err)),
+				Status:    convertStatus(grpcStatus),
 			},
 		},
 	}
