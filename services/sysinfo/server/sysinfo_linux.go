@@ -24,8 +24,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/sysinfo"
 	"github.com/Snowflake-Labs/sansshell/services/util"
@@ -140,6 +144,56 @@ var getKernelMessages = func(timeout time.Duration, cancelCh <-chan struct{}) ([
 	return records, nil
 }
 
+// sanitizeString replaces non-printable characters (except common whitespace)
+// with the Unicode replacement character, ensuring the output is valid UTF-8.
+func sanitizeString(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == utf8.RuneError {
+			return unicode.ReplacementChar
+		}
+		if unicode.IsPrint(r) || r == '\n' || r == '\r' || r == '\t' {
+			return r
+		}
+		return unicode.ReplacementChar
+	}, s)
+}
+
+// journalValueToString converts a single journalctl JSON value to a string.
+// systemd's journalctl --output=json encodes non-UTF8 / binary fields as
+// JSON arrays of byte values (numbers 0-255) instead of strings.
+func journalValueToString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case []any:
+		buf := make([]byte, 0, len(val))
+		for _, elem := range val {
+			f, ok := elem.(float64)
+			if !ok || f < 0 || f > math.MaxUint8 || f != math.Trunc(f) {
+				// Not a valid byte array (mixed types, out-of-range, or
+				// fractional values). Fall back to a textual representation
+				// so the proto string field is always populated and the
+				// server never crashes on unexpected input.
+				return fmt.Sprintf("%v", v)
+			}
+			buf = append(buf, byte(f))
+		}
+		return sanitizeString(string(buf))
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// journalEntryToStringMap converts a map[string]any (from JSON unmarshal) to
+// map[string]string suitable for the JournalRecordRaw proto entry field.
+func journalEntryToStringMap(raw map[string]any) map[string]string {
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		out[k] = journalValueToString(v)
+	}
+	return out
+}
+
 var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest, stream pb.SysInfo_JournalServer) error {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	command, err := generateJournalCmd(req)
@@ -166,15 +220,12 @@ var getJournalRecordsAndSend = func(ctx context.Context, req *pb.JournalRequest,
 		// so we can parse each entry line by line
 		text := scanner.Text()
 
-		// Create a map to hold the parsed data
-		var journalMap map[string]string
-
-		// Parse the JSON string
-		err := json.Unmarshal([]byte(text), &journalMap)
-		if err != nil {
+		var journalRaw map[string]any
+		if err := json.Unmarshal([]byte(text), &journalRaw); err != nil {
 			return status.Errorf(codes.Internal, "parse the journal entry from json string to map err: %v", err)
 		}
-		// EnableJson: true means return
+		journalMap := journalEntryToStringMap(journalRaw)
+
 		if req.EnableJson {
 			journalRecordRaw := &pb.JournalRecordRaw{}
 			journalRecordRaw.Entry = journalMap

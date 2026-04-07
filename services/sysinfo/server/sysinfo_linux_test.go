@@ -422,29 +422,34 @@ func TestDmesg(t *testing.T) {
 	}
 }
 
-// read the test file and return below objects
-// 1. array of json string
-// 2. array of map parsed from the json string
+// readJournalLog reads the test fixture and returns:
+// 1. array of raw JSON lines (for feeding to echo in mocked commands)
+// 2. array of map[string]string parsed through the same pipeline as production code
 // 3. error
 func readJournalLog() ([]string, []map[string]string, error) {
+	return readJournalLogFile("./testdata/journal-log-entries.txt")
+}
+
+func readJournalLogFile(path string) ([]string, []map[string]string, error) {
 	var result []map[string]string
-	testdataRaw := "./testdata/journal-log-entries.txt"
-	input, err := os.ReadFile(testdataRaw)
+	input, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	lines := strings.Split(string(input), "\n")
+	var nonEmptyLines []string
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		var m map[string]string
-		if err := json.Unmarshal([]byte(line), &m); err != nil {
+		nonEmptyLines = append(nonEmptyLines, line)
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			return nil, nil, err
 		}
-		result = append(result, m)
+		result = append(result, journalEntryToStringMap(raw))
 	}
-	return lines, result, nil
+	return nonEmptyLines, result, nil
 }
 
 // construct the expected JournalReply based on the map given
@@ -660,6 +665,383 @@ func TestJournal(t *testing.T) {
 					return
 				}
 			}
+		})
+	}
+}
+
+func TestSanitizeString(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "printable ASCII unchanged",
+			in:   "Hello, World!",
+			want: "Hello, World!",
+		},
+		{
+			name: "whitespace preserved",
+			in:   "line1\nline2\ttab\rcarriage",
+			want: "line1\nline2\ttab\rcarriage",
+		},
+		{
+			name: "null byte replaced",
+			in:   "a\x00b",
+			want: "a\uFFFDb",
+		},
+		{
+			name: "control characters replaced",
+			in:   "a\x01\x02\x03\x1fb",
+			want: "a\uFFFD\uFFFD\uFFFD\uFFFDb",
+		},
+		{
+			name: "valid UTF-8 multibyte preserved",
+			in:   "caf\u00e9 \u2603",
+			want: "caf\u00e9 \u2603",
+		},
+		{
+			name: "empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "high bytes forming invalid UTF-8 replaced",
+			in:   string([]byte{0x80, 0x81, 0xFE, 0xFF}),
+			want: "\uFFFD\uFFFD\uFFFD\uFFFD",
+		},
+		{
+			name: "mixed valid and invalid bytes",
+			in:   "ok" + string([]byte{0x80}) + "ok",
+			want: "ok\uFFFDok",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeString(tc.in)
+			if got != tc.want {
+				t.Errorf("sanitizeString(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestJournalValueToString(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   any
+		want string
+	}{
+		{
+			name: "plain string passes through unchanged",
+			in:   "hello world",
+			want: "hello world",
+		},
+		{
+			name: "empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "printable byte array becomes string",
+			in:   []any{float64(72), float64(105)},
+			want: "Hi",
+		},
+		{
+			name: "byte array with null byte gets sanitized",
+			in:   []any{float64(72), float64(101), float64(108), float64(108), float64(111), float64(0), float64(87), float64(111), float64(114), float64(108), float64(100)},
+			want: "Hello\uFFFDWorld",
+		},
+		{
+			name: "byte array with multiple non-printable bytes",
+			in:   []any{float64(65), float64(1), float64(2), float64(66)},
+			want: "A\uFFFD\uFFFDB",
+		},
+		{
+			name: "empty byte array",
+			in:   []any{},
+			want: "",
+		},
+		{
+			name: "single byte array element",
+			in:   []any{float64(65)},
+			want: "A",
+		},
+		{
+			name: "high bytes 128-255 get sanitized as invalid UTF-8",
+			in:   []any{float64(0x80), float64(0xFE), float64(0xFF)},
+			want: "\uFFFD\uFFFD\uFFFD",
+		},
+		{
+			name: "all non-printable byte array",
+			in:   []any{float64(0), float64(1), float64(2), float64(3)},
+			want: "\uFFFD\uFFFD\uFFFD\uFFFD",
+		},
+		{
+			name: "byte array preserving tabs and newlines",
+			in:   []any{float64(65), float64(9), float64(10), float64(13), float64(66)},
+			want: "A\t\n\rB",
+		},
+		{
+			name: "byte array with valid UTF-8 multibyte sequence",
+			in:   []any{float64(0xC3), float64(0xA9)},
+			want: "\u00e9",
+		},
+		{
+			name: "boundary value 255",
+			in:   []any{float64(255)},
+			want: "\uFFFD",
+		},
+		{
+			name: "boundary value 0",
+			in:   []any{float64(0)},
+			want: "\uFFFD",
+		},
+		{
+			name: "array with non-numeric element falls back to Sprintf",
+			in:   []any{"not", "bytes"},
+			want: "[not bytes]",
+		},
+		{
+			name: "array with mixed types falls back to Sprintf",
+			in:   []any{float64(72), "mixed"},
+			want: "[72 mixed]",
+		},
+		{
+			name: "numeric non-integer value falls back to Sprintf",
+			in:   []any{float64(72.5)},
+			want: "[72.5]",
+		},
+		{
+			name: "number out of byte range falls back to Sprintf",
+			in:   []any{float64(256)},
+			want: "[256]",
+		},
+		{
+			name: "negative number falls back to Sprintf",
+			in:   []any{float64(-1)},
+			want: "[-1]",
+		},
+		{
+			name: "float64 number becomes its string representation",
+			in:   float64(42),
+			want: "42",
+		},
+		{
+			name: "bool becomes its string representation",
+			in:   true,
+			want: "true",
+		},
+		{
+			name: "nil becomes <nil>",
+			in:   nil,
+			want: "<nil>",
+		},
+		{
+			name: "nested map falls back to Sprintf",
+			in:   map[string]any{"nested": "value"},
+			want: "map[nested:value]",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := journalValueToString(tc.in)
+			if got != tc.want {
+				t.Errorf("journalValueToString(%v) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestJournalEntryToStringMap(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   map[string]any
+		want map[string]string
+	}{
+		{
+			name: "mixed string and byte-array values",
+			in: map[string]any{
+				"MESSAGE":              []any{float64(72), float64(101), float64(108), float64(108), float64(111), float64(0)},
+				"PRIORITY":             "6",
+				"SYSLOG_IDENTIFIER":    "myservice",
+				"__REALTIME_TIMESTAMP": "1687391641745630",
+			},
+			want: map[string]string{
+				"MESSAGE":              "Hello\uFFFD",
+				"PRIORITY":             "6",
+				"SYSLOG_IDENTIFIER":    "myservice",
+				"__REALTIME_TIMESTAMP": "1687391641745630",
+			},
+		},
+		{
+			name: "empty map",
+			in:   map[string]any{},
+			want: map[string]string{},
+		},
+		{
+			name: "multiple byte-array fields",
+			in: map[string]any{
+				"MESSAGE":  []any{float64(65), float64(0), float64(66)},
+				"FIELD_X":  []any{float64(67), float64(68)},
+				"PRIORITY": "3",
+			},
+			want: map[string]string{
+				"MESSAGE":  "A\uFFFDB",
+				"FIELD_X":  "CD",
+				"PRIORITY": "3",
+			},
+		},
+		{
+			name: "all string values unchanged",
+			in: map[string]any{
+				"MESSAGE":  "normal",
+				"PRIORITY": "6",
+			},
+			want: map[string]string{
+				"MESSAGE":  "normal",
+				"PRIORITY": "6",
+			},
+		},
+		{
+			name: "JSON number value stringified",
+			in: map[string]any{
+				"MESSAGE":  "test",
+				"PRIORITY": float64(6),
+			},
+			want: map[string]string{
+				"MESSAGE":  "test",
+				"PRIORITY": "6",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := journalEntryToStringMap(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("map length = %d, want %d", len(got), len(tc.want))
+			}
+			for k, wantV := range tc.want {
+				if gotV, ok := got[k]; !ok {
+					t.Errorf("missing key %q", k)
+				} else if gotV != wantV {
+					t.Errorf("key %q = %q, want %q", k, gotV, wantV)
+				}
+			}
+		})
+	}
+}
+
+// TestJournalByteArrayRegression is the regression test for the original bug:
+// json.Unmarshal into map[string]string fails when journalctl emits MESSAGE
+// as an array of byte values. This proves the old code would break and the
+// new code handles it.
+func TestJournalByteArrayRegression(t *testing.T) {
+	jsonWithByteArray := `{"MESSAGE":[72,101,108,108,111,0,87,111,114,108,100],"PRIORITY":"6","_PID":"1","_HOSTNAME":"host","SYSLOG_IDENTIFIER":"myservice","__REALTIME_TIMESTAMP":"1687391641745630"}`
+
+	// The old approach: unmarshal into map[string]string -- must fail
+	var oldMap map[string]string
+	err := json.Unmarshal([]byte(jsonWithByteArray), &oldMap)
+	if err == nil {
+		t.Fatal("expected json.Unmarshal into map[string]string to fail for byte-array MESSAGE, but it succeeded")
+	}
+
+	// The new approach: unmarshal into map[string]any then convert -- must succeed
+	var newMap map[string]any
+	err = json.Unmarshal([]byte(jsonWithByteArray), &newMap)
+	if err != nil {
+		t.Fatalf("json.Unmarshal into map[string]any failed: %v", err)
+	}
+	result := journalEntryToStringMap(newMap)
+
+	if result["MESSAGE"] != "Hello\uFFFDWorld" {
+		t.Errorf("MESSAGE = %q, want %q", result["MESSAGE"], "Hello\uFFFDWorld")
+	}
+	if result["PRIORITY"] != "6" {
+		t.Errorf("PRIORITY = %q, want %q", result["PRIORITY"], "6")
+	}
+	if result["_PID"] != "1" {
+		t.Errorf("_PID = %q, want %q", result["_PID"], "1")
+	}
+	if result["__REALTIME_TIMESTAMP"] != "1687391641745630" {
+		t.Errorf("__REALTIME_TIMESTAMP = %q, want %q", result["__REALTIME_TIMESTAMP"], "1687391641745630")
+	}
+}
+
+func TestJournalByteArrayMessage(t *testing.T) {
+	var err error
+	ctx := context.Background()
+	conn, err = grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("Failed to dial bufnet", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewSysInfoClient(conn)
+
+	rawDataList, rawDataMapList, err := readJournalLogFile("./testdata/journal-log-entries-bytearray.txt")
+	testutil.FatalOnErr("Failed to read byte-array journal data", err, t)
+
+	journalctlBin = "journalctl"
+	savedGenerateJournalCmd := generateJournalCmd
+	t.Cleanup(func() { generateJournalCmd = savedGenerateJournalCmd })
+
+	for _, tc := range []struct {
+		name          string
+		req           *pb.JournalRequest
+		testdataInput []string
+		wantReply     []*pb.JournalReply
+	}{
+		{
+			name: "byte-array MESSAGE parsed correctly in raw JSON mode",
+			req: &pb.JournalRequest{
+				TailLine:   100,
+				EnableJson: true,
+			},
+			testdataInput: rawDataList,
+			wantReply: func() []*pb.JournalReply {
+				var replies []*pb.JournalReply
+				for _, m := range rawDataMapList {
+					replies = append(replies, getJournalReply(m, true, t))
+				}
+				return replies
+			}(),
+		},
+		{
+			name: "byte-array MESSAGE parsed correctly in structured mode",
+			req: &pb.JournalRequest{
+				TailLine: 100,
+			},
+			testdataInput: rawDataList,
+			wantReply: func() []*pb.JournalReply {
+				var replies []*pb.JournalReply
+				for _, m := range rawDataMapList {
+					replies = append(replies, getJournalReply(m, false, t))
+				}
+				return replies
+			}(),
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			generateJournalCmd = func(p *pb.JournalRequest) ([]string, error) {
+				command, err := savedGenerateJournalCmd(p)
+				if err != nil {
+					return nil, err
+				}
+				_ = command
+				return []string{testutil.ResolvePath(t, "echo"), "-n", strings.Join(tc.testdataInput, "\n")}, nil
+			}
+			stream, err := client.Journal(ctx, tc.req)
+			testutil.FatalOnErr("Journal failed", err, t)
+			var gotRecords []*pb.JournalReply
+			for {
+				resp, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				testutil.FatalOnErr("unexpected error receiving journal reply", err, t)
+				gotRecords = append(gotRecords, resp)
+			}
+			testutil.DiffErr(tc.name, gotRecords, tc.wantReply, t)
 		})
 	}
 }
