@@ -68,6 +68,8 @@ type RunState struct {
 	OutputsDir string
 	// CredSource is a registered credential source with the mtls package.
 	CredSource string
+	// ServerName overrides the TLS server name used for certificate verification.
+	ServerName string
 	// IdleTimeout is the time duration to wait before closing an idle connection.
 	// If no messages are sent/received within this timeframe, connection will be terminated.
 	IdleTimeout time.Duration
@@ -267,7 +269,7 @@ func Run(ctx context.Context, rs RunState) {
 			os.Exit(1)
 		}
 	}
-	creds, err := mtls.LoadClientCredentials(ctx, rs.CredSource)
+	creds, err := mtls.LoadClientCredentials(ctx, rs.CredSource, rs.ServerName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not load creds from %s - %v\n", rs.CredSource, err)
 		os.Exit(1)
