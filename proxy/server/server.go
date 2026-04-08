@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
@@ -248,7 +249,10 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 	// be removed from the stream set
 	doneChan := make(chan uint64)
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
+	rootSpan := trace.SpanFromContext(ctx)
 	var addedPeerToContext bool
+	var targetCount int
+	defer func() { rootSpan.SetAttributes(attrProxyTargetCount.Int(targetCount)) }()
 	for {
 		select {
 		case <-ctx.Done():
@@ -279,15 +283,23 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 				// Peer information might not be properly populated until rpcauth
 				// evaluates the initial received message, so let's grab fresh
 				// peer information when we know we've gotten at least one message.
-				ctx = rpcauth.AddPeerToContext(ctx, rpcauth.PeerInputFromContext(stream.Context()))
+				peerInfo := rpcauth.PeerInputFromContext(stream.Context())
+				ctx = rpcauth.AddPeerToContext(ctx, peerInfo)
+				enrichRootSpan(ctx, peerInfo)
 				addedPeerToContext = true
 			}
 			// We have a new request
 			switch req.Request.(type) {
 			case *pb.ProxyRequest_StartStream:
-				if err := streamSet.Add(ctx, req.GetStartStream(), replyChan, doneChan); err != nil {
+				ss := req.GetStartStream()
+				if err := streamSet.Add(ctx, ss, replyChan, doneChan); err != nil {
 					return err
 				}
+				targetCount++
+				rootSpan.AddEvent("dispatch.start_stream", trace.WithAttributes(
+					attrTargetAddress.String(ss.GetTarget()),
+					attrTargetMethod.String(ss.GetMethodName()),
+				))
 			case *pb.ProxyRequest_StreamData:
 				if err := streamSet.Send(ctx, req.GetStreamData()); err != nil {
 					return err
