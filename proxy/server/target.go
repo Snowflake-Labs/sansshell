@@ -221,6 +221,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
+			s.cancelFunc()
 			return fmt.Errorf("could not connect to target from the proxy: %w", err)
 		}
 
