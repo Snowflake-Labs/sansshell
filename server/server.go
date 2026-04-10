@@ -44,6 +44,7 @@ type serveSetup struct {
 	policy             rpcauth.AuthzPolicy
 	logger             logr.Logger
 	authzHooks         []rpcauth.RPCAuthzHook
+	hintClassifiers    []rpcauth.DenialHintClassifier
 	unaryInterceptors  []grpc.UnaryServerInterceptor
 	streamInterceptors []grpc.StreamServerInterceptor
 	statsHandler       stats.Handler
@@ -95,6 +96,16 @@ func WithLogger(l logr.Logger) Option {
 func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, s *serveSetup) error {
 		s.authzHooks = append(s.authzHooks, hook)
+		return nil
+	})
+}
+
+// WithDenialHintClassifiers sets the ordered classifiers that map denial
+// hint text to low-cardinality metric labels on the authz_denied_policy
+// counter. First match wins. If none are set, all denials get label "other".
+func WithDenialHintClassifiers(classifiers ...rpcauth.DenialHintClassifier) Option {
+	return optionFunc(func(_ context.Context, s *serveSetup) error {
+		s.hintClassifiers = append(s.hintClassifiers, classifiers...)
 		return nil
 	})
 }
@@ -213,7 +224,12 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 		return nil, fmt.Errorf("rpc authorizer was not provided")
 	}
 
-	authz := rpcauth.NewRPCAuthorizer(ss.policy, ss.authzHooks...)
+	var authz rpcauth.RPCAuthorizer
+	if len(ss.hintClassifiers) > 0 {
+		authz = rpcauth.NewRPCAuthorizerWithHintClassifiers(ss.policy, ss.authzHooks, ss.hintClassifiers)
+	} else {
+		authz = rpcauth.NewRPCAuthorizer(ss.policy, ss.authzHooks...)
+	}
 
 	unary := ss.unaryInterceptors
 	unary = append(unary,

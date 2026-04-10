@@ -45,6 +45,49 @@ type IntExtension struct {
 	Value int `json:"value"`
 }
 
+func TestClassifyDenialHints(t *testing.T) {
+	classifiers := []DenialHintClassifier{
+		{Label: "ip_not_allowed", Matches: func(s string) bool { return strings.Contains(s, "not in the allowed list") }},
+		{Label: "no_signed_cert", Matches: func(s string) bool { return strings.Contains(s, "does not yet have a signed certificate") }},
+		{Label: "deployment_mismatch", Matches: func(s string) bool {
+			return strings.Contains(s, "does not match") && strings.Contains(s, "deployment")
+		}},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		hints []string
+		want  string
+	}{
+		{"single ip hint", []string{"Peer IP 1.2.3.4 is not in the allowed list for this postgres host"}, "ip_not_allowed"},
+		{"ip substring", []string{"not in the allowed list"}, "ip_not_allowed"},
+		{"single cert hint", []string{"VM does not yet have a signed certificate; only /Os.HostManagement/ RPCs are allowed"}, "no_signed_cert"},
+		{"deployment mismatch", []string{"caller deployment does not match host deployment"}, "deployment_mismatch"},
+		{"CPS deployment mismatch", []string{"CPS caller deployment 'foo' does not match FDB host deployment parent 'bar'"}, "deployment_mismatch"},
+		{"unknown", []string{"some unknown denial reason"}, "other"},
+		{"empty hint", []string{""}, "other"},
+		{"ip wins over deployment mismatch", []string{"caller deployment does not match host deployment", "not in the allowed list"}, "ip_not_allowed"},
+		{"cert wins over deployment mismatch", []string{"caller deployment does not match host deployment", "does not yet have a signed certificate"}, "no_signed_cert"},
+		{"deployment mismatch wins over other", []string{"something unknown", "caller deployment does not match host deployment"}, "deployment_mismatch"},
+		{"all other", []string{"unknown reason 1", "unknown reason 2"}, "other"},
+		{"ip wins when all present", []string{"something unknown", "caller deployment does not match host", "does not yet have a signed certificate", "not in the allowed list"}, "ip_not_allowed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := classifyDenialHints(tc.hints, classifiers)
+			if got != tc.want {
+				t.Errorf("classifyDenialHints(%v) = %q, want %q", tc.hints, got, tc.want)
+			}
+		})
+	}
+
+	t.Run("no classifiers returns other", func(t *testing.T) {
+		got := classifyDenialHints([]string{"not in the allowed list"}, nil)
+		if got != "other" {
+			t.Errorf("classifyDenialHints with nil classifiers = %q, want %q", got, "other")
+		}
+	})
+}
+
 func TestAuthzHook(t *testing.T) {
 	ctx := context.Background()
 	var logs string
@@ -393,6 +436,54 @@ func TestAuthzHook(t *testing.T) {
 			tc.errFunc(t, err)
 			if tc.logFunc != nil {
 				tc.logFunc(t, logs)
+			}
+		})
+	}
+}
+
+func TestEvalDenialHintAttribute(t *testing.T) {
+	ctx := context.Background()
+	logger := funcr.NewJSON(func(obj string) {}, funcr.Options{Verbosity: 2})
+	ctx = logr.NewContext(ctx, logger)
+
+	for _, tc := range []struct {
+		name     string
+		hints    []string
+		wantHint string
+	}{
+		{
+			name:     "ip not allowed hint",
+			hints:    []string{"Peer IP 10.0.0.1 is not in the allowed list for this postgres host"},
+			wantHint: "ip_not_allowed",
+		},
+		{
+			name:     "no signed cert hint",
+			hints:    []string{"VM does not yet have a signed certificate; only /Os.HostManagement/ RPCs are allowed"},
+			wantHint: "no_signed_cert",
+		},
+		{
+			name:     "deployment mismatch hint",
+			hints:    []string{"caller deployment does not match host deployment"},
+			wantHint: "deployment_mismatch",
+		},
+		{
+			name:     "unknown hint",
+			hints:    []string{"something unexpected"},
+			wantHint: "other",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			policy := NewMockAuthzPolicy(
+				func(_ context.Context, _ *RPCAuthInput) (bool, error) { return false, nil },
+				func(_ context.Context, _ *RPCAuthInput) ([]string, error) { return tc.hints, nil },
+			)
+			authz := NewRPCAuthorizer(policy)
+			err := authz.Eval(ctx, &RPCAuthInput{Method: "/Test/Method"})
+			if status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("expected PermissionDenied, got %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.hints[0]) {
+				t.Errorf("error %q should contain hint %q", err.Error(), tc.hints[0])
 			}
 		})
 	}
