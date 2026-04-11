@@ -128,15 +128,16 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 	if err != nil {
 		return "", err
 	}
-	if len(result.Approver) == 0 {
-		fmt.Fprintln(os.Stderr, "Multi party auth requested, ask an approver to run:")
-		fmt.Fprintf(os.Stderr, "  sanssh -targets %v mpa approve %v\n", cc.Target(), result.Id)
-		_, err := mpaClient.WaitForApproval(ctx, &mpa.WaitForApprovalRequest{Id: result.Id})
-		if err != nil {
-			return "", err
-		}
-	}
-	return result.Id, nil
+  if len(result.Approver) == 0 {
+    fmt.Fprintln(os.Stderr, "Multi party auth requested, ask an approver to run:")
+    fmt.Fprintf(os.Stderr, "  sanssh -targets %v mpa approve %v\n", cc.Target(), result.Id)
+    _, err := mpaClient.WaitForApproval(ctx, &mpa.WaitForApprovalRequest{Id: result.Id})
+    if err != nil {
+      return "", err
+    }
+    fmt.Fprintln(os.Stderr, "MPA approved, proceeding with command execution...")
+  }
+  return result.Id, nil
 }
 
 // UnaryClientIntercepter is a grpc.UnaryClientIntercepter that will perform the MPA flow.
@@ -280,18 +281,24 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 	if len(targetsNeedingApproval) > 0 {
 		fmt.Fprintln(os.Stderr, "Waiting for multi-party approval on all targets, ask an approver to run:")
 		fmt.Fprintf(os.Stderr, "  sanssh %v-proxy %v -targets %v mpa approve %v\n", getSourceParam(state.CredSource), conn.Proxy().Target(), strings.Join(targetsNeedingApproval, ","), mpaID)
-		// We call WaitForApproval on all targets, even ones already approved. This is silly but not harmful.
-		waitCh, err := mpaClient.WaitForApprovalOneMany(ctx, &mpa.WaitForApprovalRequest{Id: mpaID})
-		if err != nil {
-			return "", err
-		}
-		for r := range waitCh {
-			if r.Error != nil {
-				fmt.Fprintf(state.Err[r.Index], "Error when waiting for MPA approval: %v\n", r.Error)
-			}
-		}
-	}
-	return mpaID, nil
+    // We call WaitForApproval on all targets, even ones already approved. This is silly but not harmful.
+    waitCh, err := mpaClient.WaitForApprovalOneMany(ctx, &mpa.WaitForApprovalRequest{Id: mpaID})
+    if err != nil {
+      return "", err
+    }
+    var waitErr error
+    for r := range waitCh {
+      if r.Error != nil {
+        fmt.Fprintf(state.Err[r.Index], "Error when waiting for MPA approval: %v\n", r.Error)
+        waitErr = r.Error
+      }
+    }
+    if waitErr != nil {
+      return "", fmt.Errorf("MPA approval failed: %v", waitErr)
+    }
+    fmt.Fprintln(os.Stderr, "MPA approved, proceeding with command execution...")
+  }
+  return mpaID, nil
 }
 
 func getSourceParam(credentialSource string) string {
