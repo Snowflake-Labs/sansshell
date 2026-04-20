@@ -233,7 +233,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			for {
 				msg := s.serviceMethod.NewReply()
 				err := grpcStream.RecvMsg(msg)
-				if err == io.EOF {
+				if isEOF(err) {
 					return nil
 				}
 				if err != nil {
@@ -344,7 +344,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			// would cancel the errgroup early. Instead, we
 			// can return nil, and the error will be picked
 			// up by the receiving goroutine
-			if err == io.EOF {
+			if isEOF(err) {
 				return nil
 			}
 			// Otherwise, this is the 'final' error. The underlying
@@ -710,4 +710,14 @@ func (u *unconnectedClientStream) SendMsg(interface{}) error {
 // see: grpc.ClientStream.RecvMsg()
 func (u *unconnectedClientStream) RecvMsg(interface{}) error {
 	return fmt.Errorf("%w: RecvMsg", errUnconnectedClient)
+}
+
+func isEOF(err error) bool {
+	// grpc-go 1.75 and older
+	if err == io.EOF {
+		return true
+	}
+
+	// grpc-go 1.76+
+	return status.Code(err) == codes.Internal && strings.HasSuffix(err.Error(), "cardinality violation: received no response message from non-server-streaming RPC")
 }
