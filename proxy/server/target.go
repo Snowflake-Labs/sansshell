@@ -181,8 +181,16 @@ func (s *TargetStream) Send(req proto.Message) error {
 	select {
 	case s.reqChan <- req:
 		return nil
+	// s.ctx is cancelled by our cancelFunc — e.g. when the target dies
+	// mid-stream (SendMsg returns EOF) or when NewStream fails. Without
+	// this, Send would keep enqueueing data into a dead reqChan.
 	case <-s.ctx.Done():
 		return s.ctx.Err()
+	// getStream().Context() is cancelled by gRPC on transport-level
+	// failures. After setStream() it is a different object from s.ctx,
+	// so we need both to react to whichever fires first.
+	case <-s.getStream().Context().Done():
+		return s.getStream().Context().Err()
 	}
 }
 
