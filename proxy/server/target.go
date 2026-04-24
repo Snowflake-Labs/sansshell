@@ -178,12 +178,11 @@ func (s *TargetStream) CloseWith(err error) {
 // Send the supplied request to the target stream, returning
 // an error if the context has already been cancelled.
 func (s *TargetStream) Send(req proto.Message) error {
-	ctx := s.getStream().Context()
 	select {
 	case s.reqChan <- req:
 		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-s.ctx.Done():
+		return s.ctx.Err()
 	}
 }
 
@@ -346,6 +345,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			// can return nil, and the error will be picked
 			// up by the receiving goroutine
 			if err == io.EOF {
+				s.cancelFunc()
 				return nil
 			}
 			// Otherwise, this is the 'final' error. The underlying

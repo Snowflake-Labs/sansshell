@@ -20,11 +20,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -264,6 +268,122 @@ func TestSendUnblocksWhenTargetUnreachable(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Send still blocked 2s after context cancel — stall not fixed")
 	}
+}
+
+// dyingClientStream simulates a gRPC stream to a target that dies
+// after accepting sendLimit messages. SendMsg returns io.EOF once the
+// limit is reached, and RecvMsg returns an Unavailable error (as a real
+// broken connection would).
+type dyingClientStream struct {
+	ctx       context.Context
+	mu        sync.Mutex
+	sent      int
+	sendLimit int
+}
+
+func (d *dyingClientStream) Header() (metadata.MD, error)  { return nil, nil }
+func (d *dyingClientStream) Trailer() metadata.MD           { return nil }
+func (d *dyingClientStream) CloseSend() error               { return nil }
+func (d *dyingClientStream) Context() context.Context        { return d.ctx }
+func (d *dyingClientStream) SendMsg(interface{}) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.sent >= d.sendLimit {
+		return io.EOF
+	}
+	d.sent++
+	return nil
+}
+func (d *dyingClientStream) RecvMsg(interface{}) error {
+	return status.Error(codes.Unavailable, "connection closed")
+}
+
+// dyingClientConn returns a dyingClientStream from NewStream.
+type dyingClientConn struct {
+	stream *dyingClientStream
+}
+
+func (c *dyingClientConn) Invoke(ctx context.Context, method string, args, reply interface{}, opts ...grpc.CallOption) error {
+	return status.Error(codes.Unimplemented, "not supported")
+}
+func (c *dyingClientConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return c.stream, nil
+}
+func (c *dyingClientConn) Close() error { return nil }
+
+type dyingClientDialer struct {
+	stream *dyingClientStream
+}
+
+func (d *dyingClientDialer) DialContext(ctx context.Context, target string, dialOpts ...grpc.DialOption) (ClientConnCloser, error) {
+	return &dyingClientConn{stream: d.stream}, nil
+}
+
+// TestSendFailsAfterTargetDiesMidStream verifies that when the target dies
+// mid-stream (SendMsg returns io.EOF), subsequent calls to
+// TargetStream.Send return an error instead of silently enqueueing data.
+func TestSendFailsAfterTargetDiesMidStream(t *testing.T) {
+	// Arrange: a stream that accepts 2 messages then returns io.EOF on SendMsg.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := &dyingClientStream{ctx: ctx, sendLimit: 2}
+	dialer := &dyingClientDialer{stream: stream}
+
+	serviceMap := LoadGlobalServiceMap()
+	ss := NewTargetStreamSet(serviceMap, dialer, nil)
+
+	replyChan := make(chan *pb.ProxyReply, 100)
+	doneChan := make(chan uint64, 1)
+
+	req := &pb.StartStream{
+		Target:     "dying-target:9500",
+		Nonce:      99,
+		MethodName: "/Testdata.TestService/TestClientStream",
+	}
+	if err := ss.Add(ctx, req, replyChan, doneChan); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	var streamID uint64
+	select {
+	case msg := <-replyChan:
+		sid := msg.GetStartStreamReply().GetStreamId()
+		if sid == 0 {
+			t.Fatalf("expected stream ID, got: %+v", msg)
+		}
+		streamID = sid
+	case <-time.After(2 * time.Second):
+		t.Fatal("no reply from Add")
+	}
+
+	payload, err := anypb.New(&td.TestRequest{Input: "chunk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := &pb.StreamData{
+		StreamIds: []uint64{streamID},
+		Payload:   payload,
+	}
+
+	// Act: send messages until Send fails. The stream accepts 2 via
+	// SendMsg, then returns io.EOF. The send loop should call cancelFunc,
+	// causing subsequent Send() calls to fail with a context error.
+	var sendErr atomic.Value
+	for i := 0; i < 20; i++ {
+		if err := ss.Send(ctx, data); err != nil {
+			sendErr.Store(err)
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Assert: Send must have returned an error.
+	stored := sendErr.Load()
+	if stored == nil {
+		t.Fatal("Send never returned error after target died — stall not fixed")
+	}
+	t.Logf("Send failed with: %v (good)", stored)
 }
 
 func TestIsCardinalityViolation(t *testing.T) {

@@ -1232,7 +1232,14 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 		}
 	}
 	progress := progressbar.DefaultBytes(fileSize)
-	defer progress.Close()
+	sendFailed := false
+	defer func() {
+		if sendFailed {
+			_ = progress.Clear()
+			return
+		}
+		_ = progress.Close()
+	}()
 
 	buf := make([]byte, util.StreamingChunkSize)
 	for {
@@ -1248,6 +1255,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			},
 		}
 		if err := stream.Send(req); err != nil {
+			sendFailed = true
 			// Emit this to every error file as it's not specific to a given target.
 			for _, e := range state.Err {
 				fmt.Fprintf(e, "All targets - error sending on stream - %v\n", err)
@@ -1258,6 +1266,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 	}
 	resp, err := stream.CloseAndRecv()
 	if err != nil && err != io.EOF {
+		sendFailed = true
 		// Emit this to every error file as it's not specific to a given target.
 		for _, e := range state.Err {
 			fmt.Fprintf(e, "All targets - error closing stream - %v\n", err)
@@ -1274,6 +1283,7 @@ func (p *cpCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface{
 			retCode = subcommands.ExitFailure
 		}
 	}
+	sendFailed = retCode != subcommands.ExitSuccess
 	return retCode
 }
 
