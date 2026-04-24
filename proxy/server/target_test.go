@@ -281,10 +281,10 @@ type dyingClientStream struct {
 	sendLimit int
 }
 
-func (d *dyingClientStream) Header() (metadata.MD, error)  { return nil, nil }
-func (d *dyingClientStream) Trailer() metadata.MD           { return nil }
-func (d *dyingClientStream) CloseSend() error               { return nil }
-func (d *dyingClientStream) Context() context.Context        { return d.ctx }
+func (d *dyingClientStream) Header() (metadata.MD, error) { return nil, nil }
+func (d *dyingClientStream) Trailer() metadata.MD         { return nil }
+func (d *dyingClientStream) CloseSend() error             { return nil }
+func (d *dyingClientStream) Context() context.Context     { return d.ctx }
 func (d *dyingClientStream) SendMsg(interface{}) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
