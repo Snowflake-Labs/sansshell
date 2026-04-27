@@ -178,12 +178,19 @@ func (s *TargetStream) CloseWith(err error) {
 // Send the supplied request to the target stream, returning
 // an error if the context has already been cancelled.
 func (s *TargetStream) Send(req proto.Message) error {
-	ctx := s.getStream().Context()
 	select {
 	case s.reqChan <- req:
 		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	// s.ctx is cancelled by our cancelFunc — e.g. when the target dies
+	// mid-stream (SendMsg returns EOF) or when NewStream fails. Without
+	// this, Send would keep enqueueing data into a dead reqChan.
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	// getStream().Context() is cancelled by gRPC on transport-level
+	// failures. After setStream() it is a different object from s.ctx,
+	// so we need both to react to whichever fires first.
+	case <-s.getStream().Context().Done():
+		return s.getStream().Context().Err()
 	}
 }
 
@@ -221,6 +228,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
+			s.cancelFunc()
 			return fmt.Errorf("could not connect to target from the proxy: %w", err)
 		}
 
@@ -345,6 +353,7 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			// can return nil, and the error will be picked
 			// up by the receiving goroutine
 			if err == io.EOF {
+				s.cancelFunc()
 				return nil
 			}
 			// Otherwise, this is the 'final' error. The underlying
