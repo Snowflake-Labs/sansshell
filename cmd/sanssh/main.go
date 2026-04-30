@@ -75,6 +75,7 @@ var (
 %s in the environment can also be set instead of setting this flag. The flag will take precedence.
 If blank a direct connection to the first entry in --targets will be made.
 If port is blank the default of %d will be used`, proxyEnv, defaultProxyPort))
+	proxyAuthorityOverride = flag.String("proxy-authority-override", "", "Authority override to use when dialing the proxy (passed to grpc.WithAuthority when set)")
 	// Deprecated: --timeout flag is deprecated. Use --idle-timeout or --dial-timeout instead
 	_                = flag.Duration("timeout", defaultDialTimeout, "DEPRECATED. Please use --idle-timeout or --dial-timeout instead")
 	dialTimeout      = flag.Duration("dial-timeout", defaultDialTimeout, "How long to wait for the connection to be accepted. Timeout specified in --targets or --proxy will take precedence")
@@ -209,17 +210,18 @@ func main() {
 	}
 
 	rs := client.RunState{
-		Proxy:             *proxyAddr,
-		Targets:           *targetsFlag.Target,
-		Outputs:           *outputsFlag.Target,
-		AuthzDryRun:       *authzDryRun,
-		OutputsDir:        *outputsDir,
-		CredSource:        *credSource,
-		IdleTimeout:       *idleTimeout,
-		ClientAuthzPolicy: clientPolicy,
-		PrefixOutput:      *prefixHeader,
-		BatchSize:         *batchSize,
-		EnableMPA:         *mpa,
+		Proxy:                  *proxyAddr,
+		ProxyAuthorityOverride: *proxyAuthorityOverride,
+		Targets:                *targetsFlag.Target,
+		Outputs:                *outputsFlag.Target,
+		AuthzDryRun:            *authzDryRun,
+		OutputsDir:             *outputsDir,
+		CredSource:             *credSource,
+		IdleTimeout:            *idleTimeout,
+		ClientAuthzPolicy:      clientPolicy,
+		PrefixOutput:           *prefixHeader,
+		BatchSize:              *batchSize,
+		EnableMPA:              *mpa,
 	}
 
 	if *justification != "" {
