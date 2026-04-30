@@ -46,6 +46,29 @@ var (
 		Description: "number of authorization failure due to policy evaluation error"}
 )
 
+// DenialHintClassifier maps denial hint text to a low-cardinality label
+// for the denial_hint metric attribute. Classifiers are checked in order;
+// the first one whose Matches function returns true wins.
+type DenialHintClassifier struct {
+	// Matches returns true if the joined denial hints belong to this category.
+	Matches func(joinedHints string) bool
+	// Label is the low-cardinality value emitted as the denial_hint attribute.
+	Label string
+}
+
+// classifyDenialHints joins all hints and runs them through the classifiers
+// in order. First match wins. Returns defaultDenialHintLabel if none match.
+func classifyDenialHints(hints []string, classifiers []DenialHintClassifier) string {
+	const defaultDenialHintLabel = "other"
+	joined := strings.Join(hints, "\n")
+	for _, c := range classifiers {
+		if c.Matches(joined) {
+			return c.Label
+		}
+	}
+	return defaultDenialHintLabel
+}
+
 type AuthzPolicy interface {
 	Eval(ctx context.Context, input *RPCAuthInput) (bool, error)
 	DenialHints(ctx context.Context, input *RPCAuthInput) ([]string, error)
@@ -83,6 +106,10 @@ type rpcAuthorizerImpl struct {
 
 	// Additional authorization hooks invoked before policy evaluation.
 	hooks []RPCAuthzHook
+
+	// Ordered classifiers for mapping denial hints to metric labels.
+	// First match wins; if empty or none match, defaultDenialHintLabel is used.
+	hintClassifiers []DenialHintClassifier
 }
 
 // A RPCAuthzHook is invoked on populated RpcAuthInput prior to policy
@@ -101,6 +128,17 @@ func NewRPCAuthorizer(policy AuthzPolicy, authzHooks ...RPCAuthzHook) RPCAuthori
 	return &rpcAuthorizerImpl{
 		policy: policy,
 		hooks:  authzHooks,
+	}
+}
+
+// NewRPCAuthorizerWithHintClassifiers is like NewRPCAuthorizer but also
+// accepts denial hint classifiers for the denial_hint metric attribute.
+// Classifiers are checked in order; first match wins.
+func NewRPCAuthorizerWithHintClassifiers(policy AuthzPolicy, authzHooks []RPCAuthzHook, classifiers []DenialHintClassifier) RPCAuthorizer {
+	return &rpcAuthorizerImpl{
+		policy:          policy,
+		hooks:           authzHooks,
+		hintClassifiers: classifiers,
 	}
 }
 
@@ -160,7 +198,13 @@ func (g *rpcAuthorizerImpl) Eval(ctx context.Context, input *RPCAuthInput) error
 	}
 	logger.Info("authz policy evaluation result", "authorizationResult", result, "input", redactedInput, "denialHints", hints)
 	if !result {
-		errRegister := recorder.Counter(ctx, authzDeniedPolicyCounter, 1, attribute.String("method", input.Method))
+		deniedAttrs := []attribute.KeyValue{
+			attribute.String("method", input.Method),
+		}
+		if len(hints) > 0 {
+			deniedAttrs = append(deniedAttrs, attribute.String("denial_hint", classifyDenialHints(hints, g.hintClassifiers)))
+		}
+		errRegister := recorder.Counter(ctx, authzDeniedPolicyCounter, 1, deniedAttrs...)
 		if errRegister != nil {
 			logger.V(1).Error(errRegister, "failed to add counter "+authzDeniedPolicyCounter.Name)
 		}
