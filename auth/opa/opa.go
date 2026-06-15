@@ -28,6 +28,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/open-policy-agent/opa/ast"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/open-policy-agent/opa/storage"
 	"github.com/open-policy-agent/opa/topdown"
 )
 
@@ -53,12 +54,12 @@ var (
 type opaAuthzPolicy struct {
 	query            rego.PreparedEvalQuery
 	denialHintsQuery *rego.PreparedEvalQuery
-	b                *bytes.Buffer
 }
 
 type policyOptions struct {
 	query            string
 	denialHintsQuery string
+	store            storage.Store
 }
 
 // An Option controls the behavior of an opaAuthzPolicy
@@ -100,6 +101,24 @@ func WithDenialHintsQuery(query string) Option {
 	})
 }
 
+// WithStore returns an option that exposes the contents of `store` to the policy
+// as the `data` document during evaluation. This allows a single policy file to
+// be parameterized with external configuration instead of hard-coding values,
+// for example:
+//
+//	store := inmem.NewFromObject(map[string]any{
+//		"config": map[string]any{"allowed_method": "/Foo.Bar/Baz"},
+//	})
+//	p, _ := opa.NewOpaAuthzPolicy(ctx, policy, opa.WithStore(store))
+//
+// and a policy that references data.config.allowed_method. The same store is
+// used for both the allow query and the denial-hints query.
+func WithStore(store storage.Store) Option {
+	return optionFunc(func(o *policyOptions) {
+		o.store = store
+	})
+}
+
 // NewOpaAuthzPolicy creates a new opaAuthzPolicy by parsing the policy given
 // in the string `policy`.
 // It returns an error if the policy cannot be parsed, or does not use
@@ -121,25 +140,29 @@ func NewOpaAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpca
 		return nil, fmt.Errorf("policy has invalid package '%s' (must be '%s')", module.Package, sansshellPackage)
 	}
 
-	b := &bytes.Buffer{}
-	r := rego.New(
+	allowArgs := []func(*rego.Rego){
 		rego.Query(options.query),
 		rego.ParsedModule(module),
 		rego.EnablePrintStatements(true),
-		rego.PrintHook(topdown.NewPrintHook(b)),
-	)
+	}
+	if options.store != nil {
+		allowArgs = append(allowArgs, rego.Store(options.store))
+	}
 
-	prepared, err := r.PrepareForEval(ctx)
+	prepared, err := rego.New(allowArgs...).PrepareForEval(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("rego: PrepareForEval() error: %w", err)
 	}
 	var denialHintsQuery *rego.PreparedEvalQuery
 	if options.denialHintsQuery != "" {
-		r := rego.New(
+		hintArgs := []func(*rego.Rego){
 			rego.Query(options.denialHintsQuery),
 			rego.ParsedModule(module),
-		)
-		hints, err := r.PrepareForEval(ctx)
+		}
+		if options.store != nil {
+			hintArgs = append(hintArgs, rego.Store(options.store))
+		}
+		hints, err := rego.New(hintArgs...).PrepareForEval(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("rego: denial hints PrepareForEval() error: %w", err)
 		}
@@ -148,7 +171,6 @@ func NewOpaAuthzPolicy(ctx context.Context, policy string, opts ...Option) (rpca
 	return &opaAuthzPolicy{
 		query:            prepared,
 		denialHintsQuery: denialHintsQuery,
-		b:                b,
 	}, nil
 }
 
@@ -165,12 +187,16 @@ func (q *opaAuthzPolicy) Eval(ctx context.Context, input *rpcauth.RPCAuthInput) 
 		evalInput = rego.EvalInput(input)
 	}
 
-	results, err := q.query.Eval(ctx, evalInput)
+	// Use a per-evaluation print buffer so concurrent calls to Eval don't race
+	// on shared state and one caller's print output can't leak into another's
+	// logs.
+	var printBuf bytes.Buffer
+	results, err := q.query.Eval(ctx, evalInput, rego.EvalPrintHook(topdown.NewPrintHook(&printBuf)))
 	if err != nil {
 		return false, fmt.Errorf("authz policy evaluation error: %w", err)
 	}
-	if q.b.Len() > 0 {
-		logger.V(1).Info("print statements", "buffer", q.b.String())
+	if printBuf.Len() > 0 {
+		logger.V(1).Info("print statements", "buffer", printBuf.String())
 	}
 	return results.Allowed(), nil
 }

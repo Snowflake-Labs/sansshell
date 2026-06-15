@@ -19,12 +19,15 @@ package opa
 import (
 	"context"
 	"encoding/json"
-	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
+
 	"github.com/open-policy-agent/opa/ast"
+	"github.com/open-policy-agent/opa/storage/inmem"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
@@ -289,6 +292,80 @@ denial_hints[msg] {
 			}
 		})
 	}
+}
+
+func TestAuthzPolicyWithStore(t *testing.T) {
+	policyString := `
+package sansshell.authz
+
+default allow = false
+
+allow {
+  input.method == data.config.allowed_method
+}
+
+denial_hints[msg] {
+  not allow
+  msg := sprintf("only %s is allowed", [data.config.allowed_method])
+}
+`
+	ctx := context.Background()
+	store := inmem.NewFromObject(map[string]any{
+		"config": map[string]any{"allowed_method": "/Foo.Bar/Baz"},
+	})
+	policy, err := NewOpaAuthzPolicy(ctx, policyString,
+		WithStore(store),
+		WithDenialHintsQuery("data.sansshell.authz.denial_hints"))
+	testutil.FatalOnErr("NewOpaAuthzPolicy", err, t)
+
+	allowed, err := policy.Eval(ctx, &rpcauth.RPCAuthInput{Method: "/Foo.Bar/Baz"})
+	testutil.FatalOnErr("Eval matching", err, t)
+	if !allowed {
+		t.Errorf("Eval() with method matching data.config = false, want true")
+	}
+
+	allowed, err = policy.Eval(ctx, &rpcauth.RPCAuthInput{Method: "/Other/Method"})
+	testutil.FatalOnErr("Eval non-matching", err, t)
+	if allowed {
+		t.Errorf("Eval() with method not matching data.config = true, want false")
+	}
+
+	hints, err := policy.DenialHints(ctx, &rpcauth.RPCAuthInput{Method: "/Other/Method"})
+	testutil.FatalOnErr("DenialHints", err, t)
+	want := []string{"only /Foo.Bar/Baz is allowed"}
+	if !reflect.DeepEqual(hints, want) {
+		t.Errorf("DenialHints() = %v, want %v", hints, want)
+	}
+}
+
+// TestAuthzPolicyConcurrentEval exercises Eval from many goroutines on a policy
+// that emits print output. It is primarily meaningful under the race detector,
+// where it guards against shared mutable state in the policy across evaluations.
+func TestAuthzPolicyConcurrentEval(t *testing.T) {
+	policyString := `
+package sansshell.authz
+
+allow {
+  print("evaluating method", input.method)
+  input.method == "foo/bar"
+}
+`
+	ctx := context.Background()
+	policy, err := NewOpaAuthzPolicy(ctx, policyString)
+	testutil.FatalOnErr("NewOpaAuthzPolicy", err, t)
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			defer wg.Done()
+			if _, err := policy.Eval(ctx, &rpcauth.RPCAuthInput{Method: "foo/bar"}); err != nil {
+				t.Errorf("Eval() error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestNewWithPolicy(t *testing.T) {
