@@ -30,8 +30,9 @@ import (
 
 // TCPCheckCmd cli adapter for execution infrastructure implementation of [subcommands.Command] interface
 type TCPCheckCmd struct {
-	timeout   uint
-	cliLogger cliUtils.StyledCliLogger
+	timeout    uint
+	sourcePort uint
+	cliLogger  cliUtils.StyledCliLogger
 }
 
 func (*TCPCheckCmd) Name() string { return "tcp-check" }
@@ -39,13 +40,14 @@ func (*TCPCheckCmd) Synopsis() string {
 	return "Check tcp connectivity from remote machine to specified server"
 }
 func (*TCPCheckCmd) Usage() string {
-	return `tcp-check <host>:<port>
+	return `tcp-check <host>:<port> [--source-port <port>] [--timeout <seconds>]
     Makes tcp connectivity check from the remote machine to specified server.
 `
 }
 
 func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
 	f.UintVar(&p.timeout, "timeout", 3, "Timeout in seconds to wait for response from --host on remote machine")
+	f.UintVar(&p.sourcePort, "source-port", 0, "Local source port to bind (1-65535). 0 or unset means the OS chooses an ephemeral port.")
 }
 
 // Execute is a method handle command execution. It adapter between cli and business logic
@@ -63,12 +65,20 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitUsageError
 	}
 
+	sourcePort := uint32(p.sourcePort)
+	if sourcePort != 0 {
+		if _, err := validator.ParsePortFromUint32(sourcePort); err != nil {
+			p.cliLogger.Errorfc(cliUtils.RedText, "Invalid source port: %s\n", err.Error())
+			return subcommands.ExitUsageError
+		}
+	}
+
 	preloader := cliUtils.NewDotPreloader("Waiting for results from remote machines", util.IsStreamToTerminal(os.Stdout))
 	client := pb.NewNetworkClientProxy(state.Conn)
 	usecase := app.NewTCPCheckUseCase(client)
 
 	preloader.Start()
-	results, err := usecase.Run(ctx, host, port, p.timeout)
+	results, err := usecase.Run(ctx, host, port, p.timeout, sourcePort)
 	if err != nil {
 		preloader.Stop()
 		p.cliLogger.Errorfc(cliUtils.RedText, "Unexpected error: %s\n", err.Error())
@@ -121,6 +131,10 @@ func pbFailReasonToText(failReason pb.TCPCheckFailureReason) string {
 		return "Connection refused"
 	case pb.TCPCheckFailureReason_TIMEOUT:
 		return "Timeout"
+	case pb.TCPCheckFailureReason_SOURCE_PORT_IN_USE:
+		return "Source port already in use"
+	case pb.TCPCheckFailureReason_PERMISSION_DENIED:
+		return "Permission denied to bind source port"
 	default:
 		return "Unknown"
 	}

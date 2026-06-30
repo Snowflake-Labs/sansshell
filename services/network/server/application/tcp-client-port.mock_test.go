@@ -46,7 +46,7 @@ type tcpClientPortMock struct {
 	UnexpectedErrorHosts []string
 }
 
-func (n *tcpClientPortMock) CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error) {
+func (n *tcpClientPortMock) CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration, sourcePort uint32) (*TCPConnectivityCheckResult, error) {
 	isUnexpectedError := false
 	for _, unexpectedErrorHost := range n.UnexpectedErrorHosts {
 		if unexpectedErrorHost == hostname {

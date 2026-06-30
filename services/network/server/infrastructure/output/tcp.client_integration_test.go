@@ -23,6 +23,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	pb "github.com/Snowflake-Labs/sansshell/services/network"
 )
 
 const localhost = "localhost"
@@ -97,7 +99,7 @@ func TestIntegrationTCPClient_CheckConnectivity(t *testing.T) {
 			client := &TCPClient{}
 
 			// ACT
-			result, err := client.CheckConnectivity(context.Background(), test.host, uint32(test.port), 1*time.Second)
+			result, err := client.CheckConnectivity(context.Background(), test.host, uint32(test.port), 1*time.Second, 0)
 
 			// ASSERT
 			if err != nil {
@@ -116,7 +118,7 @@ func TestIntegrationTCPClient_CheckConnectivity(t *testing.T) {
 		client := &TCPClient{}
 
 		// ACT
-		result, err := client.CheckConnectivity(context.Background(), notExistedHost, 20, 1*time.Second)
+		result, err := client.CheckConnectivity(context.Background(), notExistedHost, 20, 1*time.Second, 0)
 
 		// ASSERT
 		if err != nil {
@@ -131,6 +133,45 @@ func TestIntegrationTCPClient_CheckConnectivity(t *testing.T) {
 
 		if result.FailReason == nil {
 			t.Errorf("Fail reason should be not nil")
+		}
+	})
+
+	t.Run("It should return SOURCE_PORT_IN_USE when source port is already bound", func(t *testing.T) {
+		// ARRANGE
+		// Bind a listener on a local port so that same port cannot be used as source.
+		blocker, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			t.Fatalf("Failed to start blocker listener: %s", err.Error())
+		}
+		defer blocker.Close()
+		blockedPort := uint32(blocker.Addr().(*net.TCPAddr).Port)
+
+		client := &TCPClient{}
+
+		// ACT
+		result, err := client.CheckConnectivity(context.Background(), localhost, uint32(port), 1*time.Second, blockedPort)
+
+		// ASSERT
+		if err != nil {
+			t.Errorf("Unexpected error: %s", err.Error())
+			return
+		}
+
+		if result.IsOk {
+			t.Errorf("Expected ok=false but got true")
+			return
+		}
+
+		if result.FailReason == nil {
+			t.Errorf("Expected a fail reason but got nil")
+			return
+		}
+
+		// NOTE: EADDRINUSE fires when the source addr is already in use.
+		// On Linux the bind to the local address happens before the connect,
+		// so the error surfaces as SOURCE_PORT_IN_USE.
+		if *result.FailReason != pb.TCPCheckFailureReason_SOURCE_PORT_IN_USE {
+			t.Errorf("Expected SOURCE_PORT_IN_USE but got %s", result.FailReason)
 		}
 	})
 }

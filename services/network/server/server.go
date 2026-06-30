@@ -52,9 +52,20 @@ func (s *server) TCPCheck(ctx context.Context, req *pb.TCPCheckRequest) (*pb.TCP
 		return nil, status.Errorf(codes.Internal, "Invalid port value: %d", rawPort)
 	}
 
+	var sourcePort uint32
+	if req.GetSourcePort() != 0 {
+		p, err := validator.ParsePortFromUint32(req.GetSourcePort())
+		if err != nil {
+			logger.Error(err, "Invalid source port value")
+			recorder.CounterOrLog(ctx, s.tcpCheckFailureCounter, 1)
+			return nil, status.Errorf(codes.InvalidArgument, "Invalid source port value: %d", req.GetSourcePort())
+		}
+		sourcePort = p
+	}
+
 	usecase := app.NewTCPCheckUsecase(&infraOutput.TCPClient{})
 
-	result, err := usecase.Run(ctx, hostname, port, timeout)
+	result, err := usecase.Run(ctx, hostname, port, timeout, sourcePort)
 	if err != nil {
 		logger.Error(err, "Unexpected error")
 		recorder.CounterOrLog(ctx, s.tcpCheckFailureCounter, 1)

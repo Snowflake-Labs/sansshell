@@ -35,6 +35,9 @@ message TCPCheckRequest {
   uint32 port = 2;
   // The timeout duration
   google.protobuf.Duration timeout = 3;
+  // Source port to bind for the outgoing connection. If unset (0), the OS
+  // chooses an ephemeral port.
+  uint32 source_port = 4;
 }
 
 // Enum for TCP check failure reasons
@@ -43,6 +46,8 @@ enum TCPCheckFailureReason {
   TIMEOUT = 1;
   CONNECTION_REFUSED = 2;
   NO_SUCH_HOST = 3;
+  SOURCE_PORT_IN_USE = 4;
+  PERMISSION_DENIED = 5;
 }
 
 // TCPCheckReply describes the result of a rpc
