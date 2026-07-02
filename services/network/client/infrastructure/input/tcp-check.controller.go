@@ -65,12 +65,14 @@ func (p *TCPCheckCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inte
 		return subcommands.ExitUsageError
 	}
 
-	sourcePort := uint32(p.sourcePort)
-	if sourcePort != 0 {
-		if _, err := validator.ParsePortFromUint32(sourcePort); err != nil {
+	var sourcePort uint32
+	if p.sourcePort != 0 {
+		port, err := validator.ParsePortFromUint(p.sourcePort)
+		if err != nil {
 			p.cliLogger.Errorfc(cliUtils.RedText, "Invalid source port: %s\n", err.Error())
 			return subcommands.ExitUsageError
 		}
+		sourcePort = port
 	}
 
 	preloader := cliUtils.NewDotPreloader("Waiting for results from remote machines", util.IsStreamToTerminal(os.Stdout))
