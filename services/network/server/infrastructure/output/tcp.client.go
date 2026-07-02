@@ -19,12 +19,14 @@ package output
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	pb "github.com/Snowflake-Labs/sansshell/services/network"
 	app "github.com/Snowflake-Labs/sansshell/services/network/server/application"
 	"net"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -33,15 +35,23 @@ type TCPClient struct {
 }
 
 // CheckConnectivity is used to check tcp connectivity from remote machine to specified server
-func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*app.TCPConnectivityCheckResult, error) {
+func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration, sourcePort uint32) (*app.TCPConnectivityCheckResult, error) {
 	hostToCheck := net.JoinHostPort(hostname, strconv.Itoa(int(port)))
 
 	dialer := net.Dialer{Timeout: timeout}
+	if sourcePort != 0 {
+		// Bind the outgoing connection to the requested local source port.
+		dialer.LocalAddr = &net.TCPAddr{Port: int(sourcePort)}
+	}
 	conn, err := dialer.DialContext(ctx, "tcp", hostToCheck)
 	if err != nil {
 		var failReason = pb.TCPCheckFailureReason_UNKNOWN
 		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 			failReason = pb.TCPCheckFailureReason_TIMEOUT
+		} else if errors.Is(err, syscall.EADDRINUSE) {
+			failReason = pb.TCPCheckFailureReason_SOURCE_PORT_IN_USE
+		} else if errors.Is(err, syscall.EACCES) {
+			failReason = pb.TCPCheckFailureReason_PERMISSION_DENIED
 		} else if opErr, ok := err.(*net.OpError); ok && opErr.Op == "dial" {
 			if strings.HasSuffix(opErr.Err.Error(), "no such host") {
 				failReason = pb.TCPCheckFailureReason_NO_SUCH_HOST

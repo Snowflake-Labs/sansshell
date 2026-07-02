@@ -26,8 +26,8 @@ type tcpCheckUsecase struct {
 	tcpClientPort TCPClientPort
 }
 
-func (t *tcpCheckUsecase) Run(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error) {
-	result, err := t.tcpClientPort.CheckConnectivity(ctx, hostname, port, timeout)
+func (t *tcpCheckUsecase) Run(ctx context.Context, hostname string, port uint32, timeout time.Duration, sourcePort uint32) (*TCPConnectivityCheckResult, error) {
+	result, err := t.tcpClientPort.CheckConnectivity(ctx, hostname, port, timeout, sourcePort)
 	return result, err
 }
 
@@ -37,11 +37,11 @@ type TCPConnectivityCheckResult struct {
 }
 
 type TCPClientPort interface {
-	CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error)
+	CheckConnectivity(ctx context.Context, hostname string, port uint32, timeout time.Duration, sourcePort uint32) (*TCPConnectivityCheckResult, error)
 }
 
 type TCPCheckUsecase interface {
-	Run(ctx context.Context, hostname string, port uint32, timeout time.Duration) (*TCPConnectivityCheckResult, error)
+	Run(ctx context.Context, hostname string, port uint32, timeout time.Duration, sourcePort uint32) (*TCPConnectivityCheckResult, error)
 }
 
 func NewTCPCheckUsecase(client TCPClientPort) TCPCheckUsecase {

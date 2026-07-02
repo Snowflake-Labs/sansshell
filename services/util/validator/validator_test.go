@@ -118,6 +118,61 @@ func TestParsePortFromUint32(t *testing.T) {
 	}
 }
 
+func TestParsePortFromUint(t *testing.T) {
+	tests := []struct {
+		input    uint
+		expected uint32
+		err      bool
+		name     string
+	}{
+		{
+			name:     "It should successfully parse port from uint",
+			input:    80,
+			expected: 80,
+			err:      false,
+		},
+		{
+			name:     "It should successfully parse maximum allowed port value",
+			input:    65535,
+			expected: 65535,
+			err:      false,
+		},
+		{
+			name:     "It should fail if zero provided",
+			input:    0,
+			expected: 0,
+			err:      true,
+		},
+		{
+			name:     "It should fail if provided value is greater than maximum allowed port value",
+			input:    4294967296,
+			expected: 0,
+			err:      true,
+		},
+		{
+			name:     "It should fail for 2^32+1 which would silently truncate to 1 if cast to uint32 first",
+			input:    4294967297,
+			expected: 0,
+			err:      true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// ACT
+			result, err := ParsePortFromUint(test.input)
+
+			// ASSERT
+			if (err != nil) != test.err {
+				t.Errorf("ParsePortFromUint(%d) error = %v, expected error = %v", test.input, err, test.err)
+			}
+			if result != test.expected {
+				t.Errorf("ParsePortFromUint(%d) = %d, expected %d", test.input, result, test.expected)
+			}
+		})
+	}
+}
+
 func TestParseHostAndPort(t *testing.T) {
 	tests := []struct {
 		name         string

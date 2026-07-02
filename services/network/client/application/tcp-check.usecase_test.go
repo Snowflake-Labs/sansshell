@@ -31,7 +31,7 @@ func TestTCPCheckUsecase_Run(t *testing.T) {
 		usecase := NewTCPCheckUseCase(clientMock)
 
 		// ACT
-		c, err := usecase.Run(context.Background(), "localhost", 80, 1)
+		c, err := usecase.Run(context.Background(), "localhost", 80, 1, 0)
 
 		// ASSERT
 		if err != nil {
@@ -58,7 +58,7 @@ func TestTCPCheckUsecase_Run(t *testing.T) {
 		usecase := NewTCPCheckUseCase(clientMock)
 
 		// ACT
-		c, err := usecase.Run(context.Background(), "localhost", 80, 1)
+		c, err := usecase.Run(context.Background(), "localhost", 80, 1, 0)
 
 		// ASSERT
 		if err != nil {
@@ -85,7 +85,7 @@ func TestTCPCheckUsecase_Run(t *testing.T) {
 		usecase := NewTCPCheckUseCase(clientMock)
 
 		// ACT
-		_, err := usecase.Run(context.Background(), "localhost", 80, 1)
+		_, err := usecase.Run(context.Background(), "localhost", 80, 1, 0)
 
 		// ASSERT
 		if err == nil {

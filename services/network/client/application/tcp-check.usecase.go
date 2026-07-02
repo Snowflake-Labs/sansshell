@@ -33,11 +33,13 @@ type tcpCheckUseCase struct {
 // - hostname is host of remote machine from which was checked tcp connectivity
 // - port is port of remote machine from which was checked tcp connectivity
 // - timeout is  seconds to wait for a response on remote machine from hostname
-func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error) {
+// - sourcePort is the local source port to bind (0 = OS-chosen ephemeral)
+func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint, sourcePort uint32) (<-chan *pb.TCPCheckManyResponse, error) {
 	req := &pb.TCPCheckRequest{
-		Hostname: hostname,
-		Port:     port,
-		Timeout:  durationpb.New(time.Duration(timeoutSeconds) * time.Second),
+		Hostname:   hostname,
+		Port:       port,
+		Timeout:    durationpb.New(time.Duration(timeoutSeconds) * time.Second),
+		SourcePort: sourcePort,
 	}
 
 	var resp, err = p.networkClient.TCPCheckOneMany(ctx, req)
@@ -49,7 +51,7 @@ func (p *tcpCheckUseCase) Run(ctx context.Context, hostname string, port uint32,
 }
 
 type TCPCheckUseCase interface {
-	Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint) (<-chan *pb.TCPCheckManyResponse, error)
+	Run(ctx context.Context, hostname string, port uint32, timeoutSeconds uint, sourcePort uint32) (<-chan *pb.TCPCheckManyResponse, error)
 }
 
 func NewTCPCheckUseCase(networkClient pb.NetworkClientProxy) TCPCheckUseCase {
