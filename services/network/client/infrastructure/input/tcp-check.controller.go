@@ -47,7 +47,7 @@ func (*TCPCheckCmd) Usage() string {
 
 func (p *TCPCheckCmd) SetFlags(f *flag.FlagSet) {
 	f.UintVar(&p.timeout, "timeout", 3, "Timeout in seconds to wait for response from --host on remote machine")
-	f.UintVar(&p.sourcePort, "source-port", 0, "Local source port to bind (1-65535). 0 or unset means the OS chooses an ephemeral port.")
+	f.UintVar(&p.sourcePort, "source-port", 0, "Local source port to bind (1-65535). 0 or unset means the OS chooses an ephemeral port. Note: after a successful check, the OS holds the port in TIME_WAIT for ~60s; repeated checks with the same port within that window will fail with 'source port already in use'.")
 }
 
 // Execute is a method handle command execution. It adapter between cli and business logic
