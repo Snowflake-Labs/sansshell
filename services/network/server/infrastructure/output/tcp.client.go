@@ -41,7 +41,21 @@ func (p *TCPClient) CheckConnectivity(ctx context.Context, hostname string, port
 	dialer := net.Dialer{Timeout: timeout}
 	if sourcePort != 0 {
 		// Bind the outgoing connection to the requested local source port.
+		// SO_REUSEADDR allows reuse of a port still in TIME_WAIT from a previous check.
 		dialer.LocalAddr = &net.TCPAddr{Port: int(sourcePort)}
+		dialer.Control = func(network, address string, c syscall.RawConn) error {
+			var setSockOptErr error
+			err := c.Control(func(fd uintptr) {
+				setSockOptErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1)
+			})
+			if err != nil {
+				return fmt.Errorf("failed to acquire socket fd for SO_REUSEADDR: %s", err.Error())
+			}
+			if setSockOptErr != nil {
+				return fmt.Errorf("failed to set SO_REUSEADDR: %s", setSockOptErr.Error())
+			}
+			return nil
+		}
 	}
 	conn, err := dialer.DialContext(ctx, "tcp", hostToCheck)
 	if err != nil {

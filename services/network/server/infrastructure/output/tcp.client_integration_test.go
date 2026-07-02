@@ -136,6 +136,43 @@ func TestIntegrationTCPClient_CheckConnectivity(t *testing.T) {
 		}
 	})
 
+	t.Run("It should succeed on repeated checks with the same source port due to SO_REUSEADDR", func(t *testing.T) {
+		// ARRANGE
+		// Reserve an ephemeral port then release it so we have a known free source port.
+		tmp, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			t.Fatalf("Failed to find a free source port: %s", err.Error())
+		}
+		sourcePort := uint32(tmp.Addr().(*net.TCPAddr).Port)
+		tmp.Close()
+
+		client := &TCPClient{}
+
+		// ACT — first check
+		result, err := client.CheckConnectivity(context.Background(), localhost, uint32(port), 1*time.Second, sourcePort)
+
+		// ASSERT
+		if err != nil {
+			t.Fatalf("Unexpected error on first check: %s", err.Error())
+		}
+		if !result.IsOk {
+			t.Fatalf("Expected first check to succeed, got fail reason: %s", result.FailReason)
+		}
+
+		// ACT — second check immediately after, same source port.
+		// Without SO_REUSEADDR the port would linger in TIME_WAIT and this would
+		// fail with SOURCE_PORT_IN_USE.
+		result, err = client.CheckConnectivity(context.Background(), localhost, uint32(port), 1*time.Second, sourcePort)
+
+		// ASSERT
+		if err != nil {
+			t.Fatalf("Unexpected error on second check: %s", err.Error())
+		}
+		if !result.IsOk {
+			t.Fatalf("Expected second check to succeed (SO_REUSEADDR should bypass TIME_WAIT), got fail reason: %s", result.FailReason)
+		}
+	})
+
 	t.Run("It should return SOURCE_PORT_IN_USE when source port is already bound", func(t *testing.T) {
 		// ARRANGE
 		// Bind a listener on a local port so that same port cannot be used as source.
