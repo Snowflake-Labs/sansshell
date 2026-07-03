@@ -18,9 +18,7 @@ Where:
 - `<timeout>` timeout in seconds to wait for the connection to be established. Default is 3 seconds.
 - `<source-port>` local source port to bind for the outgoing TCP connection (1-65535). If unset, the OS
   chooses an ephemeral port. Binding privileged ports (`< 1024`) requires the sansshell-server process
-  to have the necessary host privilege (e.g. root or `CAP_NET_BIND_SERVICE`). Note: after a successful
-  check the OS keeps the port in `TIME_WAIT` for ~60s; repeating the check with the same `--source-port`
-  within that window will fail with "source port already in use".
+  to have the necessary host privilege (e.g. root or `CAP_NET_BIND_SERVICE`).
 
 # Useful docs
 - [service-architecture](../../docs/services-architecture.md)
