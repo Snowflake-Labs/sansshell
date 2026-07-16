@@ -64,6 +64,9 @@ type RPCAuthInput struct {
 	// Implementation specific extensions.
 	Extensions json.RawMessage `json:"extensions"`
 
+	// MPA approver eligibility populated by proxy hooks for /Mpa.Mpa/Approve.
+	MPAApprover *MPAApproverInput `json:"mpa_approver,omitempty"`
+
 	// TargetConn is a connection to the target under evaluation. It is only non-nil when
 	// the policy evaluation is being performed by some entity other than the host and
 	// can be used in rpcauth hooks to gather information by making RPC calls to the
@@ -161,6 +164,32 @@ type PrincipalAuthInput struct {
 
 	// Auxilliary groups associated with this principal.
 	Groups []string `json:"groups"`
+}
+
+// MPAInnerActionInput carries inner-action policy eval used to validate approvers.
+type MPAInnerActionInput struct {
+	Method string `json:"method,omitempty"`
+
+	RolesWithAccess []string `json:"roles_with_access,omitempty"`
+
+	MPANotRequired bool `json:"mpa_not_required,omitempty"`
+
+	MPAFromRolesWithAccessRequired bool `json:"mpa_from_roles_with_access_required,omitempty"`
+
+	MPAFromProdSSHApproversRequired bool `json:"mpa_from_prod_ssh_approvers_required,omitempty"`
+
+	ProdSSHApprovers []string `json:"prod_ssh_approvers,omitempty"`
+}
+
+// MPAApproverInput is populated by proxy authz hooks for Mpa.Approve calls.
+type MPAApproverInput struct {
+	RequesterID string `json:"requester_id,omitempty"`
+
+	SelfApproval bool `json:"self_approval,omitempty"`
+
+	ApproverQualified bool `json:"approver_qualified,omitempty"`
+
+	Inner *MPAInnerActionInput `json:"inner,omitempty"`
 }
 
 // NewRPCAuthInput creates RpcAuthInput for the supplied method and request, deriving

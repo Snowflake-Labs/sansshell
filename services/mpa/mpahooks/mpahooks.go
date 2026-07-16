@@ -44,6 +44,10 @@ const (
 	// reqMPAKey is the key name that must exist in the incoming
 	// context metadata if the client wants to do an MPA request.
 	reqMPAKey = "sansshell-mpa-request-id"
+
+	// MPAApprovalUnqualifiedMarker is emitted by proxy policy when a stored
+	// approval exists but the approver cannot satisfy the inner action.
+	MPAApprovalUnqualifiedMarker = "MPA_APPROVAL_UNQUALIFIED:"
 )
 
 // WithMPAInMetadata adds a MPA ID to the grpc metadata of an outgoing RPC call
@@ -139,6 +143,151 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 	return result.Id, nil
 }
 
+func isUnqualifiedMPAApproval(err error) bool {
+	return err != nil && strings.Contains(err.Error(), MPAApprovalUnqualifiedMarker)
+}
+
+func clearMPAForRequest(ctx context.Context, method string, req any, cc grpc.ClientConnInterface) error {
+	p, ok := req.(proto.Message)
+	if !ok {
+		return fmt.Errorf("unable to cast req to proto: %v", req)
+	}
+	var msg anypb.Any
+	if err := msg.MarshalFrom(p); err != nil {
+		return fmt.Errorf("unable to marshal into anyproto: %v", err)
+	}
+	var user string
+	if pi := proxiedidentity.FromContext(ctx); pi != nil {
+		user = pi.ID
+	} else {
+		return fmt.Errorf("missing proxied identity for MPA clear")
+	}
+	var justification string
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		if v := md.Get(rpcauth.ReqJustKey); len(v) > 0 {
+			justification = v[0]
+		}
+	}
+	mpaClient := mpa.NewMpaClient(cc)
+	_, err := mpaClient.Clear(ctx, &mpa.ClearRequest{
+		Action: &mpa.Action{
+			User:          user,
+			Justification: justification,
+			Method:        method,
+			Message:       &msg,
+		},
+	})
+	return err
+}
+
+func invokeProxiedUnaryWithMPA(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, state *util.ExecuteState, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
+	run := func() (<-chan *proxy.Ret, error) {
+		mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, conn, state)
+		if err != nil {
+			return nil, err
+		}
+		ctx = WithMPAInMetadata(ctx, mpaID)
+		return invoker(ctx, method, args, opts...)
+	}
+
+	retCh, err := run()
+	if err != nil {
+		return nil, err
+	}
+	rets := drainProxyRets(retCh)
+	for _, r := range rets {
+		if r.Error != nil && isUnqualifiedMPAApproval(r.Error) {
+			fmt.Fprintln(os.Stderr, "Previous approval was from an unqualified approver; clearing and re-requesting.")
+			if clearErr := clearMPAForProxiedRequest(ctx, method, args, conn); clearErr != nil {
+				return retChannel(rets), fmt.Errorf("clear stale MPA approval: %w", clearErr)
+			}
+			return run()
+		}
+	}
+	return retChannel(rets), nil
+}
+
+func clearMPAForProxiedRequest(ctx context.Context, method string, args any, conn *proxy.Conn) error {
+	p, ok := args.(proto.Message)
+	if !ok {
+		return fmt.Errorf("unable to cast args to proto: %v", args)
+	}
+	var msg anypb.Any
+	if err := msg.MarshalFrom(p); err != nil {
+		return fmt.Errorf("unable to marshal into anyproto: %v", err)
+	}
+	var user string
+	if pi := proxiedidentity.FromContext(ctx); pi != nil {
+		user = pi.ID
+	} else {
+		return fmt.Errorf("missing proxied identity for MPA clear")
+	}
+	var justification string
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		if v := md.Get(rpcauth.ReqJustKey); len(v) > 0 {
+			justification = v[0]
+		}
+	}
+	action := &mpa.Action{
+		User:          user,
+		Justification: justification,
+		Method:        method,
+		Message:       &msg,
+	}
+	mpaClient := mpa.NewMpaClientProxy(conn)
+	ch, err := mpaClient.ClearOneMany(ctx, &mpa.ClearRequest{Action: action})
+	if err != nil {
+		return err
+	}
+	for r := range ch {
+		if r.Error != nil {
+			return r.Error
+		}
+	}
+	return nil
+}
+
+func drainProxyRets(retCh <-chan *proxy.Ret) []*proxy.Ret {
+	var rets []*proxy.Ret
+	for r := range retCh {
+		rets = append(rets, r)
+	}
+	return rets
+}
+
+func retChannel(rets []*proxy.Ret) <-chan *proxy.Ret {
+	ch := make(chan *proxy.Ret, len(rets))
+	go func() {
+		defer close(ch)
+		for _, r := range rets {
+			ch <- r
+		}
+	}()
+	return ch
+}
+
+func invokeUnaryWithMPA(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, req, cc)
+	if err != nil {
+		return err
+	}
+	ctx = WithMPAInMetadata(ctx, mpaID)
+	err = invoker(ctx, method, req, reply, cc, opts...)
+	if !isUnqualifiedMPAApproval(err) {
+		return err
+	}
+	fmt.Fprintln(os.Stderr, "Previous approval was from an unqualified approver; clearing and re-requesting.")
+	if clearErr := clearMPAForRequest(ctx, method, req, cc); clearErr != nil {
+		return fmt.Errorf("clear stale MPA approval: %w (original: %v)", clearErr, err)
+	}
+	mpaID, err = createAndBlockOnSingleTargetMPA(ctx, method, req, cc)
+	if err != nil {
+		return err
+	}
+	ctx = WithMPAInMetadata(ctx, mpaID)
+	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
 // UnaryClientIntercepter is a grpc.UnaryClientIntercepter that will perform the MPA flow.
 func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
@@ -148,14 +297,7 @@ func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 
-		mpaID, err := createAndBlockOnSingleTargetMPA(ctx, method, req, cc)
-		if err != nil {
-			return err
-		}
-
-		ctx = WithMPAInMetadata(ctx, mpaID)
-		// Complete the call
-		return invoker(ctx, method, req, reply, cc, opts...)
+		return invokeUnaryWithMPA(ctx, method, req, reply, cc, invoker, opts...)
 	}
 }
 
@@ -311,14 +453,7 @@ func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryIntercepto
 			return invoker(ctx, method, args, opts...)
 		}
 
-		mpaID, err := createAndBlockOnProxiedMPA(ctx, method, args, conn, state)
-		if err != nil {
-			return nil, err
-		}
-
-		// Now that we have our approvals, make our call.
-		ctx = WithMPAInMetadata(ctx, mpaID)
-		return invoker(ctx, method, args, opts...)
+		return invokeProxiedUnaryWithMPA(ctx, conn, method, args, invoker, state, opts...)
 	}
 }
 
