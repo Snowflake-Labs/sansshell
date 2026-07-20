@@ -160,6 +160,27 @@ func TestActionMatchesInput(t *testing.T) {
 			},
 			matches: true,
 		},
+		{
+			desc: "custom_payload ignored on executing request",
+			ctx:  ctx,
+			action: &mpa.Action{
+				User:          "requester",
+				Method:        "foobar",
+				Message:       mustAny(anypb.New(&emptypb.Empty{})),
+				CustomPayload: mustAny(anypb.New(&emptypb.Empty{})),
+			},
+			input: &rpcauth.RPCAuthInput{
+				Method:      "foobar",
+				MessageType: "google.protobuf.Empty",
+				Message:     []byte("{}"),
+				Peer: &rpcauth.PeerAuthInput{
+					Principal: &rpcauth.PrincipalAuthInput{
+						ID: "requester",
+					},
+				},
+			},
+			matches: true,
+		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			err := mpahooks.ActionMatchesInput(tc.ctx, tc.action, tc.input)

@@ -102,8 +102,9 @@ func ActionMatchesInput(ctx context.Context, action *mpa.Action, input *rpcauth.
 		Justification: justification,
 		Message:       &msg,
 	}
-	// Make sure to use an any-proto-aware comparison
-	if !cmp.Equal(action, sentAct, protocmp.Transform()) {
+	// Make sure to use an any-proto-aware comparison. custom_payload is set at
+	// Store time by the client and is not reconstructible from the executing RPC.
+	if !cmp.Equal(action, sentAct, protocmp.Transform(), protocmp.IgnoreFields(&mpa.Action{}, "custom_payload")) {
 		return fmt.Errorf("request doesn't match mpa approval: want %v, got %v", action, sentAct)
 	}
 	return nil
@@ -120,10 +121,16 @@ func createAndBlockOnSingleTargetMPA(ctx context.Context, method string, req any
 		return "", fmt.Errorf("unable to marshal into anyproto: %v", err)
 	}
 
+	customPayload, err := buildCustomPayload(ctx, method, p, cc, nil)
+	if err != nil {
+		return "", err
+	}
+
 	mpaClient := mpa.NewMpaClient(cc)
 	result, err := mpaClient.Store(ctx, &mpa.StoreRequest{
-		Method:  method,
-		Message: &msg,
+		Method:        method,
+		Message:       &msg,
+		CustomPayload: customPayload,
 	})
 	if err != nil {
 		return "", err
@@ -144,7 +151,7 @@ func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		// Our interceptor will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
-		if method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
+		if shouldSkipMPA(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 
@@ -242,10 +249,15 @@ func createAndBlockOnProxiedMPA(ctx context.Context, method string, args any, co
 	if err := msg.MarshalFrom(p); err != nil {
 		return "", fmt.Errorf("unable to marshal into anyproto: %v", err)
 	}
+	customPayload, err := buildCustomPayload(ctx, method, p, nil, conn)
+	if err != nil {
+		return "", err
+	}
 	mpaClient := mpa.NewMpaClientProxy(conn)
 	ch, err := mpaClient.StoreOneMany(ctx, &mpa.StoreRequest{
-		Method:  method,
-		Message: &msg,
+		Method:        method,
+		Message:       &msg,
+		CustomPayload: customPayload,
 	})
 	if err != nil {
 		return "", err
@@ -307,7 +319,7 @@ func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryIntercepto
 	return func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
 		// Our hook will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
-		if method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
+		if shouldSkipMPA(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
 			return invoker(ctx, method, args, opts...)
 		}
 

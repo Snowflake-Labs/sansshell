@@ -195,6 +195,35 @@ func TestWaitForApprovalNotFound(t *testing.T) {
 	}
 }
 
+func TestStoreCustomPayloadAffectsID(t *testing.T) {
+	ctx := context.Background()
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+	baseReq := &mpa.StoreRequest{
+		Method:  "foobar",
+		Message: mustAny(anypb.New(&emptypb.Empty{})),
+	}
+	noPayload, err := serverSingleton.Store(rCtx, baseReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withPayload, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
+		Method:        baseReq.Method,
+		Message:       baseReq.Message,
+		CustomPayload: mustAny(anypb.New(&emptypb.Empty{})),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noPayload.Id == withPayload.Id {
+		t.Fatalf("expected different ids, got %q for both", noPayload.Id)
+	}
+	if withPayload.Action.CustomPayload == nil {
+		t.Fatal("expected custom_payload on stored action")
+	}
+}
+
 func TestActionIdIsDeterministic(t *testing.T) {
 	for _, tc := range []struct {
 		desc   string

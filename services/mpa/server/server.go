@@ -158,6 +158,7 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 		Justification: justification,
 		Method:        in.Method,
 		Message:       in.Message,
+		CustomPayload: in.CustomPayload,
 	}
 	id, err := actionId(action)
 	if err != nil {
