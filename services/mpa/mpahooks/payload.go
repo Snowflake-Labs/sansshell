@@ -26,7 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-type skipMPAKey struct{}
+type bypassMPAClientHookKey struct{}
 
 // PayloadProviderInput describes the inner RPC being stored as an MPA request.
 // Exactly one of Conn or Proxy should be set.
@@ -60,14 +60,14 @@ func getPayloadProvider() PayloadProvider {
 	return payloadProvider
 }
 
-// WithSkipMPA marks a context so MPA client interceptors pass the RPC through
-// without creating or waiting on an approval.
-func WithSkipMPA(ctx context.Context) context.Context {
-	return context.WithValue(ctx, skipMPAKey{}, true)
+// WithBypassMPAClientHook marks a context so MPA client interceptors pass the
+// RPC through without creating or waiting on an approval.
+func WithBypassMPAClientHook(ctx context.Context) context.Context {
+	return context.WithValue(ctx, bypassMPAClientHookKey{}, true)
 }
 
-func shouldSkipMPA(ctx context.Context) bool {
-	v, ok := ctx.Value(skipMPAKey{}).(bool)
+func shouldBypassMPAClientHook(ctx context.Context) bool {
+	v, ok := ctx.Value(bypassMPAClientHookKey{}).(bool)
 	return ok && v
 }
 

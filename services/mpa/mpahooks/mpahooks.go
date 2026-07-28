@@ -151,7 +151,7 @@ func UnaryClientIntercepter() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		// Our interceptor will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
-		if shouldSkipMPA(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
+		if shouldBypassMPAClientHook(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 
@@ -319,7 +319,7 @@ func ProxyClientUnaryInterceptor(state *util.ExecuteState) proxy.UnaryIntercepto
 	return func(ctx context.Context, conn *proxy.Conn, method string, args any, invoker proxy.UnaryInvoker, opts ...grpc.CallOption) (<-chan *proxy.Ret, error) {
 		// Our hook will run for all gRPC calls, including ones used inside the interceptor.
 		// We need to bail early on MPA-related ones to prevent infinite recursion.
-		if shouldSkipMPA(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
+		if shouldBypassMPAClientHook(ctx) || method == "/Mpa.Mpa/Store" || method == "/Mpa.Mpa/WaitForApproval" {
 			return invoker(ctx, method, args, opts...)
 		}
 
