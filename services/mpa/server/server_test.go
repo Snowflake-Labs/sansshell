@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
@@ -30,6 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func mustAny(a *anypb.Any, err error) *anypb.Any {
@@ -221,6 +223,34 @@ func TestStoreCustomPayloadAffectsID(t *testing.T) {
 	}
 	if withPayload.Action.CustomPayload == nil {
 		t.Fatal("expected custom_payload on stored action")
+	}
+}
+
+func TestStoreRejectsOversizedCustomPayload(t *testing.T) {
+	ctx := context.Background()
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+
+	// A payload just under the limit is accepted.
+	small := mustAny(anypb.New(wrapperspb.String(strings.Repeat("a", 1024))))
+	if _, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
+		Method:        "foobar-small-payload",
+		Message:       mustAny(anypb.New(&emptypb.Empty{})),
+		CustomPayload: small,
+	}); err != nil {
+		t.Fatalf("small custom_payload should be accepted, got %v", err)
+	}
+
+	// A payload over the limit is rejected with InvalidArgument.
+	big := mustAny(anypb.New(wrapperspb.String(strings.Repeat("a", maxCustomPayloadBytes+1))))
+	_, err := serverSingleton.Store(rCtx, &mpa.StoreRequest{
+		Method:        "foobar-big-payload",
+		Message:       mustAny(anypb.New(&emptypb.Empty{})),
+		CustomPayload: big,
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument for oversized custom_payload, got %v", err)
 	}
 }
 
