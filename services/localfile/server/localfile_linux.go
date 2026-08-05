@@ -143,7 +143,10 @@ func changeImmutable(path string, immutable bool) error {
 		attrs |= FS_IMMUTABLE_FL
 	}
 
-	f1, err := os.Open(path)
+	// Defense in depth for CWE-59: open with O_NOFOLLOW so that if the path is
+	// (or is swapped for) a symlink between the caller's guard and here, the
+	// open fails with ELOOP instead of following the link to another target.
+	f1, err := os.OpenFile(path, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return status.Errorf(codes.Internal, "stat: can't open %s - %v", path, err)
 	}
