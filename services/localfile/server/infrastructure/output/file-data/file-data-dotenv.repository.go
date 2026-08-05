@@ -26,8 +26,42 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/joho/godotenv"
 	"io"
+	"regexp"
 	"strings"
+	"unicode"
 )
+
+// dotEnvKeyPattern is the set of characters allowed in a dotenv key. It is
+// intentionally stricter than what godotenv accepts on read: a key must be a
+// POSIX-style environment variable name so it can never introduce a record
+// separator or otherwise alter the physical structure of the file.
+var dotEnvKeyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// validateDotEnvKey rejects any data key that is not a safe dotenv/POSIX
+// environment variable name.
+func validateDotEnvKey(key string) error {
+	if !dotEnvKeyPattern.MatchString(key) {
+		return fmt.Errorf("invalid data key %q: must match %s", key, dotEnvKeyPattern.String())
+	}
+	return nil
+}
+
+// validateDotEnvValue rejects values that cannot be safely represented on a
+// single unquoted dotenv line. A newline (CWE-93) would split the record into
+// multiple physical lines, turning a single authorized key write into arbitrary
+// additional environment variables; other control characters are rejected as
+// well since they have no legitimate use here and only add risk.
+func validateDotEnvValue(value string) error {
+	for _, r := range value {
+		switch {
+		case r == '\n' || r == '\r':
+			return fmt.Errorf("invalid value: newline character (0x%02X) is not allowed in a dotenv value", r)
+		case unicode.IsControl(r):
+			return fmt.Errorf("invalid value: control character (0x%02X) is not allowed in a dotenv value", r)
+		}
+	}
+	return nil
+}
 
 func newDotEnvFileDataRepository(context context.Context) FileDataRepository {
 	return &fileDataDotEnvRepository{
@@ -58,6 +92,15 @@ func (y *fileDataDotEnvRepository) GetDataByKey(filePath string, key string) (st
 func (y *fileDataDotEnvRepository) SetDataByKey(filePath string, key string, value string, valType pb.DataSetValueType) error {
 	if valType != pb.DataSetValueType_STRING_VAL {
 		return fmt.Errorf("unsupported value type: %s", valType)
+	}
+
+	// Fail closed before touching the file: a key or value that could alter the
+	// physical structure of the .env file must never be written.
+	if err := validateDotEnvKey(key); err != nil {
+		return err
+	}
+	if err := validateDotEnvValue(value); err != nil {
+		return err
 	}
 
 	f, err := fileUtils.OpenForOverwrite(filePath)
