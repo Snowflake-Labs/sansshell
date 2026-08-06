@@ -208,6 +208,67 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadWildcardManyFilesNoFDLeak(t *testing.T) {
+	// Reading a wildcard over many files must release each file's descriptors
+	// as it goes. If they were instead held until the whole request finished
+	// (the previous loop-scoped defers), a large directory would exhaust the
+	// process's file-descriptor limit. We constrain RLIMIT_NOFILE and read a
+	// directory with far more files than the limit so the leaky behaviour would
+	// fail with "too many open files".
+	var orig unix.Rlimit
+	if err := unix.Getrlimit(unix.RLIMIT_NOFILE, &orig); err != nil {
+		t.Skipf("cannot read RLIMIT_NOFILE: %v", err)
+	}
+	const softLimit = 128
+	if orig.Max < softLimit {
+		t.Skipf("hard RLIMIT_NOFILE (%d) too low for this test", orig.Max)
+	}
+	constrained := orig
+	constrained.Cur = softLimit
+	if err := unix.Setrlimit(unix.RLIMIT_NOFILE, &constrained); err != nil {
+		t.Skipf("cannot lower RLIMIT_NOFILE: %v", err)
+	}
+	t.Cleanup(func() { _ = unix.Setrlimit(unix.RLIMIT_NOFILE, &orig) })
+
+	dir := t.TempDir()
+	const (
+		numFiles     = 400
+		linesPerFile = 3
+	)
+	for i := 0; i < numFiles; i++ {
+		name := filepath.Join(dir, fmt.Sprintf("file-%03d.txt", i))
+		if err := os.WriteFile(name, []byte(strings.Repeat("line\n", linesPerFile)), 0644); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+	}
+
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewLocalFileClient(conn)
+	stream, err := client.Read(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{Filename: dir + "/*"},
+		},
+	})
+	testutil.FatalOnErr("Read failed", err, t)
+
+	buf := &bytes.Buffer{}
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		testutil.FatalOnErr("stream.Recv", err, t)
+		buf.Write(resp.Contents)
+	}
+	if got, want := bytes.Count(buf.Bytes(), []byte("\n")), numFiles*linesPerFile; got != want {
+		t.Fatalf("wildcard read returned %d lines, want %d", got, want)
+	}
+}
+
 func TestReadWithGeneratedFiles(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
