@@ -277,6 +277,23 @@ func (s *server) readSingleFile(ctx context.Context, file string, req *pb.ReadAc
 		if err == io.EOF {
 			// If we're not tailing then we're done.
 			if r != nil {
+				// In grep mode a file whose final line has no trailing newline
+				// leaves that last line buffered in trailingLine. Flush it
+				// through the matcher before finishing so the end of the file
+				// isn't silently dropped.
+				if req.Grep != "" && trailingLine.Len() > 0 {
+					line := trailingLine.String()
+					trailingLine.Reset()
+					if match := pattern.MatchString(line); match != req.InvertMatch {
+						s.mu.Lock()
+						sendErr := stream.Send(&pb.ReadReply{Contents: []byte(line)})
+						s.mu.Unlock()
+						if sendErr != nil {
+							recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "stream_send_err"))
+							return status.Errorf(codes.Internal, "can't send on stream for file %s: %v", file, sendErr)
+						}
+					}
+				}
 				break
 			}
 			if err := dataReady(td, stream); err != nil {

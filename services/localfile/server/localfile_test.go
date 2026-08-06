@@ -439,6 +439,120 @@ func TestReadWithGeneratedFiles(t *testing.T) {
 	}
 }
 
+// TestReadDifferentLengthFiles exercises reads over files of varying lengths,
+// including sizes that straddle the streaming chunk boundary and files whose
+// final line has no trailing newline. It guards against dropping the end of a
+// file. In particular the grep path used to discard a file's last line when it
+// wasn't newline-terminated (it stayed buffered in trailingLine and was never
+// flushed at EOF).
+func TestReadDifferentLengthFiles(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+	client := pb.NewLocalFileClient(conn)
+
+	// Force a small chunk so files of a few bytes already span multiple reads
+	// and some land exactly on a chunk boundary.
+	const chunk = 8
+	oldChunk := util.StreamingChunkSize
+	util.StreamingChunkSize = chunk
+	t.Cleanup(func() { util.StreamingChunkSize = oldChunk })
+
+	dir := t.TempDir()
+
+	writeFile := func(t *testing.T, name, content string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile(%s): %v", p, err)
+		}
+		return p
+	}
+
+	readAll := func(t *testing.T, filename, grep string, invert bool) []byte {
+		t.Helper()
+		stream, err := client.Read(ctx, &pb.ReadActionRequest{
+			Request:     &pb.ReadActionRequest_File{File: &pb.ReadRequest{Filename: filename}},
+			Grep:        grep,
+			InvertMatch: invert,
+		})
+		testutil.FatalOnErr("Read", err, t)
+		var buf bytes.Buffer
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			testutil.FatalOnErr("Recv", err, t)
+			buf.Write(resp.Contents)
+		}
+		return buf.Bytes()
+	}
+
+	// Part A: plain reads must return the file's bytes verbatim regardless of
+	// length relative to the chunk size. Keep these in their own directory so the
+	// wildcard check below (which globs a whole directory) sees only them.
+	plainDir := filepath.Join(dir, "plain")
+	if err := os.Mkdir(plainDir, 0755); err != nil {
+		t.Fatalf("Mkdir(%s): %v", plainDir, err)
+	}
+	lengths := []int{0, 1, chunk - 1, chunk, chunk + 1, 2 * chunk, 2*chunk + 3}
+	totalBytes := 0
+	for _, n := range lengths {
+		body := make([]byte, n)
+		for i := range body {
+			body[i] = byte('A' + (i % 26))
+		}
+		p := filepath.Join(plainDir, fmt.Sprintf("plain-%d.bin", n))
+		if err := os.WriteFile(p, body, 0644); err != nil {
+			t.Fatalf("WriteFile(%s): %v", p, err)
+		}
+		totalBytes += n
+		t.Run(fmt.Sprintf("plain len=%d", n), func(t *testing.T) {
+			if got := readAll(t, p, "", false); !bytes.Equal(got, body) {
+				t.Fatalf("len=%d: got %d bytes, want %d (equal=%v)", n, len(got), n, bytes.Equal(got, body))
+			}
+		})
+	}
+
+	// Part B: grep must return a file's final line even when it has no trailing
+	// newline, including when that final line spans a chunk boundary.
+	grepCases := []struct {
+		name    string
+		content string
+		grep    string
+		invert  bool
+		want    string
+	}{
+		{"unterminated last line", "first\nZEBRA_LAST", "ZEBRA_LAST", false, "ZEBRA_LAST"},
+		{"terminated last line", "first\nZEBRA_LAST\n", "ZEBRA_LAST", false, "ZEBRA_LAST\n"},
+		{"only line no newline", "ZEBRA_LAST", "ZEBRA_LAST", false, "ZEBRA_LAST"},
+		{"unterminated last line spanning chunks", "head\n" + strings.Repeat("q", chunk-2) + "ZEBRA", "ZEBRA", false, strings.Repeat("q", chunk-2) + "ZEBRA"},
+		{"unterminated last line no match", "first\nnope_here", "ZEBRA_LAST", false, ""},
+		{"invert keeps earlier drops unterminated match", "keepme\nDROP_LAST", "DROP", true, "keepme\n"},
+	}
+	for _, tc := range grepCases {
+		tc := tc
+		t.Run("grep/"+tc.name, func(t *testing.T) {
+			p := writeFile(t, "grep-"+strings.ReplaceAll(tc.name, " ", "_")+".txt", tc.content)
+			if got := readAll(t, p, tc.grep, tc.invert); string(got) != tc.want {
+				t.Fatalf("grep %q invert=%v on %q:\n got %q\nwant %q", tc.grep, tc.invert, tc.content, got, tc.want)
+			}
+		})
+	}
+
+	// Part C: a wildcard over the differently-sized plain files must return the
+	// full concatenated content (every file's end included). Ordering across the
+	// worker goroutines isn't deterministic, so compare the total byte count.
+	t.Run("wildcard total bytes", func(t *testing.T) {
+		got := readAll(t, plainDir+"/*", "", false)
+		if len(got) != totalBytes {
+			t.Fatalf("wildcard read returned %d bytes, want %d", len(got), totalBytes)
+		}
+	})
+}
+
 func TestTail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
