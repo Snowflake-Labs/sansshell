@@ -136,7 +136,15 @@ func (s *server) Read(req *pb.ReadActionRequest, stream pb.LocalFile_ReadServer)
 			regex = `(?i)` + regex
 		}
 
-		pattern = regexp.MustCompile(regex)
+		var err error
+		// The pattern is caller-controlled, so compile it defensively and
+		// surface a bad expression as InvalidArgument instead of panicking
+		// (regexp.MustCompile) and taking the whole server down.
+		pattern, err = regexp.Compile(regex)
+		if err != nil {
+			recorder.CounterOrLog(ctx, localfileReadFailureCounter, 1, attribute.String("reason", "invalid_grep_pattern"))
+			return status.Errorf(codes.InvalidArgument, "invalid grep pattern %q: %v", req.Grep, err)
+		}
 	}
 
 	var file string
