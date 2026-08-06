@@ -340,8 +340,10 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 		end++
 		fields := strings.Fields(text[end:])
 
-		// If it's a daemon that's in the 2nd field (or not)
-		if fields[1] == "daemon" {
+		// If it's a daemon that's in the 2nd field (or not). The thread name
+		// (and therefore the number of trailing fields) is attacker-controlled,
+		// so bounds-check before indexing to avoid crashing the server.
+		if len(fields) >= 2 && fields[1] == "daemon" {
 			stack.Daemon = true
 			// Remove that field and shift over so parsing below is simpler.
 			copy(fields[1:], fields[2:])
