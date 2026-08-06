@@ -47,6 +47,10 @@ var (
 )
 
 func (s *cserver) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfResponse, error) {
+	if req.GetLocation() == nil {
+		return nil, status.Error(codes.InvalidArgument, "location must be provided")
+	}
+
 	cfg, err := ini.LoadSources(ini.LoadOptions{
 		KeyValueDelimiters:      "=",
 		PreserveSurroundedQuote: true,
@@ -61,6 +65,10 @@ func (s *cserver) Read(_ context.Context, req *pb.ReadRequest) (*pb.FdbConfRespo
 }
 
 func (s *cserver) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty, error) {
+	if req.GetLocation() == nil {
+		return nil, status.Error(codes.InvalidArgument, "location must be provided")
+	}
+
 	section := req.Location.Section
 	if section == "" {
 		return nil, status.Error(codes.InvalidArgument, "section name can not be empty")
@@ -96,6 +104,10 @@ func (s *cserver) Write(_ context.Context, req *pb.WriteRequest) (*emptypb.Empty
 }
 
 func (s *cserver) Delete(_ context.Context, req *pb.DeleteRequest) (*emptypb.Empty, error) {
+	if req.GetLocation() == nil {
+		return nil, status.Error(codes.InvalidArgument, "location must be provided")
+	}
+
 	section := req.Location.Section
 	if section == "" {
 		return nil, status.Error(codes.InvalidArgument, "section name can not be empty")
