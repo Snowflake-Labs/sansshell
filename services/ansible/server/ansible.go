@@ -55,6 +55,11 @@ type server struct{}
 
 var re = regexp.MustCompile("[^a-zA-Z0-9_/]+")
 
+// userRe validates the become user. It must be a bare account name: it cannot
+// contain a slash or start with a dash, so it can never be interpreted as a
+// path or as another command-line flag.
+var userRe = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_-]*$`)
+
 func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	// Basic sanity checking up front.
@@ -95,11 +100,13 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 	}
 
 	if req.User != "" {
-		if req.User != re.ReplaceAllString(req.User, "") {
-			return nil, status.Errorf(codes.InvalidArgument, "user must only contain %s - %q is invalid", re.String(), req.User)
+		if !userRe.MatchString(req.User) {
+			return nil, status.Errorf(codes.InvalidArgument, "user %q is invalid; must match %s", req.User, userRe.String())
 		}
-		cmdArgs = append(cmdArgs, "--become")
-		cmdArgs = append(cmdArgs, req.User)
+		// Pass the user as a single --become-user token. Appending it as a
+		// separate argument after the boolean --become flag would leave it as an
+		// extra positional (a second playbook path).
+		cmdArgs = append(cmdArgs, "--become", "--become-user="+req.User)
 	}
 
 	if req.Check {
@@ -114,7 +121,9 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 		cmdArgs = append(cmdArgs, "-vvv")
 	}
 
-	cmdArgs = append(cmdArgs, req.Playbook)
+	// Terminate option parsing with "--" so the playbook path can never be
+	// interpreted as a flag regardless of its contents.
+	cmdArgs = append(cmdArgs, "--", req.Playbook)
 
 	cmdArgs = cmdArgsTransform(cmdArgs)
 

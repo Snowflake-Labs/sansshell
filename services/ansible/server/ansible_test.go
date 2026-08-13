@@ -166,6 +166,20 @@ func TestRun(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name:    "User with a slash is rejected",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    path,
+			user:    "/etc/passwd",
+			wantErr: true,
+		},
+		{
+			name:    "User starting with a dash is rejected",
+			bin:     testutil.ResolvePath(t, "cat"),
+			path:    path,
+			user:    "-oProxyCommand=x",
+			wantErr: true,
+		},
+		{
 			name: "Bad Key",
 			bin:  testutil.ResolvePath(t, "cat"),
 			path: path,
@@ -256,7 +270,7 @@ func TestRun(t *testing.T) {
 			name: "become",
 			wantArgs: append(baseArgs, []string{
 				"--become",
-				"USER",
+				"--become-user=USER",
 			}...),
 			req: &pb.RunRequest{
 				User: "USER",
@@ -288,7 +302,7 @@ func TestRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Things every request does the same.
 			tc.req.Playbook = path
-			tc.wantArgs = append(tc.wantArgs, path)
+			tc.wantArgs = append(tc.wantArgs, "--", path)
 
 			var savedArgs []string
 			diff := ""
