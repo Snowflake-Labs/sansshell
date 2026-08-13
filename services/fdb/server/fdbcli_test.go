@@ -2927,6 +2927,53 @@ func TestFDBCLI(t *testing.T) {
 			},
 		},
 		{
+			name: "snapshot command with whitespace is rejected",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Snapshot{
+							Snapshot: &pb.FDBCLISnapshot{
+								Command: "command ; kill all",
+							},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
+			name: "snapshot option with semicolon is rejected",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Snapshot{
+							Snapshot: &pb.FDBCLISnapshot{
+								Command: "command",
+								Options: []string{"ok", "bad;kill all"},
+							},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
+			name: "snapshot option starting with a dash is rejected",
+			req: &pb.FDBCLIRequest{
+				Commands: []*pb.FDBCLICommand{
+					{
+						Command: &pb.FDBCLICommand_Snapshot{
+							Snapshot: &pb.FDBCLISnapshot{
+								Command: "command",
+								Options: []string{"--exec=rm -rf /"},
+							},
+						},
+					},
+				},
+			},
+			wantAnyErr: true,
+		},
+		{
 			name: "status",
 			req: &pb.FDBCLIRequest{
 				Commands: []*pb.FDBCLICommand{
