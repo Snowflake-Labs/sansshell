@@ -701,9 +701,12 @@ func parseYumRepoQueryOutput(p *pb.SearchRequest, r io.Reader) (*pb.PackageInfoL
 
 func (s *server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	// check package name is set
-	if len(req.Name) == 0 {
-		return nil, status.Errorf(codes.InvalidArgument, "package name must be filled in")
+	// Validate the name like the other package operations do. Search previously
+	// only checked for emptiness, which let values such as "--config=/path" reach
+	// repoquery as a flag (argument injection).
+	if err := validateField("name", req.Name); err != nil {
+		recorder.CounterOrLog(ctx, packagesSearchFailureCounter, 1, attribute.String("reason", "invalid_name"))
+		return nil, err
 	}
 	// current search rpc requires at lease one search type: installed or available
 	if !req.Installed && !req.Available {
