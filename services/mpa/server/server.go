@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"reflect"
 	"sort"
 	"sync"
 	"time"
@@ -37,6 +36,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -94,13 +94,16 @@ func actionId(action *mpa.Action) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	h := sha256.New()
-	h.Write(canonical)
-	sum := h.Sum(nil)
-	// Humans are going to need to deal with these, so let's shorten them
-	// and make them a bit prettier.
-	return fmt.Sprintf("%x-%x-%x", sum[0:4], sum[4:8], sum[8:12]), nil
-
+	sum := sha256.Sum256(canonical)
+	// Use the full 256-bit digest as the id. A truncated hash (formerly the
+	// first 96 bits) narrows the collision search enough that an attacker can
+	// craft two distinct actions sharing an id, letting an approval recorded
+	// for one action satisfy authz for a different one. We keep the previous
+	// hyphen-grouped format (so old ids remain a prefix of the new ones) but
+	// emit every byte, making a collision computationally infeasible.
+	return fmt.Sprintf("%x-%x-%x-%x-%x-%x-%x-%x",
+		sum[0:4], sum[4:8], sum[8:12], sum[12:16],
+		sum[16:20], sum[20:24], sum[24:28], sum[28:32]), nil
 }
 
 type storedAction struct {
@@ -187,6 +190,11 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 			lastModified: time.Now(),
 		}
 		s.actions[id] = act
+	} else if !proto.Equal(act.action, action) {
+		// Same id but different action content can only happen on a hash
+		// collision. Refuse rather than silently binding this caller to an
+		// unrelated (possibly already-approved) action.
+		return nil, status.Error(codes.Internal, "action id collision detected")
 	}
 	return &mpa.StoreResponse{
 		Id:       id,
@@ -197,11 +205,33 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 
 func containsPrincipal(principals []*mpa.Principal, p *rpcauth.PrincipalAuthInput) bool {
 	for _, s := range principals {
-		if s.Id == p.ID && reflect.DeepEqual(s.Groups, p.Groups) {
+		if s.Id == p.ID && sameGroupSet(s.Groups, p.Groups) {
 			return true
 		}
 	}
 	return false
+}
+
+// sameGroupSet reports whether two group lists contain the same set of groups,
+// independent of ordering. Approver identity must not depend on the order in
+// which a caller's groups happen to be presented: an order-sensitive compare
+// (e.g. reflect.DeepEqual) lets the same principal be recorded as several
+// distinct approvers just by reordering their groups, inflating the approver
+// count and undermining multi-party approval.
+func sameGroupSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	as := append([]string(nil), a...)
+	bs := append([]string(nil), b...)
+	sort.Strings(as)
+	sort.Strings(bs)
+	for i := range as {
+		if as[i] != bs[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.ApproveResponse, error) {
@@ -217,6 +247,13 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	defer s.mu.Unlock()
 	act, ok := s.actions[id]
 	if !ok {
+		return nil, status.Error(codes.NotFound, "MPA request with provided input not found")
+	}
+	// Bind the approval to the exact action stored under this id. On a hash
+	// collision the approver's decoded action would differ from what is stored;
+	// treat that as not-found so an approval can never apply to a different
+	// action than the one the approver actually reviewed.
+	if !proto.Equal(act.action, in.Action) {
 		return nil, status.Error(codes.NotFound, "MPA request with provided input not found")
 	}
 	if act.action.User == p.ID {
