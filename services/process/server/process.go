@@ -122,6 +122,20 @@ var (
 		Description: "number of failures when performing process.GetMemoryDump"}
 )
 
+// memoryDumpTargetAllowed guards which PIDs GetMemoryDump may target. Producing
+// a memory dump of the sansshell server's own process would expose its in-memory
+// secrets (for example its private TLS key), and PID 1 is never a legitimate
+// dump target. Deployments can override this to enforce a narrower allowlist.
+var memoryDumpTargetAllowed = func(pid int) error {
+	if pid == os.Getpid() {
+		return status.Error(codes.PermissionDenied, "refusing to dump the sansshell server's own process")
+	}
+	if pid == 1 {
+		return status.Error(codes.PermissionDenied, "refusing to dump pid 1")
+	}
+	return nil
+}
+
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if PsBin == "" {
@@ -422,6 +436,10 @@ func (s *server) GetMemoryDump(req *pb.GetMemoryDumpRequest, stream pb.Process_G
 	if req.Pid <= 0 {
 		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+	if err := memoryDumpTargetAllowed(int(req.Pid)); err != nil {
+		recorder.CounterOrLog(ctx, processGetMemoryDumpFailureCounter, 1, attribute.String("reason", "forbidden_target"))
+		return err
 	}
 
 	var dest io.WriteCloser

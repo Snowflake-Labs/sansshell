@@ -613,6 +613,13 @@ func TestMemoryDump(t *testing.T) {
 	savedJmapBin := JmapBin
 	savedJmapFunc := jmapOptionsAndLocation
 
+	// These cases exercise the dump plumbing with canned data and use pid 1 as a
+	// placeholder target, so allow any target here. The target guard itself is
+	// covered by TestMemoryDumpTargetGuard.
+	savedMemoryDumpTargetAllowed := memoryDumpTargetAllowed
+	memoryDumpTargetAllowed = func(int) error { return nil }
+	t.Cleanup(func() { memoryDumpTargetAllowed = savedMemoryDumpTargetAllowed })
+
 	// The default one assumes we're just echoing file contents with cat.
 	var testInput string
 	gcoreOptionsAndLocation = func(req *pb.GetMemoryDumpRequest) ([]string, string, error) {
@@ -886,5 +893,18 @@ func TestMemoryDump(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMemoryDumpTargetGuard(t *testing.T) {
+	if err := memoryDumpTargetAllowed(1); err == nil {
+		t.Error("expected pid 1 to be rejected as a memory dump target")
+	}
+	if err := memoryDumpTargetAllowed(os.Getpid()); err == nil {
+		t.Error("expected the server's own pid to be rejected as a memory dump target")
+	}
+	other := os.Getpid() + 1 // guaranteed to be neither pid 1 nor our own pid
+	if err := memoryDumpTargetAllowed(other); err != nil {
+		t.Errorf("expected pid %d to be an allowed memory dump target, got: %v", other, err)
 	}
 }
