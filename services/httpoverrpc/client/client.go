@@ -25,6 +25,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -74,6 +75,7 @@ type proxyCmd struct {
 	hostname           string
 	insecureSkipVerify bool
 	stream             bool
+	skipCSRFProtection bool
 }
 
 func (*proxyCmd) Name() string { return "proxy" }
@@ -93,6 +95,7 @@ func (p *proxyCmd) SetFlags(f *flag.FlagSet) {
 	f.StringVar(&p.hostname, "hostname", "localhost", "ip address or domain name to specify host")
 	f.BoolVar(&p.insecureSkipVerify, "insecure-skip-tls-verify", false, "If true, skip TLS cert verification")
 	f.BoolVar(&p.stream, "stream", false, "If true, stream the response back to the client. Useful for large responses.")
+	f.BoolVar(&p.skipCSRFProtection, "skip-csrf-protection", false, "If true, disable CSRF protection (Sec-Fetch-Site and Origin checks) on the local proxy listener. Leave false unless a non-browser or legacy client is being used, since disabling it exposes the proxy to cross-site drive-by requests.")
 }
 
 // This context detachment is temporary until we use go1.21 and context.WithoutCancel is available.
@@ -202,6 +205,26 @@ func (p *proxyCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfa
 		if !p.allowAnyHost && host != "localhost" && net.ParseIP(host) == nil {
 			sendError(httpResp, http.StatusBadRequest, errors.New("refusing to serve non-ip non-localhost, set --allow-any-host to allow this call"))
 			return
+		}
+
+		// CSRF protection: this listener rides on the operator's ambient
+		// authorization to the remote host, so a page in the operator's browser
+		// could otherwise silently drive requests through it. Reject requests
+		// that a browser marks as cross-site, and require any supplied Origin to
+		// match the listener. Non-browser clients (curl, scripts) send neither
+		// header and are unaffected.
+		if !p.skipCSRFProtection {
+			if httpReq.Header.Get("Sec-Fetch-Site") == "cross-site" {
+				sendError(httpResp, http.StatusForbidden, errors.New("refusing cross-site request; set --skip-csrf-protection to allow this call"))
+				return
+			}
+			if origin := httpReq.Header.Get("Origin"); origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || u.Host != httpReq.Host {
+					sendError(httpResp, http.StatusForbidden, errors.New("refusing request whose Origin does not match Host; set --skip-csrf-protection to allow this call"))
+					return
+				}
+			}
 		}
 
 		var reqHeaders []*pb.Header
