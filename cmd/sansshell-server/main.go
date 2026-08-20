@@ -176,7 +176,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	server.Run(ctx,
+	opts := []server.Option{
 		server.WithLogger(logger),
 		server.WithCredSource(*credSource),
 		server.WithHostPort(*hostport),
@@ -186,14 +186,18 @@ func main() {
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpa.ServerMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
-		server.WithRawServerOption(func(s *grpc.Server) {
-			if *enableChannelz {
-				channelz.RegisterChannelzServiceToServer(s)
-			}
-		}),
+	}
+	// Only register the channelz introspection service when explicitly enabled;
+	// when disabled we do not register it at all rather than registering a no-op.
+	if *enableChannelz {
+		opts = append(opts, server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }))
+	}
+	opts = append(opts,
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
 		server.WithMetricsRecorder(recorder),
 		server.WithRefreshCredsOnSIGHUP(),
 	)
+
+	server.Run(ctx, opts...)
 }

@@ -86,7 +86,7 @@ var (
 	// peers, socket addresses and server internals to any caller able to reach
 	// the service, which is unnecessary for normal operation.
 	enableChannelz = flag.Bool("enable-channelz", false, "If true, register the gRPC channelz introspection service. Disabled by default as it exposes connection peers and server internals.")
-	version          bool
+	version        bool
 )
 
 func init() {
@@ -152,7 +152,7 @@ func main() {
 	// Create a an instance of logging/version for the proxy server itself.
 	srv := &ss.Server{}
 
-	server.Run(ctx,
+	opts := []server.Option{
 		server.WithLogger(logger),
 		server.WithAuthzPolicy(parsedOpaAuthPolicy),
 		server.WithClientAuthzPolicy(clientOpaAuthzPolicy),
@@ -162,14 +162,18 @@ func main() {
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpahooks.ProxyMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
-		server.WithRawServerOption(func(s *grpc.Server) {
-			if *enableChannelz {
-				channelz.RegisterChannelzServiceToServer(s)
-			}
-		}),
+	}
+	// Only register the channelz introspection service when explicitly enabled;
+	// when disabled we do not register it at all rather than registering a no-op.
+	if *enableChannelz {
+		opts = append(opts, server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }))
+	}
+	opts = append(opts,
 		server.WithRawServerOption(srv.Register),
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
 		server.WithMetricsRecorder(recorder),
 	)
+
+	server.Run(ctx, opts...)
 }
