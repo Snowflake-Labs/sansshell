@@ -23,12 +23,12 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/stats"
-	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/grpc/status"
 
 	"github.com/Snowflake-Labs/sansshell/proxy/proxy"
-	"github.com/Snowflake-Labs/sansshell/proxy/server"
 	tdpb "github.com/Snowflake-Labs/sansshell/proxy/testdata"
 	"github.com/Snowflake-Labs/sansshell/proxy/testutil"
 )
@@ -45,6 +45,8 @@ func (r *rpcStatusRecorder) TagRPC(ctx context.Context, _ *stats.RPCTagInfo) con
 
 func (r *rpcStatusRecorder) HandleRPC(_ context.Context, rs stats.RPCStats) {
 	if end, ok := rs.(*stats.End); ok {
+		// Dropping is deliberate. A blocking send inside a gRPC callback would stall the
+		// server, and the tests only ever read the first status.
 		select {
 		case r.statuses <- end.Error:
 		default:
@@ -58,23 +60,17 @@ func (r *rpcStatusRecorder) TagConn(ctx context.Context, _ *stats.ConnTagInfo) c
 
 func (r *rpcStatusRecorder) HandleConn(context.Context, stats.ConnStats) {}
 
-// startTestProxyRecordingStatus is startTestProxy with a stats handler attached, so a test can
-// assert on the status the proxy RPC finishes with.
-func startTestProxyRecordingStatus(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) (map[string]*bufconn.Listener, *rpcStatusRecorder) {
+func dialTestProxy(ctx context.Context, t *testing.T, targets []string) (*proxy.Conn, *rpcStatusRecorder) {
 	t.Helper()
 	rec := &rpcStatusRecorder{statuses: make(chan error, 16)}
-	targetDialer := server.NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	lis := bufconn.Listen(testutil.BufSize)
-	authz := testutil.NewAllowAllRPCAuthorizer(ctx, t)
-	grpcServer := grpc.NewServer(
-		grpc.StreamInterceptor(authz.AuthorizeStream),
-		grpc.StatsHandler(rec),
-	)
-	proxyServer := server.New(targetDialer, authz)
-	proxyServer.Register(grpcServer)
-	go func() { _ = grpcServer.Serve(lis) }()
-	t.Cleanup(func() { grpcServer.Stop() })
-	return map[string]*bufconn.Listener{"proxy": lis}, rec
+	bufMap := startTestProxy(ctx, t, testutil.StartTestDataServers(t, targets...), grpc.StatsHandler(rec))
+	conn, err := proxy.DialContext(ctx, "proxy", targets,
+		testutil.WithBufDialer(bufMap),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("DialContext: %v", err)
+	}
+	return conn, rec
 }
 
 func waitForRPCStatus(t *testing.T, rec *rpcStatusRecorder) error {
@@ -82,9 +78,22 @@ func waitForRPCStatus(t *testing.T, rec *rpcStatusRecorder) error {
 	select {
 	case err := <-rec.statuses:
 		return err
-	case <-time.After(30 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("the proxy RPC never finished")
 		return nil
+	}
+}
+
+func drainToEOF(t *testing.T, stream grpc.ClientStream) {
+	t.Helper()
+	for {
+		err := stream.RecvMsg(&tdpb.TestResponse{})
+		if err == io.EOF {
+			return
+		}
+		if err != nil {
+			t.Fatalf("RecvMsg: %v", err)
+		}
 	}
 }
 
@@ -101,15 +110,7 @@ func TestProxyRPCFinishesCleanlyAfterInvokeOneMany(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			targets := testutil.StartTestDataServers(t, tc.targets...)
-			bufMap, rec := startTestProxyRecordingStatus(ctx, t, targets)
-
-			conn, err := proxy.DialContext(ctx, "proxy", tc.targets,
-				testutil.WithBufDialer(bufMap),
-				grpc.WithTransportCredentials(insecure.NewCredentials()))
-			if err != nil {
-				t.Fatalf("DialContext: %v", err)
-			}
+			conn, rec := dialTestProxy(ctx, t, tc.targets)
 
 			retChan, err := conn.InvokeOneMany(ctx, "/Testdata.TestService/TestUnary",
 				&tdpb.TestRequest{Input: "hello"})
@@ -141,15 +142,7 @@ func TestProxyRPCFinishesCleanlyAfterInvokeOneMany(t *testing.T) {
 // messages before it closes.
 func TestProxyRPCFinishesCleanlyAfterServerStream(t *testing.T) {
 	ctx := context.Background()
-	targets := testutil.StartTestDataServers(t, "foo:123")
-	bufMap, rec := startTestProxyRecordingStatus(ctx, t, targets)
-
-	conn, err := proxy.DialContext(ctx, "proxy", []string{"foo:123"},
-		testutil.WithBufDialer(bufMap),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("DialContext: %v", err)
-	}
+	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
 
 	stream, err := conn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true},
 		"/Testdata.TestService/TestServerStream")
@@ -162,14 +155,124 @@ func TestProxyRPCFinishesCleanlyAfterServerStream(t *testing.T) {
 	if err := stream.CloseSend(); err != nil {
 		t.Fatalf("CloseSend: %v", err)
 	}
-	for {
-		err := stream.RecvMsg(&tdpb.TestResponse{})
-		if err == io.EOF {
-			break
+	drainToEOF(t, stream)
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if err := waitForRPCStatus(t, rec); err != nil {
+		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+}
+
+// The target is still sending when the client half-closes, so dispatch drains for longer here.
+func TestProxyRPCFinishesCleanlyAfterBidiStream(t *testing.T) {
+	ctx := context.Background()
+	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
+
+	stream, err := conn.NewStream(ctx,
+		&grpc.StreamDesc{ClientStreams: true, ServerStreams: true},
+		"/Testdata.TestService/TestBidiStream")
+	if err != nil {
+		t.Fatalf("NewStream: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := stream.SendMsg(&tdpb.TestRequest{Input: "hello"}); err != nil {
+			t.Fatalf("SendMsg: %v", err)
 		}
-		if err != nil {
+		if err := stream.RecvMsg(&tdpb.TestResponse{}); err != nil {
 			t.Fatalf("RecvMsg: %v", err)
 		}
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatalf("CloseSend: %v", err)
+	}
+	drainToEOF(t, stream)
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if err := waitForRPCStatus(t, rec); err != nil {
+		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+}
+
+// Here the target only replies once the client half-closes, so it finishes right after
+// ClientCloseAll rather than well before it.
+func TestProxyRPCFinishesCleanlyAfterClientStream(t *testing.T) {
+	ctx := context.Background()
+	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
+
+	stream, err := conn.NewStream(ctx, &grpc.StreamDesc{ClientStreams: true},
+		"/Testdata.TestService/TestClientStream")
+	if err != nil {
+		t.Fatalf("NewStream: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if err := stream.SendMsg(&tdpb.TestRequest{Input: "hello"}); err != nil {
+			t.Fatalf("SendMsg: %v", err)
+		}
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatalf("CloseSend: %v", err)
+	}
+	drainToEOF(t, stream)
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if err := waitForRPCStatus(t, rec); err != nil {
+		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+}
+
+// dispatch now waits for target streams to report, so a client that half-closes and walks
+// away must still not leave the RPC running. This passes without the dispatch change, since
+// the disconnect used to be what ended the RPC.
+func TestProxyRPCFinishesWhenClientAbandonsStream(t *testing.T) {
+	ctx := context.Background()
+	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
+
+	stream, err := conn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true},
+		"/Testdata.TestService/TestServerStream")
+	if err != nil {
+		t.Fatalf("NewStream: %v", err)
+	}
+	if err := stream.SendMsg(&tdpb.TestRequest{Input: "hello"}); err != nil {
+		t.Fatalf("SendMsg: %v", err)
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatalf("CloseSend: %v", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// The status may well be an error since the client is gone. Only termination matters.
+	waitForRPCStatus(t, rec)
+}
+
+// A target failure must still reach the caller, and must not taint the proxy's own status.
+func TestProxyRPCFinishesCleanlyWhenTargetErrors(t *testing.T) {
+	ctx := context.Background()
+	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
+
+	retChan, err := conn.InvokeOneMany(ctx, "/Testdata.TestService/TestUnary",
+		&tdpb.TestRequest{Input: "error"})
+	if err != nil {
+		t.Fatalf("InvokeOneMany: %v", err)
+	}
+	errors := 0
+	for r := range retChan {
+		if r.Error != nil {
+			errors++
+			if got := status.Code(r.Error); got != codes.Unknown {
+				t.Errorf("target error code = %s, want %s", got, codes.Unknown)
+			}
+		}
+	}
+	if errors != 1 {
+		t.Errorf("got %d target errors, want 1", errors)
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
