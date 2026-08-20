@@ -81,6 +81,11 @@ var (
 	verbosity        = flag.Int("v", 0, "Verbosity level. > 0 indicates more extensive logging")
 	validate         = flag.Bool("validate", false, "If true will evaluate the policy and then exit (non-zero on error)")
 	justification    = flag.Bool("justification", false, "If true then justification (which is logged and possibly validated) must be passed along in the client context Metadata with the key '"+rpcauth.ReqJustKey+"'")
+	// enableChannelz gates registration of the gRPC channelz introspection
+	// service. It is disabled by default because channelz exposes connection
+	// peers, socket addresses and server internals to any caller able to reach
+	// the service, which is unnecessary for normal operation.
+	enableChannelz = flag.Bool("enable-channelz", false, "If true, register the gRPC channelz introspection service. Disabled by default as it exposes connection peers and server internals.")
 	version          bool
 )
 
@@ -157,7 +162,11 @@ func main() {
 		server.WithAuthzHook(rpcauth.PeerPrincipalFromCertHook()),
 		server.WithAuthzHook(mpahooks.ProxyMPAAuthzHook()),
 		server.WithRawServerOption(func(s *grpc.Server) { reflection.Register(s) }),
-		server.WithRawServerOption(func(s *grpc.Server) { channelz.RegisterChannelzServiceToServer(s) }),
+		server.WithRawServerOption(func(s *grpc.Server) {
+			if *enableChannelz {
+				channelz.RegisterChannelzServiceToServer(s)
+			}
+		}),
 		server.WithRawServerOption(srv.Register),
 		server.WithDebugPort(*debugport),
 		server.WithMetricsPort(*metricsport),
