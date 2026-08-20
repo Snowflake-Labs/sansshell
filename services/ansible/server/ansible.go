@@ -38,6 +38,18 @@ var (
 	// AnsiblePlaybookBin is the location to the ansible binary. Binding this to a flag is often useful.
 	AnsiblePlaybookBin = "/usr/bin/ansible-playbook"
 
+	// AnsibleConfigFile pins the configuration file used by ansible-playbook via
+	// the ANSIBLE_CONFIG environment variable. Pinning it is important because
+	// ansible otherwise auto-discovers a config file from the process working
+	// directory (./ansible.cfg) or the home directory (~/.ansible.cfg). Since the
+	// server runs privileged and its working directory is not guaranteed to be
+	// trusted, a caller able to drop a file in those locations could supply a
+	// config that points plugin/library/roles paths at attacker-controlled code
+	// and gain execution on the next run. Defaulting to os.DevNull loads an empty
+	// config and disables that discovery; set it to a trusted path to supply a
+	// real configuration. Binding this to a flag is often useful.
+	AnsibleConfigFile = os.DevNull
+
 	// A test hook so we can take the args passed and transform them as needed.
 	cmdArgsTransform = func(input []string) []string {
 		return input
@@ -118,7 +130,11 @@ func (s *server) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunReply, err
 
 	cmdArgs = cmdArgsTransform(cmdArgs)
 
-	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs)
+	// Pin ANSIBLE_CONFIG so ansible does not auto-load ./ansible.cfg from the
+	// (untrusted) working directory or ~/.ansible.cfg from the home directory.
+	run, err := util.RunCommand(ctx, AnsiblePlaybookBin, cmdArgs,
+		util.EnvVar("ANSIBLE_CONFIG="+AnsibleConfigFile),
+	)
 	if err != nil {
 		recorder.CounterOrLog(ctx, ansibleRunFailureCounter, 1, attribute.String("reason", "run_err"))
 		return nil, err
