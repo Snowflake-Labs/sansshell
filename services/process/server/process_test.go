@@ -888,3 +888,44 @@ func TestMemoryDump(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactProcessArgs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "no secrets is unchanged",
+			in:   "/usr/bin/myapp --verbose --config /etc/app.conf",
+			want: "/usr/bin/myapp --verbose --config /etc/app.conf",
+		},
+		{
+			name: "long flag with equals",
+			in:   "mysql --password=hunter2 --host db",
+			want: "mysql --password=REDACTED --host db",
+		},
+		{
+			name: "long flag with space",
+			in:   "tool --token abcdef123 --other keep",
+			want: "tool --token REDACTED --other keep",
+		},
+		{
+			name: "env style assignment",
+			in:   "DB_PASSWORD=s3cret /usr/bin/server",
+			want: "DB_PASSWORD=REDACTED /usr/bin/server",
+		},
+		{
+			name: "api key variants",
+			in:   "svc --api-key=XYZ --access_key=ABC",
+			want: "svc --api-key=REDACTED --access_key=REDACTED",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			if got := redactProcessArgs(tc.in); got != tc.want {
+				t.Errorf("redactProcessArgs(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}

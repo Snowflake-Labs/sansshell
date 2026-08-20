@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 
@@ -122,6 +123,20 @@ var (
 		Description: "number of failures when performing process.GetMemoryDump"}
 )
 
+// secretArgPattern matches the value of a command-line flag or environment
+// assignment whose name suggests it carries a credential (password, token, key,
+// etc.). The name and delimiter are captured so they can be preserved while the
+// value is masked.
+var secretArgPattern = regexp.MustCompile(`(?i)(-{1,2}(?:password|passwd|pwd|token|secret|api[-_]?key|access[-_]?key|auth[-_]?token|credential|private[-_]?key)[=\s]+|[A-Za-z0-9_]*(?:password|passwd|secret|token|apikey|api_key|credential)[A-Za-z0-9_]*=)(\S+)`)
+
+// redactProcessArgs masks values that look like secrets in a process command
+// line. Command-line arguments frequently contain credentials, so List redacts
+// them by default. Deployments that need the raw command line can override this
+// (for example, set it to a function that returns its input unchanged).
+var redactProcessArgs = func(cmd string) string {
+	return secretArgPattern.ReplaceAllString(cmd, "${1}REDACTED")
+}
+
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if PsBin == "" {
@@ -159,13 +174,16 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 				return nil, status.Errorf(codes.InvalidArgument, "pid %d does not exist", pid)
 			}
 
-			reply.ProcessEntries = append(reply.ProcessEntries, entries[pid])
+			entry := entries[pid]
+			entry.Command = redactProcessArgs(entry.Command)
+			reply.ProcessEntries = append(reply.ProcessEntries, entry)
 		}
 		return reply, nil
 	}
 
 	// If not filtering fill everything in and return. We don't guarentee any ordering.
 	for _, e := range entries {
+		e.Command = redactProcessArgs(e.Command)
 		reply.ProcessEntries = append(reply.ProcessEntries, e)
 	}
 	return reply, nil
