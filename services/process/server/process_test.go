@@ -288,6 +288,11 @@ func TestPstackNative(t *testing.T) {
 
 	client := pb.NewProcessClient(conn)
 
+	// Inspect the parent pid; allow it regardless of the default guard.
+	savedStacksTargetAllowed := stacksTargetAllowed
+	stacksTargetAllowed = func(int) error { return nil }
+	t.Cleanup(func() { stacksTargetAllowed = savedStacksTargetAllowed })
+
 	// Our actual pid may not have symbols but our runner will.
 	resp, err := client.GetStacks(ctx, &pb.GetStacksRequest{
 		Pid: int64(os.Getppid()),
@@ -344,6 +349,13 @@ func TestPstack(t *testing.T) {
 		PstackBin = savedPstackBin
 		pstackOptions = savedFunc
 	})
+
+	// These cases exercise the parsing with canned data and use pid 1 as a
+	// placeholder target, so allow any target here. The target guard itself is
+	// covered by TestStacksTargetGuard.
+	savedStacksTargetAllowed := stacksTargetAllowed
+	stacksTargetAllowed = func(int) error { return nil }
+	t.Cleanup(func() { stacksTargetAllowed = savedStacksTargetAllowed })
 
 	client := pb.NewProcessClient(conn)
 
@@ -507,6 +519,12 @@ func TestJstack(t *testing.T) {
 		JstackBin = savedJstackBin
 		jstackOptions = savedFunc
 	})
+
+	// Placeholder pid 1 is used below with canned data; allow any target here.
+	// The target guard itself is covered by TestStacksTargetGuard.
+	savedStacksTargetAllowed := stacksTargetAllowed
+	stacksTargetAllowed = func(int) error { return nil }
+	t.Cleanup(func() { stacksTargetAllowed = savedStacksTargetAllowed })
 
 	goodJstackOptions := jstackOptions
 
@@ -906,5 +924,18 @@ func TestMemoryDumpTargetGuard(t *testing.T) {
 	other := os.Getpid() + 1 // guaranteed to be neither pid 1 nor our own pid
 	if err := memoryDumpTargetAllowed(other); err != nil {
 		t.Errorf("expected pid %d to be an allowed memory dump target, got: %v", other, err)
+	}
+}
+
+func TestStacksTargetGuard(t *testing.T) {
+	if err := stacksTargetAllowed(1); err == nil {
+		t.Error("expected pid 1 to be rejected as a stack-inspection target")
+	}
+	if err := stacksTargetAllowed(os.Getpid()); err == nil {
+		t.Error("expected the server's own pid to be rejected as a stack-inspection target")
+	}
+	other := os.Getpid() + 1 // guaranteed to be neither pid 1 nor our own pid
+	if err := stacksTargetAllowed(other); err != nil {
+		t.Errorf("expected pid %d to be an allowed stack-inspection target, got: %v", other, err)
 	}
 }

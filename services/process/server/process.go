@@ -136,6 +136,21 @@ var memoryDumpTargetAllowed = func(pid int) error {
 	return nil
 }
 
+// stacksTargetAllowed guards which PIDs the stack-inspection RPCs (GetStacks and
+// GetJavaStacks) may target. Attaching to the sansshell server's own process can
+// expose its in-memory secrets, and PID 1 is never a legitimate target. These
+// RPCs also briefly stop the target, so restricting them limits abuse. Deployments
+// can override this to enforce a narrower allowlist.
+var stacksTargetAllowed = func(pid int) error {
+	if pid == os.Getpid() {
+		return status.Error(codes.PermissionDenied, "refusing to inspect the sansshell server's own process")
+	}
+	if pid == 1 {
+		return status.Error(codes.PermissionDenied, "refusing to inspect pid 1")
+	}
+	return nil
+}
+
 func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if PsBin == "" {
@@ -210,6 +225,10 @@ func (s *server) GetStacks(ctx context.Context, req *pb.GetStacksRequest) (*pb.G
 	if req.Pid <= 0 {
 		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+	if err := stacksTargetAllowed(int(req.Pid)); err != nil {
+		recorder.CounterOrLog(ctx, processGetStacksFailureCounter, 1, attribute.String("reason", "forbidden_target"))
+		return nil, err
 	}
 
 	cmdName := PstackBin
@@ -297,6 +316,10 @@ func (s *server) GetJavaStacks(ctx context.Context, req *pb.GetJavaStacksRequest
 	if req.Pid <= 0 {
 		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "invalid_pid"))
 		return nil, status.Error(codes.InvalidArgument, "pid must be non-zero and positive")
+	}
+	if err := stacksTargetAllowed(int(req.Pid)); err != nil {
+		recorder.CounterOrLog(ctx, processGetJavaStacksFailureCounter, 1, attribute.String("reason", "forbidden_target"))
+		return nil, err
 	}
 
 	cmdName := JstackBin
