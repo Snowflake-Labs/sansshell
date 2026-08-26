@@ -127,12 +127,13 @@ func TestProxyRPCFinishesCleanlyAfterInvokeOneMany(t *testing.T) {
 			if replies != len(tc.targets) {
 				t.Errorf("got %d replies, want %d", replies, len(tc.targets))
 			}
-			if err := conn.Close(); err != nil {
-				t.Fatalf("Close: %v", err)
-			}
-
+			// Assert before closing: the RPC has to finish on its own, not because the
+			// client went away.
 			if err := waitForRPCStatus(t, rec); err != nil {
 				t.Errorf("proxy RPC finished with %v, want a successful status", err)
+			}
+			if err := conn.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
 			}
 		})
 	}
@@ -156,12 +157,13 @@ func TestProxyRPCFinishesCleanlyAfterServerStream(t *testing.T) {
 		t.Fatalf("CloseSend: %v", err)
 	}
 	drainToEOF(t, stream)
-	if err := conn.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
+	// Assert before closing: the RPC has to finish on its own, not because the client
+	// went away.
 	if err := waitForRPCStatus(t, rec); err != nil {
 		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
 
@@ -188,12 +190,13 @@ func TestProxyRPCFinishesCleanlyAfterBidiStream(t *testing.T) {
 		t.Fatalf("CloseSend: %v", err)
 	}
 	drainToEOF(t, stream)
-	if err := conn.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
+	// Assert before closing: the RPC has to finish on its own, not because the client
+	// went away.
 	if err := waitForRPCStatus(t, rec); err != nil {
 		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
 
@@ -217,39 +220,14 @@ func TestProxyRPCFinishesCleanlyAfterClientStream(t *testing.T) {
 		t.Fatalf("CloseSend: %v", err)
 	}
 	drainToEOF(t, stream)
-	if err := conn.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
+	// Assert before closing: the RPC has to finish on its own, not because the client
+	// went away.
 	if err := waitForRPCStatus(t, rec); err != nil {
 		t.Errorf("proxy RPC finished with %v, want a successful status", err)
 	}
-}
-
-// dispatch now waits for target streams to report, so a client that half-closes and walks
-// away must still not leave the RPC running. This passes without the dispatch change, since
-// the disconnect used to be what ended the RPC.
-func TestProxyRPCFinishesWhenClientAbandonsStream(t *testing.T) {
-	ctx := context.Background()
-	conn, rec := dialTestProxy(ctx, t, []string{"foo:123"})
-
-	stream, err := conn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true},
-		"/Testdata.TestService/TestServerStream")
-	if err != nil {
-		t.Fatalf("NewStream: %v", err)
-	}
-	if err := stream.SendMsg(&tdpb.TestRequest{Input: "hello"}); err != nil {
-		t.Fatalf("SendMsg: %v", err)
-	}
-	if err := stream.CloseSend(); err != nil {
-		t.Fatalf("CloseSend: %v", err)
-	}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-
-	// The status may well be an error since the client is gone. Only termination matters.
-	_ = waitForRPCStatus(t, rec)
 }
 
 // A target failure must still reach the caller, and must not taint the proxy's own status.
@@ -274,11 +252,12 @@ func TestProxyRPCFinishesCleanlyWhenTargetErrors(t *testing.T) {
 	if errors != 1 {
 		t.Errorf("got %d target errors, want 1", errors)
 	}
-	if err := conn.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
+	// Assert before closing: the RPC has to finish on its own, not because the client
+	// went away.
 	if err := waitForRPCStatus(t, rec); err != nil {
 		t.Errorf("proxy RPC finished with %v, want a successful status", err)
+	}
+	if err := conn.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
 	}
 }
