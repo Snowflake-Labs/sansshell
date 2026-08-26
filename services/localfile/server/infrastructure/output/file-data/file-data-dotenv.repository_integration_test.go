@@ -17,9 +17,13 @@ Copyright (c) 2024 Snowflake Inc. All rights reserved.
 package file_data
 
 import (
+	"context"
 	"errors"
 	pb "github.com/Snowflake-Labs/sansshell/services/localfile"
+	"github.com/joho/godotenv"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -328,6 +332,208 @@ func Test_FileDataDonEnvRepository_SetDataByKey(t *testing.T) {
 		if err.Error() != expectedError {
 			t.Errorf("Expected \"%s\", but got \"%s\"", expectedError, err.Error())
 			return
+		}
+	})
+}
+
+// writeDotEnvTmpFile writes content to a throwaway .env file in a per-test temp
+// directory and returns its path.
+func writeDotEnvTmpFile(t *testing.T, content string) string {
+	t.Helper()
+	filePath := filepath.Join(t.TempDir(), "test.env")
+	if err := os.WriteFile(filePath, []byte(content), 0600); err != nil {
+		t.Fatalf("failed to write tmp file: %s", err)
+	}
+	return filePath
+}
+
+// TestIntegration_FileDataDotEnvRepository_SetDataByKey_RejectsInjection is the
+// CWE-93 regression suite: a caller authorized for a single dotenv key must
+// never be able to inject additional environment variables via a newline (or
+// an unsafe key), and a rejected write must not modify the file.
+func TestIntegration_FileDataDotEnvRepository_SetDataByKey_RejectsInjection(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") == "" {
+		t.Skip("skipping integration test")
+	}
+
+	const initialContent = "SOME=VAR\n"
+
+	rejectionTests := []struct {
+		name           string
+		key            string
+		value          string
+		expectedErrSub string
+	}{
+		{
+			name:           "It should reject a newline-injected value (LD_PRELOAD PoC)",
+			key:            "SOME",
+			value:          "info\nLD_PRELOAD=/tmp/evil.so",
+			expectedErrSub: "newline character",
+		},
+		{
+			name:           "It should reject a carriage-return-injected value",
+			key:            "SOME",
+			value:          "info\rLD_PRELOAD=/tmp/evil.so",
+			expectedErrSub: "newline character",
+		},
+		{
+			name:           "It should reject a CRLF-injected value",
+			key:            "SOME",
+			value:          "info\r\nLD_PRELOAD=/tmp/evil.so",
+			expectedErrSub: "newline character",
+		},
+		{
+			name:           "It should reject other control characters in a value",
+			key:            "SOME",
+			value:          "info\x00evil",
+			expectedErrSub: "control character",
+		},
+		{
+			name:           "It should reject a newline-injected key",
+			key:            "SOME\nLD_PRELOAD",
+			value:          "info",
+			expectedErrSub: "invalid data key",
+		},
+		{
+			name:           "It should reject a key containing an equals sign",
+			key:            "SOME=LD_PRELOAD",
+			value:          "info",
+			expectedErrSub: "invalid data key",
+		},
+		{
+			name:           "It should reject a key with a leading digit",
+			key:            "1SOME",
+			value:          "info",
+			expectedErrSub: "invalid data key",
+		},
+		{
+			name:           "It should reject a key with a dot",
+			key:            "SOME.KEY",
+			value:          "info",
+			expectedErrSub: "invalid data key",
+		},
+		{
+			name:           "It should reject a key with a space",
+			key:            "SOME KEY",
+			value:          "info",
+			expectedErrSub: "invalid data key",
+		},
+	}
+
+	for _, test := range rejectionTests {
+		t.Run(test.name, func(t *testing.T) {
+			// ARRANGE
+			repo := newDotEnvFileDataRepository(context.Background())
+			filePath := writeDotEnvTmpFile(t, initialContent)
+
+			// ACT
+			err := repo.SetDataByKey(filePath, test.key, test.value, pb.DataSetValueType_STRING_VAL)
+
+			// ASSERT: the write is rejected ...
+			if err == nil {
+				t.Fatalf("Expected error, but got nil")
+			}
+			if !strings.Contains(err.Error(), test.expectedErrSub) {
+				t.Fatalf("Expected error containing %q, but got %q", test.expectedErrSub, err.Error())
+			}
+
+			// ... and the file is left untouched (writes nothing).
+			after, readErr := os.ReadFile(filePath)
+			if readErr != nil {
+				t.Fatalf("failed to read file after rejected write: %s", readErr)
+			}
+			if string(after) != initialContent {
+				t.Fatalf("Expected file to be unchanged %q, but got %q", initialContent, string(after))
+			}
+
+			// ... and no injected variable is observable by a dotenv consumer.
+			envMap, readErr := godotenv.Read(filePath)
+			if readErr != nil {
+				t.Fatalf("failed to parse file after rejected write: %s", readErr)
+			}
+			if _, injected := envMap["LD_PRELOAD"]; injected {
+				t.Fatalf("LD_PRELOAD was injected into the .env file: %#v", envMap)
+			}
+			if len(envMap) != 1 {
+				t.Fatalf("Expected exactly one variable after rejected write, got %#v", envMap)
+			}
+		})
+	}
+
+	t.Run("It should keep a single physical line across a two-call rewrite attempt", func(t *testing.T) {
+		// ARRANGE
+		repo := newDotEnvFileDataRepository(context.Background())
+		filePath := writeDotEnvTmpFile(t, initialContent)
+
+		// ACT 1: a legitimate write for the authorized key succeeds.
+		if err := repo.SetDataByKey(filePath, "SOME", "hello", pb.DataSetValueType_STRING_VAL); err != nil {
+			t.Fatalf("Unexpected error on legitimate write: %s", err)
+		}
+
+		// ACT 2: an injection attempt on the same key is rejected.
+		err := repo.SetDataByKey(filePath, "SOME", "world\nLD_PRELOAD=/tmp/evil.so", pb.DataSetValueType_STRING_VAL)
+		if err == nil {
+			t.Fatalf("Expected error on injection attempt, but got nil")
+		}
+
+		// ASSERT: only the authorized key exists, with its last legitimate value.
+		envMap, readErr := godotenv.Read(filePath)
+		if readErr != nil {
+			t.Fatalf("failed to parse file: %s", readErr)
+		}
+		if _, injected := envMap["LD_PRELOAD"]; injected {
+			t.Fatalf("LD_PRELOAD was injected: %#v", envMap)
+		}
+		if got := envMap["SOME"]; got != "hello" {
+			t.Fatalf("Expected SOME=hello, got SOME=%q", got)
+		}
+		if len(envMap) != 1 {
+			t.Fatalf("Expected exactly one variable, got %#v", envMap)
+		}
+	})
+}
+
+// TestIntegration_FileDataDotEnvRepository_SetDataByKey_HappyPath verifies the
+// guard does not break legitimate writes (overwrite and append of safe keys/values).
+func TestIntegration_FileDataDotEnvRepository_SetDataByKey_HappyPath(t *testing.T) {
+	if os.Getenv("INTEGRATION_TEST") == "" {
+		t.Skip("skipping integration test")
+	}
+
+	t.Run("It should overwrite an existing key", func(t *testing.T) {
+		repo := newDotEnvFileDataRepository(context.Background())
+		filePath := writeDotEnvTmpFile(t, "SOME=VAR\n")
+
+		if err := repo.SetDataByKey(filePath, "SOME", "changed", pb.DataSetValueType_STRING_VAL); err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+
+		envMap, err := godotenv.Read(filePath)
+		if err != nil {
+			t.Fatalf("failed to parse file: %s", err)
+		}
+		if got := envMap["SOME"]; got != "changed" {
+			t.Fatalf("Expected SOME=changed, got SOME=%q", got)
+		}
+	})
+
+	t.Run("It should append a new key", func(t *testing.T) {
+		repo := newDotEnvFileDataRepository(context.Background())
+		filePath := writeDotEnvTmpFile(t, "SOME=VAR\n")
+
+		if err := repo.SetDataByKey(filePath, "NEW_KEY", "new_val", pb.DataSetValueType_STRING_VAL); err != nil {
+			t.Fatalf("Unexpected error: %s", err)
+		}
+
+		envMap, err := godotenv.Read(filePath)
+		if err != nil {
+			t.Fatalf("failed to parse file: %s", err)
+		}
+		if got := envMap["SOME"]; got != "VAR" {
+			t.Fatalf("Expected existing SOME=VAR to be preserved, got SOME=%q", got)
+		}
+		if got := envMap["NEW_KEY"]; got != "new_val" {
+			t.Fatalf("Expected NEW_KEY=new_val, got NEW_KEY=%q", got)
 		}
 	})
 }
