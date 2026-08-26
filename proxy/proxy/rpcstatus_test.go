@@ -249,7 +249,7 @@ func TestProxyRPCFinishesWhenClientAbandonsStream(t *testing.T) {
 	}
 
 	// The status may well be an error since the client is gone. Only termination matters.
-	waitForRPCStatus(t, rec)
+	_ = waitForRPCStatus(t, rec)
 }
 
 // A target failure must still reach the caller, and must not taint the proxy's own status.
