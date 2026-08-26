@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -45,6 +46,11 @@ var (
 	maxMPAApprovals = 1000
 	// We also hardcode a max age to prevent unreasonably-old approvals from being used.
 	maxMPAApprovedAge = 24 * time.Hour
+	// custom_payload is attacker-influenced (it is set by the requesting client),
+	// so we cap its serialized size to keep a single Store call from bloating the
+	// in-memory action store. Integrators only need room for small metadata such
+	// as a list of required approver roles.
+	maxCustomPayloadBytes = 16 * 1024
 )
 
 // ServerMPAAuthzHook populates approver information based on an internal MPA store.
@@ -153,11 +159,18 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 		return nil, status.Error(codes.FailedPrecondition, "unable to determine caller's identity")
 	}
 
+	if in.CustomPayload != nil {
+		if n := proto.Size(in.CustomPayload); n > maxCustomPayloadBytes {
+			return nil, status.Errorf(codes.InvalidArgument, "custom_payload too large: %d bytes (max %d)", n, maxCustomPayloadBytes)
+		}
+	}
+
 	action := &mpa.Action{
 		User:          p.ID,
 		Justification: justification,
 		Method:        in.Method,
 		Message:       in.Message,
+		CustomPayload: in.CustomPayload,
 	}
 	id, err := actionId(action)
 	if err != nil {

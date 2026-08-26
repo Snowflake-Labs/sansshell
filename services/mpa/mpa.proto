@@ -61,6 +61,8 @@ message Action {
   string method = 3;
   // The request protocol buffer.
   google.protobuf.Any message = 4;
+  // Optional extension payload (included in the action hash).
+  google.protobuf.Any custom_payload = 5;
 }
 
 message Principal {
@@ -76,6 +78,8 @@ message StoreRequest {
   string method = 1;
   // The request protocol buffer. 
   google.protobuf.Any message = 2;
+  // Optional extension payload stored with the action.
+  google.protobuf.Any custom_payload = 3;
 }
 
 message StoreResponse {
