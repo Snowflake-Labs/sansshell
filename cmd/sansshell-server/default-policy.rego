@@ -38,6 +38,9 @@ allow {
 }
 
 allow {
+	input.type = "FdbExec.FdbExecRequest"
+}
+allow {
 	input.type = "Exec.ExecRequest"
 	input.message.command = "/bin/echo"
 	input.message.args = ["hello", "world"]
