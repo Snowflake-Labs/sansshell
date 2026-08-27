@@ -28,7 +28,9 @@ import (
 
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/Snowflake-Labs/sansshell/services/fdb"
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
@@ -308,6 +310,27 @@ database:connection:string:key = "connection://host:port/db"`,
 				t.Errorf("expected file group - group id: %d, got: %d", originGid, gotFileInfo.Sys().(*syscall.Stat_t).Gid)
 			}
 		})
+	}
+}
+
+func TestConfNilLocation(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewConfClient(conn)
+
+	// A request with an omitted Location must be rejected with InvalidArgument
+	// rather than crashing the server with a nil-pointer dereference.
+	if _, err := client.Read(ctx, &pb.ReadRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("Read with nil location: got err %v, want InvalidArgument", err)
+	}
+	if _, err := client.Write(ctx, &pb.WriteRequest{Value: "x"}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("Write with nil location: got err %v, want InvalidArgument", err)
+	}
+	if _, err := client.Delete(ctx, &pb.DeleteRequest{}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("Delete with nil location: got err %v, want InvalidArgument", err)
 	}
 }
 

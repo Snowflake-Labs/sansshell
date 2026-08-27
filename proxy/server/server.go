@@ -261,6 +261,9 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 			// received with this stream ID will return an error to the
 			// client.
 			streamSet.Remove(closedStream)
+			if requestChan == nil && streamSet.Empty() {
+				return nil
+			}
 		case req, ok := <-requestChan:
 			if !ok {
 				// The request channel has been closed
@@ -273,7 +276,14 @@ func dispatch(ctx context.Context, stream pb.Proxy_ProxyServer, requestChan chan
 				// In either case, we should let the target streams
 				// know that no further requests will be arriving
 				streamSet.ClientCloseAll()
-				return nil
+				if streamSet.Empty() {
+					return nil
+				}
+				// The streams we just closed still have to report on doneChan. If we return
+				// now nobody reads it, so they block on that send forever and Wait below
+				// never returns.
+				requestChan = nil
+				continue
 			}
 			if !addedPeerToContext {
 				// Peer information might not be properly populated until rpcauth
