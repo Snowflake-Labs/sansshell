@@ -65,7 +65,8 @@ var (
 	AbsolutePathError = status.Error(codes.InvalidArgument, "filename path must be absolute and clean")
 
 	// For testing since otherwise tests have to run as root for these.
-	chown             = unix.Chown
+	// Lchown (not Chown) so ownership changes never follow a symlink (CWE-59).
+	chown             = unix.Lchown
 	changeImmutableOS = changeImmutable
 
 	// ReadTimeout is how long tail should wait on a given poll call
@@ -843,6 +844,17 @@ func validateAndSetAttrs(filename string, attrs []*pb.FileAttribute, doImmutable
 			immutable = a.Immutable
 			setImmutable = true
 		}
+	}
+
+	// Primary guard against symlink following (CWE-59): never operate on a
+	// path that is a symlink. Without this, a principal confined by OPA to a
+	// directory prefix could create a symlink inside that prefix pointing at an
+	// arbitrary target (e.g. /etc/shadow) and then chown/chmod/immutable the
+	// target, escaping the confinement. Lstat inspects the link itself.
+	if fi, err := os.Lstat(filename); err != nil {
+		return nil, status.Errorf(codes.Internal, "error from lstat: %v", err)
+	} else if fi.Mode()&os.ModeSymlink != 0 {
+		return nil, status.Errorf(codes.FailedPrecondition, "refusing to set attributes on symlink %s", filename)
 	}
 
 	if uid != -1 || gid != -1 {

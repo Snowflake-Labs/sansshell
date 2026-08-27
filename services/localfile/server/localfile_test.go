@@ -1104,6 +1104,58 @@ func TestSetFileAttributes(t *testing.T) {
 	}
 }
 
+// TestSetFileAttributesSymlinkRejected is a regression test for CWE-59
+// (symlink following). SetFileAttributes must refuse to operate through a
+// symlink so a principal confined by OPA to a directory prefix can't point a
+// link at a target outside that prefix (e.g. /etc/shadow) and then
+// chown/chmod/immutable the real target. The link target must be left intact.
+func TestSetFileAttributesSymlinkRejected(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+	client := pb.NewLocalFileClient(conn)
+
+	temp := t.TempDir()
+
+	// Sentinel target that the attacker wants to modify.
+	target := filepath.Join(temp, "target")
+	testutil.FatalOnErr("write target", os.WriteFile(target, []byte("secret"), 0600), t)
+	origStat, err := os.Lstat(target)
+	testutil.FatalOnErr("lstat target", err, t)
+
+	// Symlink inside the "allowed" prefix pointing at the target.
+	link := filepath.Join(temp, "link")
+	testutil.FatalOnErr("symlink", os.Symlink(target, link), t)
+
+	_, err = client.SetFileAttributes(ctx, &pb.SetFileAttributesRequest{
+		Attrs: &pb.FileAttributes{
+			Filename: link,
+			Attributes: []*pb.FileAttribute{
+				{Value: &pb.FileAttribute_Mode{Mode: 0777}},
+			},
+		},
+	})
+	testutil.WantErr("SetFileAttributes on symlink", err, true, t)
+	if got, want := status.Code(err), codes.FailedPrecondition; got != want {
+		t.Fatalf("wrong error code. got %v want %v (err: %v)", got, want, err)
+	}
+
+	// Target's mode must be unchanged (attack blocked).
+	newStat, err := os.Lstat(target)
+	testutil.FatalOnErr("lstat target after", err, t)
+	if got, want := newStat.Mode(), origStat.Mode(); got != want {
+		t.Fatalf("target mode changed through symlink. got %v want %v", got, want)
+	}
+
+	// The link itself must still be an untouched symlink.
+	linkStat, err := os.Lstat(link)
+	testutil.FatalOnErr("lstat link", err, t)
+	if linkStat.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("link is no longer a symlink after SetFileAttributes")
+	}
+}
+
 func TestList(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
