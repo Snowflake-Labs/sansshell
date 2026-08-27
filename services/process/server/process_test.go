@@ -48,9 +48,10 @@ var (
 	lis     *bufconn.Listener
 	conn    *grpc.ClientConn
 
-	testdataJstack     = "./testdata/jstack.txt"
-	testdataJstackBad  = "./testdata/jstack-bad.txt"
-	testdataJstackBad1 = "./testdata/jstack-bad1.txt"
+	testdataJstack      = "./testdata/jstack.txt"
+	testdataJstackBad   = "./testdata/jstack-bad.txt"
+	testdataJstackBad1  = "./testdata/jstack-bad1.txt"
+	testdataJstackShort = "./testdata/jstack-short-fields.txt"
 )
 
 func bufDialer(context.Context, string) (net.Conn, error) {
@@ -576,6 +577,15 @@ func TestJstack(t *testing.T) {
 			input:   testdataJstackBad1,
 			pid:     1,
 			wantErr: true,
+		},
+		{
+			// A hostile thread name can leave fewer than two fields after the
+			// name; parsing must not index out of range and crash the server.
+			name:     "Short thread fields",
+			command:  testutil.ResolvePath(t, "cat"),
+			input:    testdataJstackShort,
+			validate: "./testdata/jstack-short-fields.textproto",
+			pid:      1,
 		},
 		{
 			name:    "Bad command",

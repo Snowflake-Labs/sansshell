@@ -1,0 +1,4 @@
+stacks : <
+  name : "evil"
+  thread_number : 7
+>
