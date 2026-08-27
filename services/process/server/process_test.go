@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -260,6 +261,31 @@ func TestKill(t *testing.T) {
 		{
 			name: "signal 0 to our pid",
 			pid:  uint64(syscall.Getpid()),
+		},
+		{
+			// CWE-196: int(math.MaxUint64) wraps to -1 on 64-bit hosts,
+			// which would turn Kill into kill(-1, sig) (signal every
+			// reachable process). Must be rejected before the cast.
+			name:    "max uint64 wraps to -1 (kill all)",
+			pid:     math.MaxUint64,
+			signal:  0,
+			wantErr: true,
+		},
+		{
+			// A value that wraps to a negative PID would signal a process
+			// group instead of a single process. Must be rejected.
+			name:    "wraps to negative pgid",
+			pid:     uint64(math.MaxUint64) - 41,
+			signal:  0,
+			wantErr: true,
+		},
+		{
+			// Anything above the valid PID range (> MaxInt32) is rejected
+			// even though it does not wrap to a negative int.
+			name:    "above valid pid range",
+			pid:     uint64(math.MaxInt32) + 1,
+			signal:  0,
+			wantErr: true,
 		},
 	} {
 		tc := tc
