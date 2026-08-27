@@ -32,7 +32,45 @@ import (
 const (
 	sansshellMetadata   = "sansshell-"
 	sansshellTraceIDKey = sansshellMetadata + "trace-id"
+
+	// maxSansshellMetadataPairs bounds how many sansshell-prefixed metadata
+	// key/value pairs we process from an incoming request. This work happens
+	// before authorization, so without a cap an unauthenticated caller could
+	// send an arbitrary number of headers and drive CPU/memory usage or flood
+	// the audit log.
+	maxSansshellMetadataPairs = 100
+	// maxSansshellMetadataValueLen bounds the length of any single metadata
+	// value we log or forward downstream.
+	maxSansshellMetadataValueLen = 4096
 )
+
+// boundedSansshellMetadata returns the sansshell-prefixed metadata key/value
+// pairs (flattened as k1, v1, k2, v2, ...) from the incoming context, capping
+// both the number of pairs and the size of each value. Incoming metadata is
+// caller-controlled and inspected before authorization, so these bounds
+// protect the server from unbounded pre-authz work.
+func boundedSansshellMetadata(ctx context.Context) []string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil
+	}
+	var pairs []string
+	for k, v := range md {
+		if !strings.HasPrefix(k, sansshellMetadata) {
+			continue
+		}
+		for _, val := range v {
+			if len(pairs)/2 >= maxSansshellMetadataPairs {
+				return pairs
+			}
+			if len(val) > maxSansshellMetadataValueLen {
+				val = val[:maxSansshellMetadataValueLen]
+			}
+			pairs = append(pairs, k, val)
+		}
+	}
+	return pairs
+}
 
 // UnaryClientLogInterceptor returns a new grpc.UnaryClientInterceptor that logs
 // outgoing requests using the supplied logger, as well as injecting it into the
@@ -86,16 +124,16 @@ func logOtelTraceID(ctx context.Context, l logr.Logger) logr.Logger {
 }
 
 func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
-	// Add any sansshell specific metadata from incoming context to the logging we do.
-	md, ok := metadata.FromIncomingContext(ctx)
-	if ok {
-		for k, v := range md {
-			if strings.HasPrefix(k, sansshellMetadata) {
-				for _, val := range v {
-					l = l.WithValues(k, val)
-				}
-			}
+	// Add any sansshell specific metadata from incoming context to the logging
+	// we do. Collect the (bounded) pairs first and attach them in a single
+	// WithValues call; calling WithValues once per value is O(N^2) because it
+	// copies the accumulated key/value slice each time.
+	if pairs := boundedSansshellMetadata(ctx); len(pairs) > 0 {
+		kvs := make([]interface{}, len(pairs))
+		for i, p := range pairs {
+			kvs[i] = p
 		}
+		l = l.WithValues(kvs...)
 	}
 	l = logOtelTraceID(ctx, l)
 	return l
@@ -103,16 +141,10 @@ func logMetadata(ctx context.Context, l logr.Logger) logr.Logger {
 
 func passAlongMetadata(ctx context.Context) context.Context {
 	// See if we got any metadata that has our prefix and pass it along
-	// downstream (i.e. proxy case).
-	md, ok := metadata.FromIncomingContext(ctx)
-	if ok {
-		for k, v := range md {
-			if strings.HasPrefix(k, sansshellMetadata) {
-				for _, val := range v {
-					ctx = metadata.AppendToOutgoingContext(ctx, k, val)
-				}
-			}
-		}
+	// downstream (i.e. proxy case). Bound and append in a single call so a
+	// caller can't force us to build an arbitrarily long outgoing header set.
+	if pairs := boundedSansshellMetadata(ctx); len(pairs) > 0 {
+		ctx = metadata.AppendToOutgoingContext(ctx, pairs...)
 	}
 	return ctx
 }
