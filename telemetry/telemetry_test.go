@@ -66,6 +66,39 @@ func testLogging(t *testing.T, args, want string) {
 	}
 }
 
+func TestBoundedSansshellMetadata(t *testing.T) {
+	// Only sansshell-prefixed keys are collected.
+	md := metadata.MD{}
+	md.Set("sansshell-key", "value")
+	md.Set("unrelated-key", "value")
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+	if got := boundedSansshellMetadata(ctx); len(got) != 2 || got[0] != "sansshell-key" || got[1] != "value" {
+		t.Fatalf("unexpected pairs for prefixed metadata: %v", got)
+	}
+
+	// The number of pairs is capped regardless of how many values a hostile
+	// caller sends.
+	vals := make([]string, maxSansshellMetadataPairs*3)
+	for i := range vals {
+		vals[i] = "v"
+	}
+	flood := metadata.MD{}
+	flood.Set("sansshell-flood", vals...)
+	ctx = metadata.NewIncomingContext(context.Background(), flood)
+	if got := boundedSansshellMetadata(ctx); len(got)/2 != maxSansshellMetadataPairs {
+		t.Fatalf("pair count not capped: got %d pairs, want %d", len(got)/2, maxSansshellMetadataPairs)
+	}
+
+	// Oversized values are truncated.
+	big := metadata.MD{}
+	big.Set("sansshell-big", strings.Repeat("a", maxSansshellMetadataValueLen*2))
+	ctx = metadata.NewIncomingContext(context.Background(), big)
+	got := boundedSansshellMetadata(ctx)
+	if len(got) != 2 || len(got[1]) != maxSansshellMetadataValueLen {
+		t.Fatalf("value not truncated: got len %d, want %d", len(got[1]), maxSansshellMetadataValueLen)
+	}
+}
+
 func TestUnaryClient(t *testing.T) {
 	// We need the basics of a connection to satisfy a real ClientConn below.
 	ctx := context.Background()

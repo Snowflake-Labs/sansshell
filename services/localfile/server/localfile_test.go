@@ -210,6 +210,30 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadInvalidGrepPattern(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewLocalFileClient(conn)
+
+	// An un-compilable, caller-supplied grep pattern must be rejected with
+	// InvalidArgument rather than panicking the server (regexp.MustCompile).
+	stream, err := client.Read(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{Filename: "/etc/hosts"},
+		},
+		Grep: "[unterminated(",
+	})
+	testutil.FatalOnErr("Read failed", err, t)
+
+	_, err = stream.Recv()
+	if got, want := status.Code(err), codes.InvalidArgument; got != want {
+		t.Fatalf("invalid grep pattern: got code %v (%v), want %v", got, err, want)
+	}
+}
+
 func TestReadWithGeneratedFiles(t *testing.T) {
 	ctx := context.Background()
 	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
