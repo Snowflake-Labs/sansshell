@@ -39,7 +39,9 @@ import (
 	_ "gocloud.dev/blob/fileblob"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/Snowflake-Labs/sansshell/services"
@@ -205,6 +207,30 @@ func TestRead(t *testing.T) {
 				t.Fatalf("contents do not match. Got:\n%s\n\nWant:\n%s", got, want)
 			}
 		})
+	}
+}
+
+func TestReadInvalidGrepPattern(t *testing.T) {
+	ctx := context.Background()
+	conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	testutil.FatalOnErr("grpc.DialContext(bufnet)", err, t)
+	t.Cleanup(func() { conn.Close() })
+
+	client := pb.NewLocalFileClient(conn)
+
+	// An un-compilable, caller-supplied grep pattern must be rejected with
+	// InvalidArgument rather than panicking the server (regexp.MustCompile).
+	stream, err := client.Read(ctx, &pb.ReadActionRequest{
+		Request: &pb.ReadActionRequest_File{
+			File: &pb.ReadRequest{Filename: "/etc/hosts"},
+		},
+		Grep: "[unterminated(",
+	})
+	testutil.FatalOnErr("Read failed", err, t)
+
+	_, err = stream.Recv()
+	if got, want := status.Code(err), codes.InvalidArgument; got != want {
+		t.Fatalf("invalid grep pattern: got code %v (%v), want %v", got, err, want)
 	}
 }
 
