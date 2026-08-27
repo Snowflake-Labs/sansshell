@@ -20,6 +20,7 @@ import (
 	"context"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
@@ -129,6 +130,80 @@ func TestMaxNumApprovals(t *testing.T) {
 	}
 	if len(reqs.Item) != maxMPAApprovals {
 		t.Fatalf("got %v requests, expected %v", len(reqs.Item), maxMPAApprovals)
+	}
+}
+
+func TestStoreRejectsOversizedPayload(t *testing.T) {
+	s := &server{actions: make(map[string]*storedAction)}
+	ctx := rpcauth.AddPeerToContext(context.Background(), &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+
+	big := mustAny(anypb.New(&mpa.Principal{Id: strings.Repeat("a", MaxMessageBytes+1)}))
+	_, err := s.Store(ctx, &mpa.StoreRequest{Method: "foobar", Message: big})
+	if got, want := status.Code(err), codes.ResourceExhausted; got != want {
+		t.Fatalf("oversized Store: got code %v (%v), want %v", got, err, want)
+	}
+	if len(s.actions) != 0 || s.curBytes != 0 {
+		t.Fatalf("oversized request should not be stored: entries=%d bytes=%d", len(s.actions), s.curBytes)
+	}
+}
+
+func TestStorePayloadLimitsConfigurable(t *testing.T) {
+	origMsg, origTotal := MaxMessageBytes, MaxTotalBytes
+	t.Cleanup(func() { MaxMessageBytes, MaxTotalBytes = origMsg, origTotal })
+
+	ctx := rpcauth.AddPeerToContext(context.Background(), &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+	payload := mustAny(anypb.New(&mpa.Principal{Id: strings.Repeat("a", 4096)}))
+
+	// A tight per-request limit rejects a payload that a larger limit accepts.
+	MaxMessageBytes = 16
+	s := &server{actions: make(map[string]*storedAction)}
+	if _, err := s.Store(ctx, &mpa.StoreRequest{Method: "m", Message: payload}); status.Code(err) != codes.ResourceExhausted {
+		t.Fatalf("tight limit: got %v, want ResourceExhausted", err)
+	}
+
+	// Disabling the limit (<= 0) accepts the same payload.
+	MaxMessageBytes = 0
+	s = &server{actions: make(map[string]*storedAction)}
+	if _, err := s.Store(ctx, &mpa.StoreRequest{Method: "m", Message: payload}); err != nil {
+		t.Fatalf("disabled limit: unexpected error %v", err)
+	}
+	if len(s.actions) != 1 {
+		t.Fatalf("disabled limit: expected the request to be stored, got %d entries", len(s.actions))
+	}
+}
+
+func TestStoreBoundsTotalBytes(t *testing.T) {
+	s := &server{actions: make(map[string]*storedAction)}
+	ctx := rpcauth.AddPeerToContext(context.Background(), &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+
+	// Each entry is well under the per-entry cap, but storing many of them
+	// would blow past the total budget if it were unbounded. Eviction must
+	// keep the total (and our accounting) within the limit.
+	payload := strings.Repeat("a", MaxMessageBytes/2)
+	iterations := MaxTotalBytes/(MaxMessageBytes/2) + 50
+	for i := 0; i < iterations; i++ {
+		msg := mustAny(anypb.New(&mpa.Principal{Id: payload}))
+		if _, err := s.Store(ctx, &mpa.StoreRequest{Method: "m" + strconv.Itoa(i), Message: msg}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s.curBytes > MaxTotalBytes {
+		t.Fatalf("total stored bytes %d exceeds limit %d", s.curBytes, MaxTotalBytes)
+	}
+
+	// curBytes must stay consistent with what's actually stored.
+	var sum int
+	for _, act := range s.actions {
+		sum += act.sizeBytes
+	}
+	if sum != s.curBytes {
+		t.Fatalf("byte accounting drift: sum of entries=%d curBytes=%d", sum, s.curBytes)
 	}
 }
 
