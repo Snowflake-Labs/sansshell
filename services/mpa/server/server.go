@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -45,6 +46,18 @@ var (
 	maxMPAApprovals = 1000
 	// We also hardcode a max age to prevent unreasonably-old approvals from being used.
 	maxMPAApprovedAge = 24 * time.Hour
+	// MaxMessageBytes bounds the encoded size of a single stored MPA request.
+	// The payload is a caller-controlled google.protobuf.Any, so without a cap
+	// a single request could pin a large amount of heap in the server. Binding
+	// this to a flag is often useful. A value <= 0 disables the per-request
+	// check.
+	MaxMessageBytes = 1 << 20 // 1 MiB
+	// MaxTotalBytes bounds the total encoded size of all stored MPA requests.
+	// Combined with the per-request cap this keeps heap usage bounded even
+	// under a flood of large-but-individually-acceptable payloads. Binding this
+	// to a flag is often useful. A value <= 0 disables total-byte accounting
+	// and eviction.
+	MaxTotalBytes = 64 << 20 // 64 MiB
 )
 
 // ServerMPAAuthzHook populates approver information based on an internal MPA store.
@@ -108,12 +121,43 @@ type storedAction struct {
 	lastModified time.Time
 	approvers    []*mpa.Principal
 	approved     chan struct{}
+	sizeBytes    int
 }
 
 // server is used to implement the gRPC server
 type server struct {
 	actions map[string]*storedAction
-	mu      sync.Mutex
+	// curBytes is the sum of sizeBytes across all entries in actions. It is
+	// protected by mu and kept in sync by deleteActionLocked / Store.
+	curBytes int
+	mu       sync.Mutex
+}
+
+// deleteActionLocked removes an action and keeps curBytes accurate.
+// Callers must hold s.mu.
+func (s *server) deleteActionLocked(id string) {
+	if act, ok := s.actions[id]; ok {
+		s.curBytes -= act.sizeBytes
+		delete(s.actions, id)
+	}
+}
+
+// evictOldestLocked removes the least-recently-modified action, if any.
+// Callers must hold s.mu.
+func (s *server) evictOldestLocked() {
+	var oldestID string
+	var oldestTime time.Time
+	found := false
+	for id, act := range s.actions {
+		if !found || act.lastModified.Before(oldestTime) {
+			oldestID = id
+			oldestTime = act.lastModified
+			found = true
+		}
+	}
+	if found {
+		s.deleteActionLocked(oldestID)
+	}
 }
 
 func callerIdentity(ctx context.Context) (*rpcauth.PrincipalAuthInput, bool) {
@@ -136,6 +180,7 @@ func (s *server) clearOutdatedApprovals() {
 	staleTime := time.Now().Add(-maxMPAApprovedAge)
 	for id, act := range s.actions {
 		if act.lastModified.Before(staleTime) {
+			s.curBytes -= act.sizeBytes
 			delete(s.actions, id)
 		}
 	}
@@ -159,6 +204,15 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 		Method:        in.Method,
 		Message:       in.Message,
 	}
+
+	// The message is a caller-controlled Any payload. Reject anything too
+	// large up front so a single request can't pin an unreasonable amount of
+	// heap in the root server.
+	size := proto.Size(action)
+	if MaxMessageBytes > 0 && size > MaxMessageBytes {
+		return nil, status.Errorf(codes.ResourceExhausted, "MPA request too large: %d bytes exceeds per-request limit of %d bytes", size, MaxMessageBytes)
+	}
+
 	id, err := actionId(action)
 	if err != nil {
 		return nil, err
@@ -166,28 +220,33 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Time to clear out excessive approvals!
-	for len(s.actions) >= maxMPAApprovals {
-		var oldestID string
-		oldestTime := time.Now()
-		for id, act := range s.actions {
-			if act.lastModified.Before(oldestTime) {
-				oldestID = id
-				oldestTime = act.lastModified
-			}
-		}
-		delete(s.actions, oldestID)
+	// Storing is idempotent: if we already have this action, just return it
+	// without disturbing the store or its accounting.
+	if act, ok := s.actions[id]; ok {
+		return &mpa.StoreResponse{
+			Id:       id,
+			Action:   action,
+			Approver: act.approvers,
+		}, nil
 	}
 
-	act, ok := s.actions[id]
-	if !ok {
-		act = &storedAction{
-			action:       action,
-			approved:     make(chan struct{}),
-			lastModified: time.Now(),
-		}
-		s.actions[id] = act
+	// Time to clear out excessive approvals! Bound both the number of entries
+	// and the total bytes held.
+	for len(s.actions) >= maxMPAApprovals {
+		s.evictOldestLocked()
 	}
+	for MaxTotalBytes > 0 && s.curBytes+size > MaxTotalBytes && len(s.actions) > 0 {
+		s.evictOldestLocked()
+	}
+
+	act := &storedAction{
+		action:       action,
+		approved:     make(chan struct{}),
+		lastModified: time.Now(),
+		sizeBytes:    size,
+	}
+	s.actions[id] = act
+	s.curBytes += size
 	return &mpa.StoreResponse{
 		Id:       id,
 		Action:   action,
@@ -291,7 +350,7 @@ func (s *server) Clear(ctx context.Context, in *mpa.ClearRequest) (*mpa.ClearRes
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.actions, id)
+	s.deleteActionLocked(id)
 	return &mpa.ClearResponse{}, nil
 }
 

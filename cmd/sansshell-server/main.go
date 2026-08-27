@@ -125,6 +125,9 @@ func init() {
 	flag.StringVar(&process.PstackBin, "pstack-bin", process.PstackBin, "Path to the pstack binary")
 	flag.StringVar(&process.GcoreBin, "gcore-bin", process.GcoreBin, "Path to the gcore binary")
 
+	flag.IntVar(&mpa.MaxMessageBytes, "mpa-max-message-bytes", mpa.MaxMessageBytes, "Maximum encoded size, in bytes, of a single stored MPA request payload (<= 0 disables the check)")
+	flag.IntVar(&mpa.MaxTotalBytes, "mpa-max-total-bytes", mpa.MaxTotalBytes, "Maximum total encoded size, in bytes, of all stored MPA requests (<= 0 disables total-byte eviction)")
+
 	flag.BoolVar(&version, "version", false, "Returns the server built version from the sansshell server package")
 }
 
