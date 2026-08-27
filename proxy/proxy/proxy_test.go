@@ -44,12 +44,15 @@ import (
 	tu "github.com/Snowflake-Labs/sansshell/testing/testutil"
 )
 
-func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener) map[string]*bufconn.Listener {
+func startTestProxy(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, opts ...grpc.ServerOption) map[string]*bufconn.Listener {
 	t.Helper()
 	targetDialer := server.NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	lis := bufconn.Listen(testutil.BufSize)
 	authz := testutil.NewAllowAllRPCAuthorizer(ctx, t)
-	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
+	serverOpts := make([]grpc.ServerOption, 0, len(opts)+1)
+	serverOpts = append(serverOpts, grpc.StreamInterceptor(authz.AuthorizeStream))
+	serverOpts = append(serverOpts, opts...)
+	grpcServer := grpc.NewServer(serverOpts...)
 	proxyServer := server.New(targetDialer, authz)
 	proxyServer.Register(grpcServer)
 	go func() {
