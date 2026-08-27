@@ -560,6 +560,12 @@ func (t *TargetStreamSet) Remove(streamID uint64) {
 	t.closedStreams[streamID] = true
 }
 
+// Empty reports whether every stream in this set has been removed, which means no target
+// stream is still expected to report completion.
+func (t *TargetStreamSet) Empty() bool {
+	return len(t.streams) == 0
+}
+
 // Wait blocks until all TargetStreams associated with this
 // stream set have completed.
 func (t *TargetStreamSet) Wait() {

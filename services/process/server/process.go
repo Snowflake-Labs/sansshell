@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -173,9 +174,14 @@ func (s *server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, 
 
 func (s *server) Kill(ctx context.Context, req *pb.KillRequest) (*emptypb.Empty, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
-	if req.Pid == 0 {
+	// Reject 0 (wildcard) and any value that cannot be represented as a
+	// positive int PID. req.Pid is a uint64: on 64-bit hosts values such as
+	// math.MaxUint64 wrap to -1 when cast to int, turning a single-PID kill
+	// into kill(-1, sig) / process-group signalling. Bounding by MaxInt32
+	// keeps every legitimate PID while blocking the wraparound (CWE-196).
+	if req.Pid == 0 || req.Pid > math.MaxInt32 {
 		recorder.CounterOrLog(ctx, processKillFailureCounter, 1, attribute.String("reason", "invalid_pid"))
-		return nil, status.Error(codes.InvalidArgument, "pid must be positive and non-zero")
+		return nil, status.Error(codes.InvalidArgument, "pid must be positive and within the valid PID range")
 	}
 	err := syscall.Kill(int(req.Pid), syscall.Signal(req.Signal))
 	if err != nil {
