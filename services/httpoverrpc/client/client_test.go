@@ -501,3 +501,239 @@ func TestGetPortDefaultHTTPS(t *testing.T) {
 		t.Fatalf("got wrong port: %d. Expected: %d", result, defaultHTTPSPort)
 	}
 }
+
+func TestProxyHostHeader(t *testing.T) {
+	ctx := context.Background()
+	receivedHeaders := make(map[string]string)
+
+	// Set up web server that captures headers
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		receivedHeaders["request-host"] = httpReq.Host
+		_, _ = httpResp.Write([]byte("hello world"))
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// Start proxying command with host-header flag
+	f := flag.NewFlagSet("proxy", flag.PanicOnError)
+	p := &proxyCmd{}
+	p.SetFlags(f)
+	_, port, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	customHostHeader := "custom.example.com"
+	if err := f.Parse([]string{"-host-header", customHostHeader, "-allow-any-host", port}); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	go p.Execute(ctx, f, &util.ExecuteState{
+		Conn: conn,
+		Out:  []io.Writer{writer},
+		Err:  []io.Writer{os.Stderr},
+	})
+
+	// Find the port to use
+	buf := make([]byte, 1024)
+	if _, err := reader.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	msg := strings.Fields(string(buf))
+	// Parse out "Listening on http://%v, "
+	addr := msg[2][:len(msg[2])-1]
+
+	// Make a call with original host header
+	req, err := http.NewRequest("GET", addr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "original.example.com:8080"
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+
+	// Verify that the custom host header was used instead of the original
+	if receivedHeaders["request-host"] != customHostHeader {
+		t.Errorf("got host header %q, want %q", receivedHeaders["request-host"], customHostHeader)
+	}
+}
+
+func TestProxyHostHeaderStream(t *testing.T) {
+	ctx := context.Background()
+	receivedHeaders := make(map[string]string)
+
+	// Set up web server that captures headers
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		receivedHeaders["request-host"] = httpReq.Host
+		_, _ = httpResp.Write([]byte("hello world"))
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// Start proxying command with host-header flag and stream mode
+	f := flag.NewFlagSet("proxy", flag.PanicOnError)
+	p := &proxyCmd{}
+	p.SetFlags(f)
+	p.stream = true
+	_, port, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	customHostHeader := "custom-stream.example.com"
+	if err := f.Parse([]string{"-host-header", customHostHeader, "-allow-any-host", port}); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	go p.Execute(ctx, f, &util.ExecuteState{
+		Conn: conn,
+		Out:  []io.Writer{writer},
+		Err:  []io.Writer{os.Stderr},
+	})
+
+	// Find the port to use
+	buf := make([]byte, 1024)
+	if _, err := reader.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	msg := strings.Fields(string(buf))
+	// Parse out "Listening on http://%v, "
+	addr := msg[2][:len(msg[2])-1]
+
+	// Make a call with original host header
+	req, err := http.NewRequest("GET", addr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Host = "original-stream.example.com:8080"
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+
+	// Verify that the custom host header was used instead of the original
+	if receivedHeaders["request-host"] != customHostHeader {
+		t.Errorf("got host header %q, want %q", receivedHeaders["request-host"], customHostHeader)
+	}
+}
+
+func TestProxyNoHostHeader(t *testing.T) {
+	ctx := context.Background()
+	receivedHeaders := make(map[string]string)
+
+	// Set up web server that captures headers
+	m := http.NewServeMux()
+	m.HandleFunc("/", func(httpResp http.ResponseWriter, httpReq *http.Request) {
+		receivedHeaders["request-host"] = httpReq.Host
+		_, _ = httpResp.Write([]byte("hello world"))
+	})
+	l, err := net.Listen("tcp4", "localhost:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = http.Serve(l, m) }()
+
+	// Dial out to sansshell server set up in TestMain
+	conn, err := proxy.DialContext(ctx, "", []string{"bufnet"}, grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	// Start proxying command without host-header flag
+	f := flag.NewFlagSet("proxy", flag.PanicOnError)
+	p := &proxyCmd{}
+	p.SetFlags(f)
+	_, port, err := net.SplitHostPort(l.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Parse([]string{"-allow-any-host", port}); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer := io.Pipe()
+	go p.Execute(ctx, f, &util.ExecuteState{
+		Conn: conn,
+		Out:  []io.Writer{writer},
+		Err:  []io.Writer{os.Stderr},
+	})
+
+	// Find the port to use
+	buf := make([]byte, 1024)
+	if _, err := reader.Read(buf); err != nil {
+		t.Fatal(err)
+	}
+	msg := strings.Fields(string(buf))
+	// Parse out "Listening on http://%v, "
+	addr := msg[2][:len(msg[2])-1]
+
+	// Make a call with original host header
+	req, err := http.NewRequest("GET", addr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalHost := "original.example.com:8080"
+	req.Host = originalHost
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "hello world"
+	if string(body) != want {
+		t.Errorf("got %q, want %q", body, want)
+	}
+
+	// Verify that the proxy's address was used (no host override)
+	// When host-header flag is not set, the target receives the proxy's listening address
+	if !strings.HasPrefix(receivedHeaders["request-host"], "localhost:") {
+		t.Errorf("got host header %q, want localhost:port", receivedHeaders["request-host"])
+	}
+}
