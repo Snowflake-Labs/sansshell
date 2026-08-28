@@ -258,11 +258,11 @@ func TestClientInterceptors(t *testing.T) {
 	}()
 	defer s.GracefulStop()
 
-	clientCreds, err := mtls.LoadClientTLS("../../../auth/mtls/testdata/client.pem", "../../../auth/mtls/testdata/client.key", rot)
+	clientCreds, err := mtls.LoadClientTLS("../../../auth/mtls/testdata/client.pem", "../../../auth/mtls/testdata/client.key", rot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	approverCreds, err := mtls.LoadClientTLS("../testdata/approver.pem", "../testdata/approver.key", rot)
+	approverCreds, err := mtls.LoadClientTLS("../testdata/approver.pem", "../testdata/approver.key", rot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +446,7 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	proxyClientCreds, err := mtls.LoadClientTLS("../testdata/proxy.pem", "../testdata/proxy.key", rot)
+	proxyClientCreds, err := mtls.LoadClientTLS("../testdata/proxy.pem", "../testdata/proxy.key", rot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,11 +472,11 @@ func TestProxiedClientInterceptors(t *testing.T) {
 	}()
 	defer proxySrv.GracefulStop()
 
-	clientCreds, err := mtls.LoadClientTLS("../../../auth/mtls/testdata/client.pem", "../../../auth/mtls/testdata/client.key", rot)
+	clientCreds, err := mtls.LoadClientTLS("../../../auth/mtls/testdata/client.pem", "../../../auth/mtls/testdata/client.key", rot, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	approverCreds, err := mtls.LoadClientTLS("../testdata/approver.pem", "../testdata/approver.key", rot)
+	approverCreds, err := mtls.LoadClientTLS("../testdata/approver.pem", "../testdata/approver.key", rot, "")
 	if err != nil {
 		t.Fatal(err)
 	}

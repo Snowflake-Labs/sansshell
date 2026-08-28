@@ -211,12 +211,12 @@ func TestLoadClientTLS(t *testing.T) {
 	testutil.FatalOnErr("Failed to load root CA", err, t)
 
 	// Make sure this errors if we pass bad data like reversing things.
-	_, err = LoadClientTLS("testdata/client.key", "testdata/client.pem", CAPool)
+	_, err = LoadClientTLS("testdata/client.key", "testdata/client.pem", CAPool, "")
 	t.Log(err)
 	testutil.FatalOnNoErr("bad TLS client data", err, t)
 
 	// Also that it works on correct input.
-	_, err = LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool)
+	_, err = LoadClientTLS("testdata/client.pem", "testdata/client.key", CAPool, "")
 	testutil.FatalOnErr("tls client data", err, t)
 }
 
@@ -279,7 +279,7 @@ func TestLoadClientServerCredentials(t *testing.T) {
 				err = server.OverrideServerName("server") //nolint:staticcheck
 				testutil.FatalOnErr("OverrideServerName", err, t)
 			}
-			client, err := LoadClientCredentials(context.Background(), tc.loader)
+			client, err := LoadClientCredentials(context.Background(), tc.loader, "")
 			testutil.WantErr("client", err, tc.wantErr, t)
 			if !tc.wantErr {
 				err = client.OverrideServerName("server") //nolint:staticcheck
@@ -317,7 +317,7 @@ func TestHealthCheck(t *testing.T) {
 	unregisterAll()
 	err = Register("refresh", &simpleLoader{name: "refresh"})
 	testutil.FatalOnErr("Register", err, t)
-	creds, err := LoadClientCredentials(ctx, "refresh")
+	creds, err := LoadClientCredentials(ctx, "refresh", "")
 	testutil.FatalOnErr("Failed to load client cert", err, t)
 	err = creds.OverrideServerName("bufnet") //nolint:staticcheck
 	testutil.FatalOnErr("OverrideServerName", err, t)
