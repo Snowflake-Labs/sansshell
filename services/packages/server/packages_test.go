@@ -887,6 +887,22 @@ func TestSearch(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name: "name that looks like a flag is rejected",
+			req: &pb.SearchRequest{
+				Name:      "--config=/tmp/evil.repo",
+				Installed: true,
+			},
+			wantError: true,
+		},
+		{
+			name: "name with shell metacharacters is rejected",
+			req: &pb.SearchRequest{
+				Name:      "firefox && rm -rf /",
+				Installed: true,
+			},
+			wantError: true,
+		},
+		{
 			name: "specify a bad package system and get an error.",
 			req: &pb.SearchRequest{
 				PackageSystem: pb.PackageSystem_PACKAGE_SYSTEM_YUM + 99,
