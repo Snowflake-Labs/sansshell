@@ -54,7 +54,8 @@ func init() {
 // to run a sansssh command.
 type RunState struct {
 	// Proxy is an optional proxy server to route requests.
-	Proxy string
+	Proxy                  string
+	ProxyAuthorityOverride string
 	// Targets is a list of remote targets to use when a proxy
 	// is in use. For non proxy must be 1 entry.
 	Targets []string
@@ -283,6 +284,10 @@ func Run(ctx context.Context, rs RunState) {
 		grpc.WithTransportCredentials(creds),
 		// Use 16MB instead of the default 4MB to allow larger responses
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(16 * 1024 * 1024)),
+	}
+
+	if rs.Proxy != "" && rs.ProxyAuthorityOverride != "" {
+		ops = append(ops, grpc.WithAuthority(rs.ProxyAuthorityOverride))
 	}
 
 	if rs.PerRPCCredentials != nil {
