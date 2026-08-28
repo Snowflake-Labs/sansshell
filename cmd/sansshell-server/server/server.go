@@ -68,6 +68,7 @@ type runState struct {
 	streamInterceptors   []grpc.StreamServerInterceptor
 	statsHandler         stats.Handler
 	authzHooks           []rpcauth.RPCAuthzHook
+	hintClassifiers      []rpcauth.DenialHintClassifier
 	services             []func(*grpc.Server)
 
 	refreshCredsOnSIGHUP bool
@@ -169,6 +170,16 @@ func WithStreamInterceptor(i grpc.StreamServerInterceptor) Option {
 func WithAuthzHook(hook rpcauth.RPCAuthzHook) Option {
 	return optionFunc(func(_ context.Context, r *runState) error {
 		r.authzHooks = append(r.authzHooks, hook)
+		return nil
+	})
+}
+
+// WithDenialHintClassifiers sets the ordered classifiers that map denial
+// hint text to low-cardinality metric labels on the authz_denied_policy
+// counter. First match wins. If none are set, all denials get label "other".
+func WithDenialHintClassifiers(classifiers ...rpcauth.DenialHintClassifier) Option {
+	return optionFunc(func(_ context.Context, r *runState) error {
+		r.hintClassifiers = append(r.hintClassifiers, classifiers...)
 		return nil
 	})
 }
@@ -405,6 +416,9 @@ func extractCommonOptionsFromRunState(rs *runState) []server.Option {
 	serverOpts = append(serverOpts, server.WithAuthzHook(justificationHook))
 	for _, a := range rs.authzHooks {
 		serverOpts = append(serverOpts, server.WithAuthzHook(a))
+	}
+	if len(rs.hintClassifiers) > 0 {
+		serverOpts = append(serverOpts, server.WithDenialHintClassifiers(rs.hintClassifiers...))
 	}
 	for _, u := range rs.unaryInterceptors {
 		serverOpts = append(serverOpts, server.WithUnaryInterceptor(u))
