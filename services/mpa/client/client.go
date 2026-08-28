@@ -64,6 +64,28 @@ func (p *mpaCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 	return c.Execute(ctx, args...)
 }
 
+// sanitizeForDisplay escapes terminal control characters in requester-supplied
+// strings before they are printed to an approver's terminal. Fields such as the
+// method, user, and justification are attacker-influenced, and an approver
+// reviews them interactively; without escaping, embedded ANSI escape or
+// carriage-return sequences could rewrite the terminal to hide or spoof what is
+// actually being approved. Tab is preserved; other C0/C1 controls and DEL are
+// rendered as \xNN.
+func sanitizeForDisplay(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\t':
+			b.WriteRune(r)
+		case r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f):
+			fmt.Fprintf(&b, "\\x%02x", r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func getAction(ctx context.Context, state *util.ExecuteState, c pb.MpaClientProxy, id string) *pb.Action {
 	resp, err := c.GetOneMany(ctx, &pb.GetRequest{Id: id})
 	if err != nil {
@@ -136,7 +158,7 @@ func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 		return subcommands.ExitFailure
 	}
 
-	fmt.Printf("MPA Request:\n%s\n", protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(action))
+	fmt.Printf("MPA Request:\n%s\n", sanitizeForDisplay(protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(action)))
 
 	if !p.skipConfirmation {
 		// ask for confirmation
@@ -172,12 +194,12 @@ func (p *approveCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...inter
 			fmt.Fprintf(state.Err[r.Index], "Unable to approve: %v\n", r.Error)
 			continue
 		}
-		msg := []string{"Approved", action.Method}
+		msg := []string{"Approved", sanitizeForDisplay(action.Method)}
 		if action.GetUser() != "" {
-			msg = append(msg, "from", action.GetUser())
+			msg = append(msg, "from", sanitizeForDisplay(action.GetUser()))
 		}
 		if action.GetJustification() != "" {
-			msg = append(msg, "for", action.GetJustification())
+			msg = append(msg, "for", sanitizeForDisplay(action.GetJustification()))
 		}
 		fmt.Fprintln(state.Out[r.Index], strings.Join(msg, " "))
 	}
@@ -228,18 +250,18 @@ func (p *listCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interfac
 				if len(item.Approver) > 0 {
 					var approvers []string
 					for _, a := range item.Approver {
-						approvers = append(approvers, a.Id)
+						approvers = append(approvers, sanitizeForDisplay(a.Id))
 					}
 					msg = append(msg, fmt.Sprintf("(approved by %v)", strings.Join(approvers, ",")))
 				}
-				msg = append(msg, protojson.MarshalOptions{UseProtoNames: true}.Format(item.Action))
+				msg = append(msg, sanitizeForDisplay(protojson.MarshalOptions{UseProtoNames: true}.Format(item.Action)))
 			} else {
-				msg = append(msg, item.Action.GetMethod())
+				msg = append(msg, sanitizeForDisplay(item.Action.GetMethod()))
 				if item.Action.GetUser() != "" {
-					msg = append(msg, "from", item.Action.GetUser())
+					msg = append(msg, "from", sanitizeForDisplay(item.Action.GetUser()))
 				}
 				if item.Action.GetJustification() != "" {
-					msg = append(msg, "for", item.Action.GetJustification())
+					msg = append(msg, "for", sanitizeForDisplay(item.Action.GetJustification()))
 				}
 				if len(item.Approver) > 0 {
 					msg = append(msg, "(approved)")
@@ -331,7 +353,7 @@ func (p *getCmd) Execute(ctx context.Context, f *flag.FlagSet, args ...interface
 			fmt.Fprintf(state.Err[r.Index], "Error: action was nil when looking up MPA request")
 			continue
 		}
-		fmt.Fprintln(state.Out[r.Index], protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(r.Resp))
+		fmt.Fprintln(state.Out[r.Index], sanitizeForDisplay(protojson.MarshalOptions{UseProtoNames: true, Multiline: true}.Format(r.Resp)))
 	}
 	return subcommands.ExitSuccess
 }
