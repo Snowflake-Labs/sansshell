@@ -151,9 +151,8 @@ var (
 				"-y",
 			},
 		}
-		if isOlderVersion(p.NewVersion, p.OldVersion) {
-			updateOpts[pb.PackageSystem_PACKAGE_SYSTEM_YUM] = []string{"downgrade", "-y"}
-		}
+		// NOTE: Update is forward-only. Downgrades are rejected up front in
+		// Update() so this builder never emits "yum downgrade -y".
 		out, err := genCmd(p.PackageSystem, updateOpts)
 		if err != nil {
 			return nil, err
@@ -315,6 +314,25 @@ func validateField(param string, name string) error {
 	return nil
 }
 
+// validateRepo validates an optional repository selector (enable/disable). An
+// empty value is allowed (no repo override). When set it must not start with a
+// dash and must contain only [a-zA-Z0-9_.:-]. In particular this rejects the
+// wildcard "*", which as "--enablerepo=*" re-enables every (including disabled
+// or legacy) repo and lets a caller source an arbitrary, possibly known-
+// vulnerable, package build.
+func validateRepo(param string, repo string) error {
+	if repo == "" {
+		return nil
+	}
+	if strings.HasPrefix(repo, "-") {
+		return status.Errorf(codes.InvalidArgument, "package %s %q invalid. Cannot start with a dash", param, repo)
+	}
+	if repo != inputValidateRe.ReplaceAllString(repo, "") {
+		return status.Errorf(codes.InvalidArgument, "package %s %q invalid. Must contain only [a-zA-Z0-9_.:-] (no wildcards)", param, repo)
+	}
+	return nil
+}
+
 func (s *server) Install(ctx context.Context, req *pb.InstallRequest) (*pb.InstallReply, error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 	if err := validateField("name", req.Name); err != nil {
@@ -449,6 +467,27 @@ func (s *server) Update(ctx context.Context, req *pb.UpdateRequest) (*pb.UpdateR
 	if !nevraRe.MatchString(req.NewVersion) {
 		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_new_version"))
 		return nil, status.Errorf(codes.Internal, "new_version %q not in nevra format (n-e:v-r.a)", req.NewVersion)
+	}
+
+	// Reject wildcard/metacharacter repo selectors. A caller-supplied
+	// "--enablerepo=*" would re-enable every repo (including disabled/legacy
+	// ones) and let an attacker source a specific vulnerable build.
+	if err := validateRepo("repo", req.Repo); err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_repo"))
+		return nil, err
+	}
+	if err := validateRepo("disable_repo", req.DisableRepo); err != nil {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "invalid_disable_repo"))
+		return nil, err
+	}
+
+	// Update is forward-only. A caller-chosen new_version older than old_version
+	// would otherwise trigger "yum downgrade -y" and re-introduce a known-
+	// vulnerable build. Intentional downgrades should go through an explicit
+	// "sanssh ... exec run" command rather than the Update RPC.
+	if isOlderVersion(req.NewVersion, req.OldVersion) {
+		recorder.CounterOrLog(ctx, packagesUpdateFailureCounter, 1, attribute.String("reason", "downgrade_not_allowed"))
+		return nil, status.Errorf(codes.InvalidArgument, "Packages.Update is forward-only and cannot downgrade: new_version %q is older than old_version %q. For an intentional downgrade, run an explicit command instead, e.g. `sanssh ... exec run /usr/bin/yum downgrade -y %s-%s`.", req.NewVersion, req.OldVersion, req.Name, req.NewVersion)
 	}
 
 	// We can generate both commands since errors duplicate here.

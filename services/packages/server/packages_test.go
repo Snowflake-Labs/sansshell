@@ -589,6 +589,38 @@ func TestUpdate(t *testing.T) {
 				NewVersion: "4.5.6 && rm -rf /",
 			},
 		},
+		{
+			// Update is forward-only. A new_version older than the old_version
+			// must be rejected so a caller can't force "yum downgrade -y" to
+			// re-introduce a known-vulnerable build.
+			name: "downgrade is rejected",
+			req: &pb.UpdateRequest{
+				Name:       "package",
+				OldVersion: "0:1-4.5.6",
+				NewVersion: "0:1-1.2.3",
+			},
+		},
+		{
+			// A wildcard enablerepo ("--enablerepo=*") re-enables every repo and
+			// lets a caller source an arbitrary version, so it must be rejected.
+			name: "wildcard enablerepo is rejected",
+			req: &pb.UpdateRequest{
+				Name:       "package",
+				OldVersion: "0:1-1.2.3",
+				NewVersion: "0:1-4.5.6",
+				Repo:       "*",
+			},
+		},
+		{
+			// Wildcard disablerepo is likewise rejected.
+			name: "wildcard disablerepo is rejected",
+			req: &pb.UpdateRequest{
+				Name:        "package",
+				OldVersion:  "0:1-1.2.3",
+				NewVersion:  "0:1-4.5.6",
+				DisableRepo: "*",
+			},
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
