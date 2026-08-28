@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/user"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -1140,11 +1141,40 @@ func parseFDBCLISleep(req *pb.FDBCLISleep) ([]string, []captureLogs, error) {
 	return args, nil, nil
 }
 
+// fdbcliSnapshotTokenRe restricts the snapshot command and its options to a
+// safe character set. fdbcli receives every command as a single space-joined
+// --exec string, so a token containing whitespace or fdbcli/shell
+// metacharacters (e.g. ";") could inject additional fdbcli commands. The
+// snapshot command/options only ever need binary-name and path/argument style
+// tokens, so anything outside this set is rejected.
+var fdbcliSnapshotTokenRe = regexp.MustCompile(`^[a-zA-Z0-9_.:/=@%+-]+$`)
+
+func validateFDBCLISnapshotToken(kind, tok string) error {
+	if tok == "" {
+		return status.Errorf(codes.InvalidArgument, "snapshot %s must not be empty", kind)
+	}
+	if strings.HasPrefix(tok, "-") {
+		return status.Errorf(codes.InvalidArgument, "snapshot %s %q must not start with a dash", kind, tok)
+	}
+	if !fdbcliSnapshotTokenRe.MatchString(tok) {
+		return status.Errorf(codes.InvalidArgument, "snapshot %s %q contains invalid characters (allowed: a-zA-Z0-9_.:/=@%%+-)", kind, tok)
+	}
+	return nil
+}
+
 func parseFDBCLISnapshot(req *pb.FDBCLISnapshot) ([]string, []captureLogs, error) {
 	args := []string{"snapshot"}
 
 	if req.Command == "" {
 		return nil, nil, status.Error(codes.InvalidArgument, "snapshot requires command to be filled in")
+	}
+	if err := validateFDBCLISnapshotToken("command", req.Command); err != nil {
+		return nil, nil, err
+	}
+	for _, o := range req.Options {
+		if err := validateFDBCLISnapshotToken("option", o); err != nil {
+			return nil, nil, err
+		}
 	}
 	args = append(args, req.Command)
 	args = append(args, req.Options...)
