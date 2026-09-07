@@ -45,6 +45,7 @@ import (
 	_ "github.com/Snowflake-Labs/sansshell/services/dns/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/exec/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/fdb/client"
+	_ "github.com/Snowflake-Labs/sansshell/services/fdbexec/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/healthcheck/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/httpoverrpc/client"
 	_ "github.com/Snowflake-Labs/sansshell/services/localfile/client"
