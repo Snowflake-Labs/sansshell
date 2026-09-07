@@ -97,3 +97,87 @@ func TestPrefixWriter(t *testing.T) {
 		}
 	})
 }
+
+func TestCleanWriter(t *testing.T) {
+	for _, tc := range []struct {
+		desc   string
+		inputs []string
+		output string
+	}{
+		{
+			desc:   "Basic input with prefix",
+			inputs: []string{"123-10.0.0.1:9500: some_output_strings\n"},
+			output: "some_output_strings\n",
+		},
+		{
+			desc:   "Multiple writes across a single line",
+			inputs: []string{"123-10.0.0.1:9500:", " some_output_strings\n"},
+			output: "some_output_strings\n",
+		},
+		{
+			desc:   "Two lines, both cleaned",
+			inputs: []string{"1:a b\n2:c d\n"},
+			output: "b\nd\n",
+		},
+		{
+			desc:   "Line without space remains unchanged",
+			inputs: []string{"nospace\n"},
+			output: "nospace\n",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := GetCleanOutputWriter(&buf)
+			for _, in := range tc.inputs {
+				if _, err := w.Write([]byte(in)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got, want := buf.String(), tc.output; got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestIPOnlyWriter(t *testing.T) {
+	for _, tc := range []struct {
+		desc   string
+		inputs []string
+		output string
+	}{
+		{
+			desc:   "IPv4 simple",
+			inputs: []string{"123-10.0.0.1:9500: foo\n"},
+			output: "10.0.0.1\n",
+		},
+		{
+			desc:   "localhost",
+			inputs: []string{"9-localhost:50042: bar\n"},
+			output: "localhost\n",
+		},
+		{
+			desc:   "IPv6 bracketed",
+			inputs: []string{"77-[2001:db8::1]:50042: baz\n"},
+			output: "2001:db8::1\n",
+		},
+		{
+			desc:   "split writes",
+			inputs: []string{"1-10.1.1.1:50042:", " abc\n"},
+			output: "10.1.1.1\n",
+		},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			var buf bytes.Buffer
+			w := GetIPOnlyWriter(&buf)
+			for _, in := range tc.inputs {
+				if _, err := w.Write([]byte(in)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got, want := buf.String(), tc.output; got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
