@@ -75,6 +75,7 @@ type cmdOptions struct {
 	uid          uint32
 	gid          uint32
 	extraFiles   []*os.File
+	processGroup bool
 }
 
 // Option will run the apply operation to change required checking/state
@@ -175,6 +176,26 @@ func ExtraFiles(files []*os.File) Option {
 	return optionfunc(func(o *cmdOptions) {
 		o.extraFiles = files
 	})
+}
+
+// ProcessGroup is an option which runs the command in its own process group so that
+// cancelling the context kills any processes it started along with it.
+func ProcessGroup() Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.processGroup = true
+	})
+}
+
+// KillProcessGroupOnCancel configures cmd to start in a new process group and
+// makes context cancellation kill the whole group rather than just cmd.
+func KillProcessGroupOnCancel(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 }
 
 // DefRunBufLimit is the default limit we'll buffer for stdout/stderr from RunCommand exec'ing
@@ -297,6 +318,9 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		}
 		cmd.SysProcAttr.Credential.Uid = options.uid
 		cmd.SysProcAttr.Credential.Gid = options.gid
+	}
+	if options.processGroup {
+		KillProcessGroupOnCancel(cmd)
 	}
 	logger.Info("executing local command", "cmd", cmd.String())
 	run.Error = cmd.Run()

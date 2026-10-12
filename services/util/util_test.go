@@ -23,7 +23,10 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"golang.org/x/sys/unix"
@@ -185,6 +188,32 @@ func TestRunCommand(t *testing.T) {
 				t.Fatalf("%s: Asked for non-zero return code and got 0", tc.name)
 			}
 		})
+	}
+}
+
+func TestRunCommandProcessGroup(t *testing.T) {
+	pidFile := path.Join(t.TempDir(), "pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := RunCommand(ctx, "/bin/sh", []string{"-c", "sleep 60 & echo $! > " + pidFile + "; wait"}, ProcessGroup())
+	testutil.FatalOnErr("RunCommand", err, t)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("RunCommand returned after %v, want it to return soon after cancellation", elapsed)
+	}
+
+	b, err := os.ReadFile(pidFile)
+	testutil.FatalOnErr("reading pid file", err, t)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	testutil.FatalOnErr("parsing pid", err, t)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for unix.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatalf("background process %d still running after cancellation", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

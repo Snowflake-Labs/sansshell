@@ -50,7 +50,7 @@ type server struct{}
 func (s *server) Run(ctx context.Context, req *pb.ExecRequest) (res *pb.ExecResponse, err error) {
 	recorder := metrics.RecorderFromContextOrNoop(ctx)
 
-	var opts []util.Option
+	opts := []util.Option{util.ProcessGroup()}
 	if req.User != "" {
 		uid, gid, err := resolveUser(req.User)
 		if err != nil {
@@ -105,6 +105,7 @@ func (s *server) StreamingRun(req *pb.ExecRequest, stream pb.Exec_StreamingRunSe
 			}
 		}
 	}
+	util.KillProcessGroupOnCancel(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
