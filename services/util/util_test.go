@@ -19,12 +19,12 @@ package util
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"reflect"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -192,28 +192,47 @@ func TestRunCommand(t *testing.T) {
 }
 
 func TestRunCommandProcessGroup(t *testing.T) {
-	pidFile := path.Join(t.TempDir(), "pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
+	for _, tc := range []struct {
+		name   string
+		script string
+	}{
+		{
+			name:   "parent still running",
+			script: "(sleep 2; touch %s) & wait",
+		},
+		{
+			name:   "parent already exited",
+			script: "(sleep 2; touch %s) &",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			marker := path.Join(t.TempDir(), "marker")
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
 
-	start := time.Now()
-	_, err := RunCommand(ctx, "/bin/sh", []string{"-c", "sleep 60 & echo $! > " + pidFile + "; wait"}, ProcessGroup())
-	testutil.FatalOnErr("RunCommand", err, t)
-	if elapsed := time.Since(start); elapsed > 10*time.Second {
-		t.Fatalf("RunCommand returned after %v, want it to return soon after cancellation", elapsed)
+			start := time.Now()
+			_, err := RunCommand(ctx, "/bin/sh", []string{"-c", fmt.Sprintf(tc.script, marker)}, ProcessGroup())
+			testutil.FatalOnErr("RunCommand", err, t)
+			if elapsed := time.Since(start); elapsed > 1500*time.Millisecond {
+				t.Fatalf("RunCommand returned after %v, want it to return soon after cancellation", elapsed)
+			}
+
+			time.Sleep(3 * time.Second)
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatal("background process kept running after cancellation")
+			}
+		})
 	}
+}
 
-	b, err := os.ReadFile(pidFile)
-	testutil.FatalOnErr("reading pid file", err, t)
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-	testutil.FatalOnErr("parsing pid", err, t)
-
-	deadline := time.Now().Add(5 * time.Second)
-	for unix.Kill(pid, 0) == nil {
-		if time.Now().After(deadline) {
-			t.Fatalf("background process %d still running after cancellation", pid)
-		}
-		time.Sleep(50 * time.Millisecond)
+func TestKillProcessGroupOnCancelAfterExit(t *testing.T) {
+	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", "exit 0")
+	KillProcessGroupOnCancel(cmd)
+	testutil.FatalOnErr("Run", cmd.Run(), t)
+	if err := cmd.Cancel(); !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("Cancel after exit = %v, want %v", err, os.ErrProcessDone)
 	}
 }
 

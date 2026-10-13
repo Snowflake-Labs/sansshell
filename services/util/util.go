@@ -20,6 +20,7 @@ package util
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -194,8 +195,16 @@ func KillProcessGroupOnCancel(cmd *exec.Cmd) {
 	}
 	cmd.SysProcAttr.Setpgid = true
 	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		return killProcessGroup(cmd.Process.Pid)
 	}
+}
+
+func killProcessGroup(pgid int) error {
+	err := syscall.Kill(-pgid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
 }
 
 // DefRunBufLimit is the default limit we'll buffer for stdout/stderr from RunCommand exec'ing
@@ -323,7 +332,16 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		KillProcessGroupOnCancel(cmd)
 	}
 	logger.Info("executing local command", "cmd", cmd.String())
-	run.Error = cmd.Run()
+	run.Error = cmd.Start()
+	if run.Error == nil {
+		if options.processGroup {
+			// os/exec stops watching ctx once the direct child exits, but processes it
+			// left in the background can still hold stdout/stderr open.
+			stop := context.AfterFunc(ctx, func() { _ = killProcessGroup(cmd.Process.Pid) })
+			defer stop()
+		}
+		run.Error = cmd.Wait()
+	}
 	run.ExitCode = cmd.ProcessState.ExitCode()
 	// If this was an error it could be two different things. Just exiting non-zero results in an exec.ExitError
 	// and we can suppress that as exit code is enough. Otherwise we leave run.Error for callers to use.
