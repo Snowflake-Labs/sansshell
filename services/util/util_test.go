@@ -19,11 +19,14 @@ package util
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/testing/testutil"
 	"golang.org/x/sys/unix"
@@ -185,6 +188,51 @@ func TestRunCommand(t *testing.T) {
 				t.Fatalf("%s: Asked for non-zero return code and got 0", tc.name)
 			}
 		})
+	}
+}
+
+func TestRunCommandProcessGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		script string
+	}{
+		{
+			name:   "parent still running",
+			script: "(sleep 2; touch %s) & wait",
+		},
+		{
+			name:   "parent already exited",
+			script: "(sleep 2; touch %s) &",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			marker := path.Join(t.TempDir(), "marker")
+			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			defer cancel()
+
+			start := time.Now()
+			_, err := RunCommand(ctx, "/bin/sh", []string{"-c", fmt.Sprintf(tc.script, marker)}, ProcessGroup())
+			testutil.FatalOnErr("RunCommand", err, t)
+			if elapsed := time.Since(start); elapsed > 1500*time.Millisecond {
+				t.Fatalf("RunCommand returned after %v, want it to return soon after cancellation", elapsed)
+			}
+
+			time.Sleep(3 * time.Second)
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatal("background process kept running after cancellation")
+			}
+		})
+	}
+}
+
+func TestKillProcessGroupOnCancelAfterExit(t *testing.T) {
+	cmd := exec.CommandContext(context.Background(), "/bin/sh", "-c", "exit 0")
+	KillProcessGroupOnCancel(cmd)
+	testutil.FatalOnErr("Run", cmd.Run(), t)
+	if err := cmd.Cancel(); !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("Cancel after exit = %v, want %v", err, os.ErrProcessDone)
 	}
 }
 

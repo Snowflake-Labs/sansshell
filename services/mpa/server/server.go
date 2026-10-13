@@ -117,11 +117,11 @@ func actionId(action *mpa.Action) (string, error) {
 }
 
 type storedAction struct {
-	action       *mpa.Action
-	lastModified time.Time
-	approvers    []*mpa.Principal
-	approved     chan struct{}
-	sizeBytes    int
+	action    *mpa.Action
+	created   time.Time
+	approvers []*mpa.Principal
+	approved  chan struct{}
+	sizeBytes int
 }
 
 // server is used to implement the gRPC server
@@ -142,16 +142,16 @@ func (s *server) deleteActionLocked(id string) {
 	}
 }
 
-// evictOldestLocked removes the least-recently-modified action, if any.
+// evictOldestLocked removes the oldest action, if any.
 // Callers must hold s.mu.
 func (s *server) evictOldestLocked() {
 	var oldestID string
 	var oldestTime time.Time
 	found := false
 	for id, act := range s.actions {
-		if !found || act.lastModified.Before(oldestTime) {
+		if !found || act.created.Before(oldestTime) {
 			oldestID = id
-			oldestTime = act.lastModified
+			oldestTime = act.created
 			found = true
 		}
 	}
@@ -179,7 +179,7 @@ func (s *server) clearOutdatedApprovals() {
 
 	staleTime := time.Now().Add(-maxMPAApprovedAge)
 	for id, act := range s.actions {
-		if act.lastModified.Before(staleTime) {
+		if act.created.Before(staleTime) {
 			s.curBytes -= act.sizeBytes
 			delete(s.actions, id)
 		}
@@ -240,10 +240,10 @@ func (s *server) Store(ctx context.Context, in *mpa.StoreRequest) (*mpa.StoreRes
 	}
 
 	act := &storedAction{
-		action:       action,
-		approved:     make(chan struct{}),
-		lastModified: time.Now(),
-		sizeBytes:    size,
+		action:    action,
+		approved:  make(chan struct{}),
+		created:   time.Now(),
+		sizeBytes: size,
 	}
 	s.actions[id] = act
 	s.curBytes += size
@@ -281,7 +281,6 @@ func (s *server) Approve(ctx context.Context, in *mpa.ApproveRequest) (*mpa.Appr
 	if act.action.User == p.ID {
 		return nil, status.Error(codes.InvalidArgument, "MPA requests cannot be approved by their requestor")
 	}
-	act.lastModified = time.Now()
 	// Only add the approver if it's new compared to existing approvals
 	if !containsPrincipal(act.approvers, p) {
 		act.approvers = append(act.approvers, &mpa.Principal{

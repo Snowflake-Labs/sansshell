@@ -215,14 +215,14 @@ func BuildServer(opts ...Option) (*grpc.Server, error) {
 
 	authz := rpcauth.NewRPCAuthorizer(ss.policy, ss.authzHooks...)
 
-	unary := ss.unaryInterceptors
+	unary := append([]grpc.UnaryServerInterceptor{unaryRecoveryInterceptor(ss.logger)}, ss.unaryInterceptors...)
 	unary = append(unary,
 		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.UnaryServerLogInterceptor(ss.logger),
 		// Execute authz after logger is setup
 		authz.Authorize,
 	)
-	streaming := ss.streamInterceptors
+	streaming := append([]grpc.StreamServerInterceptor{streamRecoveryInterceptor(ss.logger)}, ss.streamInterceptors...)
 	streaming = append(streaming,
 		// Execute log interceptor after other interceptors so that metadata gets logged
 		telemetry.StreamServerLogInterceptor(ss.logger),

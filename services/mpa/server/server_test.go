@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Snowflake-Labs/sansshell/auth/rpcauth"
 	"github.com/Snowflake-Labs/sansshell/services/mpa"
@@ -204,6 +205,36 @@ func TestStoreBoundsTotalBytes(t *testing.T) {
 	}
 	if sum != s.curBytes {
 		t.Fatalf("byte accounting drift: sum of entries=%d curBytes=%d", sum, s.curBytes)
+	}
+}
+
+func TestApproveDoesNotExtendExpiry(t *testing.T) {
+	s := &server{actions: make(map[string]*storedAction)}
+	ctx := context.Background()
+	rCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "requester"},
+	})
+	stored, err := s.Store(rCtx, &mpa.StoreRequest{
+		Method:  "foobar",
+		Message: mustAny(anypb.New(&emptypb.Empty{})),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.actions[stored.Id].created = time.Now().Add(-maxMPAApprovedAge + time.Minute)
+
+	aCtx := rpcauth.AddPeerToContext(ctx, &rpcauth.PeerAuthInput{
+		Principal: &rpcauth.PrincipalAuthInput{ID: "approver"},
+	})
+	for i := 0; i < 2; i++ {
+		if _, err := s.Approve(aCtx, &mpa.ApproveRequest{Action: stored.Action}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.actions[stored.Id].created = s.actions[stored.Id].created.Add(-2 * time.Minute)
+
+	if _, err := s.Get(ctx, &mpa.GetRequest{Id: stored.Id}); status.Code(err) != codes.NotFound {
+		t.Fatalf("Get after expiry: got %v, want NotFound", err)
 	}
 }
 

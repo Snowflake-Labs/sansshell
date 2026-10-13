@@ -20,6 +20,7 @@ package util
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -75,6 +76,7 @@ type cmdOptions struct {
 	uid          uint32
 	gid          uint32
 	extraFiles   []*os.File
+	processGroup bool
 }
 
 // Option will run the apply operation to change required checking/state
@@ -175,6 +177,34 @@ func ExtraFiles(files []*os.File) Option {
 	return optionfunc(func(o *cmdOptions) {
 		o.extraFiles = files
 	})
+}
+
+// ProcessGroup is an option which runs the command in its own process group so that
+// cancelling the context kills any processes it started along with it.
+func ProcessGroup() Option {
+	return optionfunc(func(o *cmdOptions) {
+		o.processGroup = true
+	})
+}
+
+// KillProcessGroupOnCancel configures cmd to start in a new process group and
+// makes context cancellation kill the whole group rather than just cmd.
+func KillProcessGroupOnCancel(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+	cmd.Cancel = func() error {
+		return killProcessGroup(cmd.Process.Pid)
+	}
+}
+
+func killProcessGroup(pgid int) error {
+	err := syscall.Kill(-pgid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
 }
 
 // DefRunBufLimit is the default limit we'll buffer for stdout/stderr from RunCommand exec'ing
@@ -298,8 +328,20 @@ func RunCommand(ctx context.Context, bin string, args []string, opts ...Option) 
 		cmd.SysProcAttr.Credential.Uid = options.uid
 		cmd.SysProcAttr.Credential.Gid = options.gid
 	}
+	if options.processGroup {
+		KillProcessGroupOnCancel(cmd)
+	}
 	logger.Info("executing local command", "cmd", cmd.String())
-	run.Error = cmd.Run()
+	run.Error = cmd.Start()
+	if run.Error == nil {
+		if options.processGroup {
+			// os/exec stops watching ctx once the direct child exits, but processes it
+			// left in the background can still hold stdout/stderr open.
+			stop := context.AfterFunc(ctx, func() { _ = killProcessGroup(cmd.Process.Pid) })
+			defer stop()
+		}
+		run.Error = cmd.Wait()
+	}
 	run.ExitCode = cmd.ProcessState.ExitCode()
 	// If this was an error it could be two different things. Just exiting non-zero results in an exec.ExitError
 	// and we can suppress that as exit code is enough. Otherwise we leave run.Error for callers to use.

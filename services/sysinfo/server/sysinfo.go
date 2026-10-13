@@ -79,21 +79,29 @@ func (s *server) Dmesg(req *pb.DmesgRequest, stream pb.SysInfo_DmesgServer) erro
 		return err
 	}
 
+	var pattern *regexp.Regexp
+	if req.Grep != "" {
+		regex := req.Grep
+		if req.IgnoreCase {
+			regex = `(?i)` + regex
+		}
+		var err error
+		pattern, err = regexp.Compile(regex)
+		if err != nil {
+			recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "invalid_grep_pattern"))
+			return status.Errorf(codes.InvalidArgument, "invalid grep pattern %q: %v", req.Grep, err)
+		}
+	}
+
 	records, err := getKernelMessages(timeout, ctx.Done())
 	if err != nil {
 		recorder.CounterOrLog(ctx, sysinfoDmesgFailureCounter, 1, attribute.String("reason", "get kernel message error"))
 		return status.Errorf(codes.InvalidArgument, "can't get kernel message %v", err)
 	}
 	// grep the messages we want
-	if req.Grep != "" {
+	if pattern != nil {
 		var newRecords []*pb.DmsgRecord
-		regex := req.Grep
-		if req.IgnoreCase {
-			regex = `(?i)` + regex
-		}
-
 		isInvert := req.InvertMatch
-		pattern := regexp.MustCompile(regex)
 		for _, record := range records {
 			// Two cases are what we want
 			// case 1: isInvert = false and match = true (pattern matched)

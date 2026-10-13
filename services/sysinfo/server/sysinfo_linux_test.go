@@ -392,6 +392,14 @@ func TestDmesg(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "invalid grep pattern expect an error: dmesg -grep (",
+			req: &pb.DmesgRequest{
+				TailLines: -1,
+				Grep:      "(",
+			},
+			wantErr: true,
+		},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
