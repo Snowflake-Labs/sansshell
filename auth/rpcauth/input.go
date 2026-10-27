@@ -70,6 +70,13 @@ type RPCAuthInput struct {
 	// host.
 	// TargetConn is not exposed to policy evaluation.
 	TargetConn grpc.ClientConnInterface `json:"-"`
+
+	// TargetMetadata can be set by a policy or hook while a proxy authorizes a call.
+	// The proxy sends it to the target as request metadata. Metadata is sent when the
+	// stream opens, so only the value set for the first message is used, and a later
+	// message that sets a different value closes the stream.
+	// TargetMetadata is not exposed to policy evaluation.
+	TargetMetadata metadata.MD `json:"-"`
 }
 
 // EnvironmentInput contains information about the environment in which the policy evaluation is

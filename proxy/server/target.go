@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -201,10 +203,10 @@ func (s *TargetStream) Send(req proto.Message) error {
 func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 	group, ctx := errgroup.WithContext(s.ctx)
 
-	peer := rpcauth.PeerInputFromContext(ctx)
-	if peer != nil && peer.Principal != nil {
+	caller := rpcauth.PeerInputFromContext(ctx)
+	if caller != nil && caller.Principal != nil {
 		// Unconditionally add information on the original caller to outgoing RPCs
-		ctx = proxiedidentity.AppendToMetadataInOutgoingContext(ctx, peer.Principal)
+		ctx = proxiedidentity.AppendToMetadataInOutgoingContext(ctx, caller.Principal)
 	}
 
 	group.Go(func() error {
@@ -224,7 +226,38 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 			return fmt.Errorf("could not connect to target from the proxy: %w", err)
 		}
 		s.grpcConn = grpcConn
-		grpcStream, err := s.grpcConn.NewStream(ctx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
+
+		// Metadata can only be sent when the stream opens, so with an identifiedTarget
+		// the first request is authorized before that.
+		streamCtx := ctx
+		var first proto.Message
+		var firstPeer *rpcauth.PeerAuthInput
+		var targetMD metadata.MD
+		identified, early := grpcConn.(identifiedTarget)
+		if early {
+			targetPeer, err := identified.targetPeer(ctx)
+			if err != nil {
+				s.logger.Info("unable to create stream", "status", err)
+				s.cancelFunc()
+				return fmt.Errorf("could not connect to target from the proxy: %w", err)
+			}
+			firstPeer = rpcauth.PeerInputFromContext(peer.NewContext(ctx, targetPeer))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case first = <-s.reqChan:
+			}
+			if first != nil {
+				input, err := s.authorize(ctx, first, firstPeer, grpcConn)
+				if err != nil {
+					s.CloseWith(err)
+					return err
+				}
+				targetMD = input.TargetMetadata
+				streamCtx = withTargetMetadata(ctx, targetMD)
+			}
+		}
+		grpcStream, err := s.grpcConn.NewStream(streamCtx, s.serviceMethod.StreamDesc(), s.serviceMethod.FullName())
 		if err != nil {
 			// We cannot create a new stream to the target. So we need to cancel this stream.
 			s.logger.Info("unable to create stream", "status", err)
@@ -235,6 +268,11 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		// We've successfully connected and can replace the initial unconnected stream
 		// with the target stream.
 		s.setStream(grpcStream)
+		if early && !sameIdentity(firstPeer, s.PeerAuthInfo()) {
+			err := status.Error(codes.Unavailable, "target identity changed before the stream to it was opened")
+			s.CloseWith(err)
+			return err
+		}
 
 		// Receives messages from the server stream
 		group.Go(func() error {
@@ -289,53 +327,36 @@ func (s *TargetStream) Run(nonce uint32, replyChan chan *pb.ProxyReply) {
 		// read from the incoming request channel, and write
 		// to the stream.
 		for {
-			var req proto.Message
-			var ok bool
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case req, ok = <-s.reqChan:
-				if !ok {
-					// reqChan was closed, meaning no more messages are incoming
-					// if this was a client stream, we issue a half-close
-					if s.serviceMethod.ClientStreams() {
-						err = grpcStream.CloseSend()
-						if err != nil {
-							s.CloseWith(err)
+			req := first
+			first = nil
+			if req == nil {
+				var ok bool
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case req, ok = <-s.reqChan:
+					if !ok {
+						// reqChan was closed, meaning no more messages are incoming
+						// if this was a client stream, we issue a half-close
+						if s.serviceMethod.ClientStreams() {
+							err = grpcStream.CloseSend()
+							if err != nil {
+								s.CloseWith(err)
+							}
+							return err
 						}
-						return err
+						// otherwise, we're done
+						return nil
 					}
-					// otherwise, we're done
-					return nil
 				}
-			}
-
-			authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
-			if err != nil {
-				err = status.Errorf(codes.Internal, "error creating authz input %v", err)
-				s.CloseWith(err)
-				return err
-			}
-			streamPeerInfo := s.PeerAuthInfo()
-			if streamPeerInfo == nil {
-				err := status.Errorf(codes.Internal, "peer auth info cannot be nil")
-				s.CloseWith(err)
-				return err
-			}
-			authinput.Host = &rpcauth.HostAuthInput{
-				Net:       streamPeerInfo.Net,
-				Cert:      streamPeerInfo.Cert,
-				Principal: streamPeerInfo.Principal,
-			}
-			authinput.Environment = &rpcauth.EnvironmentInput{
-				NonHostPolicyCheck: true,
-			}
-			authinput.TargetConn = grpcConn
-
-			// If authz fails, close immediately with an error
-			if err := s.authorizer.Eval(ctx, authinput); err != nil {
-				s.CloseWith(err)
-				return err
+				input, err := s.authorize(ctx, req, s.PeerAuthInfo(), grpcConn)
+				if err == nil {
+					err = checkTargetMetadata(early, targetMD, input.TargetMetadata)
+				}
+				if err != nil {
+					s.CloseWith(err)
+					return err
+				}
 			}
 
 			if s.authzDryRun {
@@ -673,6 +694,60 @@ func convertStatus(s *status.Status) *pb.Status {
 		Message: p.Message,
 		Details: p.Details,
 	}
+}
+
+func (s *TargetStream) authorize(ctx context.Context, req proto.Message, targetPeer *rpcauth.PeerAuthInput, conn grpc.ClientConnInterface) (*rpcauth.RPCAuthInput, error) {
+	authinput, err := rpcauth.NewRPCAuthInput(ctx, s.Method(), req)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "error creating authz input %v", err)
+	}
+	if targetPeer == nil {
+		return nil, status.Errorf(codes.Internal, "peer auth info cannot be nil")
+	}
+	authinput.Host = &rpcauth.HostAuthInput{
+		Net:       targetPeer.Net,
+		Cert:      targetPeer.Cert,
+		Principal: targetPeer.Principal,
+	}
+	authinput.Environment = &rpcauth.EnvironmentInput{
+		NonHostPolicyCheck: true,
+	}
+	authinput.TargetConn = conn
+	if err := s.authorizer.Eval(ctx, authinput); err != nil {
+		return nil, err
+	}
+	return authinput, nil
+}
+
+func withTargetMetadata(ctx context.Context, md metadata.MD) context.Context {
+	if len(md) == 0 {
+		return ctx
+	}
+	existing, _ := metadata.FromOutgoingContext(ctx)
+	return metadata.NewOutgoingContext(ctx, metadata.Join(existing, md))
+}
+
+func checkTargetMetadata(early bool, sent, requested metadata.MD) error {
+	if !early {
+		if len(requested) > 0 {
+			return status.Error(codes.FailedPrecondition, "target metadata requires a dialer created with NewCredentialsDialer")
+		}
+		return nil
+	}
+	if len(sent) == 0 && len(requested) == 0 {
+		return nil
+	}
+	if !reflect.DeepEqual(sent, requested) {
+		return status.Error(codes.PermissionDenied, "target metadata cannot change after the stream to the target is opened")
+	}
+	return nil
+}
+
+func sameIdentity(a, b *rpcauth.PeerAuthInput) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return reflect.DeepEqual(a.Net, b.Net) && reflect.DeepEqual(a.Cert, b.Cert)
 }
 
 // isCardinalityViolation returns true if err is a gRPC cardinality violation,
