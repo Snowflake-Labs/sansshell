@@ -404,7 +404,6 @@ func Run(ctx context.Context, opts ...Option) {
 		streamClient = append(streamClient, clientAuthz.AuthorizeClientStream)
 	}
 	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(clientCreds),
 		grpc.WithChainUnaryInterceptor(unaryClient...),
 		grpc.WithChainStreamInterceptor(streamClient...),
 		// Use 16MB instead of the default 4MB to allow larger responses
@@ -413,7 +412,7 @@ func Run(ctx context.Context, opts ...Option) {
 	if rs.statsClientHandler != nil {
 		dialOpts = append(dialOpts, grpc.WithStatsHandler(rs.statsClientHandler))
 	}
-	targetDialer := server.NewDialer(dialOpts...)
+	targetDialer := server.NewCredentialsDialer(clientCreds, dialOpts...)
 
 	svcMap := server.LoadGlobalServiceMap()
 	rs.logger.Info("loaded service map", "serviceMap", svcMap)

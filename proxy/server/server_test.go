@@ -72,7 +72,11 @@ func startOldBehaviorServer(t *testing.T, name string) *bufconn.Listener {
 
 func startTestProxyWithAuthz(ctx context.Context, t *testing.T, targets map[string]*bufconn.Listener, authz rpcauth.RPCAuthorizer) pb.Proxy_ProxyClient {
 	t.Helper()
-	targetDialer := NewDialer(testutil.WithBufDialer(targets), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return startTestProxyWithDialer(ctx, t, NewCredentialsDialer(insecure.NewCredentials(), testutil.WithBufDialer(targets)), authz)
+}
+
+func startTestProxyWithDialer(ctx context.Context, t *testing.T, targetDialer TargetDialer, authz rpcauth.RPCAuthorizer) pb.Proxy_ProxyClient {
+	t.Helper()
 	lis := bufconn.Listen(testutil.BufSize)
 	grpcServer := grpc.NewServer(grpc.StreamInterceptor(authz.AuthorizeStream))
 	proxyServer := New(targetDialer, authz)
